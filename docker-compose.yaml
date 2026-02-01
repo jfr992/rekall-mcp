@@ -1,0 +1,119 @@
+# Memento MCP - Docker Compose
+#
+# Quick start:
+#   docker compose up -d
+#
+# This starts Qdrant (vector database) and the MCP server with memory tools.
+# Everything runs in containers - no local Python install needed.
+#
+# DATA STORAGE:
+#   - Memory files: ~/.claude/memory/ (on your machine, survives container deletion)
+#   - Qdrant data: ~/.claude/qdrant/ (on your machine, survives container deletion)
+#
+# To backup: just copy ~/.claude/ somewhere safe
+
+services:
+  # =========================================================================
+  # QDRANT - Vector Database (required)
+  # =========================================================================
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: memento-qdrant
+    ports:
+      - "6333:6333"
+    volumes:
+      # Store on your machine, not in a Docker volume
+      - ${QDRANT_DATA_PATH:-~/.claude/qdrant}:/qdrant/storage
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # =========================================================================
+  # MCP SERVER - Memory Tools (default)
+  # =========================================================================
+  mcp:
+    build: .
+    container_name: memento-mcp
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-sentence-transformers}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
+      - MCP_TRANSPORT=streamable-http
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - MEMORY_STORAGE_PATH=/data/memory
+    ports:
+      - "8000:8000"
+    volumes:
+      # Store on your machine, not in a Docker volume
+      - ${MEMORY_STORAGE_PATH:-~/.claude/memory}:/data/memory
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # =========================================================================
+  # OLLAMA - Local Embeddings (optional, better quality)
+  # =========================================================================
+  # Uncomment to use Ollama instead of sentence-transformers
+  # Then set EMBEDDING_PROVIDER=ollama in your .env file
+  #
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: memory-ollama
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_models:/root/.ollama
+  #   # Pull the embedding model on first run:
+  #   # docker exec memory-ollama ollama pull nomic-embed-text
+
+  # =========================================================================
+  # DEVELOPMENT - With hot reload
+  # =========================================================================
+  mcp-dev:
+    build: .
+    container_name: memento-mcp-dev
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-sentence-transformers}
+      - MCP_TRANSPORT=streamable-http
+      - LOG_LEVEL=DEBUG
+      - MEMORY_STORAGE_PATH=/data/memory
+    ports:
+      - "8001:8000"
+    volumes:
+      - ./src:/app/src
+      - ${MEMORY_STORAGE_PATH:-~/.claude/memory}:/data/memory
+    depends_on:
+      - qdrant
+    profiles:
+      - dev
+
+  # =========================================================================
+  # TESTS
+  # =========================================================================
+  test:
+    build: .
+    container_name: memento-test
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+    volumes:
+      - ./src:/app/src:ro
+      - ./tests:/app/tests:ro
+    depends_on:
+      - qdrant
+    profiles:
+      - test
+    entrypoint: ["pytest", "-v", "tests/"]
+
+# No Docker volumes needed - we mount directly to ~/.claude/
