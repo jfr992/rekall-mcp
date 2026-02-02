@@ -23,12 +23,13 @@ All operations:
 
 from __future__ import annotations
 
-import json
 import logging
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+
+import yaml
 
 from core import Embedder, Telemetry, VectorStore
 
@@ -229,22 +230,39 @@ class MemoryManager:
         memory_type: str,
         date: str,
     ) -> None:
-        """Save memory to JSONL file for durability."""
-        date_dir = self.memory_dir / date
-        date_dir.mkdir(exist_ok=True)
+        """Save memory to human-readable YAML file."""
+        yaml_file = self.memory_dir / f"{date}.yaml"
 
-        memory_file = date_dir / f"{memory_type}s.jsonl"
-        with open(memory_file, "a") as f:
-            f.write(
-                json.dumps(
-                    {
-                        "id": memory_id,
-                        "content": content,
-                        "metadata": metadata,
-                    }
-                )
-                + "\n"
-            )
+        # Load existing data for this date
+        if yaml_file.exists():
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f) or {}
+        else:
+            data = {"date": date}
+
+        # Ensure type section exists
+        type_key = f"{memory_type}s"
+        if type_key not in data:
+            data[type_key] = []
+
+        # Add new memory
+        memory_entry = {
+            "id": memory_id,
+            "content": content,
+            "project": metadata.get("project", "general"),
+            "timestamp": metadata.get("timestamp"),
+        }
+
+        # Add any extra metadata (excluding duplicates)
+        for key, value in metadata.items():
+            if key not in ["memory_id", "content", "date", "timestamp", "type", "project"]:
+                memory_entry[key] = value
+
+        data[type_key].append(memory_entry)
+
+        # Write back
+        with open(yaml_file, "w") as f:
+            yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
 
     # Alias for backwards compatibility
     def save_memory(

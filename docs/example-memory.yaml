@@ -1,0 +1,48 @@
+# Example Memory File
+# This is what ~/.claude/memory/2026-02-01.yaml looks like
+#
+# You can edit this file directly! Add notes, modify content, organize however you like.
+# The AI will search these when you ask it to recall memories.
+
+date: 2026-02-01
+
+requirements:
+  - id: 2026-02-01_requirement_1234
+    content: Must use Python 3.11 or higher for this project
+    project: my-app
+    timestamp: 2026-02-01T09:15:32.123456
+
+decisions:
+  - id: 2026-02-01_decision_5678
+    content: Chose PostgreSQL over MySQL for better JSON support
+    project: my-app
+    timestamp: 2026-02-01T10:23:15.789012
+
+  - id: 2026-02-01_decision_5679
+    content: Use Docker for local development and production
+    project: my-app
+    timestamp: 2026-02-01T11:45:22.456789
+
+preferences:
+  - id: 2026-02-01_preference_9012
+    content: User prefers concise explanations with code examples
+    project: general
+    timestamp: 2026-02-01T14:12:45.234567
+
+facts:
+  - id: 2026-02-01_fact_3456
+    content: Production environment is in AWS us-east-1 region
+    project: my-app
+    timestamp: 2026-02-01T15:30:18.345678
+
+learnings:
+  - id: 2026-02-01_learning_7890
+    content: Discovered that JWT validation fails with trailing slash in issuer URL
+    project: my-app
+    timestamp: 2026-02-01T16:55:33.567890
+
+notes:
+  - id: 2026-02-01_note_2345
+    content: Team standup happens every Monday at 9 AM EST
+    project: general
+    timestamp: 2026-02-01T08:00:00.000000
