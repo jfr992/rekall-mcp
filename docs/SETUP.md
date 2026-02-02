@@ -33,7 +33,7 @@ This starts:
 ### Step 2: Tell Claude About It
 
 ```bash
-claude mcp add memory --type http --url http://localhost:8000
+claude mcp add --transport http memory http://localhost:8000
 ```
 
 Verify:
