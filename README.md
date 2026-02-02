@@ -112,14 +112,34 @@ Not all memories are equal. The type guides how AI should use them:
 
 ## Data Safety
 
-Your data stays on your machine:
+Your data stays on your machine in **human-readable YAML**:
 
 ```
 ~/.claude/
-├── memory/     # Your memories (JSON files, human-readable)
-└── qdrant/     # Search index (can be rebuilt from memory/)
+├── memory/
+│   ├── 2026-02-01.yaml  # All memories for this day
+│   ├── 2026-02-02.yaml
+│   └── ...
+└── qdrant/              # Search index (can be rebuilt)
 ```
 
+**Example YAML** (`2026-02-01.yaml`):
+```yaml
+date: 2026-02-01
+decisions:
+  - id: 2026-02-01_decision_5678
+    content: Use PostgreSQL for JSON support
+    project: my-app
+    timestamp: 2026-02-01T14:33:22.789012
+
+preferences:
+  - id: 2026-02-01_preference_9012
+    content: User prefers concise explanations
+    project: general
+    timestamp: 2026-02-01T14:35:10.456789
+```
+
+- **Edit directly** - Add your own notes by hand
 - **Credentials** are automatically redacted before storage
 - **Backup** is just `cp -r ~/.claude ~/backup`
 - **Nothing leaves your machine** unless you configure it to
