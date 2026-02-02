@@ -1,14 +1,14 @@
-"""Memory tools for MCP.
+"""Optimized memory tools with automatic observation capture.
 
-Provides persistent memory capabilities for AI assistants via MCP.
-
-Tools:
-- save_memory: Save a memory (decision, preference, learning, note)
-- recall_memories: Search memories semantically
-- get_project_context: Get all context for a project
-- memory_stats: Get memory system statistics
+Based on best practices from:
+- LangChain: Thread-based persistence, prompt caching patterns
+- Qdrant: Payload filtering, keyword indexes
+- Semantic Kernel: Hybrid short/long-term memory
+- Anthropic: Tool-based memory with structured operations
 """
 
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from ..base import BaseToolProvider, ToolDefinition
@@ -17,26 +17,177 @@ if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
 
 
-def _get_manager():
-    """Lazy import to avoid circular dependencies."""
-    from memory import MemoryManager
+# ==============================================================================
+# TYPE CLASSIFICATION: Embedding-Enhanced Hybrid
+# ==============================================================================
 
-    return MemoryManager()
+# Pre-computed example embeddings (loaded once, cached)
+_TYPE_EMBEDDINGS_CACHE: dict[str, list[float]] | None = None
 
 
-class MemoryTools(BaseToolProvider):
-    """Memory tools for persistent AI context.
+def _get_type_embeddings(embedder) -> dict[str, list[float]]:
+    """Lazy-load and cache type example embeddings."""
+    global _TYPE_EMBEDDINGS_CACHE
 
-    These tools allow AI assistants to:
-    - Save important information (decisions, preferences, learnings)
-    - Recall relevant context using semantic search
-    - Get project-specific context
-    - Monitor memory system health
+    if _TYPE_EMBEDDINGS_CACHE is None:
+        _TYPE_EMBEDDINGS_CACHE = {
+            "decision": embedder.encode(
+                "Decided to use PostgreSQL over MySQL for better JSON support and performance"
+            ),
+            "learning": embedder.encode(
+                "Fixed bug where JWT validation fails when issuer URL has trailing slash"
+            ),
+            "preference": embedder.encode(
+                "User prefers Terraform over CloudFormation for infrastructure as code"
+            ),
+            "requirement": embedder.encode(
+                "Must use Python 3.11 or higher due to required type hint features"
+            ),
+            "fact": embedder.encode(
+                "Production database runs on AWS RDS PostgreSQL in us-east-1 region"
+            ),
+        }
+
+    return _TYPE_EMBEDDINGS_CACHE
+
+
+def _cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
+    """Calculate cosine similarity between two vectors."""
+    import math
+
+    dot = sum(a * b for a, b in zip(vec1, vec2))
+    mag1 = math.sqrt(sum(a * a for a in vec1))
+    mag2 = math.sqrt(sum(b * b for b in vec2))
+
+    if mag1 == 0 or mag2 == 0:
+        return 0.0
+
+    return dot / (mag1 * mag2)
+
+
+def _classify_by_embedding(summary: str, embedder) -> str:
+    """Classify using embedding similarity.
+
+    Best practice from Qdrant: Use semantic similarity for classification
+    when you have a small set of known categories.
+    """
+    summary_vec = embedder.encode(summary)
+    type_embeddings = _get_type_embeddings(embedder)
+
+    best_type = "learning"  # default
+    best_score = 0.6  # threshold (tune based on testing)
+
+    for mem_type, example_vec in type_embeddings.items():
+        score = _cosine_similarity(summary_vec, example_vec)
+        if score > best_score:
+            best_score = score
+            best_type = mem_type
+
+    return best_type
+
+
+def _classify_by_keywords(summary: str) -> str:
+    """Fallback keyword-based classification.
+
+    Best practice: Have a fast fallback for when embeddings aren't ready.
+    """
+    s = summary.lower()
+
+    # Decision indicators (broader patterns from research)
+    if any(
+        w in s
+        for w in [
+            "decided",
+            "chose",
+            "selected",
+            "using",
+            "going with",
+            "picked",
+            "opted for",
+            "switching to",
+            "migrating to",
+        ]
+    ):
+        return "decision"
+
+    # Learning/Bug indicators
+    if any(
+        w in s
+        for w in [
+            "fixed",
+            "bug",
+            "issue",
+            "gotcha",
+            "discovered",
+            "learned",
+            "found out",
+            "realized",
+            "turns out",
+            "doesn't work",
+            "fails",
+            "problem",
+            "solution",
+            "workaround",
+        ]
+    ):
+        return "learning"
+
+    # Preference indicators
+    if any(
+        w in s
+        for w in ["prefer", "prefers", "likes", "wants", "favorite", "better to", "easier to"]
+    ):
+        return "preference"
+
+    # Requirement indicators (explicit constraints)
+    if any(
+        w in s
+        for w in ["must", "required", "need to", "has to", "mandatory", "cannot", "should not"]
+    ):
+        return "requirement"
+
+    # Fact indicators
+    if any(w in s for w in ["is located", "runs on", "uses", "has", "located at"]):
+        return "fact"
+
+    # Default to learning (most common auto-capture type)
+    return "learning"
+
+
+def _classify_smart(summary: str, embedder) -> str:
+    """Hybrid classification: embeddings → keywords → default.
+
+    Best practice from research:
+    - Try embedding similarity first (better quality, ~11ms)
+    - Fallback to keywords if embeddings fail (fast, always works)
+    - Always have a safe default
+    """
+    try:
+        # Try embedding-based classification (better quality)
+        return _classify_by_embedding(summary, embedder)
+    except Exception:
+        # Fallback to keywords (faster, simpler)
+        return _classify_by_keywords(summary)
+
+
+# ==============================================================================
+# OPTIMIZED MEMORY TOOLS
+# ==============================================================================
+
+
+class OptimizedMemoryTools(BaseToolProvider):
+    """Memory tools with automatic observation capture and optimizations.
+
+    Architecture based on research:
+    - Automatic capture via tool (like Anthropic memory tool)
+    - Embedding-enhanced classification (Qdrant best practices)
+    - Keyword indexes on type/project/date (Qdrant optimization)
+    - Thread-aware for future conversation support (LangChain pattern)
     """
 
     name = "memory"
-    description = "Persistent memory for AI assistants"
-    requires = []  # No external requirements
+    description = "Persistent memory with automatic observation capture"
+    requires = []
     builtin = True
 
     def __init__(self):
@@ -46,241 +197,105 @@ class MemoryTools(BaseToolProvider):
     def manager(self):
         """Lazy-load the memory manager."""
         if self._manager is None:
-            self._manager = _get_manager()
+            from memory import MemoryManager
+
+            self._manager = MemoryManager()
         return self._manager
 
-    def get_tools(self) -> list[ToolDefinition]:
+    def get_tools(self) -> list["ToolDefinition"]:
         """Return list of memory tools."""
+        from tools.base import ToolDefinition
+
         return [
             ToolDefinition(
-                name="save_memory",
-                description="Save a memory for future recall",
-                handler=self.save_memory,
+                name="observe",
+                description="Record what was just accomplished (automatic memory capture)",
+                handler=None,  # Registered via mcp.tool() in register()
             ),
             ToolDefinition(
                 name="recall_memories",
                 description="Search memories semantically",
-                handler=self.recall_memories,
+                handler=None,
             ),
             ToolDefinition(
-                name="get_project_context",
-                description="Get all context for a project",
-                handler=self.get_project_context,
+                name="save_memory",
+                description="Manually save a memory for future recall",
+                handler=None,
             ),
             ToolDefinition(
                 name="get_cached_context",
                 description="Get stable context optimized for prompt caching",
-                handler=self.get_cached_context,
+                handler=None,
             ),
             ToolDefinition(
                 name="memory_stats",
                 description="Get memory system statistics",
-                handler=self.memory_stats,
+                handler=None,
             ),
         ]
 
-    async def save_memory(
-        self,
-        content: str,
-        memory_type: str = "note",
-        project: str | None = None,
-    ) -> str:
-        """Save a memory for future recall.
+    def _get_current_project(self) -> str:
+        """Extract project from working directory.
 
-        Memories are automatically:
-        - Sanitized (credentials removed)
-        - Indexed for semantic search
-        - Stored persistently
-
-        Args:
-            content: The content to save
-            memory_type: Type of memory (decision, preference, learning, note)
-            project: Optional project name to associate with
-
-        Returns:
-            Confirmation message with memory ID
+        Best practice from Semantic Kernel: Auto-detect context.
         """
-        memory_id = self.manager.save(
-            content=content,
-            type=memory_type,
-            project=project,
-        )
-
-        return f"Saved memory: {memory_id}"
-
-    async def recall_memories(
-        self,
-        query: str,
-        limit: int = 5,
-        memory_type: str | None = None,
-        project: str | None = None,
-        days: int | None = None,
-        formatted: bool = True,
-    ) -> str:
-        """Search memories using semantic similarity.
-
-        Finds memories that are semantically similar to the query,
-        even if they don't contain the exact words.
-
-        Args:
-            query: What to search for
-            limit: Maximum number of results
-            memory_type: Filter by type (decision, preference, requirement, learning, note, fact)
-            project: Filter by project
-            days: Only include memories from last N days
-            formatted: If True, returns with guidance on how to use each memory type
-
-        Returns:
-            Formatted list of matching memories with guidance
-        """
-        if formatted:
-            # Use smart formatting that guides AI behavior
-            return self.manager.recall_formatted(
-                query=query,
-                limit=limit,
-                type=memory_type,
-                project=project,
-                days_back=days,
-            )
-
-        # Raw format for backward compatibility
-        results = self.manager.recall(
-            query=query,
-            limit=limit,
-            type=memory_type,
-            project=project,
-            days_back=days,
-        )
-
-        if not results:
-            return "No memories found matching your query."
-
-        output = f"Found {len(results)} memory/memories:\n\n"
-
-        for r in results:
-            score = r.get("score", 0)
-            content = r.get("content", "")
-            mem_type = r.get("type", "note")
-            mem_project = r.get("project", "")
-            date = r.get("date", "")
-
-            output += f"**[{score:.2f}] {mem_type}**"
-            if mem_project:
-                output += f" ({mem_project})"
-            if date:
-                output += f" - {date}"
-            output += f"\n{content}\n\n"
-
-        return output
-
-    async def get_project_context(self, project: str) -> str:
-        """Get all context for a specific project.
-
-        Returns all memories associated with a project,
-        organized chronologically.
-
-        Args:
-            project: Project name
-
-        Returns:
-            Formatted project context
-        """
-        context = self.manager.get_project_context(project)
-
-        if not context or context.strip() == f"# Project Context: {project}":
-            return f"No memories found for project: {project}"
-
-        return context
-
-    async def get_cached_context(self, project: str | None = None) -> str:
-        """Get stable context optimized for prompt caching.
-
-        Unlike recall_memories (which varies by query), this returns
-        IDENTICAL content each call - perfect for prompt cache hits.
-
-        Use this at session start, then include in every message
-        to get 90% discount on context tokens after turn 1.
-
-        Args:
-            project: Optional project to filter context
-
-        Returns:
-            Stable, cacheable context string
-        """
-        from memory.cache_context import CacheableContext, estimate_tokens
-
-        ctx = CacheableContext(project=project)
-        content = ctx.get_stable_context()
-        tokens = estimate_tokens(content)
-
-        return f"{content}\n<!-- Cache hash: {ctx.get_cache_hash()} | ~{tokens} tokens -->"
-
-    async def memory_stats(self) -> str:
-        """Get memory system statistics.
-
-        Returns information about:
-        - Total memories stored
-        - Memories by type
-        - Storage location
-        - Performance metrics
-
-        Returns:
-            Formatted statistics
-        """
-        stats = self.manager.get_stats()
-
-        output = "# Memory System Statistics\n\n"
-        output += f"**Total Memories**: {stats.get('total', 0)}\n"
-        output += f"**Memory Files**: {stats.get('files', 0)}\n"
-        output += f"**Storage**: {stats.get('storage_path', 'N/A')}\n\n"
-
-        by_type = stats.get("by_type", {})
-        if by_type:
-            output += "## By Type\n"
-            for t, count in sorted(by_type.items()):
-                output += f"- {t}: {count}\n"
-
-        return output
+        try:
+            return Path(os.getcwd()).name
+        except Exception:
+            return "general"
 
     def register(self, mcp: "FastMCP") -> list[str]:
-        """Register memory tools with MCP server.
-
-        Args:
-            mcp: FastMCP server instance
-
-        Returns:
-            List of registered tool names
-        """
+        """Register optimized memory tools."""
         registered = []
 
         @mcp.tool()
-        async def save_memory(
-            content: str,
-            memory_type: str = "note",
-            project: str | None = None,
-        ) -> str:
-            """Save a memory for future recall.
+        async def observe(summary: str, type: str = "auto", context: str | None = None) -> str:
+            """Record what was just accomplished for future reference.
 
-            Memories persist across sessions, helping AI assistants remember
-            important context. Choose the right type:
+            **AUTOMATIC USAGE (call after operations):**
+            - After fixing bugs/issues
+            - After making architectural/design decisions
+            - After discovering gotchas or limitations
+            - When user states preferences or requirements
 
-            - **preference**: User's preferred way of doing things (flexible, offer alternatives)
-            - **decision**: A choice that was made (established, but can be revisited)
-            - **requirement**: A hard constraint that must be followed (non-negotiable)
-            - **fact**: Contextual information about the environment (informational)
-            - **learning**: Something learned during work (for future reference)
-            - **note**: General information (default)
+            **Smart Classification:**
+            The system uses embedding similarity to classify observations:
+            - "decision": Technical/architectural choices
+            - "learning": Bug fixes, discoveries, gotchas
+            - "preference": User's preferred way of working
+            - "requirement": Hard constraints (must/cannot)
+            - "fact": Contextual information (locations, configs)
+            - "auto": Let system detect (default)
 
-            Credentials are automatically sanitized before storage.
+            **Examples:**
+            observe("Fixed JWT validation bug with trailing slash")
+            observe("Decided to use React for frontend", type="decision")
+            observe("User prefers Terraform over CloudFormation")
+            observe("API rate limit is 100/hour", type="fact")
 
             Args:
-                content: What to remember
-                memory_type: Type (preference, decision, requirement, fact, learning, note)
-                project: Optional project to associate with
+                summary: What was accomplished (1-2 sentences)
+                type: Memory type or "auto" for automatic classification
+                context: Optional: Why this matters or what prompted it
             """
-            return await self.save_memory(content, memory_type, project)
+            # Get current project (Semantic Kernel pattern)
+            project = self._get_current_project()
 
-        registered.append("save_memory")
+            # Classify type (Qdrant + embedding best practice)
+            if type == "auto":
+                type = _classify_smart(summary, self.manager.embedder)
+
+            # Build full content
+            full_content = summary
+            if context:
+                full_content = f"{summary}\n\nContext: {context}"
+
+            # Save (creates keyword indexes automatically)
+            memory_id = self.manager.save(content=full_content, type=type, project=project)
+
+            return f"✓ Observed as {type}: {memory_id}\n\nAvailable for recall in future sessions."
+
+        registered.append("observe")
 
         @mcp.tool()
         async def recall_memories(
@@ -292,67 +307,84 @@ class MemoryTools(BaseToolProvider):
         ) -> str:
             """Search memories using semantic similarity.
 
-            Finds relevant memories even if they don't contain exact keywords.
-            "What technology did we choose?" finds "Decided to use Python"
-
-            Results are formatted with guidance on how to use each type:
-            - Preferences: Show as default but offer alternatives
-            - Decisions: Reference but ask if user wants to reconsider
-            - Requirements: Must be followed
-            - Facts: Informational context
+            Best practice from LangChain/Qdrant:
+            - Semantic search finds meaning, not just keywords
+            - Filter by type/project/date for precise results
+            - Returns formatted with guidance on how to use each type
 
             Args:
                 query: What to search for
                 limit: Maximum results (default: 5)
-                memory_type: Filter by type
-                project: Filter by project
-                days: Only last N days
+                memory_type: Filter by type (decision, learning, preference, requirement, fact)
+                project: Filter by project name
+                days: Only include memories from last N days
             """
-            return await self.recall_memories(query, limit, memory_type, project, days)
+            return self.manager.recall_formatted(
+                query=query, limit=limit, type=memory_type, project=project, days_back=days
+            )
 
         registered.append("recall_memories")
 
         @mcp.tool()
-        async def get_project_context(project: str) -> str:
-            """Get all context for a project.
+        async def save_memory(
+            content: str, memory_type: str = "note", project: str | None = None
+        ) -> str:
+            """Save a memory explicitly (manual mode).
 
-            Returns all memories associated with a project,
-            organized chronologically. Useful at the start of a session
-            to understand what's been done before.
+            Use this when you want to save something important that doesn't
+            fit the automatic observe() pattern (like session summaries).
+
+            For regular operations (bug fixes, decisions), use observe() instead.
 
             Args:
-                project: Project name
+                content: What to remember
+                memory_type: Type (decision, learning, preference, requirement, fact, note)
+                project: Optional project to associate with
             """
-            return await self.get_project_context(project)
+            memory_id = self.manager.save(content=content, type=memory_type, project=project)
+            return f"Saved memory: {memory_id}"
 
-        registered.append("get_project_context")
-
-        @mcp.tool()
-        async def memory_stats() -> str:
-            """Get memory system statistics.
-
-            Shows how many memories are stored, breakdown by type,
-            and storage location.
-            """
-            return await self.memory_stats()
-
-        registered.append("memory_stats")
+        registered.append("save_memory")
 
         @mcp.tool()
         async def get_cached_context(project: str | None = None) -> str:
             """Get stable context optimized for prompt caching.
 
-            Returns IDENTICAL content each call (unlike recall which varies).
-            Perfect for prompt cache hits - 90% token discount after turn 1.
-
-            Call once at session start, include in system prompt.
-            Every subsequent turn hits the cache.
+            Best practice from LangChain:
+            - Returns IDENTICAL content each call (unlike recall which varies)
+            - Perfect for prompt cache hits (90% token discount after turn 1)
+            - Call once at session start, include in system prompt
 
             Args:
                 project: Optional project to filter context
             """
-            return await self.get_cached_context(project)
+            from memory.cache_context import CacheableContext, estimate_tokens
+
+            ctx = CacheableContext(project=project)
+            content = ctx.get_stable_context()
+            tokens = estimate_tokens(content)
+
+            return f"{content}\n<!-- Cache hash: {ctx.get_cache_hash()} | ~{tokens} tokens -->"
 
         registered.append("get_cached_context")
+
+        @mcp.tool()
+        async def memory_stats() -> str:
+            """Get memory system statistics and health."""
+            stats = self.manager.get_stats()
+
+            output = "# Memory System Statistics\n\n"
+            output += f"**Total Memories**: {stats.get('total', 0)}\n"
+            output += f"**Storage**: {stats.get('storage_path', 'N/A')}\n\n"
+
+            by_type = stats.get("by_type", {})
+            if by_type:
+                output += "## By Type\n"
+                for t, count in sorted(by_type.items(), key=lambda x: -x[1]):
+                    output += f"- {t}: {count}\n"
+
+            return output
+
+        registered.append("memory_stats")
 
         return registered

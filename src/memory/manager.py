@@ -24,6 +24,7 @@ All operations:
 from __future__ import annotations
 
 import logging
+import os
 import re
 from datetime import datetime, timedelta
 from pathlib import Path
@@ -113,17 +114,22 @@ class MemoryManager:
 
     def __init__(
         self,
-        memory_dir: str | Path = "~/.claude/memory",
-        qdrant_url: str = "http://localhost:6333",
-        embedding_model: str = "all-MiniLM-L6-v2",
+        memory_dir: str | Path | None = None,
+        qdrant_url: str | None = None,
+        embedding_model: str | None = None,
     ) -> None:
         """Initialize memory manager.
 
         Args:
-            memory_dir: Where to store memory files
-            qdrant_url: Qdrant server URL
-            embedding_model: Model for embeddings
+            memory_dir: Where to store memory files (default: MEMORY_STORAGE_PATH or ~/.claude/memory)
+            qdrant_url: Qdrant server URL (default: QDRANT_URL or http://localhost:6333)
+            embedding_model: Model for embeddings (default: EMBEDDING_MODEL or all-MiniLM-L6-v2)
         """
+        # Read from environment with sensible defaults
+        memory_dir = memory_dir or os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory")
+        qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "http://localhost:6333")
+        embedding_model = embedding_model or os.environ.get("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+
         # File storage
         self.memory_dir = Path(memory_dir).expanduser()
         self.memory_dir.mkdir(parents=True, exist_ok=True)

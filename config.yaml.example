@@ -1,0 +1,48 @@
+# Memento MCP Server Configuration
+# Copy to config.yaml and customize
+
+# =============================================================================
+# QDRANT - Vector Database
+# =============================================================================
+qdrant:
+  url: http://localhost:6333
+  # api_key: xxx  # Only for Qdrant Cloud
+  # collection_prefix: ""  # Prefix for collection names (e.g., "prod_")
+
+# =============================================================================
+# TOOLS - Memory tool configuration
+# =============================================================================
+tools:
+  # ---------------------------------------------------------------------------
+  # Memory Tool - Persistent context for AI assistants
+  # ---------------------------------------------------------------------------
+  memory:
+    enabled: true
+    storage_path: ~/.claude/memory  # Where to store daily YAML memory files
+
+    # Embedding configuration
+    embedding_provider: sentence-transformers  # Options: sentence-transformers, ollama, gemini
+    embedding_model: all-MiniLM-L6-v2  # Model for sentence-transformers provider
+
+    # Qdrant collection settings
+    collection: agent_memory  # Collection name in Qdrant
+
+    # Classification settings
+    use_smart_classification: true  # Use embedding-based classification (recommended)
+
+    # Ollama settings (if embedding_provider: ollama)
+    # ollama_url: http://localhost:11434
+    # ollama_model: nomic-embed-text
+
+    # Gemini settings (if embedding_provider: gemini)
+    # gemini_api_key: ${GEMINI_API_KEY}  # Reference environment variable
+    # gemini_model: models/embedding-001
+
+# =============================================================================
+# SERVER - MCP Server settings
+# =============================================================================
+server:
+  transport: stdio  # or "streamable-http" for HTTP mode
+  log_level: INFO  # DEBUG, INFO, WARNING, ERROR
+  host: 0.0.0.0
+  port: 8000
