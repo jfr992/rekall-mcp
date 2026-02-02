@@ -80,7 +80,7 @@ class ToolLoader:
             ValueError: If provider doesn't exist
         """
         if name == "memory":
-            from .builtin.memory import MemoryTools
+            from .builtin import MemoryTools
 
             return MemoryTools()
         elif name == "spectro":

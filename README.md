@@ -1,30 +1,12 @@
 # Memento MCP
 
-**Persistent memory for AI assistants.** Give Claude (or any MCP-compatible AI) the ability to remember context across sessions.
-
-> *"The people who are crazy enough to think they can change the world are the ones who do."*
+**Give Claude a memory.** Three steps, five minutes.
 
 ---
 
-## Philosophy
+## Install
 
-Every conversation with an AI starts from zero. You explain the same context, repeat the same preferences, re-establish the same decisions. It's like working with a brilliant colleague who has amnesia.
-
-**Memento changes that.**
-
-We believe AI assistants should:
-- **Remember** what matters across sessions
-- **Understand** context, not just keywords
-- **Respect** privacy by keeping data local
-- **Guide** behavior based on memory type (preferences suggest, requirements constrain)
-
-This isn't just about saving tokens. It's about building a relationship with your AI where continuity exists.
-
----
-
-## Quick Start
-
-### 1. Clone and Start
+### 1. Download and Start
 
 ```bash
 git clone https://github.com/jfr992/memento-mcp.git
@@ -32,7 +14,9 @@ cd memento-mcp
 docker compose up -d
 ```
 
-### 2. Configure Claude
+> **Need Docker?** Get it free at [docker.com/get-started](https://www.docker.com/get-started/)
+
+### 2. Tell Claude
 
 Add to `~/.claude/claude_code_config.json`:
 
@@ -53,15 +37,88 @@ Add to `~/.claude/claude_code_config.json`:
 curl http://localhost:8000/health
 ```
 
-**Done.** Claude now has persistent memory.
+**Done.** Claude now remembers things between sessions.
 
 ---
 
-## How It Works
+## How to Use
+
+Just talk normally. Claude automatically remembers:
+
+- **Decisions** → "Let's use PostgreSQL"
+- **Preferences** → "I prefer TypeScript"
+- **Lessons** → "That bug was caused by..."
+
+To check memories: *"What do you remember about this project?"*
+
+---
+
+## Your Data
+
+Everything stays on your computer in editable files:
 
 ```
-You: "Let's use PostgreSQL for its JSON support"
-AI:  *saves decision to memory*
+~/.claude/memory/2026-02-02.yaml   ← Open in any text editor
+```
+
+Nothing is sent anywhere. Backup = copy the folder.
+
+---
+
+## How Search Works
+
+Memories are converted to **embeddings** (vectors that capture meaning) for semantic search:
+
+```
+"Use PostgreSQL" → [0.12, 0.45, 0.78, ...]  ← Numbers that represent meaning
+```
+
+When you ask "what database?", Claude searches by meaning, not keywords.
+
+**Embedding options** (see [docs/SETUP.md](docs/SETUP.md)):
+| Provider | Runs on | Cost | Quality |
+|----------|---------|------|---------|
+| `sentence-transformers` | Your computer | Free | Good (default) |
+| `ollama` | Your computer | Free | Better |
+| `gemini` | Google Cloud | Free tier | Best |
+
+---
+
+## Troubleshooting
+
+**"Connection refused"** → Make sure Docker is running: `docker compose ps`
+
+**"Claude forgets"** → Add to `~/.claude/CLAUDE.md`:
+```
+At session start, call get_cached_context() to restore memory.
+```
+
+**Restart everything:** `docker compose down && docker compose up -d`
+
+---
+
+<details>
+<summary><b>How It Works</b></summary>
+
+### The Flow
+
+```
+You say something important
+        ↓
+Claude saves it → YAML file (~/.claude/memory/)
+        ↓
+Text → Embedding (vector of numbers capturing meaning)
+        ↓
+Vector → Qdrant (search database)
+        ↓
+Later: Claude searches by meaning, finds relevant memories
+```
+
+### Example
+
+```
+You: "Let's use PostgreSQL for JSON support"
+AI:  *saves to memory + creates embedding*
 
 [3 days later]
 
@@ -70,118 +127,41 @@ AI:  *semantic search finds the memory*
      "We chose PostgreSQL for its JSON support"
 ```
 
-Memories are:
-- **Stored locally** in `~/.claude/memory/` (JSON files you own)
-- **Searchable** via Qdrant vector database (semantic, not just keywords)
-- **Sanitized** automatically (credentials are redacted)
+### Memory Types
 
----
-
-## Memory Types
-
-Not all memories are equal. The type guides how AI should use them:
-
-| Type | Purpose | AI Behavior |
+| Type | Example | AI Behavior |
 |------|---------|-------------|
-| `requirement` | Hard constraints | **Must** follow |
-| `decision` | Past choices | Reference, can revisit if asked |
-| `preference` | User preferences | Show as default, offer alternatives |
-| `fact` | Context/environment | Informational background |
-| `learning` | Lessons learned | Apply to similar situations |
+| `requirement` | "Must use Python 3.11+" | **Must** follow |
+| `decision` | "Chose PostgreSQL" | Reference, can revisit |
+| `preference` | "Prefers Terraform" | Suggest, offer alternatives |
+| `fact` | "Project uses AWS" | Background context |
+| `learning` | "JWT bug fix" | Apply to similar cases |
 
-**Example:**
-```
-"Must use Python 3.11+" (requirement) → AI will not suggest Python 3.10
-"Prefers Terraform" (preference) → AI suggests Terraform but mentions alternatives
-"Chose PostgreSQL" (decision) → AI references it, asks before changing
-```
-
----
-
-## Tools Available
+### Tools
 
 | Tool | Purpose |
 |------|---------|
-| `save_memory(content, type, project)` | Save context for future recall |
-| `recall_memories(query)` | Semantic search across memories |
-| `get_project_context(project)` | All memories for a project |
-| `get_cached_context(project)` | Stable context for prompt caching |
-| `memory_stats()` | Storage statistics |
+| `observe(summary)` | Auto-save what was accomplished |
+| `recall_memories(query)` | Search memories |
+| `get_cached_context(project)` | Get all context (for prompt caching) |
+| `memory_stats()` | Storage stats |
+
+</details>
 
 ---
 
-## Data Safety
-
-Your data stays on your machine in **human-readable YAML**:
-
-```
-~/.claude/
-├── memory/
-│   ├── 2026-02-01.yaml  # All memories for this day
-│   ├── 2026-02-02.yaml
-│   └── ...
-└── qdrant/              # Search index (can be rebuilt)
-```
-
-**Example YAML** (`2026-02-01.yaml`):
-```yaml
-date: 2026-02-01
-decisions:
-  - id: 2026-02-01_decision_5678
-    content: Use PostgreSQL for JSON support
-    project: my-app
-    timestamp: 2026-02-01T14:33:22.789012
-
-preferences:
-  - id: 2026-02-01_preference_9012
-    content: User prefers concise explanations
-    project: general
-    timestamp: 2026-02-01T14:35:10.456789
-```
-
-- **Edit directly** - Add your own notes by hand
-- **Credentials** are automatically redacted before storage
-- **Backup** is just `cp -r ~/.claude ~/backup`
-- **Nothing leaves your machine** unless you configure it to
-
----
-
-## Cost Savings
+<details>
+<summary><b>Cost Savings</b></summary>
 
 ### Token Savings
-Less re-explaining context = fewer input tokens.
-- ~80% reduction in repetitive context tokens
+- ~80% reduction in repetitive context
 
 ### Prompt Cache Savings
-`get_cached_context()` returns identical content each call.
-- Put at the start of every prompt
-- After turn 1, you get 90% discount on those tokens
-- 10k tokens cached = ~$54/month savings at high usage
+`get_cached_context()` returns identical content → 90% discount after turn 1
 
----
+At high usage: **~$54/month savings** per 10k cached tokens
 
-## Documentation
-
-| Document | Purpose |
-|----------|---------|
-| [Setup Guide](docs/SETUP.md) | Installation, embedding providers, backups |
-| [Vision](docs/VISION.md) | Why this exists, where we're going |
-| [Architecture](docs/ARCHITECTURE.md) | Technical design |
-| [Tools](docs/TOOLS.md) | Adding your own tools |
-
----
-
-## Requirements
-
-- Docker (recommended) or Python 3.11+
-- ~500MB disk for embedding model
-- Works on macOS, Linux, Windows (WSL)
-
----
-
-## License
-
-MIT - Use it however you want.
+</details>
 
 ---
 
@@ -192,27 +172,50 @@ MIT - Use it however you want.
 
 ```bash
 pip install -e ".[dev]"
-docker compose up -d qdrant  # Need vector database
+docker compose up -d qdrant
 cd src && python -m server
 ```
 
-### Running Tests
+### Tests
 
 ```bash
-docker compose run --rm memento-test
-# or locally
-pytest tests/ -v
+docker compose --profile test run --rm test
 ```
 
 ### Project Structure
 
 ```
 src/
-├── server.py     # MCP server entry point
-├── config.py     # Configuration
-├── core/         # Shared infrastructure (embeddings, vector store, telemetry)
-├── memory/       # Memory system (manager, cleanup, migration)
-└── tools/        # Pluggable tool system
+├── server.py       # MCP entry point
+├── core/           # Embeddings, vector store, telemetry
+├── memory/         # Memory manager, cleanup, migration
+├── crawler/        # Documentation crawler (optional)
+├── indexer/        # Document chunker + Qdrant indexer
+└── tools/          # Pluggable tool system
 ```
 
+### Documentation
+
+| Doc | Purpose |
+|-----|---------|
+| [docs/SETUP.md](docs/SETUP.md) | Detailed setup, embedding providers, migration |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Technical design |
+| [docs/TOOLS.md](docs/TOOLS.md) | Adding custom tools |
+| [docs/EXAMPLES.md](docs/EXAMPLES.md) | Real-world usage patterns |
+| [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) | Metrics and monitoring |
+
 </details>
+
+---
+
+## Requirements
+
+- Docker (or Python 3.11+)
+- ~500MB disk (embedding model downloads on first use)
+- macOS, Linux, or Windows (WSL)
+
+---
+
+## License
+
+MIT

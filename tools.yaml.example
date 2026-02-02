@@ -1,0 +1,11 @@
+# Memento MCP Server Tools Configuration
+#
+# Copy this file to tools.yaml and customize for your setup.
+# Or use environment variables:
+#   TOOLS_ENABLED=memory
+
+tools:
+  # Memory tools - persistent context for AI assistants
+  # Provides observe(), recall_memories(), save_memory(), get_cached_context(), memory_stats()
+  memory:
+    enabled: true
