@@ -18,17 +18,8 @@ docker compose up -d
 
 ### 2. Tell Claude
 
-Add to `~/.claude/claude_code_config.json`:
-
-```json
-{
-  "mcpServers": {
-    "memory": {
-      "type": "http",
-      "url": "http://localhost:8000"
-    }
-  }
-}
+```bash
+claude mcp add memory --type http --url http://localhost:8000
 ```
 
 ### 3. Verify
