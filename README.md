@@ -19,7 +19,7 @@ docker compose up -d
 ### 2. Tell Claude
 
 ```bash
-claude mcp add memory --type http --url http://localhost:8000
+claude mcp add --transport http memory http://localhost:8000
 ```
 
 ### 3. Verify
