@@ -31,10 +31,11 @@ What it does:
 """
 
 import argparse
-import json
 import logging
 import sys
 from pathlib import Path
+
+import yaml
 
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
@@ -85,19 +86,30 @@ def migrate_memories(
     logger.info(f"Model: {model}")
     logger.info("")
 
-    # Find all memory files
+    # Find all memory files (YAML format)
     if not storage_path.exists():
         logger.error(f"Storage path not found: {storage_path}")
         return {"error": "Storage path not found", "migrated": 0}
 
-    memory_files = list(storage_path.glob("*.json"))
-    logger.info(f"Found {len(memory_files)} memory files")
+    yaml_files = list(storage_path.glob("*.yaml"))
+    logger.info(f"Found {len(yaml_files)} daily memory files")
+
+    # Count total memories across all files
+    total_memories = 0
+    if yaml_files:
+        for yaml_file in yaml_files:
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f) or {}
+            for key in data:
+                if key.endswith("s") and isinstance(data[key], list):
+                    total_memories += len(data[key])
+        logger.info(f"Total memories: {total_memories}")
 
     if dry_run:
         logger.info("\n[DRY RUN] No changes made")
-        return {"found": len(memory_files), "migrated": 0, "dry_run": True}
+        return {"found": total_memories, "migrated": 0, "dry_run": True}
 
-    if not memory_files:
+    if not yaml_files:
         logger.info("No memories to migrate")
         return {"found": 0, "migrated": 0}
 
@@ -131,39 +143,58 @@ def migrate_memories(
     store.delete_collection()
     store.ensure_collection()
 
-    # Migrate each memory
+    # Migrate each memory from YAML files
     logger.info("\nMigrating memories...")
     migrated = 0
     errors = 0
 
-    for i, file_path in enumerate(memory_files, 1):
+    for yaml_file in yaml_files:
         try:
-            with open(file_path) as f:
-                memory = json.load(f)
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f) or {}
 
-            # Re-embed the content
-            content = memory.get("content", "")
-            vector = embedder.encode(content)
+            date = data.get("date", yaml_file.stem)
 
-            # Store in Qdrant
-            store.upsert(
-                id=memory.get("id", file_path.stem),
-                vector=vector,
-                payload={
-                    "content": content,
-                    "memory_type": memory.get("memory_type", "note"),
-                    "project": memory.get("project", ""),
-                    "tags": memory.get("tags", []),
-                    "created_at": memory.get("created_at", ""),
-                },
-            )
+            # Process each type section (requirements, decisions, preferences, etc.)
+            for type_key in data:
+                if not type_key.endswith("s") or not isinstance(data[type_key], list):
+                    continue
 
-            migrated += 1
-            if i % 10 == 0 or i == len(memory_files):
-                logger.info(f"  Progress: {i}/{len(memory_files)}")
+                memory_type = type_key[:-1]  # Remove trailing 's'
+
+                for memory in data[type_key]:
+                    try:
+                        # Re-embed the content
+                        content = memory.get("content", "")
+                        if not content:
+                            continue
+
+                        vector = embedder.encode(content)
+
+                        # Store in Qdrant
+                        store.save(
+                            id=memory.get("id", f"{date}_{memory_type}_{migrated}"),
+                            vector=vector,
+                            payload={
+                                "memory_id": memory.get("id"),
+                                "content": content,
+                                "date": date,
+                                "timestamp": memory.get("timestamp", ""),
+                                "type": memory_type,
+                                "project": memory.get("project", "general"),
+                            },
+                        )
+
+                        migrated += 1
+                        if migrated % 10 == 0 or migrated == total_memories:
+                            logger.info(f"  Progress: {migrated}/{total_memories}")
+
+                    except Exception as e:
+                        logger.warning(f"  Failed to migrate memory from {yaml_file.name}: {e}")
+                        errors += 1
 
         except Exception as e:
-            logger.warning(f"  Failed to migrate {file_path.name}: {e}")
+            logger.warning(f"  Failed to process {yaml_file.name}: {e}")
             errors += 1
 
     logger.info("")
@@ -176,7 +207,7 @@ def migrate_memories(
     logger.info(f"Dimensions: {embedder.dimensions}")
 
     return {
-        "found": len(memory_files),
+        "found": total_memories,
         "migrated": migrated,
         "errors": errors,
         "provider": provider,
