@@ -1,0 +1,73 @@
+# Documentation Crawler Configuration
+# Copy to crawl_config.yaml and customize for your documentation site
+
+# Target documentation to crawl
+target:
+  name: "my-tool-docs"  # Name for the crawled dataset
+  start_urls:
+    - https://docs.example.com/
+  allowed_domains:
+    - docs.example.com
+
+  # URL patterns to skip
+  deny_patterns:
+    - /api-content/  # Skip raw API dumps
+    - \?             # Skip URLs with query params
+    - "#"            # Skip anchor links
+
+  # Categories (optional) - map URL patterns to categories
+  categories:
+    api:
+      - /api/
+      - /reference/
+    tutorials:
+      - /tutorials/
+      - /guides/
+      - /getting-started/
+    concepts:
+      - /concepts/
+      - /architecture/
+
+# CSS Selectors (optional) - customize content extraction
+selectors:
+  title:
+    - h1::text
+    - article h1::text
+    - main h1::text
+    - title::text
+  content:
+    - article
+    - main
+    - .docs-content
+    - .markdown-body
+    - '[role="main"]'
+
+# Crawler settings
+crawler:
+  # Polite crawling (respectful of server resources)
+  concurrent_requests: 1
+  download_delay: 2.0  # seconds between requests
+  randomize_delay: true
+
+  # Auto-throttle based on server response
+  autothrottle_enabled: true
+  autothrottle_max_delay: 10.0
+
+  # Cache settings
+  cache_enabled: true
+  cache_expiration: 604800  # 7 days
+  cache_dir: .scrapy_cache
+
+  # User agent (be transparent about what you're doing)
+  user_agent: "MementoMCP-DocBot/1.0 (Documentation indexer; contact: your-email@example.com)"
+
+# Output settings
+output:
+  directory: ./crawled_docs
+  format: json  # json or jsonl
+
+# Indexer settings (for embedding and Qdrant)
+indexer:
+  chunk_size: 1000  # characters per chunk
+  chunk_overlap: 200  # overlap between chunks
+  collection_name: tool_docs  # Qdrant collection name

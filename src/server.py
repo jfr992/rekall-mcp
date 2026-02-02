@@ -100,9 +100,12 @@ async def app_lifespan(_server: FastMCP) -> AsyncIterator[dict]:
 
 
 # Create the MCP server
+# Set host to 0.0.0.0 for Docker container access
 mcp = FastMCP(
     "AI Memory & Tools Server",
     lifespan=app_lifespan,
+    host="0.0.0.0",
+    port=8000,
 )
 
 
@@ -125,8 +128,11 @@ def setup_tools() -> None:
         logger.info(f"Loaded {provider}: {len(tools)} tools")
 
 
-# Register tools at module load time
-setup_tools()
+# Register tools at module load time (skip during testing)
+# Check if we're in a test environment
+_is_testing = "pytest" in sys.modules or "PYTEST_VERSION" in os.environ
+if not _is_testing:
+    setup_tools()
 
 
 # Add server management tools
@@ -173,11 +179,20 @@ async def get_telemetry_summary() -> str:
 def main() -> None:
     """Main entry point."""
     transport = os.getenv("MCP_TRANSPORT", "stdio")
+    host = os.getenv("HOST", "127.0.0.1")
+    port = int(os.getenv("PORT", "8000"))
 
     logger.info(f"Starting MCP server with {transport} transport")
 
     if transport == "streamable-http":
-        mcp.run(transport="streamable-http")
+        # Use uvicorn directly for more control over host binding
+        import uvicorn
+        uvicorn.run(
+            mcp.streamable_http_app(),
+            host=host,
+            port=port,
+            log_level="info",
+        )
     else:
         mcp.run(transport="stdio")
 

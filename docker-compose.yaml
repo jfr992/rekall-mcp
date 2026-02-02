@@ -45,6 +45,8 @@ services:
       - MCP_TRANSPORT=streamable-http
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - MEMORY_STORAGE_PATH=/data/memory
+      - FASTMCP_HOST=0.0.0.0
+      - HOST=0.0.0.0
     ports:
       - "8000:8000"
     volumes:
