@@ -35,7 +35,7 @@ memento-qdrant   Up
 ## Step 2: Configure Claude (Single Command)
 
 ```bash
-claude mcp add memory --type http --url http://localhost:8000
+claude mcp add --transport http memory http://localhost:8000
 ```
 
 **Verify it worked:**
