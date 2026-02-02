@@ -32,17 +32,13 @@ This starts:
 
 ### Step 2: Tell Claude About It
 
-Add this to your Claude Code config file (`~/.claude/claude_code_config.json`):
+```bash
+claude mcp add memory --type http --url http://localhost:8000
+```
 
-```json
-{
-  "mcpServers": {
-    "memory": {
-      "type": "http",
-      "url": "http://localhost:8000"
-    }
-  }
-}
+Verify:
+```bash
+claude mcp list  # Should show: memory (http) - http://localhost:8000
 ```
 
 ### Step 3: Verify It's Working
@@ -126,13 +122,21 @@ docker compose up -d qdrant
 
 ### Step 3: Tell Claude About It
 
+```bash
+claude mcp add memory \
+  --command python \
+  --args "-m,server" \
+  --cwd /path/to/memento-mcp/src
+```
+
+Or manually edit `~/.claude/claude_code_config.json`:
 ```json
 {
   "mcpServers": {
     "memory": {
       "command": "python",
       "args": ["-m", "server"],
-      "cwd": "/path/to/memento-mcp"
+      "cwd": "/path/to/memento-mcp/src"
     }
   }
 }

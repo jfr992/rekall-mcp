@@ -25,11 +25,11 @@ services:
       # Store on your machine, not in a Docker volume
       - ${QDRANT_DATA_PATH:-~/.claude/qdrant}:/qdrant/storage
     restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
+    # healthcheck:
+    #   test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+    #   interval: 30s
+    #   timeout: 10s
+    #   retries: 3
 
   # =========================================================================
   # MCP SERVER - Memory Tools (default)
@@ -53,8 +53,7 @@ services:
       # Store on your machine, not in a Docker volume
       - ${MEMORY_STORAGE_PATH:-~/.claude/memory}:/data/memory
     depends_on:
-      qdrant:
-        condition: service_healthy
+      - qdrant
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
