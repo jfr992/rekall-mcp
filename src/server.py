@@ -257,7 +257,7 @@ async def api_get_context(request):
     from starlette.responses import JSONResponse
 
     try:
-        project = request.query_params.get("project")
+        project = request.query_params.get("project") or "general"
 
         manager = _get_memory_manager()
         context = manager.get_project_context(project)
