@@ -5,7 +5,6 @@ measuring REAL token usage to prove the effectiveness of the memory system.
 """
 
 import tempfile
-from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -72,9 +71,9 @@ class TestSelfBenchmark:
         for learning in week1_learnings:
             memory_manager.save(learning, type="learning", project="payment-api")
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("🧪 SELF-BENCHMARK: Cold Start vs Warm Start")
-        print("="*80)
+        print("=" * 80)
 
         # ================================================================
         # WEEK 2 - SCENARIO 1: WITHOUT MEMORY (Cold Start)
@@ -84,7 +83,9 @@ class TestSelfBenchmark:
         print("-" * 80)
 
         # User's question
-        user_question = "I need to add a new endpoint for refund processing. What's our current setup?"
+        user_question = (
+            "I need to add a new endpoint for refund processing. What's our current setup?"
+        )
 
         # WITHOUT memory, AI needs full context repeated
         context_without_memory = f"""
@@ -115,12 +116,12 @@ class TestSelfBenchmark:
 
         tokens_without_memory = self.count_tokens(context_without_memory)
 
-        print(f"\n💬 User question:")
+        print("\n💬 User question:")
         print(f"   '{user_question}'")
-        print(f"\n📝 Context provided (WITHOUT memory):")
-        print(f"   - Full architecture explanation")
-        print(f"   - All past decisions repeated")
-        print(f"   - All learnings re-explained")
+        print("\n📝 Context provided (WITHOUT memory):")
+        print("   - Full architecture explanation")
+        print("   - All past decisions repeated")
+        print("   - All learnings re-explained")
         print(f"\n🔢 Token count: {tokens_without_memory} tokens")
 
         # ================================================================
@@ -153,12 +154,12 @@ class TestSelfBenchmark:
         total_context_with_memory = context_with_memory + memory_recall_overhead
         tokens_with_memory = self.count_tokens(total_context_with_memory)
 
-        print(f"\n💬 User question:")
+        print("\n💬 User question:")
         print(f"   '{user_question}'")
-        print(f"\n📝 Context provided (WITH memory):")
-        print(f"   - Minimal prompt")
-        print(f"   - recall_memories() tool call")
-        print(f"   - Context retrieved from vector DB")
+        print("\n📝 Context provided (WITH memory):")
+        print("   - Minimal prompt")
+        print("   - recall_memories() tool call")
+        print("   - Context retrieved from vector DB")
         print(f"\n🔢 Token count: {tokens_with_memory} tokens")
 
         # ================================================================
@@ -173,19 +174,19 @@ class TestSelfBenchmark:
         cost_with_memory = tokens_with_memory * 3.00 / 1_000_000
         cost_saved = cost_without_memory - cost_with_memory
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("📊 RESULTS")
-        print("="*80)
-        print(f"\n🔢 Token Usage:")
+        print("=" * 80)
+        print("\n🔢 Token Usage:")
         print(f"   Without memory: {tokens_without_memory:,} tokens")
         print(f"   With memory:    {tokens_with_memory:,} tokens")
-        print(f"   ─────────────────────────────────────")
+        print("   ─────────────────────────────────────")
         print(f"   Saved:          {tokens_saved:,} tokens ({percentage_saved:.0f}% reduction)")
 
-        print(f"\n💰 Cost per Query:")
+        print("\n💰 Cost per Query:")
         print(f"   Without memory: ${cost_without_memory:.6f}")
         print(f"   With memory:    ${cost_with_memory:.6f}")
-        print(f"   ─────────────────────────────────────")
+        print("   ─────────────────────────────────────")
         print(f"   Saved per query: ${cost_saved:.6f}")
 
         # Scale to realistic usage
@@ -196,25 +197,25 @@ class TestSelfBenchmark:
         monthly_cost_with = cost_with_memory * queries_per_day * days_per_month
         monthly_savings = monthly_cost_without - monthly_cost_with
 
-        print(f"\n📅 Monthly Projection (10 queries/day × 20 days):")
+        print("\n📅 Monthly Projection (10 queries/day × 20 days):")
         print(f"   Without memory: ${monthly_cost_without:.2f}/month")
         print(f"   With memory:    ${monthly_cost_with:.2f}/month")
-        print(f"   ─────────────────────────────────────")
+        print("   ─────────────────────────────────────")
         print(f"   Monthly savings: ${monthly_savings:.2f}")
 
-        print(f"\n⏱️  Time Saved:")
-        print(f"   Without memory: ~5 min typing/explaining context")
-        print(f"   With memory:    ~2 seconds (automatic recall)")
-        print(f"   ─────────────────────────────────────")
-        print(f"   Time saved per query: ~5 minutes")
-        print(f"   Monthly time saved: ~16.7 hours")
+        print("\n⏱️  Time Saved:")
+        print("   Without memory: ~5 min typing/explaining context")
+        print("   With memory:    ~2 seconds (automatic recall)")
+        print("   ─────────────────────────────────────")
+        print("   Time saved per query: ~5 minutes")
+        print("   Monthly time saved: ~16.7 hours")
 
-        print(f"\n🎯 Efficiency Gain:")
+        print("\n🎯 Efficiency Gain:")
         print(f"   Token efficiency: {percentage_saved:.0f}% reduction")
-        print(f"   Time efficiency:  150x faster (2 sec vs 5 min)")
+        print("   Time efficiency:  150x faster (2 sec vs 5 min)")
         print(f"   Cost efficiency:  ${monthly_savings:.2f}/month savings")
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
 
         # Assertions
         assert tokens_saved > 0, "Memory should save tokens"
@@ -240,9 +241,9 @@ class TestSelfBenchmark:
         for decision in decisions:
             memory_manager.save(decision, type="decision", project=project)
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("🧪 SELF-BENCHMARK: Prompt Cache Effectiveness")
-        print("="*80)
+        print("=" * 80)
 
         # Simulate stable context (returned by get_cached_context)
         cached_context = f"""
@@ -273,18 +274,18 @@ class TestSelfBenchmark:
             "What about user authentication?",
         ]
 
-        print(f"\n📝 Cached Context:")
+        print("\n📝 Cached Context:")
         print(f"   Size: {cached_context_tokens} tokens")
-        print(f"   Stability: Identical across all turns (perfect for caching)")
+        print("   Stability: Identical across all turns (perfect for caching)")
 
-        print(f"\n💬 Simulating 10-turn conversation:")
+        print("\n💬 Simulating 10-turn conversation:")
 
         # Turn 1: Write to cache (full price)
         turn1_prompt_tokens = self.count_tokens(turns[0])
         turn1_total = turn1_prompt_tokens + cached_context_tokens
         turn1_cost = turn1_total * 3.00 / 1_000_000
 
-        print(f"\n   Turn 1:")
+        print("\n   Turn 1:")
         print(f"   ├─ Fresh prompt: {turn1_prompt_tokens} tokens")
         print(f"   ├─ Cached context: {cached_context_tokens} tokens (writing to cache)")
         print(f"   ├─ Total: {turn1_total} tokens")
@@ -307,13 +308,13 @@ class TestSelfBenchmark:
             total_cache_hits += cached_context_tokens
 
             if i == 2:  # Show detail for turn 2
-                print(f"\n   Turn 2:")
+                print("\n   Turn 2:")
                 print(f"   ├─ Fresh prompt: {prompt_tokens} tokens (@$3.00/1M)")
                 print(f"   ├─ Cached context: {cached_context_tokens} tokens (@$0.30/1M) ✨")
                 print(f"   ├─ Total: {total_tokens} tokens")
                 print(f"   └─ Cost: ${turn_cost:.6f}")
 
-        print(f"\n   Turns 3-10: Similar pattern (cached context @ $0.30/1M)")
+        print("\n   Turns 3-10: Similar pattern (cached context @ $0.30/1M)")
 
         # Calculate totals
         total_cost_with_cache = turn1_cost + sum(subsequent_costs)
@@ -329,35 +330,39 @@ class TestSelfBenchmark:
         cache_hit_ratio = total_cached_tokens / total_tokens
         savings_percentage = (cache_savings / total_cost_without_cache) * 100
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("📊 PROMPT CACHE RESULTS")
-        print("="*80)
+        print("=" * 80)
 
-        print(f"\n🔢 Token Distribution:")
+        print("\n🔢 Token Distribution:")
         print(f"   Fresh input tokens:  {total_fresh_tokens:,} (24%)")
         print(f"   Cached tokens:       {total_cached_tokens:,} (76%)")
-        print(f"   ─────────────────────────────────────────")
+        print("   ─────────────────────────────────────────")
         print(f"   Total:               {total_tokens:,}")
 
         print(f"\n🎯 Cache Hit Ratio: {cache_hit_ratio*100:.0f}%")
 
-        print(f"\n💰 Cost Comparison:")
+        print("\n💰 Cost Comparison:")
         print(f"   Without cache: ${total_cost_without_cache:.6f} (@$3.00/1M)")
         print(f"   With cache:    ${total_cost_with_cache:.6f}")
-        print(f"   ─────────────────────────────────────────")
+        print("   ─────────────────────────────────────────")
         print(f"   Savings:       ${cache_savings:.6f} ({savings_percentage:.0f}%)")
 
-        print(f"\n📈 Effective Rate:")
+        print("\n📈 Effective Rate:")
         effective_rate = (total_cost_with_cache / total_tokens) * 1_000_000
         print(f"   ${effective_rate:.2f} per 1M tokens")
-        print(f"   (vs $3.00/1M without cache)")
+        print("   (vs $3.00/1M without cache)")
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
 
         # Assertions
-        assert cache_hit_ratio > 0.70, f"Cache hit ratio should be >70%, got {cache_hit_ratio*100:.0f}%"
+        assert (
+            cache_hit_ratio > 0.70
+        ), f"Cache hit ratio should be >70%, got {cache_hit_ratio*100:.0f}%"
         assert savings_percentage > 50, f"Should save >50%, got {savings_percentage:.0f}%"
-        assert effective_rate < 2.00, f"Effective rate should be <$2.00/1M, got ${effective_rate:.2f}"
+        assert (
+            effective_rate < 2.00
+        ), f"Effective rate should be <$2.00/1M, got ${effective_rate:.2f}"
 
     def test_scenario_real_world_week(self, memory_manager: MemoryManager):
         """Complete real-world test: 1 week of development work.
@@ -367,9 +372,9 @@ class TestSelfBenchmark:
 
         project = "saas-dashboard"
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("🧪 SELF-BENCHMARK: Real Week of Development")
-        print("="*80)
+        print("=" * 80)
 
         # Day 1-2: Setup phase
         print("\n📅 Day 1-2: Initial Setup")
@@ -378,7 +383,7 @@ class TestSelfBenchmark:
             memory_manager.save(
                 f"Setup decision {i}: Important architectural choice",
                 type="decision",
-                project=project
+                project=project,
             )
         print(f"   ✅ Stored {initial_decisions} architectural decisions")
 
@@ -389,7 +394,7 @@ class TestSelfBenchmark:
             memory_manager.save(
                 f"Learning {i}: Bug fix or optimization discovered",
                 type="learning",
-                project=project
+                project=project,
             )
         print(f"   ✅ Stored {learnings} learnings and bug fixes")
 
@@ -406,19 +411,23 @@ class TestSelfBenchmark:
 
         # Without memory
         tokens_without_memory_day5 = (
-            sessions_on_day5 * turns_per_session *
-            (avg_question_tokens + context_tokens_without_memory)
+            sessions_on_day5
+            * turns_per_session
+            * (avg_question_tokens + context_tokens_without_memory)
         )
 
         # With memory (includes cache benefit)
         tokens_with_memory_day5 = (
-            sessions_on_day5 * turns_per_session *
-            (avg_question_tokens + context_tokens_with_memory)
+            sessions_on_day5
+            * turns_per_session
+            * (avg_question_tokens + context_tokens_with_memory)
         )
 
         # Cache benefit: 75% of context tokens get cached
         cache_hit_ratio = 0.75
-        cached_tokens = int(sessions_on_day5 * turns_per_session * context_tokens_with_memory * cache_hit_ratio)
+        cached_tokens = int(
+            sessions_on_day5 * turns_per_session * context_tokens_with_memory * cache_hit_ratio
+        )
 
         # Cost calculation
         cost_without_memory = tokens_without_memory_day5 * 3.00 / 1_000_000
@@ -430,9 +439,9 @@ class TestSelfBenchmark:
         cache_read_tokens = cached_tokens - cache_write_tokens
 
         cost_with_memory = (
-            (fresh_tokens * 3.00 / 1_000_000) +
-            (cache_write_tokens * 3.00 / 1_000_000) +
-            (cache_read_tokens * 0.30 / 1_000_000)
+            (fresh_tokens * 3.00 / 1_000_000)
+            + (cache_write_tokens * 3.00 / 1_000_000)
+            + (cache_read_tokens * 0.30 / 1_000_000)
         )
 
         tokens_saved = tokens_without_memory_day5 - tokens_with_memory_day5
@@ -442,47 +451,49 @@ class TestSelfBenchmark:
         print(f"   Turns per session: {turns_per_session}")
         print(f"   Cache hit ratio: {cache_hit_ratio*100:.0f}%")
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
         print("📊 WEEK SUMMARY")
-        print("="*80)
+        print("=" * 80)
 
-        print(f"\n📝 Memory Storage:")
+        print("\n📝 Memory Storage:")
         print(f"   Decisions stored: {initial_decisions}")
         print(f"   Learnings stored: {learnings}")
         print(f"   Total memories: {initial_decisions + learnings}")
 
-        print(f"\n🔢 Day 5 Token Usage:")
+        print("\n🔢 Day 5 Token Usage:")
         print(f"   Without memory: {tokens_without_memory_day5:,} tokens")
         print(f"   With memory:    {tokens_with_memory_day5:,} tokens")
-        print(f"   ─────────────────────────────────────")
-        print(f"   Saved:          {tokens_saved:,} tokens ({tokens_saved/tokens_without_memory_day5*100:.0f}%)")
+        print("   ─────────────────────────────────────")
+        print(
+            f"   Saved:          {tokens_saved:,} tokens ({tokens_saved/tokens_without_memory_day5*100:.0f}%)"
+        )
 
-        print(f"\n💰 Day 5 Cost:")
+        print("\n💰 Day 5 Cost:")
         print(f"   Without memory: ${cost_without_memory:.4f}")
         print(f"   With memory:    ${cost_with_memory:.4f}")
-        print(f"   ─────────────────────────────────────")
+        print("   ─────────────────────────────────────")
         print(f"   Saved:          ${cost_saved:.4f}")
 
-        print(f"\n⏱️  Time Saved (Day 5):")
+        print("\n⏱️  Time Saved (Day 5):")
         time_per_context = 3  # minutes
         contexts_needed = sessions_on_day5
         time_saved_minutes = contexts_needed * time_per_context
         print(f"   Context explanations avoided: {contexts_needed}")
         print(f"   Time per explanation: {time_per_context} min")
-        print(f"   ─────────────────────────────────────")
+        print("   ─────────────────────────────────────")
         print(f"   Total time saved: {time_saved_minutes} minutes")
 
-        print(f"\n🎯 Key Metrics:")
+        print("\n🎯 Key Metrics:")
         print(f"   Token efficiency: {tokens_saved/tokens_without_memory_day5*100:.0f}% reduction")
         print(f"   Cost efficiency: ${cost_saved:.4f} saved in one day")
         print(f"   Time efficiency: {time_saved_minutes} minutes saved")
         print(f"   Cache effectiveness: {cache_hit_ratio*100:.0f}% hit ratio")
 
-        print(f"\n💡 Insight:")
-        print(f"   Memory system paid for itself by Day 5!")
-        print(f"   Week 2+ is pure savings and productivity gain.")
+        print("\n💡 Insight:")
+        print("   Memory system paid for itself by Day 5!")
+        print("   Week 2+ is pure savings and productivity gain.")
 
-        print("\n" + "="*80)
+        print("\n" + "=" * 80)
 
         # Assertions
         assert tokens_saved > 0

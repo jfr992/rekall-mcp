@@ -9,6 +9,7 @@ repos:
       - id: check-added-large-files
       - id: check-merge-conflict
       - id: detect-private-key
+        exclude: ^tests/test_memory\.py$  # Contains test vectors for credential sanitization
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.4.4
@@ -31,7 +32,7 @@ repos:
     hooks:
       - id: pytest
         name: pytest
-        entry: pytest
+        entry: bash -c 'source .venv/bin/activate && PYTHONPATH=src pytest --tb=short -q'
         language: system
         pass_filenames: false
         always_run: true

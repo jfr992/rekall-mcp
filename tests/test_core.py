@@ -11,7 +11,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-
 # =============================================================================
 # TELEMETRY TESTS: How we measure
 # =============================================================================
@@ -24,6 +23,7 @@ class TestTelemetry:
     def reset_telemetry(self):
         """Reset singleton before each test."""
         from core.telemetry import Telemetry
+
         Telemetry.reset()
         yield
         Telemetry.reset()
@@ -153,26 +153,24 @@ class TestEmbedder:
             with patch("sentence_transformers.SentenceTransformer") as mock_st:
                 model = MagicMock()
                 model.get_sentence_embedding_dimension.return_value = 384
-                model.encode.return_value = MagicMock(
-                    tolist=MagicMock(return_value=[0.1] * 384)
-                )
+                model.encode.return_value = MagicMock(tolist=MagicMock(return_value=[0.1] * 384))
                 mock_st.return_value = model
                 yield model
 
     def test_lazy_loads_model(self, mock_sentence_transformer):
-        """Model only loads when first used."""
+        """Provider only loads when first used."""
         from core.embeddings import Embedder
 
         embedder = Embedder()
 
-        # Not loaded yet
-        assert embedder._model is None
+        # Not loaded yet (provider pattern)
+        assert embedder._provider is None
 
         # Access triggers load
         _ = embedder.dimensions
 
         # Now loaded
-        assert embedder._model is not None
+        assert embedder._provider is not None
 
     def test_encode_returns_vector(self, mock_sentence_transformer):
         """encode() returns list of floats."""
@@ -351,6 +349,7 @@ class TestCoreIntegration:
     def reset_telemetry(self):
         """Reset telemetry singleton."""
         from core.telemetry import Telemetry
+
         Telemetry.reset()
         yield
         Telemetry.reset()

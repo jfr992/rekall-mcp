@@ -110,7 +110,7 @@ class TestEndToEndWorkflow:
         manager = MemoryManager(memory_dir=temp_memory_dir)
 
         # Observe something
-        memory_id = manager.save(
+        _ = manager.save(
             content="Decided to use PostgreSQL", type="decision", project="test-project"
         )
 
@@ -198,8 +198,6 @@ class TestNoDRYViolations:
         """Memory types should be configurable, not hardcoded strings."""
         # This is more of a code review test, but we can check
         # that types come from somewhere consistent
-
-        from tools.builtin.memory import _get_type_embeddings
 
         # Should return dict with known types
         # (This requires embedder, so we'll test the structure)

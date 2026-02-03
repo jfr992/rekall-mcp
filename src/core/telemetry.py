@@ -222,7 +222,8 @@ class Telemetry:
     def increment(self, counter: str, amount: int = 1) -> None:
         """Increment a counter without timing."""
         # Use OperationMetrics but with 0 duration
-        self._operations[counter].record(0, success=True)
+        for _ in range(amount):
+            self._operations[counter].record(0, success=True)
 
     # -------------------------------------------------------------------------
     # EXPORT: How we report

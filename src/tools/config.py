@@ -1,5 +1,7 @@
 """Tool configuration management."""
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -45,7 +47,7 @@ class ToolConfig:
         self._enabled[name] = False
 
     @classmethod
-    def from_file(cls, path: str | Path) -> "ToolConfig":
+    def from_file(cls, path: str | Path) -> ToolConfig:
         """Load config from a YAML file.
 
         Args:
@@ -74,7 +76,7 @@ class ToolConfig:
         return config
 
     @classmethod
-    def from_env(cls) -> "ToolConfig":
+    def from_env(cls) -> ToolConfig:
         """Load config from environment variables.
 
         Environment variables:
@@ -109,7 +111,7 @@ class ToolConfig:
         return config
 
     @classmethod
-    def default(cls) -> "ToolConfig":
+    def default(cls) -> ToolConfig:
         """Get default configuration.
 
         Memory is enabled by default.

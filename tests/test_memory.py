@@ -4,13 +4,11 @@ Following TDD principles - these tests define the expected behavior.
 DRY: Uses fixtures and parametrization to avoid repetition.
 """
 
-import json
-import tempfile
-from pathlib import Path
+from datetime import datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
-
+import yaml
 
 # =============================================================================
 # FIXTURES (DRY - reusable test components)
@@ -29,6 +27,7 @@ def temp_memory_dir(tmp_path):
 def reset_telemetry():
     """Reset telemetry singleton before each test."""
     from core.telemetry import Telemetry
+
     Telemetry.reset()
     yield
     Telemetry.reset()
@@ -81,38 +80,44 @@ class TestSanitization:
     def sanitizer(self):
         """Get sanitizer function."""
         from memory.manager import Sanitizer
+
         return Sanitizer.sanitize
 
     # DRY: Parametrize all credential patterns
-    @pytest.mark.parametrize("secret,description", [
-        # API Keys
-        ("api_key=sk-abc123def456", "generic api_key"),
-        ("apiKey: 'my-secret-key'", "camelCase apiKey"),
-        ("API_KEY=\"test123\"", "uppercase API_KEY"),
-
-        # Passwords
-        ("password=mysecretpass", "password"),
-        ("passwd: hunter2", "passwd"),
-        ("pwd='secret123'", "pwd"),
-
-        # Tokens
-        ("token=abc123xyz", "generic token"),
-        ("secret: my-secret-value", "secret"),
-        ("Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", "bearer token"),
-        ("Authorization: Basic dXNlcjpwYXNz", "basic auth"),
-
-        # Provider-specific
-        ("ghp_1234567890abcdef1234567890abcdef1234", "GitHub PAT"),
-        ("gho_1234567890abcdef1234567890abcdef1234", "GitHub OAuth"),
-        ("sk-1234567890abcdef1234567890abcdef1234567890abcdef", "OpenAI key"),
-        ("sk-ant-abc123-def456", "Anthropic key"),
-        ("xoxb-123-456-abc", "Slack bot token"),
-        ("AKIAIOSFODNN7EXAMPLE", "AWS access key"),
-
-        # PEM keys
-        ("-----BEGIN RSA PRIVATE KEY-----\nMIIE...base64...\n-----END RSA PRIVATE KEY-----", "RSA private key"),
-        ("-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----", "generic private key"),
-    ])
+    @pytest.mark.parametrize(
+        "secret,description",
+        [
+            # API Keys
+            ("api_key=sk-abc123def456", "generic api_key"),
+            ("apiKey: 'my-secret-key'", "camelCase apiKey"),
+            ('API_KEY="test123"', "uppercase API_KEY"),
+            # Passwords
+            ("password=mysecretpass", "password"),
+            ("passwd: hunter2", "passwd"),
+            ("pwd='secret123'", "pwd"),
+            # Tokens
+            ("token=abc123xyz", "generic token"),
+            ("secret: my-secret-value", "secret"),
+            ("Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", "bearer token"),
+            ("Authorization: Basic dXNlcjpwYXNz", "basic auth"),
+            # Provider-specific
+            ("ghp_1234567890abcdef1234567890abcdef1234", "GitHub PAT"),
+            ("gho_1234567890abcdef1234567890abcdef1234", "GitHub OAuth"),
+            ("sk-1234567890abcdef1234567890abcdef1234567890abcdef", "OpenAI key"),
+            ("sk-ant-abc123-def456", "Anthropic key"),
+            ("xoxb-123-456-abc", "Slack bot token"),
+            ("AKIAIOSFODNN7EXAMPLE", "AWS access key"),
+            # PEM keys
+            (
+                "-----BEGIN RSA PRIVATE KEY-----\nMIIE...base64...\n-----END RSA PRIVATE KEY-----",
+                "RSA private key",
+            ),
+            (
+                "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----",
+                "generic private key",
+            ),
+        ],
+    )
     def test_sanitizes_credentials(self, sanitizer, secret, description):
         """Each credential type should be redacted."""
         content = f"Here is my {description}: {secret}"
@@ -153,13 +158,14 @@ class TestSaveMemory:
     """Test memory saving functionality."""
 
     def test_save_creates_file(self, memory_manager, temp_memory_dir):
-        """Saving a memory should create a JSONL file."""
+        """Saving a memory should create a YAML file."""
         memory_manager.save_memory("Test content", memory_type="note", project="test")
 
-        # Check file was created
-        jsonl_files = list(temp_memory_dir.rglob("*.jsonl"))
-        assert len(jsonl_files) == 1
-        assert "notes.jsonl" in str(jsonl_files[0])
+        # Check file was created (daily YAML format)
+        yaml_files = list(temp_memory_dir.rglob("*.yaml"))
+        assert len(yaml_files) == 1
+        today = datetime.now().strftime("%Y-%m-%d")
+        assert today in str(yaml_files[0])
 
     def test_save_returns_memory_id(self, memory_manager):
         """save_memory should return a valid memory ID."""
@@ -180,16 +186,18 @@ class TestSaveMemory:
             metadata={"priority": "high"},
         )
 
-        # Read the file
-        jsonl_file = list(temp_memory_dir.rglob("*.jsonl"))[0]
-        with open(jsonl_file) as f:
-            data = json.loads(f.readline())
+        # Read the YAML file
+        yaml_file = list(temp_memory_dir.rglob("*.yaml"))[0]
+        with open(yaml_file) as f:
+            data = yaml.safe_load(f)
 
-        assert data["content"] == "Architecture decision"
-        assert data["metadata"]["type"] == "decision"
-        assert data["metadata"]["project"] == "my-project"
-        assert "date" in data["metadata"]
-        assert "timestamp" in data["metadata"]
+        # Check decisions section exists with our memory
+        assert "decisions" in data
+        assert len(data["decisions"]) == 1
+        memory = data["decisions"][0]
+        assert memory["content"] == "Architecture decision"
+        assert memory["project"] == "my-project"
+        assert "timestamp" in memory
 
     def test_save_sanitizes_content(self, memory_manager, temp_memory_dir):
         """Saved content should be sanitized."""
@@ -198,13 +206,14 @@ class TestSaveMemory:
             memory_type="note",
         )
 
-        # Read the file
-        jsonl_file = list(temp_memory_dir.rglob("*.jsonl"))[0]
-        with open(jsonl_file) as f:
-            data = json.loads(f.readline())
+        # Read the YAML file
+        yaml_file = list(temp_memory_dir.rglob("*.yaml"))[0]
+        with open(yaml_file) as f:
+            data = yaml.safe_load(f)
 
-        assert "secret123" not in data["content"]
-        assert "[REDACTED]" in data["content"]
+        content = data["notes"][0]["content"]
+        assert "secret123" not in content
+        assert "[REDACTED]" in content
 
     def test_save_calls_store_save(self, memory_manager, mock_store):
         """Saving should call store.save()."""
@@ -212,15 +221,20 @@ class TestSaveMemory:
 
         mock_store.save.assert_called_once()
 
-    @pytest.mark.parametrize("memory_type", ["note", "decision", "learning", "preference", "session"])
+    @pytest.mark.parametrize(
+        "memory_type", ["note", "decision", "learning", "preference", "session"]
+    )
     def test_save_different_types(self, memory_manager, temp_memory_dir, memory_type):
         """All memory types should be saveable."""
         memory_id = memory_manager.save_memory("Content", memory_type=memory_type)
 
         assert memory_type in memory_id
-        # File should be named {type}s.jsonl
-        jsonl_files = list(temp_memory_dir.rglob("*.jsonl"))
-        assert f"{memory_type}s.jsonl" in str(jsonl_files[0])
+        # File should be daily YAML with type section
+        yaml_files = list(temp_memory_dir.rglob("*.yaml"))
+        assert len(yaml_files) == 1
+        with open(yaml_files[0]) as f:
+            data = yaml.safe_load(f)
+        assert f"{memory_type}s" in data
 
 
 # =============================================================================
@@ -325,13 +339,15 @@ class TestSessionSummary:
         assert memory_id != ""
         assert "session" in memory_id
 
-        # Verify content
-        jsonl_file = list(temp_memory_dir.rglob("sessions.jsonl"))[0]
-        with open(jsonl_file) as f:
-            data = json.loads(f.readline())
+        # Verify content in YAML file
+        yaml_file = list(temp_memory_dir.rglob("*.yaml"))[0]
+        with open(yaml_file) as f:
+            data = yaml.safe_load(f)
 
-        assert "Built API" in data["content"]
-        assert "Added tests" in data["content"]
+        assert "sessions" in data
+        content = data["sessions"][0]["content"]
+        assert "Built API" in content
+        assert "Added tests" in content
 
     def test_save_session_with_all_fields(self, memory_manager, temp_memory_dir):
         """Session summary should include all provided fields."""
@@ -343,14 +359,15 @@ class TestSessionSummary:
             project="test",
         )
 
-        jsonl_file = list(temp_memory_dir.rglob("sessions.jsonl"))[0]
-        with open(jsonl_file) as f:
-            data = json.loads(f.readline())
+        yaml_file = list(temp_memory_dir.rglob("*.yaml"))[0]
+        with open(yaml_file) as f:
+            data = yaml.safe_load(f)
 
-        assert "Tasks Completed" in data["content"]
-        assert "Decisions" in data["content"]
-        assert "Learnings" in data["content"]
-        assert "Preferences" in data["content"]
+        content = data["sessions"][0]["content"]
+        assert "Tasks Completed" in content
+        assert "Decisions" in content
+        assert "Learnings" in content
+        assert "Preferences" in content
 
     def test_save_session_empty_returns_empty(self, memory_manager):
         """Empty session summary should return empty string."""
@@ -471,6 +488,7 @@ class TestIntegration:
     def reset_telemetry(self):
         """Reset telemetry singleton."""
         from core.telemetry import Telemetry
+
         Telemetry.reset()
         yield
         Telemetry.reset()
@@ -492,7 +510,7 @@ class TestIntegration:
     def test_full_save_and_recall_cycle(self, real_memory_manager):
         """Test complete save -> recall cycle."""
         # Save
-        memory_id = real_memory_manager.save(
+        _ = real_memory_manager.save(
             content="Integration test memory about architecture",
             type="decision",
             project="integration-test",

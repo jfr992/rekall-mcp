@@ -27,6 +27,8 @@ Usage:
     print(config.tools.memory.storage_path)
 """
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -102,7 +104,7 @@ class Config:
     server: ServerConfig = field(default_factory=ServerConfig)
 
     @classmethod
-    def load(cls, path: str | Path | None = None) -> "Config":
+    def load(cls, path: str | Path | None = None) -> Config:
         """Load configuration from file and environment.
 
         Priority:
@@ -150,7 +152,7 @@ class Config:
         return None
 
     @classmethod
-    def _load_from_file(cls, path: Path) -> "Config":
+    def _load_from_file(cls, path: Path) -> Config:
         """Load config from YAML file."""
         with open(path) as f:
             data = yaml.safe_load(f) or {}
@@ -232,7 +234,7 @@ class Config:
         return data
 
     @classmethod
-    def _apply_env_overrides(cls, config: "Config") -> "Config":
+    def _apply_env_overrides(cls, config: Config) -> Config:
         """Override config with environment variables."""
         # Qdrant
         if url := os.environ.get("QDRANT_URL"):

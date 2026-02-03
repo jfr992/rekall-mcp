@@ -350,6 +350,19 @@ class VectorStore:
             self.client.delete_collection(collection_name=self.collection)
             logger.info(f"Deleted collection: {self.collection}")
 
+    def recreate_collection(self) -> None:
+        """Delete and recreate the collection (useful for migration)."""
+        with self._telemetry.track("vector_store.recreate_collection"):
+            # Delete if exists
+            collections = [c.name for c in self.client.get_collections().collections]
+            if self.collection in collections:
+                self.client.delete_collection(collection_name=self.collection)
+                logger.info(f"Deleted collection: {self.collection}")
+
+            # Create fresh
+            self._ensure_collection()
+            logger.info(f"Recreated collection: {self.collection}")
+
     # -------------------------------------------------------------------------
     # INFO: Collection stats
     # -------------------------------------------------------------------------

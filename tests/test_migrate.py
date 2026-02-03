@@ -1,6 +1,5 @@
 """Tests for memory migration tool."""
 
-import json
 from unittest.mock import MagicMock
 
 import pytest
@@ -26,30 +25,33 @@ class TestMigrationDryRun:
 
     @pytest.fixture
     def sample_memories(self, tmp_path):
-        """Create sample memory files for testing."""
-        memories = [
-            {
-                "id": "mem1",
-                "content": "Use PostgreSQL for the database",
-                "memory_type": "decision",
-                "project": "myapp",
-                "tags": ["database"],
-                "created_at": "2024-01-01T00:00:00Z",
-            },
-            {
-                "id": "mem2",
-                "content": "The user prefers TypeScript over JavaScript",
-                "memory_type": "preference",
-                "project": "myapp",
-                "tags": ["language"],
-                "created_at": "2024-01-02T00:00:00Z",
-            },
-        ]
+        """Create sample memory files in YAML format for testing."""
+        import yaml
 
-        for mem in memories:
-            file_path = tmp_path / f"{mem['id']}.json"
-            with open(file_path, "w") as f:
-                json.dump(mem, f)
+        # Create daily YAML file with memories
+        yaml_content = {
+            "date": "2024-01-01",
+            "decisions": [
+                {
+                    "id": "mem1",
+                    "content": "Use PostgreSQL for the database",
+                    "project": "myapp",
+                    "timestamp": "2024-01-01T00:00:00Z",
+                }
+            ],
+            "preferences": [
+                {
+                    "id": "mem2",
+                    "content": "The user prefers TypeScript over JavaScript",
+                    "project": "myapp",
+                    "timestamp": "2024-01-02T00:00:00Z",
+                }
+            ],
+        }
+
+        file_path = tmp_path / "2024-01-01.yaml"
+        with open(file_path, "w") as f:
+            yaml.dump(yaml_content, f)
 
         return tmp_path
 
@@ -148,8 +150,9 @@ class TestMigrationCLI:
 
     def test_migrate_memories_signature(self):
         """migrate_memories should accept expected parameters."""
-        from memory.migrate import migrate_memories
         import inspect
+
+        from memory.migrate import migrate_memories
 
         sig = inspect.signature(migrate_memories)
         params = list(sig.parameters.keys())

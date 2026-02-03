@@ -31,7 +31,9 @@ class TestMemoryEffectiveness:
         """Create memory manager for testing."""
         return MemoryManager(memory_dir=temp_memory_dir)
 
-    def test_memory_reduces_context_repetition(self, memory_manager: MemoryManager, temp_memory_dir: Path):
+    def test_memory_reduces_context_repetition(
+        self, memory_manager: MemoryManager, temp_memory_dir: Path
+    ):
         """Test that memory reduces need to repeat context.
 
         Scenario: User works on a project across multiple sessions.
@@ -54,7 +56,7 @@ class TestMemoryEffectiveness:
                 content=decision,
                 type="decision",
                 project=project,
-                metadata={"session": "initial_setup"}
+                metadata={"session": "initial_setup"},
             )
 
         learnings = [
@@ -68,7 +70,7 @@ class TestMemoryEffectiveness:
                 content=learning,
                 type="learning",
                 project=project,
-                metadata={"session": "debugging"}
+                metadata={"session": "debugging"},
             )
 
         # Verify memories were saved
@@ -86,7 +88,9 @@ class TestMemoryEffectiveness:
         # Manual re-typing includes overhead: "The project uses...", "We decided to...", etc.
         # Each memory becomes ~2x longer when manually explained
         total_words = sum(len(d.split()) for d in decisions + learnings)
-        manual_context_tokens = total_words * 2.0 * 1.3  # 2x expansion for explanation, 1.3 words->tokens
+        manual_context_tokens = (
+            total_words * 2.0 * 1.3
+        )  # 2x expansion for explanation, 1.3 words->tokens
 
         # With memory recall: just semantic search query + compact results
         # Query: ~10 tokens, Results: condensed format
@@ -96,7 +100,7 @@ class TestMemoryEffectiveness:
         tokens_saved = manual_context_tokens - memory_recall_tokens
         savings_percentage = (tokens_saved / manual_context_tokens) * 100
 
-        print(f"\n🎯 Context Repetition Test:")
+        print("\n🎯 Context Repetition Test:")
         print(f"   Manual context: ~{manual_context_tokens:.0f} tokens")
         print(f"   Memory recall:  ~{memory_recall_tokens:.0f} tokens")
         print(f"   Savings:        ~{tokens_saved:.0f} tokens ({savings_percentage:.0f}%)")
@@ -145,7 +149,7 @@ class TestMemoryEffectiveness:
         savings = total_cost_without_cache - total_cost_with_cache
         savings_percentage = (savings / total_cost_without_cache) * 100
 
-        print(f"\n💰 Prompt Cache Effectiveness:")
+        print("\n💰 Prompt Cache Effectiveness:")
         print(f"   Context size:           {cached_context_size_tokens} tokens")
         print(f"   Without cache (10 turns): ${total_cost_without_cache:.6f}")
         print(f"   With cache (10 turns):    ${total_cost_with_cache:.6f}")
@@ -177,7 +181,7 @@ class TestMemoryEffectiveness:
                 content=memory,
                 type="decision",
                 project=project,
-                metadata={"topic": "authentication"}
+                metadata={"topic": "authentication"},
             )
 
         # Simulate semantic search (instant recall)
@@ -198,7 +202,7 @@ class TestMemoryEffectiveness:
         # Efficiency multiplier
         efficiency_multiplier = manual_search_time_seconds / semantic_search_time_seconds
 
-        print(f"\n⚡ Time Savings from Semantic Search:")
+        print("\n⚡ Time Savings from Semantic Search:")
         print(f"   Manual search:   ~{manual_search_time_seconds/60:.1f} minutes")
         print(f"   Semantic search: ~{semantic_search_time_seconds} seconds")
         print(f"   Time saved:      ~{time_saved_minutes:.1f} minutes")
@@ -249,13 +253,13 @@ class TestMemoryEffectiveness:
         annual_savings = monthly_savings * 12
         savings_percentage = (monthly_savings / monthly_cost_without_memory) * 100
 
-        print(f"\n💵 Monthly Cost Savings Projection:")
+        print("\n💵 Monthly Cost Savings Projection:")
         print(f"   Sessions per month:       {sessions_per_month}")
         print(f"   Without memory:           ${monthly_cost_without_memory:.4f}/month")
         print(f"   With memory:              ${monthly_cost_with_memory:.4f}/month")
         print(f"   Monthly savings:          ${monthly_savings:.4f} ({savings_percentage:.0f}%)")
         print(f"   Annual savings:           ${annual_savings:.2f}")
-        print(f"\n   Break-even: Memory system pays for itself in token savings!")
+        print("\n   Break-even: Memory system pays for itself in token savings!")
 
         assert monthly_savings > 0
         assert savings_percentage > 80  # Should save >80% with caching
@@ -287,11 +291,13 @@ class TestMemoryEffectiveness:
         # Estimate: Each additional 1k tokens = 1% better code quality
         quality_improvement = (context_preserved / 1000) * 1
 
-        print(f"\n🧠 Context Window Preservation:")
+        print("\n🧠 Context Window Preservation:")
         print(f"   Total window:             {context_window_size:,} tokens")
         print(f"   Repetitive (no memory):   {repetitive_context_without_memory:,} tokens")
         print(f"   Repetitive (with memory): {repetitive_context_with_memory:,} tokens")
-        print(f"   Context preserved:        {context_preserved:,} tokens ({preservation_percentage:.1f}%)")
+        print(
+            f"   Context preserved:        {context_preserved:,} tokens ({preservation_percentage:.1f}%)"
+        )
         print(f"   Quality improvement:      ~{quality_improvement:.0f}%")
 
         assert context_preserved > 0
@@ -364,18 +370,18 @@ class TestMemoryEffectiveness:
         time_saved_seconds = sessions_per_week * 180  # 3 min per session
         time_saved_hours = time_saved_seconds / 3600
 
-        print(f"\n📊 Real-World Scenario: API Development (1 Week)")
+        print("\n📊 Real-World Scenario: API Development (1 Week)")
         print(f"   Total memories stored:    {total_memories}")
         print(f"   Sessions in week:         {sessions_per_week}")
-        print(f"   ")
+        print("   ")
         print(f"   Tokens without memory:    {tokens_without_memory:,}")
         print(f"   Tokens with memory:       {tokens_with_memory:,}")
         print(f"   Tokens saved:             {tokens_saved:,}")
-        print(f"   ")
+        print("   ")
         print(f"   Cost saved:               ${cost_saved:.4f}")
         print(f"   Time saved:               {time_saved_hours:.1f} hours")
-        print(f"   ")
-        print(f"   💡 Insight: Memory pays for itself in the first week!")
+        print("   ")
+        print("   💡 Insight: Memory pays for itself in the first week!")
 
         assert tokens_saved > 0
         assert time_saved_hours >= 0.5  # Should save at least 30 minutes
@@ -400,25 +406,25 @@ class TestMemoryEffectiveness:
         # Turn 1: Initial prompt with context
         turn1_prompt_tokens = 500  # User's actual question
         turn1_cached_context_tokens = 1000  # get_cached_context() result
-        turn1_response_tokens = 800  # AI's response
+        # turn1_response_tokens = 800  # AI's response (not needed for calculation)
 
         # Turns 2-10: Continued conversation (context stays in cache)
         subsequent_turn_prompt_tokens = 300  # Shorter follow-ups
         subsequent_turn_cached_context_tokens = 1000  # Same cached context
-        subsequent_turn_response_tokens = 600  # Responses
+        # subsequent_turn_response_tokens = 600  # Responses (not needed)
 
         # Calculate token distribution
-        total_turns = 10
+        # total_turns = 10  # Unused in calculation
 
         # Input tokens breakdown
         total_fresh_input_tokens = (
-            turn1_prompt_tokens +  # Turn 1 prompt
-            (subsequent_turn_prompt_tokens * 9)  # Turns 2-10 prompts
+            turn1_prompt_tokens  # Turn 1 prompt
+            + (subsequent_turn_prompt_tokens * 9)  # Turns 2-10 prompts
         )
 
         total_cached_input_tokens = (
-            turn1_cached_context_tokens +  # Turn 1 (write to cache)
-            (subsequent_turn_cached_context_tokens * 9)  # Turns 2-10 (read from cache)
+            turn1_cached_context_tokens  # Turn 1 (write to cache)
+            + (subsequent_turn_cached_context_tokens * 9)  # Turns 2-10 (read from cache)
         )
 
         total_input_tokens = total_fresh_input_tokens + total_cached_input_tokens
@@ -430,14 +436,16 @@ class TestMemoryEffectiveness:
         # Cost calculation
         # Turn 1: Full price for cached context (writes to cache)
         turn1_cost = (
-            (turn1_prompt_tokens * 3 / 1_000_000) +  # Fresh tokens
-            (turn1_cached_context_tokens * 3 / 1_000_000)  # Writing to cache (full price)
+            (turn1_prompt_tokens * 3 / 1_000_000)  # Fresh tokens
+            + (turn1_cached_context_tokens * 3 / 1_000_000)  # Writing to cache (full price)
         )
 
         # Turns 2-10: Cached context gets 90% discount
         subsequent_turns_cost = (
-            ((subsequent_turn_prompt_tokens * 3 / 1_000_000) +  # Fresh tokens
-             (subsequent_turn_cached_context_tokens * 0.30 / 1_000_000))  # Cached (90% off)
+            (
+                (subsequent_turn_prompt_tokens * 3 / 1_000_000)  # Fresh tokens
+                + (subsequent_turn_cached_context_tokens * 0.30 / 1_000_000)
+            )  # Cached (90% off)
             * 9  # 9 turns
         )
 
@@ -453,21 +461,29 @@ class TestMemoryEffectiveness:
         # Effective rate per token (weighted average)
         effective_rate = (total_cost_with_cache / total_input_tokens) * 1_000_000
 
-        print(f"\n🎯 Cache Hit Ratio Analysis (10-turn conversation):")
-        print(f"   ")
-        print(f"   Input Token Distribution:")
-        print(f"   ├─ Fresh input tokens:    {total_fresh_input_tokens:,} ({100-cache_hit_percentage:.0f}%)")
-        print(f"   └─ Cached input tokens:   {total_cached_input_tokens:,} ({cache_hit_percentage:.0f}%)")
-        print(f"   ")
+        print("\n🎯 Cache Hit Ratio Analysis (10-turn conversation):")
+        print("   ")
+        print("   Input Token Distribution:")
+        print(
+            f"   ├─ Fresh input tokens:    {total_fresh_input_tokens:,} ({100-cache_hit_percentage:.0f}%)"
+        )
+        print(
+            f"   └─ Cached input tokens:   {total_cached_input_tokens:,} ({cache_hit_percentage:.0f}%)"
+        )
+        print("   ")
         print(f"   Cache Hit Ratio:          {cache_hit_percentage:.0f}%")
-        print(f"   ")
-        print(f"   Cost Analysis:")
+        print("   ")
+        print("   Cost Analysis:")
         print(f"   ├─ Without cache:         ${total_cost_without_cache:.6f} (@$3.00/1M)")
-        print(f"   └─ With cache:            ${total_cost_with_cache:.6f} (effective rate: ${effective_rate:.2f}/1M)")
-        print(f"   ")
-        print(f"   Savings from caching:     ${cache_savings:.6f} ({cache_savings_percentage:.0f}%)")
-        print(f"   ")
-        print(f"   💡 Key Insight:")
+        print(
+            f"   └─ With cache:            ${total_cost_with_cache:.6f} (effective rate: ${effective_rate:.2f}/1M)"
+        )
+        print("   ")
+        print(
+            f"   Savings from caching:     ${cache_savings:.6f} ({cache_savings_percentage:.0f}%)"
+        )
+        print("   ")
+        print("   💡 Key Insight:")
         print(f"      {cache_hit_percentage:.0f}% of tokens benefit from 90% discount")
         print(f"      Effective rate: ${effective_rate:.2f}/1M (vs $3.00/1M without cache)")
 
@@ -479,7 +495,7 @@ class TestMemoryEffectiveness:
 
         Shows how cache effectiveness varies with conversation patterns.
         """
-        print(f"\n📊 Cache Hit Ratio Comparison\n")
+        print("\n📊 Cache Hit Ratio Comparison\n")
         print(f"{'Scenario':<30} {'Cache Hit':<12} {'Cost':<12} {'Savings':<12}")
         print(f"{'-'*30} {'-'*12} {'-'*12} {'-'*12}")
 
@@ -540,44 +556,46 @@ class TestMemoryEffectiveness:
             savings = total_cost_without_cache - total_cost_with_cache
             savings_pct = (savings / total_cost_without_cache) * 100
 
-            print(f"{scenario['name']:<30} {cache_hit_ratio*100:>6.0f}%      "
-                  f"${total_cost_with_cache:>8.6f}  "
-                  f"{savings_pct:>6.0f}%")
+            print(
+                f"{scenario['name']:<30} {cache_hit_ratio*100:>6.0f}%      "
+                f"${total_cost_with_cache:>8.6f}  "
+                f"{savings_pct:>6.0f}%"
+            )
 
-        print(f"\n💡 Key Insights:")
-        print(f"   • Cache hit ratio directly impacts savings")
-        print(f"   • 50% cache hits = ~40% cost reduction")
-        print(f"   • 75% cache hits = ~65% cost reduction")
-        print(f"   • 90% cache hits = ~80% cost reduction")
-        print(f"   ")
-        print(f"   🎯 get_cached_context() typically achieves 75-90% cache hit ratio")
-        print(f"      by returning stable, unchanging context across conversation.")
+        print("\n💡 Key Insights:")
+        print("   • Cache hit ratio directly impacts savings")
+        print("   • 50% cache hits = ~40% cost reduction")
+        print("   • 75% cache hits = ~65% cost reduction")
+        print("   • 90% cache hits = ~80% cost reduction")
+        print("   ")
+        print("   🎯 get_cached_context() typically achieves 75-90% cache hit ratio")
+        print("      by returning stable, unchanging context across conversation.")
 
     def test_summary_report(self, memory_manager: MemoryManager):
         """Generate comprehensive effectiveness report."""
-        print(f"\n" + "="*60)
-        print(f"📈 MEMORY SYSTEM EFFECTIVENESS REPORT")
-        print(f"="*60)
+        print("\n" + "=" * 60)
+        print("📈 MEMORY SYSTEM EFFECTIVENESS REPORT")
+        print("=" * 60)
 
-        print(f"\n🎯 Key Benefits:")
-        print(f"   1. Token Savings:     75-85% reduction in repetitive context")
-        print(f"   2. Prompt Caching:    90% discount on cached context (turns 2+)")
-        print(f"   3. Time Savings:      ~5-10 min per session (no re-explaining)")
-        print(f"   4. Context Quality:   Preserves 2-3% of context window")
-        print(f"   5. Cost Savings:      ~$0.03-0.05 per month (20 sessions)")
+        print("\n🎯 Key Benefits:")
+        print("   1. Token Savings:     75-85% reduction in repetitive context")
+        print("   2. Prompt Caching:    90% discount on cached context (turns 2+)")
+        print("   3. Time Savings:      ~5-10 min per session (no re-explaining)")
+        print("   4. Context Quality:   Preserves 2-3% of context window")
+        print("   5. Cost Savings:      ~$0.03-0.05 per month (20 sessions)")
 
-        print(f"\n💰 ROI Calculation:")
-        print(f"   Monthly cost:         ~$0.001 (storage negligible)")
-        print(f"   Monthly savings:      ~$0.03-0.05 (token reduction)")
-        print(f"   Net benefit:          ~$0.029-0.049 per month")
-        print(f"   ROI:                  2,900% - 4,900%")
+        print("\n💰 ROI Calculation:")
+        print("   Monthly cost:         ~$0.001 (storage negligible)")
+        print("   Monthly savings:      ~$0.03-0.05 (token reduction)")
+        print("   Net benefit:          ~$0.029-0.049 per month")
+        print("   ROI:                  2,900% - 4,900%")
 
-        print(f"\n⚡ Efficiency Gains:")
-        print(f"   Context recall:       100x faster than manual search")
-        print(f"   Session startup:      95% faster (no context re-entry)")
-        print(f"   Code quality:         ~4.5% improvement (more context available)")
+        print("\n⚡ Efficiency Gains:")
+        print("   Context recall:       100x faster than manual search")
+        print("   Session startup:      95% faster (no context re-entry)")
+        print("   Code quality:         ~4.5% improvement (more context available)")
 
-        print(f"\n🌟 Bottom Line:")
-        print(f"   The memory system pays for itself in token savings alone,")
-        print(f"   while providing massive time savings and quality improvements.")
-        print(f"="*60)
+        print("\n🌟 Bottom Line:")
+        print("   The memory system pays for itself in token savings alone,")
+        print("   while providing massive time savings and quality improvements.")
+        print("=" * 60)

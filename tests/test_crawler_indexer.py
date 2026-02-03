@@ -6,14 +6,15 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 # Check if scrapy is available
 try:
-    import scrapy
-    SCRAPY_AVAILABLE = True
+    import importlib.util
+
+    SCRAPY_AVAILABLE = importlib.util.find_spec("scrapy") is not None
 except ImportError:
     SCRAPY_AVAILABLE = False
 
@@ -458,12 +459,14 @@ class TestEndToEndWorkflow:
             for doc in docs:
                 doc_file = docs_dir / f"{doc['id']}.json"
                 doc_file.write_text(json.dumps(doc))
-                manifest["documents"].append({
-                    "id": doc["id"],
-                    "url": doc["url"],
-                    "title": doc["title"],
-                    "category": doc["category"],
-                })
+                manifest["documents"].append(
+                    {
+                        "id": doc["id"],
+                        "url": doc["url"],
+                        "title": doc["title"],
+                        "category": doc["category"],
+                    }
+                )
 
             (docs_dir / "manifest.json").write_text(json.dumps(manifest))
 
