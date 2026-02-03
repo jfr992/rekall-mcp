@@ -18,10 +18,10 @@ try:
     import scrapy
     from scrapy.linkextractors import LinkExtractor
     from scrapy.spiders import CrawlSpider, Rule
-except ImportError:
+except ImportError as e:
     raise ImportError(
         "Scrapy is required for crawling. Install with: pip install memento-mcp[crawler]"
-    )
+    ) from e
 
 
 def load_crawl_config(config_path: str | None = None) -> dict:
@@ -115,13 +115,16 @@ class DocsSpider(CrawlSpider):
             settings.setdefault("HTTPCACHE_EXPIRATION_SECS", 604800)  # 7 days
             settings.setdefault("HTTPCACHE_DIR", ".scrapy_cache")
             settings.setdefault("LOG_LEVEL", "INFO")
-            settings.setdefault("USER_AGENT", crawler_config.get(
-                "user_agent",
-                "MementoMCP-DocBot/1.0 (Documentation indexer)"
-            ))
-            settings.setdefault("ITEM_PIPELINES", {
-                "crawler.pipeline.DocumentPipeline": 300,
-            })
+            settings.setdefault(
+                "USER_AGENT",
+                crawler_config.get("user_agent", "MementoMCP-DocBot/1.0 (Documentation indexer)"),
+            )
+            settings.setdefault(
+                "ITEM_PIPELINES",
+                {
+                    "crawler.pipeline.DocumentPipeline": 300,
+                },
+            )
         except FileNotFoundError:
             # Use defaults if no config
             pass
@@ -172,12 +175,15 @@ class DocsSpider(CrawlSpider):
     def _extract_title(self, response: scrapy.http.Response) -> str:
         """Extract page title."""
         # Use selectors from config, or defaults
-        selectors = self.selectors.get("title", [
-            "h1::text",
-            "article h1::text",
-            "main h1::text",
-            "title::text",
-        ])
+        selectors = self.selectors.get(
+            "title",
+            [
+                "h1::text",
+                "article h1::text",
+                "main h1::text",
+                "title::text",
+            ],
+        )
 
         for selector in selectors:
             title = response.css(selector).get()
@@ -206,21 +212,31 @@ class DocsSpider(CrawlSpider):
     def _extract_content(self, response: scrapy.http.Response) -> str:
         """Extract main content text."""
         # Use selectors from config, or defaults
-        content_selectors = self.selectors.get("content", [
-            "article",
-            "main",
-            ".docs-content",
-            ".markdown-body",
-            '[role="main"]',
-        ])
+        content_selectors = self.selectors.get(
+            "content",
+            [
+                "article",
+                "main",
+                ".docs-content",
+                ".markdown-body",
+                '[role="main"]',
+            ],
+        )
 
         for selector in content_selectors:
             content_elem = response.css(selector)
             if content_elem:
                 # Remove navigation, headers, footers, scripts
                 for remove_selector in [
-                    "nav", "header", "footer", "script", "style",
-                    ".sidebar", ".toc", ".breadcrumb", ".nav",
+                    "nav",
+                    "header",
+                    "footer",
+                    "script",
+                    "style",
+                    ".sidebar",
+                    ".toc",
+                    ".breadcrumb",
+                    ".nav",
                 ]:
                     content_elem.css(remove_selector).drop()
 

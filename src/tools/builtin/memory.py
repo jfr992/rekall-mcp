@@ -7,6 +7,8 @@ Based on best practices from:
 - Anthropic: Tool-based memory with structured operations
 """
 
+from __future__ import annotations
+
 import os
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -55,7 +57,7 @@ def _cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
     """Calculate cosine similarity between two vectors."""
     import math
 
-    dot = sum(a * b for a, b in zip(vec1, vec2))
+    dot = sum(a * b for a, b in zip(vec1, vec2, strict=False))
     mag1 = math.sqrt(sum(a * a for a in vec1))
     mag2 = math.sqrt(sum(b * b for b in vec2))
 
@@ -202,7 +204,7 @@ class OptimizedMemoryTools(BaseToolProvider):
             self._manager = MemoryManager()
         return self._manager
 
-    def get_tools(self) -> list["ToolDefinition"]:
+    def get_tools(self) -> list[ToolDefinition]:
         """Return list of memory tools."""
         from tools.base import ToolDefinition
 
@@ -244,7 +246,7 @@ class OptimizedMemoryTools(BaseToolProvider):
         except Exception:
             return "general"
 
-    def register(self, mcp: "FastMCP") -> list[str]:
+    def register(self, mcp: FastMCP) -> list[str]:
         """Register optimized memory tools."""
         registered = []
 
@@ -360,7 +362,7 @@ class OptimizedMemoryTools(BaseToolProvider):
             """
             from memory.cache_context import CacheableContext, estimate_tokens
 
-            ctx = CacheableContext(project=project)
+            ctx = CacheableContext(project=project, storage_path=str(self.manager.memory_dir))
             content = ctx.get_stable_context()
             tokens = estimate_tokens(content)
 

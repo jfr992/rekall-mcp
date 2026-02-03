@@ -25,9 +25,12 @@ Usage:
     prompt = cached_prefix + user_message
 """
 
+from __future__ import annotations
+
 import hashlib
-import json
 from pathlib import Path
+
+import yaml
 
 
 class CacheableContext:
@@ -96,25 +99,43 @@ class CacheableContext:
         return self._cache_hash or ""
 
     def _load_memories(self) -> list[dict]:
-        """Load memories from storage."""
+        """Load memories from storage (YAML format)."""
         if not self.storage_path.exists():
             return []
 
         memories = []
-        for file_path in self.storage_path.glob("**/*.json"):
+        for yaml_file in self.storage_path.glob("*.yaml"):
             try:
-                with open(file_path) as f:
-                    mem = json.load(f)
+                with open(yaml_file) as f:
+                    data = yaml.safe_load(f) or {}
 
-                # Filter by project
-                if self.project and mem.get("project") != self.project:
-                    continue
+                date = data.get("date", yaml_file.stem)
 
-                # Filter by type
-                if mem.get("type") not in self.include_types:
-                    continue
+                # Process each type section (requirements, decisions, etc.)
+                for type_key in data:
+                    if not type_key.endswith("s") or not isinstance(data[type_key], list):
+                        continue
 
-                memories.append(mem)
+                    memory_type = type_key[:-1]  # Remove trailing 's'
+
+                    # Filter by type
+                    if memory_type not in self.include_types:
+                        continue
+
+                    for memory in data[type_key]:
+                        # Filter by project
+                        project = memory.get("project", "general")
+                        if self.project and project != self.project:
+                            continue
+
+                        memories.append(
+                            {
+                                "content": memory.get("content", ""),
+                                "type": memory_type,
+                                "project": project,
+                                "created_at": memory.get("timestamp", date),
+                            }
+                        )
             except Exception:
                 continue
 

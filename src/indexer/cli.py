@@ -155,11 +155,11 @@ Examples:
 
     # Index in Qdrant
     logger.info("Indexing in Qdrant...")
-    indexed = indexer.index_chunks(all_chunks, embeddings)
+    indexer.index_chunks(all_chunks, embeddings)
 
     # Get stats
     stats = indexer.get_stats()
-    logger.info(f"Indexing complete!")
+    logger.info("Indexing complete!")
     logger.info(f"Collection: {stats.get('collection')}")
     logger.info(f"Total points: {stats.get('points_count')}")
     logger.info(f"Status: {stats.get('status')}")
