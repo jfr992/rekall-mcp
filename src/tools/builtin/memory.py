@@ -376,8 +376,9 @@ class OptimizedMemoryTools(BaseToolProvider):
             stats = self.manager.get_stats()
 
             output = "# Memory System Statistics\n\n"
-            output += f"**Total Memories**: {stats.get('total', 0)}\n"
-            output += f"**Storage**: {stats.get('storage_path', 'N/A')}\n\n"
+            output += f"**Total Memories**: {stats.get('total_memories', 0)}\n"
+            output += f"**Memory Files**: {stats.get('memory_files', 0)}\n"
+            output += f"**Storage**: {stats.get('memory_dir', 'N/A')}\n\n"
 
             by_type = stats.get("by_type", {})
             if by_type:
