@@ -25,6 +25,7 @@ All operations are traced via Telemetry.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any
 
@@ -170,8 +171,13 @@ class VectorStore:
             )
         """
         with self._telemetry.track("vector_store.save"):
-            # Convert string ID to int hash if needed
-            point_id = id if isinstance(id, int) else hash(id) % (2**63)
+            # Convert string ID to stable int using SHA256
+            if isinstance(id, int):
+                point_id = id
+            else:
+                # Use SHA256 for stable hashing (not randomized per-process like hash())
+                hash_bytes = hashlib.sha256(id.encode()).digest()
+                point_id = int.from_bytes(hash_bytes[:8], byteorder='big') % (2**63)
 
             point = PointStruct(
                 id=point_id,
@@ -209,7 +215,11 @@ class VectorStore:
 
             for item in items:
                 item_id = item["id"]
-                point_id = item_id if isinstance(item_id, int) else hash(item_id) % (2**63)
+                if isinstance(item_id, int):
+                    point_id = item_id
+                else:
+                    hash_bytes = hashlib.sha256(item_id.encode()).digest()
+                    point_id = int.from_bytes(hash_bytes[:8], byteorder='big') % (2**63)
 
                 points.append(
                     PointStruct(

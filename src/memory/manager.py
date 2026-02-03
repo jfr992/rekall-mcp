@@ -23,6 +23,7 @@ All operations:
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import re
@@ -205,7 +206,12 @@ class MemoryManager:
             # Generate ID and timestamps
             date = datetime.now().strftime("%Y-%m-%d")
             timestamp = datetime.now().isoformat()
-            memory_id = f"{date}_{type}_{hash(content) % 10000:04d}"
+            # Use SHA256 for stable, collision-resistant IDs across processes
+            # Include timestamp in hash to prevent collisions for identical content
+            # 8 hex chars = 32 bits = ~4 billion unique values (collision-resistant)
+            unique_string = f"{content}|{timestamp}"
+            content_hash = hashlib.sha256(unique_string.encode()).hexdigest()[:8]
+            memory_id = f"{date}_{type}_{content_hash}"
 
             # Build payload
             payload = {
@@ -537,15 +543,23 @@ class MemoryManager:
             except Exception:
                 vector_count = 0
 
-            # File counts
-            file_count = sum(1 for _ in self.memory_dir.rglob("*.jsonl"))
+            # File counts (YAML daily files)
+            yaml_files = list(self.memory_dir.rglob("*.yaml"))
+            file_count = len(yaml_files)
 
+            # Count by type from YAML files
             type_counts: dict[str, int] = {}
-            for jsonl_file in self.memory_dir.rglob("*.jsonl"):
-                memory_type = jsonl_file.stem.rstrip("s")
-                with open(jsonl_file) as f:
-                    count = sum(1 for _ in f)
-                type_counts[memory_type] = type_counts.get(memory_type, 0) + count
+            for yaml_file in yaml_files:
+                try:
+                    with open(yaml_file) as f:
+                        data = yaml.safe_load(f) or {}
+                    for key, value in data.items():
+                        if key != "date" and isinstance(value, list):
+                            # Key is like "decisions", "preferences", etc.
+                            mem_type = key.rstrip("s")
+                            type_counts[mem_type] = type_counts.get(mem_type, 0) + len(value)
+                except Exception:
+                    pass
 
             return {
                 "total_memories": vector_count,

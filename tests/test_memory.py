@@ -430,15 +430,30 @@ class TestStats:
         assert "by_type" in stats
 
     def test_stats_counts_files(self, memory_manager, temp_memory_dir, mock_store):
-        """Stats should count JSONL files."""
-        # Create some files
-        (temp_memory_dir / "2026-02-01").mkdir()
-        (temp_memory_dir / "2026-02-01" / "notes.jsonl").write_text('{"id": "1"}\n')
-        (temp_memory_dir / "2026-02-01" / "decisions.jsonl").write_text('{"id": "2"}\n')
+        """Stats should count YAML files and memories by type."""
+        import yaml
+
+        # Create YAML files (current format)
+        (temp_memory_dir / "2026-02-01.yaml").write_text(
+            yaml.dump({
+                "date": "2026-02-01",
+                "notes": [{"id": "1", "content": "note 1"}],
+                "decisions": [{"id": "2", "content": "decision 1"}],
+            })
+        )
+        (temp_memory_dir / "2026-02-02.yaml").write_text(
+            yaml.dump({
+                "date": "2026-02-02",
+                "preferences": [{"id": "3", "content": "pref 1"}],
+            })
+        )
 
         stats = memory_manager.get_stats()
 
         assert stats["memory_files"] == 2
+        assert stats["by_type"]["note"] == 1
+        assert stats["by_type"]["decision"] == 1
+        assert stats["by_type"]["preference"] == 1
 
     def test_stats_handles_store_error(self, memory_manager, mock_store):
         """Stats should handle store errors gracefully."""
