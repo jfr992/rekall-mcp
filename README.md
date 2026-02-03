@@ -223,9 +223,24 @@ cd src && python -m server
 
 ### Tests
 
+Tests run in an isolated environment and **never affect your production data**.
+
 ```bash
+# Run all tests
 docker compose --profile test run --rm test
+
+# Run specific test file
+docker compose --profile test run --rm test pytest tests/test_memory.py -v
+
+# Cleanup
+docker compose --profile test down
 ```
+
+**What happens:**
+- `qdrant-test` starts on port 6334 with ephemeral tmpfs storage
+- Tests use `/tmp/test_memory` for YAML files (inside container)
+- Your production data at `~/.claude/memory/` and `~/.claude/qdrant/` stays untouched
+- Everything auto-deletes when tests finish
 
 ### Project Structure
 

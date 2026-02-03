@@ -88,6 +88,34 @@ This fires on every message (new session, resume, or after context compaction).
 **DO NOT** batch saves for end of session - context may be lost.
 **DO NOT** wait for user to remind you.
 
+## Running Tests
+
+**IMPORTANT:** Tests are now isolated and won't affect production data.
+
+```bash
+# Run all tests (isolated environment)
+docker compose --profile test run --rm test
+
+# Run specific test file
+docker compose --profile test run --rm test pytest tests/test_memory.py -v
+
+# Cleanup test containers
+docker compose --profile test down
+```
+
+**What happens when you run tests:**
+1. `qdrant-test` container starts on port 6334 with tmpfs (in-memory) storage
+2. Tests connect to `qdrant-test` instead of production Qdrant (port 6333)
+3. Test memories are written to `/tmp/test_memory` inside container (ephemeral)
+4. When tests finish, `docker compose down` deletes everything
+5. Your production data at `~/.claude/memory/` and `~/.claude/qdrant/` is untouched
+
+**Architecture:**
+- Production Qdrant: `localhost:6333` → `~/.claude/qdrant` (persistent)
+- Production YAML: `~/.claude/memory/*.yaml` (persistent)
+- Test Qdrant: `localhost:6334` → tmpfs (deleted on stop)
+- Test YAML: `/tmp/test_memory` inside container (deleted on stop)
+
 ## Recent Work
 
 - Added REST API endpoints for memory tools
@@ -95,3 +123,4 @@ This fires on every message (new session, resume, or after context compaction).
 - Fixed Docker networking (QDRANT_URL env var)
 - Ported crawler/indexer from spectro-mcp
 - All tests passing (129 passed, 6 skipped)
+- Fixed test isolation bug that contaminated production Qdrant with 1,558 test memories
