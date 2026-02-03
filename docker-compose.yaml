@@ -101,18 +101,33 @@ services:
       - dev
 
   # =========================================================================
+  # QDRANT TEST - Isolated test database
+  # =========================================================================
+  qdrant-test:
+    image: qdrant/qdrant:latest
+    container_name: memento-qdrant-test
+    ports:
+      - "6334:6333"
+    tmpfs:
+      - /qdrant/storage:size=1G
+    profiles:
+      - test
+    restart: "no"
+
+  # =========================================================================
   # TESTS
   # =========================================================================
   test:
     build: .
     container_name: memento-test
     environment:
-      - QDRANT_URL=http://qdrant:6333
+      - QDRANT_URL=http://qdrant-test:6333
+      - MEMORY_STORAGE_PATH=/tmp/test_memory
     volumes:
       - ./src:/app/src:ro
       - ./tests:/app/tests:ro
     depends_on:
-      - qdrant
+      - qdrant-test
     profiles:
       - test
     entrypoint: ["pytest", "-v", "tests/"]
