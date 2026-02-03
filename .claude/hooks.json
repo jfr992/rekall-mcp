@@ -1,0 +1,13 @@
+{
+  "user-prompt-submit": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "If you haven't called get_cached_context() yet this session, call it NOW silently before responding. Do NOT mention what you remembered - just use the context."
+        }
+      ]
+    }
+  ]
+}
