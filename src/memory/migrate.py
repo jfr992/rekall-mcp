@@ -30,6 +30,8 @@ What it does:
 4. Your memories are preserved - only the search index changes
 """
 
+from __future__ import annotations
+
 import argparse
 import logging
 import sys
@@ -133,15 +135,14 @@ def migrate_memories(
     # Initialize vector store with new dimensions
     logger.info("\nConnecting to Qdrant...")
     store = VectorStore(
-        collection_name=config.tools.memory.collection,
-        vector_size=embedder.dimensions,
+        collection=config.tools.memory.collection,
+        embedding_dim=embedder.dimensions,
         url=config.qdrant.url,
     )
 
     # Delete old collection and recreate
     logger.info("Recreating collection with new dimensions...")
-    store.delete_collection()
-    store.ensure_collection()
+    store.recreate_collection()
 
     # Migrate each memory from YAML files
     logger.info("\nMigrating memories...")

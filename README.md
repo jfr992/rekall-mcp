@@ -190,6 +190,7 @@ src/
 | Doc | Purpose |
 |-----|---------|
 | [docs/SETUP.md](docs/SETUP.md) | Detailed setup, embedding providers, migration |
+| [docs/TUNING.md](docs/TUNING.md) | Customize what Claude remembers |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Technical design |
 | [docs/TOOLS.md](docs/TOOLS.md) | Adding custom tools |
 | [docs/EXAMPLES.md](docs/EXAMPLES.md) | Real-world usage patterns |

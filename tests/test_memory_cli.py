@@ -74,9 +74,7 @@ class TestSaveCommand:
         """Save with --project flag."""
         from memory.cli import memory
 
-        result = cli_runner.invoke(
-            memory, ["save", "Content", "--project", "my-project"]
-        )
+        result = cli_runner.invoke(memory, ["save", "Content", "--project", "my-project"])
 
         assert result.exit_code == 0
         mock_memory_manager.save_memory.assert_called_with(
@@ -208,9 +206,7 @@ class TestEndSessionCommand:
         """End session with tasks."""
         from memory.cli import memory
 
-        result = cli_runner.invoke(
-            memory, ["end-session", "--tasks", "Task 1, Task 2"]
-        )
+        result = cli_runner.invoke(memory, ["end-session", "--tasks", "Task 1, Task 2"])
 
         assert result.exit_code == 0
         assert "Saved" in result.output or "saved" in result.output
@@ -223,10 +219,14 @@ class TestEndSessionCommand:
             memory,
             [
                 "end-session",
-                "--tasks", "Task 1",
-                "--decisions", "Decision 1",
-                "--learnings", "Learning 1",
-                "--project", "test",
+                "--tasks",
+                "Task 1",
+                "--decisions",
+                "Decision 1",
+                "--learnings",
+                "Learning 1",
+                "--project",
+                "test",
             ],
         )
 
@@ -277,17 +277,17 @@ class TestGlobalOptions:
 
         with patch("memory.cli.MemoryManager") as mock_class:
             mock_class.return_value = MagicMock(
-                get_stats=MagicMock(return_value={
-                    "total_memories": 0,
-                    "memory_files": 0,
-                    "memory_dir": "/custom/path",
-                    "by_type": {},
-                })
+                get_stats=MagicMock(
+                    return_value={
+                        "total_memories": 0,
+                        "memory_files": 0,
+                        "memory_dir": "/custom/path",
+                        "by_type": {},
+                    }
+                )
             )
 
-            result = cli_runner.invoke(
-                memory, ["--memory-dir", "/custom/path", "stats"]
-            )
+            result = cli_runner.invoke(memory, ["--memory-dir", "/custom/path", "stats"])
 
             assert result.exit_code == 0
             mock_class.assert_called_with(
@@ -301,17 +301,17 @@ class TestGlobalOptions:
 
         with patch("memory.cli.MemoryManager") as mock_class:
             mock_class.return_value = MagicMock(
-                get_stats=MagicMock(return_value={
-                    "total_memories": 0,
-                    "memory_files": 0,
-                    "memory_dir": "/tmp",
-                    "by_type": {},
-                })
+                get_stats=MagicMock(
+                    return_value={
+                        "total_memories": 0,
+                        "memory_files": 0,
+                        "memory_dir": "/tmp",
+                        "by_type": {},
+                    }
+                )
             )
 
-            result = cli_runner.invoke(
-                memory, ["--qdrant-url", "http://custom:6333", "stats"]
-            )
+            result = cli_runner.invoke(memory, ["--qdrant-url", "http://custom:6333", "stats"])
 
             assert result.exit_code == 0
             mock_class.assert_called_with(

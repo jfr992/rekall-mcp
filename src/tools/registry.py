@@ -1,5 +1,7 @@
 """Tool registry for discovering and managing available tools."""
 
+from __future__ import annotations
+
 import os
 from dataclasses import dataclass, field
 from typing import Any
@@ -30,7 +32,7 @@ class ToolRegistry:
         enabled = registry.get_enabled()
     """
 
-    _instance: "ToolRegistry | None" = None
+    _instance: ToolRegistry | None = None
 
     def __init__(self) -> None:
         self._tools: dict[str, ToolInfo] = {}
@@ -38,7 +40,7 @@ class ToolRegistry:
         self._discovered = False
 
     @classmethod
-    def get(cls) -> "ToolRegistry":
+    def get(cls) -> ToolRegistry:
         """Get the singleton instance."""
         if cls._instance is None:
             cls._instance = cls()

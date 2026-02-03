@@ -3,6 +3,8 @@
 Each tool provider implements this interface to register its tools with MCP.
 """
 
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -58,7 +60,7 @@ class BaseToolProvider(ABC):
         """Return list of tools this provider offers."""
         ...
 
-    def register(self, mcp: "FastMCP") -> list[str]:
+    def register(self, mcp: FastMCP) -> list[str]:
         """Register all tools with the MCP server.
 
         Returns list of registered tool names.

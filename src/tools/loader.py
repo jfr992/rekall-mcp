@@ -1,5 +1,7 @@
 """Tool loader for registering tools with MCP."""
 
+from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
 from core import Telemetry
@@ -19,7 +21,7 @@ class ToolLoader:
         loader.load_all()
     """
 
-    def __init__(self, mcp: "FastMCP"):
+    def __init__(self, mcp: FastMCP):
         self._mcp = mcp
         self._telemetry = Telemetry.get()
         self._loaded: dict[str, list[str]] = {}
