@@ -566,6 +566,6 @@ Potential future enhancements:
 
 ## See Also
 
-- [Installation Guide](./INSTALL.md) - Setup instructions
-- [API Reference](../src/server.py) - Full REST API documentation
-- [Skills Guide](../.claude/MEMORY_PLUGIN.md) - Usage examples
+- [Setup Guide](./SETUP.md) - Detailed setup, embedding providers, migration
+- [Tuning Guide](./TUNING.md) - Customize what Claude remembers
+- [Architecture](./ARCHITECTURE.md) - Technical design
