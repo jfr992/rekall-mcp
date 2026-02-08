@@ -25,7 +25,6 @@ All operations are traced via Telemetry.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 from typing import Any
 
@@ -41,6 +40,7 @@ from qdrant_client.http.models import (
 )
 
 from core.telemetry import Telemetry
+from core.utils import stable_hash_id
 
 logger = logging.getLogger(__name__)
 
@@ -171,13 +171,8 @@ class VectorStore:
             )
         """
         with self._telemetry.track("vector_store.save"):
-            # Convert string ID to stable int using SHA256
-            if isinstance(id, int):
-                point_id = id
-            else:
-                # Use SHA256 for stable hashing (not randomized per-process like hash())
-                hash_bytes = hashlib.sha256(id.encode()).digest()
-                point_id = int.from_bytes(hash_bytes[:8], byteorder='big') % (2**63)
+            # Convert string ID to stable int for Qdrant
+            point_id = id if isinstance(id, int) else stable_hash_id(id)
 
             point = PointStruct(
                 id=point_id,
@@ -215,11 +210,7 @@ class VectorStore:
 
             for item in items:
                 item_id = item["id"]
-                if isinstance(item_id, int):
-                    point_id = item_id
-                else:
-                    hash_bytes = hashlib.sha256(item_id.encode()).digest()
-                    point_id = int.from_bytes(hash_bytes[:8], byteorder='big') % (2**63)
+                point_id = item_id if isinstance(item_id, int) else stable_hash_id(item_id)
 
                 points.append(
                     PointStruct(

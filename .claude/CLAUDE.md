@@ -35,20 +35,13 @@ curl http://localhost:8000/health
 ```
 src/
 ├── server.py           # MCP server with REST API endpoints
-├── core/               # Embedder, VectorStore, Telemetry
+├── core/               # Embedder, VectorStore, Telemetry, utils
+│   └── utils.py        # stable_hash_id() — single source for string→int64 hashing
 ├── memory/manager.py   # MemoryManager (save, recall, get_stats)
 ├── crawler/            # Documentation crawler (Scrapy)
 ├── indexer/            # Document chunker + Qdrant indexer
 └── tools/              # MCP tool definitions
 ```
-
-## Key Files
-
-- `server.py:179` - Health check endpoint
-- `server.py:203` - REST API endpoints for memory
-- `memory/manager.py:179` - save() method
-- `memory/manager.py:288` - recall() method
-- `memory/manager.py:531` - get_stats() method
 
 ## Memory System
 
@@ -118,9 +111,10 @@ docker compose --profile test down
 
 ## Recent Work
 
-- Added REST API endpoints for memory tools
-- Added `/health` endpoint using `@mcp.custom_route()`
-- Fixed Docker networking (QDRANT_URL env var)
-- Ported crawler/indexer from spectro-mcp
-- All tests passing (129 passed, 6 skipped)
-- Fixed test isolation bug that contaminated production Qdrant with 1,558 test memories
+- TDD hardening: 4 bug fixes, 6 performance improvements, 6 dead code removals, 3 DRY fixes
+- `stable_hash_id()` in `core/utils.py` — single source for string→int64 hashing
+- Atomic YAML writes (tempfile + os.replace), sanitizer false-positive fix
+- REST API singleton, CLI bug fixes (type= kwarg, save_memory→save)
+- Embedding LRU cache (512 entries), numpy cosine similarity, centroid classification
+- Removed dead code: `save_memory()` alias, `sanitize()`, `qdrant` property, `PROVIDER_COMPARISON`, `Embedder.model`, `ToolDefinition.parameters`
+- All tests passing (152 passed, 7 skipped)

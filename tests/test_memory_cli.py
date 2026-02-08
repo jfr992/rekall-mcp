@@ -24,7 +24,7 @@ def mock_memory_manager():
         mock_class.return_value = manager
 
         # Default return values
-        manager.save_memory.return_value = "2026-02-01_note_1234"
+        manager.save.return_value = "2026-02-01_note_1234"
         manager.recall.return_value = [
             {
                 "score": 0.9,
@@ -57,7 +57,7 @@ class TestSaveCommand:
 
         assert result.exit_code == 0
         assert "Saved" in result.output
-        mock_memory_manager.save_memory.assert_called_once()
+        mock_memory_manager.save.assert_called_once()
 
     def test_save_with_type(self, cli_runner, mock_memory_manager):
         """Save with --type flag."""
@@ -66,8 +66,8 @@ class TestSaveCommand:
         result = cli_runner.invoke(memory, ["save", "Decision made", "--type", "decision"])
 
         assert result.exit_code == 0
-        mock_memory_manager.save_memory.assert_called_with(
-            "Decision made", memory_type="decision", project=None
+        mock_memory_manager.save.assert_called_with(
+            "Decision made", type="decision", project=None
         )
 
     def test_save_with_project(self, cli_runner, mock_memory_manager):
@@ -77,8 +77,8 @@ class TestSaveCommand:
         result = cli_runner.invoke(memory, ["save", "Content", "--project", "my-project"])
 
         assert result.exit_code == 0
-        mock_memory_manager.save_memory.assert_called_with(
-            "Content", memory_type="note", project="my-project"
+        mock_memory_manager.save.assert_called_with(
+            "Content", type="note", project="my-project"
         )
 
     def test_save_with_all_options(self, cli_runner, mock_memory_manager):
@@ -91,8 +91,8 @@ class TestSaveCommand:
         )
 
         assert result.exit_code == 0
-        mock_memory_manager.save_memory.assert_called_with(
-            "Full test", memory_type="learning", project="test-proj"
+        mock_memory_manager.save.assert_called_with(
+            "Full test", type="learning", project="test-proj"
         )
 
 

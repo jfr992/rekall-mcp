@@ -48,7 +48,7 @@ def save(ctx, content: str, memory_type: str, project: str | None):
         memory save "User prefers diagrams" --type preference --project my-app
     """
     mgr: MemoryManager = ctx.obj["manager"]
-    memory_id = mgr.save_memory(content, memory_type=memory_type, project=project)
+    memory_id = mgr.save(content, type=memory_type, project=project)
     click.echo(f"✓ Saved: {memory_id}")
 
 
@@ -84,7 +84,7 @@ def recall(
         query,
         limit=limit,
         project=project,
-        memory_type=memory_type,
+        type=memory_type,
         days_back=days,
     )
 

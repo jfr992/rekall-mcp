@@ -6,6 +6,7 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any
 
+from core.utils import stable_hash_id
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import (
     Distance,
@@ -127,7 +128,7 @@ class QdrantIndexer:
         points = []
         for chunk, embedding in zip(chunks, embeddings, strict=False):
             point = PointStruct(
-                id=hash(chunk.chunk_id) % (2**63),  # Convert to int64
+                id=stable_hash_id(chunk.chunk_id),
                 vector=embedding,
                 payload={
                     "doc_id": chunk.doc_id,
