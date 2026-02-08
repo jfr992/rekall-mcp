@@ -42,19 +42,51 @@ Just talk normally. Claude automatically remembers:
 
 To check memories: *"What do you remember about this project?"*
 
+### Python API
+
+```python
+from memory import MemoryManager
+
+memory = MemoryManager()
+
+# Save
+memory.save("Chose PostgreSQL for JSON support", type="decision", project="my-app")
+memory.save("User prefers concise responses", type="preference")
+
+# Recall (semantic search)
+results = memory.recall("what database did we choose?")
+for r in results:
+    print(f"[{r['score']:.2f}] {r['content']}")
+
+# Project context
+context = memory.get_project_context("my-app")
+```
+
+### CLI
+
+```bash
+# Save
+python -m memory.cli save "Decided to use PostgreSQL" --type decision --project my-app
+
+# Recall
+python -m memory.cli recall "database choices"
+python -m memory.cli recall "recent work" --limit 3 --days 7
+
+# Stats
+python -m memory.cli stats
+```
+
 ---
 
 ## Memory Plugin (Auto-Triggering Skills)
 
-**NEW**: Make memory completely automatic with the Memory Plugin.
-
-### What It Does
+Make memory completely automatic with the Memory Plugin.
 
 Instead of manually calling memory tools, the plugin:
-- ✅ **Auto-restores** context at session start (silently)
-- ✅ **Auto-saves** decisions when detected ("decided to use...")
-- ✅ **Auto-recalls** memories when you ask questions
-- ✅ **Works invisibly** - feels like Claude naturally "remembers"
+- **Auto-restores** context at session start (silently)
+- **Auto-saves** decisions when detected ("decided to use...")
+- **Auto-recalls** memories when you ask questions
+- **Works invisibly** - feels like Claude naturally "remembers"
 
 ### Quick Install
 
@@ -82,8 +114,6 @@ EOF
 # 3. Restart Claude Code
 ```
 
-**Done!** Memory now works automatically across all sessions.
-
 ### Available Skills
 
 - `/memory-restore` - Load cached memories (auto-triggered at session start)
@@ -91,10 +121,15 @@ EOF
 - `/memory-recall <query>` - Search memories semantically
 - `/memory-stats` - Check system health
 
-### Learn More
+### Installation Modes
 
-- **[Installation Guide](docs/INSTALL.md)** - Detailed setup instructions
-- **[How It Works](docs/MEMORY_PLUGIN.md)** - Architecture and technical details
+| Mode | Skills location | Hook location | Best for |
+|------|----------------|---------------|----------|
+| **Global** | `~/.claude/skills/` | `~/.claude/hooks.json` | Memory across all projects |
+| **Project-local** | `.claude/skills/` | `.claude/hooks.json` | Teams sharing config via git |
+| **Hybrid** | `~/.claude/skills/` | `.claude/hooks.json` (project) | Multi-project, selective auto-restore |
+
+See **[How It Works](docs/MEMORY_PLUGIN.md)** for architecture and technical details.
 
 ---
 
@@ -103,10 +138,17 @@ EOF
 Everything stays on your computer in editable files:
 
 ```
-~/.claude/memory/2026-02-02.yaml   ← Open in any text editor
+~/.claude/memory/2026-02-02.yaml   <- Open in any text editor
 ```
 
 Nothing is sent anywhere. Backup = copy the folder.
+
+Credentials are automatically sanitized before storage:
+
+```
+Input:  "Set api_key to sk-abc123def456"
+Stored: "Set api_key to [REDACTED]"
+```
 
 ---
 
@@ -115,7 +157,7 @@ Nothing is sent anywhere. Backup = copy the folder.
 Memories are converted to **embeddings** (vectors that capture meaning) for semantic search:
 
 ```
-"Use PostgreSQL" → [0.12, 0.45, 0.78, ...]  ← Numbers that represent meaning
+"Use PostgreSQL" -> [0.12, 0.45, 0.78, ...]  <- Numbers that represent meaning
 ```
 
 When you ask "what database?", Claude searches by meaning, not keywords.
@@ -138,6 +180,10 @@ When you ask "what database?", Claude searches by meaning, not keywords.
 At session start, call get_cached_context() to restore memory.
 ```
 
+**Memories not found** → Rebuild the search index: `cd src && python -m memory.migrate`
+
+**"Rate limit exceeded" (Gemini)** → Switch to sentence-transformers (free, unlimited), then run `python -m memory.migrate`
+
 **Restart everything:** `docker compose down && docker compose up -d`
 
 ---
@@ -149,13 +195,13 @@ At session start, call get_cached_context() to restore memory.
 
 ```
 You say something important
-        ↓
-Claude saves it → YAML file (~/.claude/memory/)
-        ↓
-Text → Embedding (vector of numbers capturing meaning)
-        ↓
-Vector → Qdrant (search database)
-        ↓
+        |
+Claude saves it -> YAML file (~/.claude/memory/)
+        |
+Text -> Embedding (vector of numbers capturing meaning)
+        |
+Vector -> Qdrant (search database)
+        |
 Later: Claude searches by meaning, finds relevant memories
 ```
 
@@ -242,12 +288,33 @@ docker compose --profile test down
 - Your production data at `~/.claude/memory/` and `~/.claude/qdrant/` stays untouched
 - Everything auto-deletes when tests finish
 
+### Observability
+
+Every operation is tracked via the Telemetry singleton:
+
+```python
+from core import Telemetry
+
+telemetry = Telemetry.get()
+print(telemetry.summary())
+# memory.save      | 20 calls | p50=12.2ms | 100.0% ok
+# memory.recall    | 15 calls | p50=10.7ms | 100.0% ok
+# embedder.encode  | 35 calls | p50= 6.1ms | 100.0% ok
+
+# OTEL-compatible metrics dict
+metrics = telemetry.get_metrics()
+
+# Track custom operations
+with telemetry.track("my_operation"):
+    pass
+```
+
 ### Project Structure
 
 ```
 src/
 ├── server.py       # MCP entry point
-├── core/           # Embeddings, vector store, telemetry
+├── core/           # Embeddings, vector store, telemetry, utils
 ├── memory/         # Memory manager, cleanup, migration
 ├── crawler/        # Documentation crawler (optional)
 ├── indexer/        # Document chunker + Qdrant indexer
@@ -258,14 +325,11 @@ src/
 
 | Doc | Purpose |
 |-----|---------|
-| [docs/INSTALL.md](docs/INSTALL.md) | **Memory Plugin installation guide** |
-| [docs/MEMORY_PLUGIN.md](docs/MEMORY_PLUGIN.md) | **How the Memory Plugin works (architecture & features)** |
+| [docs/MEMORY_PLUGIN.md](docs/MEMORY_PLUGIN.md) | Memory Plugin architecture and features |
 | [docs/SETUP.md](docs/SETUP.md) | Detailed setup, embedding providers, migration |
 | [docs/TUNING.md](docs/TUNING.md) | Customize what Claude remembers |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Technical design |
-| [docs/TOOLS.md](docs/TOOLS.md) | Adding custom tools |
-| [docs/EXAMPLES.md](docs/EXAMPLES.md) | Real-world usage patterns |
-| [docs/OBSERVABILITY.md](docs/OBSERVABILITY.md) | Metrics and monitoring |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Technical design, adding tools |
+| [docs/example-memory.yaml](docs/example-memory.yaml) | Example YAML memory file |
 
 </details>
 

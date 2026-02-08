@@ -302,7 +302,7 @@ Your data is stored on your machine, not hidden in Docker volumes:
 
 ```
 ~/.claude/
-├── memory/     # Your memories (JSON files)
+├── memory/     # Your memories (YAML files)
 └── qdrant/     # Search index (can be rebuilt)
 ```
 
