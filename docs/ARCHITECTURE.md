@@ -37,9 +37,8 @@ This document explains how the system is built and why.
                                 │    LOCAL FILE STORAGE     │
                                 │                           │
                                 │  ~/.claude/memory/        │
-                                │    2026-02-01/            │
-                                │      decisions.jsonl      │
-                                │      notes.jsonl          │
+                                │    2026-02-01.yaml        │
+                                │    2026-02-02.yaml        │
                                 └───────────────────────────┘
 ```
 
@@ -162,7 +161,7 @@ metrics = telemetry.get_metrics()
    "Decided to use Python" → [0.1, 0.3, ...]
                                     │
 4. Save to file (durability)        │
-   ~/.claude/memory/2026-02-01/decisions.jsonl
+   ~/.claude/memory/2026-02-01.yaml
                                     │
 5. Save to Qdrant (searchability)   │
    Collection: agent_memory
@@ -206,18 +205,23 @@ If Qdrant is unavailable, file storage still works.
 
 ```
 ~/.claude/memory/
-├── 2026-02-01/
-│   ├── decisions.jsonl
-│   ├── notes.jsonl
-│   └── sessions.jsonl
-├── 2026-02-02/
-│   └── decisions.jsonl
+├── 2026-02-01.yaml
+├── 2026-02-02.yaml
 └── ...
 ```
 
-Each line is a JSON object:
-```json
-{"id": "2026-02-01_decision_1234", "content": "...", "metadata": {...}}
+Each file is a YAML list of memories for that date:
+```yaml
+- id: 2026-02-01_decision_a4044b26
+  timestamp: '2026-02-01T10:30:00'
+  type: decision
+  project: my-app
+  content: Chose PostgreSQL for JSON support
+- id: 2026-02-01_learning_b3921c45
+  timestamp: '2026-02-01T14:15:32'
+  type: learning
+  project: my-app
+  content: JWT validation fails with trailing slash in issuer URL
 ```
 
 ### Qdrant Collection
@@ -298,13 +302,71 @@ All tests use mocks to avoid needing real Qdrant/model.
 
 ---
 
+## Observability
+
+### Tracked Operations
+
+| Operation | Description |
+|-----------|-------------|
+| `memory.save` | Saving a memory |
+| `memory.recall` | Searching memories |
+| `memory.get_project_context` | Getting project context |
+| `memory.get_stats` | Getting system stats |
+| `memory.clear_project` | Deleting project memories |
+| `embedder.encode` | Text → vector conversion |
+| `embedder.encode_batch` | Batch encoding |
+| `embedder.load_model` | Model initialization |
+| `vector_store.save` | Saving to Qdrant |
+| `vector_store.search` | Searching Qdrant |
+| `vector_store.scroll` | Listing from Qdrant |
+| `vector_store.delete` | Deleting from Qdrant |
+| `vector_store.connect` | Connecting to Qdrant |
+
+### Per-Operation Metrics
+
+Each operation records: `count`, `errors`, `success_rate_pct`, `avg_ms`, `p50_ms`, `p95_ms`, `p99_ms`.
+
+Access via `Telemetry.get().get_metrics()` (OTEL-compatible dict) or `Telemetry.get().summary()` for a human-readable table.
+
+---
+
 ## Extension Points
+
+### Adding a New Tool Provider
+
+```python
+# tools/builtin/my_tool.py
+from tools.base import BaseToolProvider, ToolDefinition
+
+class MyToolProvider(BaseToolProvider):
+    name = "my_tool"
+    description = "What it does"
+
+    def get_tools(self) -> list[ToolDefinition]:
+        return [
+            ToolDefinition(
+                name="do_something",
+                description="Does something useful",
+                handler=self.do_something,
+            ),
+        ]
+
+    async def do_something(self, arg: str) -> str:
+        return f"Did something with {arg}"
+```
+
+Register in `tools/builtin/__init__.py` and enable in config:
+
+```yaml
+tools:
+  my_tool:
+    enabled: true
+```
 
 ### Adding a New Memory Type
 
 ```python
 memory.save("Custom content", type="my_custom_type")
-# Automatically creates my_custom_types.jsonl
 ```
 
 ### Custom Embedding Model
@@ -322,12 +384,3 @@ store = VectorStore(
     embedding_dim=768,  # Different model
 )
 ```
-
----
-
-## Future Considerations
-
-1. **Team sharing**: Sync memories across team members
-2. **Importance scoring**: Auto-identify what's worth remembering
-3. **Memory decay**: Forget old, irrelevant memories
-4. **Claude Code hooks**: Auto-save at session end
