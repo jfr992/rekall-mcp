@@ -28,43 +28,59 @@ _TYPE_EMBEDDINGS_CACHE: dict[str, list[float]] | None = None
 
 
 def _get_type_embeddings(embedder) -> dict[str, list[float]]:
-    """Lazy-load and cache type example embeddings."""
+    """Lazy-load and cache type centroid embeddings (3 examples per type, averaged)."""
+    import numpy as np
+
     global _TYPE_EMBEDDINGS_CACHE
 
     if _TYPE_EMBEDDINGS_CACHE is None:
-        _TYPE_EMBEDDINGS_CACHE = {
-            "decision": embedder.encode(
-                "Decided to use PostgreSQL over MySQL for better JSON support and performance"
-            ),
-            "learning": embedder.encode(
-                "Fixed bug where JWT validation fails when issuer URL has trailing slash"
-            ),
-            "preference": embedder.encode(
-                "User prefers Terraform over CloudFormation for infrastructure as code"
-            ),
-            "requirement": embedder.encode(
-                "Must use Python 3.11 or higher due to required type hint features"
-            ),
-            "fact": embedder.encode(
-                "Production database runs on AWS RDS PostgreSQL in us-east-1 region"
-            ),
+        examples = {
+            "decision": [
+                "Decided to use PostgreSQL over MySQL for better JSON support and performance",
+                "Going with React instead of Vue for the frontend framework",
+                "Chose to implement microservices rather than monolith architecture",
+            ],
+            "learning": [
+                "Fixed bug where JWT validation fails when issuer URL has trailing slash",
+                "Discovered that connection pool must be closed before shutdown",
+                "Learned that pytest fixtures are shared across the module by default",
+            ],
+            "preference": [
+                "User prefers Terraform over CloudFormation for infrastructure as code",
+                "Likes using type hints extensively in all Python code",
+                "Prefers short functions with clear names over lengthy comments",
+            ],
+            "requirement": [
+                "Must use Python 3.11 or higher due to required type hint features",
+                "Cannot deploy to production without passing all integration tests",
+                "Required to encrypt all data at rest using AES-256",
+            ],
+            "fact": [
+                "Production database runs on AWS RDS PostgreSQL in us-east-1 region",
+                "The CI pipeline is configured in GitHub Actions with 3 parallel runners",
+                "API gateway is hosted at api.example.com behind CloudFront",
+            ],
         }
+        _TYPE_EMBEDDINGS_CACHE = {}
+        for mem_type, texts in examples.items():
+            vecs = [embedder.encode(t) for t in texts]
+            centroid = np.mean(vecs, axis=0).tolist()
+            _TYPE_EMBEDDINGS_CACHE[mem_type] = centroid
 
     return _TYPE_EMBEDDINGS_CACHE
 
 
 def _cosine_similarity(vec1: list[float], vec2: list[float]) -> float:
-    """Calculate cosine similarity between two vectors."""
-    import math
+    """Calculate cosine similarity between two vectors using numpy."""
+    import numpy as np
 
-    dot = sum(a * b for a, b in zip(vec1, vec2, strict=False))
-    mag1 = math.sqrt(sum(a * a for a in vec1))
-    mag2 = math.sqrt(sum(b * b for b in vec2))
-
-    if mag1 == 0 or mag2 == 0:
+    a = np.asarray(vec1)
+    b = np.asarray(vec2)
+    norm_a = np.linalg.norm(a)
+    norm_b = np.linalg.norm(b)
+    if norm_a == 0 or norm_b == 0:
         return 0.0
-
-    return dot / (mag1 * mag2)
+    return float(np.dot(a, b) / (norm_a * norm_b))
 
 
 def _classify_by_embedding(summary: str, embedder) -> str:

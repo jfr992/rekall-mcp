@@ -58,24 +58,14 @@ def get_config() -> ToolConfig:
     return ToolConfig.from_env()
 
 
-@asynccontextmanager
-async def app_lifespan(_server: FastMCP) -> AsyncIterator[dict]:
-    """Manage application lifecycle."""
-    telemetry = Telemetry.get()
-
-    # Log startup
-    logger.info("Starting MCP server with pluggable tools")
-
-    # Get configuration
+def _initialize_tools() -> ToolRegistry:
+    """Discover tools and apply configuration. Single source of truth."""
     config = get_config()
-
-    # Discover available tools
     registry = ToolRegistry.get()
     discovered = registry.discover()
 
     logger.info(f"Discovered tools: {list(discovered.keys())}")
 
-    # Apply configuration
     for name in discovered:
         if config.is_enabled(name):
             if registry.can_enable(name):
@@ -86,13 +76,20 @@ async def app_lifespan(_server: FastMCP) -> AsyncIterator[dict]:
         else:
             registry.disable(name)
 
-    enabled = registry.get_enabled()
-    logger.info(f"Enabled tools: {enabled}")
+    logger.info(f"Enabled tools: {registry.get_enabled()}")
+    return registry
 
-    # Yield context
+
+@asynccontextmanager
+async def app_lifespan(_server: FastMCP) -> AsyncIterator[dict]:
+    """Manage application lifecycle."""
+    telemetry = Telemetry.get()
+    logger.info("Starting MCP server with pluggable tools")
+
+    registry = _initialize_tools()
+
     yield {"telemetry": telemetry, "registry": registry}
 
-    # Log shutdown
     logger.info("Shutting down MCP server")
     metrics = telemetry.get_metrics()
     total_ops = sum(m.get("count", 0) for m in metrics.get("operations", {}).values())
@@ -115,16 +112,8 @@ mcp = FastMCP(
 
 def setup_tools() -> None:
     """Set up tools based on configuration."""
-    config = get_config()
-    registry = ToolRegistry.get()
-    registry.discover()
+    registry = _initialize_tools()
 
-    # Apply config
-    for name in ["memory", "spectro"]:
-        if config.is_enabled(name) and registry.can_enable(name):
-            registry.enable(name)
-
-    # Load tools
     loader = ToolLoader(mcp)
     loaded = loader.load_all(registry)
 
@@ -197,11 +186,17 @@ async def health_check(request):
 # =============================================================================
 
 
-def _get_memory_manager():
-    """Get or create memory manager instance."""
-    from memory.manager import MemoryManager
+_memory_manager_instance = None
 
-    return MemoryManager()
+
+def _get_memory_manager():
+    """Get or create memory manager singleton for REST API."""
+    global _memory_manager_instance
+    if _memory_manager_instance is None:
+        from memory.manager import MemoryManager
+
+        _memory_manager_instance = MemoryManager()
+    return _memory_manager_instance
 
 
 @mcp.custom_route("/api/memory/save", methods=["POST"])

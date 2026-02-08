@@ -17,6 +17,7 @@ All operations emit OTEL metrics for observability.
 
 from core.embeddings import Embedder
 from core.telemetry import Telemetry
+from core.utils import stable_hash_id
 from core.vector_store import VectorStore
 
-__all__ = ["VectorStore", "Embedder", "Telemetry"]
+__all__ = ["VectorStore", "Embedder", "Telemetry", "stable_hash_id"]

@@ -27,6 +27,7 @@ import hashlib
 import logging
 import os
 import re
+import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -70,8 +71,8 @@ class Sanitizer:
         r"(?i)AKIA[0-9A-Z]{16}",  # AWS
         # Private keys
         r"-----BEGIN[A-Z ]+-----[\s\S]+?-----END[A-Z ]+-----",
-        # Generic hex (API keys)
-        r"(?i)[a-f0-9]{32}",
+        # Generic hex only when preceded by key/secret/token/password context
+        r"(?i)(?:key|secret|token|password)[\"'\s:=]+[a-f0-9]{32,}",
     ]
 
     @classmethod
@@ -272,20 +273,19 @@ class MemoryManager:
 
         data[type_key].append(memory_entry)
 
-        # Write back
-        with open(yaml_file, "w") as f:
-            yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-
-    # Alias for backwards compatibility
-    def save_memory(
-        self,
-        content: str,
-        memory_type: str = "note",
-        project: str | None = None,
-        metadata: dict[str, Any] | None = None,
-    ) -> str:
-        """Save a memory (alias for save())."""
-        return self.save(content, type=memory_type, project=project, **(metadata or {}))
+        # Atomic write: write to temp file, then os.replace() (POSIX atomic)
+        fd, tmp_path = tempfile.mkstemp(dir=self.memory_dir, suffix=".yaml.tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            os.replace(tmp_path, yaml_file)
+        except BaseException:
+            # Clean up temp file on any failure
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
 
     # -------------------------------------------------------------------------
     # RECALL: Find relevant memories
@@ -298,7 +298,7 @@ class MemoryManager:
         project: str | None = None,
         type: str | None = None,
         days_back: int | None = None,
-        score_threshold: float = 0.3,
+        score_threshold: float = 0.45,
     ) -> list[dict[str, Any]]:
         """Recall relevant memories using semantic search.
 
@@ -578,16 +578,3 @@ class MemoryManager:
             self.store.delete(filters={"project": project})
             logger.info(f"Cleared memories for project: {project}")
 
-    # -------------------------------------------------------------------------
-    # BACKWARD COMPATIBILITY
-    # -------------------------------------------------------------------------
-
-    def sanitize(self, content: str) -> str:
-        """Sanitize content (for backwards compatibility)."""
-        return Sanitizer.sanitize(content)
-
-    # Direct access to underlying components (for testing)
-    @property
-    def qdrant(self):
-        """Get Qdrant client (for backwards compatibility)."""
-        return self.store.client
