@@ -34,6 +34,7 @@ from __future__ import annotations
 import logging
 import os
 from abc import ABC, abstractmethod
+from collections import OrderedDict
 
 from core.telemetry import Telemetry
 
@@ -179,8 +180,12 @@ class OllamaProvider(EmbeddingProvider):
         return response.json()["embedding"]
 
     def encode_batch(self, texts: list[str]) -> list[list[float]]:
-        # Ollama doesn't have native batch API, so we loop
-        return [self.encode(text) for text in texts]
+        # Ollama doesn't have native batch API — parallelize with threads
+        from concurrent.futures import ThreadPoolExecutor
+
+        workers = min(8, len(texts)) if texts else 1
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            return list(pool.map(self.encode, texts))
 
 
 class GeminiProvider(EmbeddingProvider):
@@ -329,6 +334,10 @@ class Embedder:
         # For backwards compatibility
         self.model_name = model or self.DEFAULT_MODEL
 
+        # Embedding cache (avoids redundant model calls for repeated text)
+        self._cache: OrderedDict[str, list[float]] = OrderedDict()
+        self._cache_max = 512
+
     @property
     def provider(self) -> EmbeddingProvider:
         """Get the provider, initializing if needed."""
@@ -362,14 +371,6 @@ class Embedder:
 
         raise ValueError(f"Unknown provider: {self.provider_name}")
 
-    # Backwards compatibility: expose model property
-    @property
-    def model(self):
-        """Get the underlying model (sentence-transformers only)."""
-        if self.provider_name == "sentence-transformers":
-            return self.provider.model
-        raise AttributeError(f"model attribute not available for {self.provider_name} provider")
-
     @property
     def dimensions(self) -> int:
         """Embedding vector dimensions."""
@@ -378,14 +379,25 @@ class Embedder:
     def encode(self, text: str) -> list[float]:
         """Convert text to embedding vector.
 
+        Results are cached (up to 512 entries) to avoid redundant model calls.
+
         Args:
             text: Text to encode
 
         Returns:
             List of floats (embedding vector)
         """
+        if text in self._cache:
+            self._cache.move_to_end(text)
+            return self._cache[text]
+
         with self._telemetry.track("embedder.encode"):
-            return self.provider.encode(text)
+            result = self.provider.encode(text)
+
+        self._cache[text] = result
+        if len(self._cache) > self._cache_max:
+            self._cache.popitem(last=False)
+        return result
 
     def encode_batch(
         self,
@@ -409,36 +421,3 @@ class Embedder:
     def __repr__(self) -> str:
         loaded = "loaded" if self._provider else "not loaded"
         return f"Embedder(provider={self.provider_name}, {loaded})"
-
-
-# =============================================================================
-# COMPARISON GUIDE
-# =============================================================================
-
-PROVIDER_COMPARISON = """
-Embedding Provider Comparison
-=============================
-
-| Provider            | Location | Cost      | Speed   | Quality | Dimensions |
-|---------------------|----------|-----------|---------|---------|------------|
-| sentence-transformers| Local   | Free      | Fast    | Good    | 384        |
-| Ollama              | Local    | Free      | Medium  | Good+   | 768-1024   |
-| Gemini              | Cloud    | Free tier | Slow*   | Best    | 768        |
-
-* Slow due to network latency
-
-Recommendations:
-- Development/Testing: sentence-transformers (fastest setup)
-- Production (local): Ollama with nomic-embed-text (good quality, no API costs)
-- Production (cloud): Gemini (highest quality, free tier may suffice)
-
-Free Tiers:
-- sentence-transformers: Unlimited (local)
-- Ollama: Unlimited (local)
-- Gemini: 1,500 requests/day
-
-Setup Commands:
-- sentence-transformers: pip install sentence-transformers
-- Ollama: brew install ollama && ollama pull nomic-embed-text
-- Gemini: Get API key at https://ai.google.dev/
-"""

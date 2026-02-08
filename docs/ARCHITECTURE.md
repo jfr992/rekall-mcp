@@ -51,8 +51,9 @@ All shared functionality lives in `core/`:
 
 ```
 src/core/
+├── utils.py         # Shared utilities (stable_hash_id)
 ├── telemetry.py     # One place for metrics
-├── embeddings.py    # One place for text→vector
+├── embeddings.py    # One place for text→vector (with LRU cache)
 └── vector_store.py  # One place for Qdrant operations
 ```
 

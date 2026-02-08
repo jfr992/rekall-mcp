@@ -7,8 +7,8 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
@@ -21,7 +21,6 @@ class ToolDefinition:
     name: str
     description: str
     handler: Callable
-    parameters: dict[str, Any] = field(default_factory=dict)
 
 
 class BaseToolProvider(ABC):
