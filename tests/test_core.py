@@ -310,6 +310,23 @@ class TestVectorStore:
         assert len(results) == 2
         assert results[0]["content"] == "Item 1"
 
+    def test_scroll_with_vectors(self, store, mock_qdrant):
+        """scroll(with_vectors=True) returns payload + vector data."""
+        mock_qdrant.scroll.return_value = (
+            [
+                MagicMock(payload={"memory_id": "m1"}, vector=[0.1, 0.2, 0.3]),
+                MagicMock(payload={"memory_id": "m2"}, vector=(0.4, 0.5, 0.6)),
+            ],
+            None,
+        )
+
+        results = store.scroll(with_vectors=True)
+
+        assert len(results) == 2
+        assert results[0]["memory_id"] == "m1"
+        assert results[0]["vector"] == [0.1, 0.2, 0.3]
+        assert results[1]["vector"] == [0.4, 0.5, 0.6]
+
     def test_delete_removes_matching(self, store, mock_qdrant):
         """delete() removes vectors by filter."""
         store.delete(filters={"project": "old-project"})
