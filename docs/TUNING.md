@@ -4,6 +4,14 @@ Control what Claude remembers and when.
 
 ---
 
+Use `docs/CLAUDE_MEMORY_SETTINGS.md` as the canonical policy reference for:
+- what `observe` should run automatically,
+- project scoping and endpoint defaults,
+- dashboard defaults (`/api/memory/graph`) and CLAUDE.md fallback values,
+- and the troubleshooting order when memory behavior degrades.
+
+---
+
 ## Quick Setup
 
 Add to `~/.claude/CLAUDE.md`:

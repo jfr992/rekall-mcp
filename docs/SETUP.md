@@ -12,6 +12,8 @@ When you chat with Claude, it normally forgets everything when you close the con
 - **Smart search** - Claude can find relevant memories by meaning, not just keywords
 - **Project awareness** - Claude knows which project you're working on
 
+Before/while configuring behavior, see `docs/CLAUDE_MEMORY_SETTINGS.md` for the canonical policy, API defaults, and what Claude-side tuning to adjust first.
+
 ---
 
 ## Quick Start with Docker (Recommended)

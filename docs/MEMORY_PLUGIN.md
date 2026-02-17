@@ -4,6 +4,8 @@
 
 The Memory Plugin transforms memento-mcp from a passive memory store into an intelligent, auto-triggering system that seamlessly preserves context across Claude Code sessions. Instead of manually calling MCP tools, the plugin uses **Claude Code skills** that automatically detect when to restore, save, or search memories.
 
+Before wiring this in, review `docs/CLAUDE_MEMORY_SETTINGS.md` for the canonical policy and tuning knobs (project scoping, dashboard defaults, and recovery playbook).
+
 ## What Problem Does It Solve?
 
 **Before**: Manual memory management

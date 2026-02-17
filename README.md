@@ -347,6 +347,7 @@ src/
 | [docs/MEMORY_PLUGIN.md](docs/MEMORY_PLUGIN.md) | Memory Plugin architecture and features |
 | [docs/SETUP.md](docs/SETUP.md) | Detailed setup, embedding providers, migration |
 | [docs/TUNING.md](docs/TUNING.md) | Customize what Claude remembers |
+| [docs/CLAUDE_MEMORY_SETTINGS.md](docs/CLAUDE_MEMORY_SETTINGS.md) | Claude-specific memory policy and tuning knobs |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Technical design, adding tools |
 | [docs/example-memory.yaml](docs/example-memory.yaml) | Example YAML memory file |
 
