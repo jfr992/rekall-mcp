@@ -4,7 +4,11 @@
 #   docker build -t memento-mcp .
 #
 # Run:
-#   docker run -e QDRANT_URL=http://host.docker.internal:6333 memento-mcp
+#   docker run -p 8000:8000 \
+#     -e QDRANT_URL=http://host.docker.internal:6333 \
+#     -e MCP_TRANSPORT=streamable-http \
+#     -e HOST=0.0.0.0 \
+#     memento-mcp
 
 FROM python:3.11-slim
 
@@ -42,8 +46,10 @@ EXPOSE 8000
 
 # Default environment
 ENV PYTHONPATH=/app/src
-ENV MCP_TRANSPORT=stdio
+ENV MCP_TRANSPORT=streamable-http
 ENV EMBEDDING_PROVIDER=sentence-transformers
+ENV HOST=0.0.0.0
+ENV PORT=8000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
