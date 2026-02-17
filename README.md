@@ -236,6 +236,8 @@ AI:  *semantic search finds the memory*
 | `recall_memories(query)` | Search memories |
 | `get_cached_context(project)` | Get all context (for prompt caching) |
 | `memory_stats()` | Storage stats |
+| `GET /api/memory/graph` | Memory nodes + semantic edges for the brain dashboard |
+| `/dashboard` | Browser UI for exploring memory clusters as a neural network |
 
 </details>
 
