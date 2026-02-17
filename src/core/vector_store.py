@@ -286,15 +286,17 @@ class VectorStore:
         self,
         filters: dict[str, Any] | None = None,
         limit: int = 100,
+        with_vectors: bool = False,
     ) -> list[dict[str, Any]]:
         """Get all vectors matching filters (no query vector needed).
 
         Args:
             filters: Filter by payload fields
             limit: Maximum results
+            with_vectors: Include vectors in returned payloads
 
         Returns:
-            List of payloads (no scores since not searching)
+            List of payloads (with vectors if requested)
 
         Example:
             all_decisions = store.scroll(filters={"type": "decision"})
@@ -307,10 +309,22 @@ class VectorStore:
                 scroll_filter=query_filter,
                 limit=limit,
                 with_payload=True,
-                with_vectors=False,
+                with_vectors=with_vectors,
             )
 
-            return [point.payload for point in results]
+            if not with_vectors:
+                return [point.payload for point in results]
+
+            merged: list[dict[str, Any]] = []
+            for point in results:
+                payload = dict(point.payload or {})
+                vector = point.vector
+                if isinstance(vector, dict):
+                    vector = next(iter(vector.values()), [])
+                payload["vector"] = list(vector or [])
+                merged.append(payload)
+
+            return merged
 
     def _build_filter(self, filters: dict[str, Any]) -> Filter:
         """Convert dict filters to Qdrant Filter."""
