@@ -1,5 +1,7 @@
 # Memory Plugin Usage
 
+For canonical policy, tuning knobs, and troubleshooting order, see `docs/CLAUDE_MEMORY_SETTINGS.md`.
+
 This project uses auto-triggering memory skills for seamless context preservation across sessions.
 
 ## How It Works
