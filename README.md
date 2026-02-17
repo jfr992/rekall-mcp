@@ -13,6 +13,14 @@ git clone https://github.com/jfr992/memento-mcp.git
 cd memento-mcp
 docker compose up -d
 ```
+```bash
+# Optional: plain Docker run (HTTP + dashboard enabled)
+docker run -p 8000:8000 \
+  -e QDRANT_URL=http://host.docker.internal:6333 \
+  -e MCP_TRANSPORT=streamable-http \
+  -e HOST=0.0.0.0 \
+  memento-mcp
+```
 
 > **Need Docker?** Get it free at [docker.com/get-started](https://www.docker.com/get-started/)
 
@@ -26,6 +34,9 @@ claude mcp add --transport http memory http://localhost:8000
 
 ```bash
 curl http://localhost:8000/health
+```
+```bash
+curl http://localhost:8000/dashboard
 ```
 
 **Done.** Claude now remembers things between sessions.
@@ -174,6 +185,12 @@ When you ask "what database?", Claude searches by meaning, not keywords.
 ## Troubleshooting
 
 **"Connection refused"** → Make sure Docker is running: `docker compose ps`
+
+**"No dashboard UI"** → Make sure transport is HTTP and port is mapped:
+```bash
+docker compose exec mcp env | rg 'MCP_TRANSPORT=streamable-http|HOST=0.0.0.0'
+docker compose ps
+```
 
 **"Claude forgets"** → Add to `~/.claude/CLAUDE.md`:
 ```
