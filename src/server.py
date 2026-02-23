@@ -340,6 +340,7 @@ async def api_memory_graph(request):
             points,
             neighbor_count=neighbor_count,
             min_similarity=min_similarity,
+            knowledge_graph=manager.knowledge_graph,
         )
 
         return JSONResponse({"query": {"limit": limit, "filters": filters}, "graph": graph})

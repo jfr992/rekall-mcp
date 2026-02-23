@@ -71,6 +71,7 @@ def build_memory_graph(
     points: list[dict[str, Any]],
     neighbor_count: int = 5,
     min_similarity: float = 0.35,
+    knowledge_graph=None,
 ) -> dict[str, Any]:
     """Build a graph payload from memory vectors and metadata."""
     nodes: list[dict[str, Any]] = []
@@ -110,24 +111,45 @@ def build_memory_graph(
     links: list[dict[str, Any]] = []
     degrees = [0] * len(nodes)
 
-    for i in range(len(nodes)):
-        similarities: list[tuple[int, float]] = []
-        for j in range(i + 1, len(nodes)):
-            score = _cosine_similarity(node_vectors[i], node_vectors[j])
-            if score >= min_similarity:
-                similarities.append((j, score))
+    if knowledge_graph is not None and knowledge_graph.stats()["edges"] > 0:
+        node_ids = {node["id"] for node in nodes}
+        node_index = {node["id"]: idx for idx, node in enumerate(nodes)}
+        for source, target, data in knowledge_graph._graph.edges(data=True):
+            source_id = str(source)
+            target_id = str(target)
 
-        similarities.sort(key=lambda item: item[1], reverse=True)
-        for j, score in similarities[:neighbor_count]:
-            links.append(
-                {
-                    "source": nodes[i]["id"],
-                    "target": nodes[j]["id"],
-                    "weight": score,
-                }
-            )
-            degrees[i] += 1
-            degrees[j] += 1
+            if source_id in node_ids and target_id in node_ids:
+                links.append(
+                    {
+                        "source": source_id,
+                        "target": target_id,
+                        "weight": data.get("weight", 0.5),
+                        "relation": data.get("relation", "related_to"),
+                    }
+                )
+                if source_id in node_ids:
+                    degrees[node_index[source_id]] += 1
+                if target_id in node_ids:
+                    degrees[node_index[target_id]] += 1
+    else:
+        for i in range(len(nodes)):
+            similarities: list[tuple[int, float]] = []
+            for j in range(i + 1, len(nodes)):
+                score = _cosine_similarity(node_vectors[i], node_vectors[j])
+                if score >= min_similarity:
+                    similarities.append((j, score))
+
+            similarities.sort(key=lambda item: item[1], reverse=True)
+            for j, score in similarities[:neighbor_count]:
+                links.append(
+                    {
+                        "source": nodes[i]["id"],
+                        "target": nodes[j]["id"],
+                        "weight": score,
+                    }
+                )
+                degrees[i] += 1
+                degrees[j] += 1
 
     for idx, degree in enumerate(degrees):
         nodes[idx]["degree"] = degree
