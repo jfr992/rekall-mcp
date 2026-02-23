@@ -221,6 +221,36 @@ class TestSaveMemory:
 
         mock_store.save.assert_called_once()
 
+    def test_save_invokes_auto_link(self, memory_manager, mock_store, mock_embedder, monkeypatch):
+        """Saving should run auto-link and persist graph updates."""
+        graph = MagicMock()
+        memory_manager._knowledge_graph = graph
+
+        result = MagicMock(edges_created=2, relations={"related_to": 2})
+        monkeypatch.setattr(
+            "memory.manager.auto_link",
+            lambda **_: result,
+        )
+
+        memory_manager.save("Test memory", type="decision", project="api")
+
+        graph.add_node.assert_called_once()
+        graph.save.assert_called_once()
+
+    def test_save_continues_if_auto_link_fails(self, memory_manager, monkeypatch):
+        """Auto-link exceptions should not break save."""
+        graph = MagicMock()
+        memory_manager._knowledge_graph = graph
+
+        def _broken_link(**_kwargs):
+            raise RuntimeError("linking unavailable")
+
+        monkeypatch.setattr("memory.manager.auto_link", _broken_link)
+
+        memory_id = memory_manager.save("Noisy save", type="note")
+
+        assert memory_id is not None
+
     @pytest.mark.parametrize(
         "memory_type", ["note", "decision", "learning", "preference", "session"]
     )
@@ -410,6 +440,181 @@ class TestProjectContext:
         assert context == ""
 
 
+class TestHierarchicalContext:
+    """Test topic-aware context generation."""
+
+    def test_get_hierarchical_project_context_from_vectors(self, memory_manager, mock_store):
+        """Manager should build topic clusters from vector-backed points."""
+        mock_store.scroll.return_value = [
+            {
+                "memory_id": "a",
+                "content": "PostgreSQL index optimization",
+                "type": "decision",
+                "project": "api",
+                "date": "2026-02-24",
+                "vector": [1.0, 0.0, 0.0],
+            },
+            {
+                "memory_id": "b",
+                "content": "PostgreSQL query tuning",
+                "type": "learning",
+                "project": "api",
+                "date": "2026-02-23",
+                "vector": [0.98, 0.01, 0.0],
+            },
+            {
+                "memory_id": "c",
+                "content": "UI palette contrast fix",
+                "type": "note",
+                "project": "api",
+                "date": "2026-02-22",
+                "vector": [-1.0, 0.0, 0.0],
+            },
+        ]
+
+        context = memory_manager.get_hierarchical_project_context(project="api")
+
+        assert "# Hierarchical Context" in context
+        assert "postgre" in context.lower()
+        call_args = mock_store.scroll.call_args.kwargs
+        assert call_args["with_vectors"] is True
+        assert call_args["filters"] == {"project": "api"}
+
+    def test_hierarchical_project_context_empty(self, memory_manager, mock_store):
+        """Empty store should return empty context string."""
+        mock_store.scroll.return_value = []
+
+        context = memory_manager.get_hierarchical_project_context(project="api")
+
+        assert context == ""
+
+
+class TestSkillContext:
+    """Test inferred skill context generation."""
+
+    def test_get_skill_context_extracts_repeated_terms(self, memory_manager, mock_store):
+        """Manager should extract candidate skills from repeated terms."""
+        mock_store.scroll.return_value = [
+            {"memory_id": "a", "content": "Added PostgreSQL query plan optimization"},
+            {"memory_id": "b", "content": "Migrated data model using PostgreSQL"},
+            {"memory_id": "c", "content": "Refactored Redis caching strategy"},
+        ]
+
+        context = memory_manager.get_skill_context(project="api", min_mentions=2, max_skills=4)
+
+        assert "## postgresql (2 mentions)" in context
+        assert "# Skill Context: api" in context
+        call_args = mock_store.scroll.call_args.kwargs
+        assert call_args["filters"] == {"project": "api"}
+
+    def test_get_skill_context_empty(self, memory_manager, mock_store):
+        """Empty store returns empty string."""
+        mock_store.scroll.return_value = []
+
+        context = memory_manager.get_skill_context(project="api")
+
+        assert context == ""
+
+
+class TestIntelligenceLayer:
+    """Test conflict detection and proactive summary tooling."""
+
+    def test_save_creates_contradiction_edge(self, memory_manager, mock_store):
+        """Saving a contradiction should create a `contradicts` edge."""
+        from memory.knowledge_graph import KnowledgeGraph
+
+        memory_manager._knowledge_graph = KnowledgeGraph(memory_manager.memory_dir / "_graph.json")
+        memory_manager._knowledge_graph.add_node("old_decision", topic="api", memory_type="decision")
+
+        mock_store.search.return_value = [
+            {
+                "memory_id": "old_decision",
+                "type": "decision",
+                "content": "Use Redis cache for sessions",
+                "score": 0.88,
+            },
+        ]
+
+        memory_id = memory_manager.save(
+            content="Do not use Redis cache for sessions",
+            type="decision",
+            project="api",
+        )
+
+        graph_edges = memory_manager._knowledge_graph.get_edges(memory_id, direction="out")
+        assert any(
+            edge.target == "old_decision" and edge.relation == "contradicts"
+            for edge in graph_edges
+        )
+
+    def test_consolidate_memories_reports_signals(self, memory_manager, mock_store):
+        """Consolidation should report supersedes and contradictions."""
+        from memory.knowledge_graph import KnowledgeGraph
+
+        graph = KnowledgeGraph(memory_manager.memory_dir / "_graph.json")
+        memory_manager._knowledge_graph = graph
+
+        graph.add_node("old", topic="api", memory_type="decision")
+        graph.add_node("new", topic="api", memory_type="decision")
+        graph.add_node("conflict_a", topic="api", memory_type="decision")
+        graph.add_node("conflict_b", topic="api", memory_type="decision")
+
+        graph.add_edge("new", "old", "supersedes", weight=0.9)
+        graph.add_edge("conflict_a", "conflict_b", "contradicts", weight=0.82)
+
+        mock_store.scroll.return_value = [
+            {"memory_id": "old", "project": "api", "type": "decision", "content": "Old decision to cache in Redis"},
+            {"memory_id": "new", "project": "api", "type": "decision", "content": "New decision to cache in Redis via RedisJSON"},
+            {"memory_id": "conflict_a", "project": "api", "type": "decision", "content": "Do not cache responses on hot path"},
+            {"memory_id": "conflict_b", "project": "api", "type": "decision", "content": "Cache responses aggressively on hot path"},
+        ]
+
+        report = memory_manager.consolidate_memories(project="api")
+
+        assert "Memory Consolidation: api" in report
+        assert "Superseded Memories" in report
+        assert "old" in report
+        assert "Conflicting Memories" in report
+
+    def test_get_proactive_context_summary_prioritizes_signals(self, memory_manager, mock_store):
+        """Proactive summary should include top signals and conflict section."""
+        from memory.knowledge_graph import KnowledgeGraph
+
+        graph = KnowledgeGraph(memory_manager.memory_dir / "_graph.json")
+        memory_manager._knowledge_graph = graph
+
+        now = datetime.now().strftime("%Y-%m-%d")
+        graph.add_node("high", topic="api", memory_type="decision")
+        graph._graph.nodes["high"]["importance"] = 0.99
+        graph.add_node("old", topic="api", memory_type="decision")
+        graph._graph.nodes["old"]["importance"] = 0.3
+        graph.add_edge("old", "high", "contradicts", weight=0.9)
+
+        mock_store.scroll.return_value = [
+            {
+                "memory_id": "high",
+                "project": "api",
+                "type": "decision",
+                "content": "Use strict authentication for all endpoints",
+                "date": now,
+            },
+            {
+                "memory_id": "old",
+                "project": "api",
+                "type": "decision",
+                "content": "Allow anonymous access to staging endpoint",
+                "date": now,
+            },
+        ]
+
+        report = memory_manager.get_proactive_context_summary(project="api")
+
+        assert "Proactive Context: api" in report
+        assert "Top Signals" in report
+        assert "Conflicts to Review" in report
+        top_signals_section = report.split("Top Signals")[1]
+        assert top_signals_section.index("high") < top_signals_section.index("old")
+
 # =============================================================================
 # STATS TESTS
 # =============================================================================
@@ -543,6 +748,7 @@ class TestCliRecallType:
     def test_recall_passes_type_not_memory_type(self):
         """Verify the CLI source uses `type=memory_type`."""
         from pathlib import Path
+
         import memory.cli
         source = Path(memory.cli.__file__).read_text()
         # The recall function body should use type= not memory_type=
@@ -555,6 +761,7 @@ class TestCliSaveAlias:
 
     def test_save_uses_save_not_save_memory(self):
         from pathlib import Path
+
         import memory.cli
         source = Path(memory.cli.__file__).read_text()
         assert "mgr.save(" in source

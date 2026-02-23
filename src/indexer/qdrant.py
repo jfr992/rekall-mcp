@@ -6,7 +6,6 @@ import logging
 import os
 from typing import TYPE_CHECKING, Any
 
-from core.utils import stable_hash_id
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import (
     Distance,
@@ -16,6 +15,8 @@ from qdrant_client.http.models import (
     PointStruct,
     VectorParams,
 )
+
+from core.utils import stable_hash_id
 
 if TYPE_CHECKING:
     from indexer.chunker import DocumentChunk

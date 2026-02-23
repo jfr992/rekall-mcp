@@ -1,9 +1,8 @@
 """Tests for Phase 4 performance improvements."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
-
 
 # =============================================================================
 # 4a: Embedding cache
@@ -150,6 +149,7 @@ class TestRecallThreshold:
 
     def test_default_threshold_is_reasonable(self):
         import inspect
+
         from memory.manager import MemoryManager
 
         sig = inspect.signature(MemoryManager.recall)
