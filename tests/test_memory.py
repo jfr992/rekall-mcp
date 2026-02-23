@@ -489,6 +489,32 @@ class TestHierarchicalContext:
         assert context == ""
 
 
+class TestSkillContext:
+    """Test inferred skill context generation."""
+
+    def test_get_skill_context_extracts_repeated_terms(self, memory_manager, mock_store):
+        """Manager should extract candidate skills from repeated terms."""
+        mock_store.scroll.return_value = [
+            {"memory_id": "a", "content": "Added PostgreSQL query plan optimization"},
+            {"memory_id": "b", "content": "Migrated data model using PostgreSQL"},
+            {"memory_id": "c", "content": "Refactored Redis caching strategy"},
+        ]
+
+        context = memory_manager.get_skill_context(project="api", min_mentions=2, max_skills=4)
+
+        assert "## postgresql (2 mentions)" in context
+        assert "# Skill Context: api" in context
+        call_args = mock_store.scroll.call_args.kwargs
+        assert call_args["filters"] == {"project": "api"}
+
+    def test_get_skill_context_empty(self, memory_manager, mock_store):
+        """Empty store returns empty string."""
+        mock_store.scroll.return_value = []
+
+        context = memory_manager.get_skill_context(project="api")
+
+        assert context == ""
+
 # =============================================================================
 # STATS TESTS
 # =============================================================================

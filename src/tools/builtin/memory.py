@@ -251,6 +251,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 handler=None,
             ),
             ToolDefinition(
+                name="skill_context",
+                description="Infer skills from recurring memory themes",
+                handler=None,
+            ),
+            ToolDefinition(
                 name="memory_stats",
                 description="Get memory system statistics",
                 handler=None,
@@ -416,6 +421,25 @@ class OptimizedMemoryTools(BaseToolProvider):
             )
 
         registered.append("get_hierarchical_context")
+
+        @mcp.tool()
+        async def skill_context(
+            project: str | None = None,
+            min_mentions: int = 2,
+            max_skills: int = 8,
+        ) -> str:
+            """Infer likely skills from memory clusters.
+
+            Repetitive technical terms across memories are grouped as candidate
+            skills to support planning and handoff workflows.
+            """
+            return self.manager.get_skill_context(
+                project=project,
+                min_mentions=min_mentions,
+                max_skills=max_skills,
+            )
+
+        registered.append("skill_context")
 
         @mcp.tool()
         async def memory_stats() -> str:

@@ -36,6 +36,7 @@ import yaml
 
 from core import Embedder, Telemetry, VectorStore
 from memory.linker import auto_link
+from memory.skills import extract_skills, render_skill_context
 
 if TYPE_CHECKING:
     from memory.knowledge_graph import KnowledgeGraph
@@ -640,6 +641,34 @@ class MemoryManager:
                 max_topics=max_topics,
             )
             return render_hierarchical_context(topics, project=project)
+
+    # -------------------------------------------------------------------------
+    # SKILL CONTEXT: Inferred capabilities
+    # -------------------------------------------------------------------------
+
+    def get_skill_context(
+        self,
+        project: str | None = None,
+        limit: int = 200,
+        min_mentions: int = 2,
+        max_skills: int = 8,
+    ) -> str:
+        """Get inferred skill context from memory evidence."""
+        with self._telemetry.track("memory.get_skill_context"):
+            filters = {}
+            if project:
+                filters["project"] = project
+
+            points = self.store.scroll(filters=filters if filters else None, limit=limit)
+            if not points:
+                return ""
+
+            skills = extract_skills(
+                points,
+                min_mentions=min_mentions,
+                max_skills=max_skills,
+            )
+            return render_skill_context(skills, project=project)
 
     # -------------------------------------------------------------------------
     # SESSION SUMMARY: End-of-session snapshot
