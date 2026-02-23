@@ -40,7 +40,9 @@ _NEGATION_PATTERNS = (
 )
 
 _NEGATION_RE = re.compile("|".join(_NEGATION_PATTERNS), re.IGNORECASE)
-_TOKEN_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)?")
+_TOKEN_RE = re.compile(r"[a-zA-Z0-9]+(?:-[a-zA-Z0-9]+)?")
+_MIN_CONTRADICTION_OVERLAP = 2
+_NEGATION_PROXIMITY_WINDOW = 3
 _STOP_WORDS = {
     "a",
     "an",
@@ -197,7 +199,15 @@ def _is_contradiction(
     cand_content: str,
     similarity: float,
 ) -> bool:
-    """Return True when texts appear semantically related and logically opposite."""
+    """Return True when texts appear semantically related and logically opposite.
+
+    Requires:
+    1. High enough semantic similarity (>= 0.6)
+    2. Exactly one text contains negation (asymmetric)
+    3. Minimum token overlap (>= 2 shared non-stop-words)
+    4. The negation targets a concept shared with the other text
+       (negation word must appear within 3 words of a shared token)
+    """
     if similarity < _CONTRADICTION_SIMILARITY_THRESHOLD:
         return False
 
@@ -210,8 +220,40 @@ def _is_contradiction(
     if new_has_negation and cand_has_negation:
         return False
 
-    overlap = _token_overlap(new_content, cand_content)
-    return overlap > 0
+    if _token_overlap(new_content, cand_content) < _MIN_CONTRADICTION_OVERLAP:
+        return False
+
+    # The negation must target a concept shared with the other text.
+    negating = new_content if new_has_negation else cand_content
+    other = cand_content if new_has_negation else new_content
+    return _negation_near_shared_concept(negating, other)
+
+
+def _negation_near_shared_concept(
+    negating_text: str,
+    other_text: str,
+) -> bool:
+    """Check if a negation word appears near a token that also appears in other_text.
+
+    This prevents false positives where a negation is incidental (e.g. "not a
+    standard issue type") and unrelated to the shared concepts between texts.
+    """
+    words = negating_text.lower().split()
+    other_tokens = _tokenize(other_text)
+
+    for i, word in enumerate(words):
+        clean = re.sub(r"[^\w'-]", "", word)
+        if not _NEGATION_RE.search(clean):
+            continue
+        # Check words within window after the negation
+        for j in range(i + 1, min(i + _NEGATION_PROXIMITY_WINDOW + 1, len(words))):
+            neighbor = words[j]
+            neighbor_tokens = {
+                t for t in _TOKEN_RE.findall(neighbor) if t.lower() not in _STOP_WORDS
+            }
+            if {t.lower() for t in neighbor_tokens} & other_tokens:
+                return True
+    return False
 
 
 def _contains_negation(content: str) -> bool:
