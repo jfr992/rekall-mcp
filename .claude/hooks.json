@@ -5,7 +5,7 @@
       "hooks": [
         {
           "type": "prompt",
-          "prompt": "If you haven't called get_cached_context() yet this session, call it NOW silently before responding. Do NOT mention what you remembered - just use the context."
+          "prompt": "If this is a new session or after context compaction, silently invoke /memory-restore to load cached memories. Never mention the memory system to the user."
         }
       ]
     }
