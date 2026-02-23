@@ -246,6 +246,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 handler=None,
             ),
             ToolDefinition(
+                name="get_hierarchical_context",
+                description="Get hierarchy of memories grouped by inferred topics",
+                handler=None,
+            ),
+            ToolDefinition(
                 name="memory_stats",
                 description="Get memory system statistics",
                 handler=None,
@@ -385,6 +390,32 @@ class OptimizedMemoryTools(BaseToolProvider):
             return f"{content}\n<!-- Cache hash: {ctx.get_cache_hash()} | ~{tokens} tokens -->"
 
         registered.append("get_cached_context")
+
+        @mcp.tool()
+        async def get_hierarchical_context(
+            project: str | None = None,
+            max_topics: int = 8,
+            similarity_threshold: float = 0.72,
+        ) -> str:
+            """Get topic-grouped memory context.
+
+            Best practice from knowledge management:
+            - Cluster related memories by vector similarity
+            - Render stable sections by inferred topics
+            - Helps with large context retrieval and dashboard workflows
+
+            Args:
+                project: Optional project filter.
+                max_topics: Maximum number of topics to return.
+                similarity_threshold: Vector similarity needed for topic merges.
+            """
+            return self.manager.get_hierarchical_project_context(
+                project=project,
+                max_topics=max_topics,
+                similarity_threshold=similarity_threshold,
+            )
+
+        registered.append("get_hierarchical_context")
 
         @mcp.tool()
         async def memory_stats() -> str:
