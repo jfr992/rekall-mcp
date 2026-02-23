@@ -14,13 +14,13 @@ Usage:
     MCP_CONFIG=tools.yaml python -m server
 """
 
+import logging
+import os
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-import logging
-import os
-import sys
 
 from mcp.server.fastmcp import FastMCP
 
@@ -294,6 +294,47 @@ async def api_get_context(request):
         return JSONResponse({"project": project, "context": context})
     except Exception as e:
         logger.error(f"Error getting context: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/context/hierarchy", methods=["GET"])
+async def api_get_hierarchical_context(request):
+    """REST API: Get topic-grouped context for a project."""
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        limit = _read_int(query, "limit", 120)
+        max_topics = _read_int(query, "max_topics", 8)
+        similarity_threshold = _read_float(query, "similarity_threshold", 0.72)
+
+        if limit < 1:
+            limit = 1
+        if max_topics < 1:
+            max_topics = 1
+
+        manager = _get_memory_manager()
+        context = manager.get_hierarchical_project_context(
+            project=project,
+            limit=limit,
+            max_topics=max_topics,
+            similarity_threshold=similarity_threshold,
+        )
+
+        return JSONResponse(
+            {
+                "project": project or "general",
+                "context": context,
+                "params": {
+                    "limit": limit,
+                    "max_topics": max_topics,
+                    "similarity_threshold": similarity_threshold,
+                },
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error getting hierarchical context: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
