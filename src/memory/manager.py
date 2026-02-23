@@ -365,27 +365,86 @@ class MemoryManager:
                 cutoff = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
                 filters["date"] = {"gte": cutoff}
 
-            # Search
+            # Phase 1: SEED — standard vector search
             query_vector = self.embedder.encode(query)
-            results = self.store.search(
+            seed_results = self.store.search(
                 vector=query_vector,
-                limit=limit,
+                limit=limit * 2 if limit else 0,
                 filters=filters if filters else None,
                 score_threshold=score_threshold,
             )
 
-            # Format results
-            return [
-                {
-                    "score": r.get("score"),
-                    "content": r.get("content"),
-                    "date": r.get("date"),
-                    "type": r.get("type"),
-                    "project": r.get("project"),
-                    "memory_id": r.get("memory_id"),
-                }
-                for r in results
-            ]
+            # Phase 2: EXPAND — graph traversal
+            graph = self.knowledge_graph
+            if graph.stats()["edges"] > 0:
+                seed_ids = {r.get("memory_id") for r in seed_results if r.get("memory_id")}
+                expanded_ids: set[str] = set()
+
+                for memory_id in seed_ids:
+                    if not isinstance(memory_id, str):
+                        continue
+                    graph.record_access(memory_id)
+                    neighbors = graph.get_neighbors(memory_id, hops=1)
+                    expanded_ids.update(neighbors)
+
+                # Deduplicate expanded items and ignore seed IDs.
+                new_ids = expanded_ids - seed_ids
+                for expanded_id in list(new_ids):
+                    expanded_results = self.store.search(
+                        vector=query_vector,
+                        limit=1,
+                        filters={"memory_id": expanded_id},
+                        score_threshold=0.0,
+                    )
+
+                    for result in expanded_results:
+                        memory_id = result.get("memory_id")
+                        if memory_id not in seed_ids:
+                            seed_results.append({**result, "_graph_expanded": True})
+                            seed_ids.add(memory_id)
+
+                graph.save()
+
+            # Phase 3: RANK — combined scoring
+            scored: list[dict[str, float]] = []
+            for result in seed_results:
+                memory_id = result.get("memory_id", "")
+                vector_score = float(result.get("score", 0.0))
+                importance = graph.get_importance(memory_id) if memory_id else 0.5
+                is_expanded = bool(result.get("_graph_expanded"))
+                graph_proximity = 0.7 if is_expanded else 1.0
+
+                days_old = 0
+                if result.get("date"):
+                    try:
+                        mem_date = datetime.strptime(result["date"], "%Y-%m-%d")
+                        days_old = (datetime.now() - mem_date).days
+                    except ValueError:
+                        days_old = 0
+
+                recency = max(0.0, 1.0 - days_old / 365)
+
+                final_score = (
+                    vector_score * 0.50
+                    + importance * 0.20
+                    + recency * 0.15
+                    + graph_proximity * 0.15
+                )
+
+                scored.append(
+                    {
+                        "score": round(final_score, 4),
+                        "vector_score": round(vector_score, 4),
+                        "content": result.get("content"),
+                        "date": result.get("date"),
+                        "type": result.get("type"),
+                        "project": result.get("project"),
+                        "memory_id": memory_id,
+                    }
+                )
+
+            scored.sort(key=lambda item: item["score"], reverse=True)
+            return scored[:limit]
 
     def recall_formatted(
         self,
