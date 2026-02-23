@@ -576,6 +576,31 @@ class TestIntelligenceLayer:
         assert "old" in report
         assert "Conflicting Memories" in report
 
+    def test_consolidate_deduplicates_bidirectional_pairs(self, memory_manager, mock_store):
+        """Consolidation should not report A→B and B→A as separate entries."""
+        from memory.knowledge_graph import KnowledgeGraph
+
+        graph = KnowledgeGraph(memory_manager.memory_dir / "_graph.json")
+        memory_manager._knowledge_graph = graph
+
+        graph.add_node("mem_a", topic="api", memory_type="decision")
+        graph.add_node("mem_b", topic="api", memory_type="decision")
+
+        # Create bidirectional contradicts edges (as the linker + rebuild can)
+        graph.add_edge("mem_a", "mem_b", "contradicts", weight=0.80)
+        graph.add_edge("mem_b", "mem_a", "contradicts", weight=0.80)
+
+        mock_store.scroll.return_value = [
+            {"memory_id": "mem_a", "project": "api", "type": "decision", "content": "Use EST timezone"},
+            {"memory_id": "mem_b", "project": "api", "type": "decision", "content": "Use UTC timezone"},
+        ]
+
+        report = memory_manager.consolidate_memories(project="api")
+
+        # The pair should appear exactly once, not twice
+        conflict_count = report.count("may conflict")
+        assert conflict_count == 1, f"Expected 1 conflict entry, got {conflict_count}"
+
     def test_get_proactive_context_summary_prioritizes_signals(self, memory_manager, mock_store):
         """Proactive summary should include top signals and conflict section."""
         from memory.knowledge_graph import KnowledgeGraph

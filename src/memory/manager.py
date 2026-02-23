@@ -706,15 +706,16 @@ class MemoryManager:
                     elif edge.relation == "contradicts":
                         contradictions.append((edge.source, edge.target, edge.weight))
 
-            # Deduplicate and keep strongest edges.
+            # Deduplicate: normalize pairs to (min, max) so A→B and B→A collapse.
             seen_supersedes: dict[tuple[str, str], float] = {}
             for source_id, target_id, weight in superseded:
-                key = (source_id, target_id)
+                key = (min(source_id, target_id), max(source_id, target_id))
                 seen_supersedes[key] = max(seen_supersedes.get(key, 0.0), weight)
 
             seen_conflicts: dict[tuple[str, str], float] = {}
             for source_id, target_id, weight in contradictions:
-                key = (source_id, target_id)
+                # Normalize to (min, max) so A→B and B→A collapse into one entry
+                key = (min(source_id, target_id), max(source_id, target_id))
                 seen_conflicts[key] = max(seen_conflicts.get(key, 0.0), weight)
 
             lines = [f"# Memory Consolidation: {project or 'all projects'}"]
