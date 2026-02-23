@@ -1,14 +1,10 @@
 # Tuning Claude's Memory Behavior
 
-Control what Claude remembers and when.
+Control what Claude remembers, how it recalls, and how the knowledge graph evolves.
 
 ---
 
-Use `docs/CLAUDE_MEMORY_SETTINGS.md` as the canonical policy reference for:
-- what `observe` should run automatically,
-- project scoping and endpoint defaults,
-- dashboard defaults (`/api/memory/graph`) and CLAUDE.md fallback values,
-- and the troubleshooting order when memory behavior degrades.
+See `docs/CLAUDE_MEMORY_SETTINGS.md` for the canonical policy reference (project scoping, endpoint defaults, graph internals, troubleshooting).
 
 ---
 
@@ -19,13 +15,17 @@ Add to `~/.claude/CLAUDE.md`:
 ```markdown
 ## Memory System
 
-At the START of each session:
-1. Call `get_cached_context()` to restore memory from previous sessions
-2. Use the context to understand user preferences and project history
+At session start:
+1. Call `get_hierarchical_context()` for topic-grouped context
+2. Fall back to `get_cached_context()` if hierarchy unavailable
 
 During work:
-- Call `observe(summary)` after completing tasks to save what you learned
-- The system automatically classifies memory type (decision/preference/learning/etc)
+- Call `observe(summary)` after completing tasks
+- Auto-classifies type AND auto-links to knowledge graph
+
+Maintenance:
+- If graph has 0 edges: `rebuild_knowledge_graph()`
+- To find duplicates: `consolidate_memories()`
 ```
 
 ---
@@ -56,11 +56,9 @@ During work:
 
 ---
 
-## Customizing Behavior
+## Customizing Save Behavior
 
 ### Conservative (Default Recommendation)
-
-Only save significant discoveries. Add to CLAUDE.md:
 
 ```markdown
 ## Memory Preferences
@@ -68,8 +66,8 @@ Only save significant discoveries. Add to CLAUDE.md:
 Save to memory:
 - Architectural decisions
 - Patterns and interesting discoveries
-- Links and snippets I share
 - Bug fixes with learnings
+- Links and snippets I share
 
 Do NOT save:
 - Simple questions/explanations
@@ -78,8 +76,6 @@ Do NOT save:
 ```
 
 ### Aggressive (Capture Everything)
-
-Save more context. Add to CLAUDE.md:
 
 ```markdown
 ## Memory Preferences
@@ -93,8 +89,6 @@ Save frequently:
 
 ### Manual Only
 
-Only save when explicitly requested:
-
 ```markdown
 ## Memory Preferences
 
@@ -106,29 +100,75 @@ Only call observe() when I explicitly say:
 
 ---
 
-## Memory Types
+## Memory Types and Importance
 
-| Type | Use For | AI Behavior |
-|------|---------|-------------|
-| `requirement` | Hard constraints | **Must** follow |
-| `decision` | Choices made | Reference, can revisit |
-| `preference` | User likes/dislikes | Suggest, offer alternatives |
-| `fact` | Project context | Background info |
-| `learning` | Bug fixes, discoveries | Apply to similar cases |
-| `note` | General info | Low-priority context |
+| Type | Use For | AI Behavior | Graph Weight |
+|------|---------|-------------|--------------|
+| `requirement` | Hard constraints | **Must** follow | 1.0 |
+| `decision` | Choices made | Reference, can revisit | 0.85 |
+| `preference` | User likes/dislikes | Suggest, offer alternatives | 0.75 |
+| `learning` | Bug fixes, discoveries | Apply to similar cases | 0.65 |
+| `fact` | Project context | Background info | 0.55 |
+| `note` | General info | Low-priority context | 0.35 |
+
+Higher-weight memories rank higher in recall and decay more slowly.
 
 ---
 
-## Explicit Commands
+## Tuning the Knowledge Graph
 
-Tell Claude directly:
+### Auto-Linking Rules
+
+On every `save()` / `observe()`, the auto-linker searches for similar memories and classifies relationships:
+
+| Rule | Condition | Effect |
+|------|-----------|--------|
+| Supersedes | similarity > 0.9 + same type | New replaces old (old importance halved) |
+| Contradicts | Negation patterns detected | Both flagged as conflicting |
+| Led_to | New learning + existing decision | Causation edge |
+| Depends_on | New decision + existing requirement | Dependency edge |
+| Related_to | similarity > 0.5 + same project | Default association |
+
+### Importance Decay
+
+Memories that aren't accessed for 7+ days gradually lose importance:
 
 ```
-"Remember that I prefer TypeScript"
-"Save this: we're using AWS Lambda for auth"
-"Update memory with today's architecture decision"
-"Don't save this - just exploring"
+importance *= 0.98^(days_idle - 7)
 ```
+
+Floor: 0.1 (never fully forgotten). Access via recall resets the timer.
+
+### Recall Scoring
+
+The composite score balances four signals:
+
+| Signal | Weight | What it measures |
+|--------|--------|------------------|
+| Vector similarity | 50% | Textual relevance to query |
+| Importance | 20% | Type weight + graph centrality |
+| Recency | 15% | How recent the memory is |
+| Graph proximity | 15% | Whether found via graph expansion |
+
+### Rebuilding the Graph
+
+Run after upgrades, bulk imports, or when graph stats show 0 edges:
+
+```bash
+curl -X POST http://localhost:8000/api/memory/graph/rebuild
+```
+
+Or via MCP tool: `rebuild_knowledge_graph()`
+
+### Cleaning Up Duplicates
+
+Find superseded and contradictory pairs:
+
+```bash
+curl http://localhost:8000/api/memory/consolidate
+```
+
+Review the output. Remove stale entries from `~/.claude/memory/*.yaml`, then rebuild.
 
 ---
 
@@ -143,7 +183,7 @@ cat ~/.claude/memory/$(date +%Y-%m-%d).yaml
 # All memories
 ls ~/.claude/memory/
 
-# Search
+# Search with graph enhancement
 curl -X POST http://localhost:8000/api/memory/recall \
   -H "Content-Type: application/json" \
   -d '{"query": "database decisions"}'
@@ -155,33 +195,35 @@ curl -X POST http://localhost:8000/api/memory/recall \
 curl http://localhost:8000/api/memory/stats
 ```
 
+Returns: total memories, by-type breakdown, knowledge graph node/edge counts.
+
+### Knowledge Graph Health
+
+```bash
+curl http://localhost:8000/api/memory/stats | jq '.knowledge_graph'
+```
+
+If edges = 0, rebuild: `curl -X POST http://localhost:8000/api/memory/graph/rebuild`
+
 ---
 
 ## Editing Memories
 
-Memories are plain YAML - edit directly:
+Memories are plain YAML. Edit directly:
 
 ```bash
-# Open today's file
 code ~/.claude/memory/$(date +%Y-%m-%d).yaml
 ```
 
-Format:
-```yaml
-date: "2026-02-02"
-decisions:
-  - id: 2026-02-02_decision_1234
-    content: "Use PostgreSQL for JSON support"
-    project: my-app
-    timestamp: "2026-02-02T10:30:00"
-preferences:
-  - id: 2026-02-02_preference_5678
-    content: "User prefers concise responses"
-    project: general
-    timestamp: "2026-02-02T11:00:00"
-```
+After editing YAML files, rebuild the graph to update relationships:
 
-After editing, memories are automatically re-indexed on next search.
+```bash
+# Re-index into Qdrant
+cd src && python -m memory.migrate
+
+# Rebuild graph
+curl -X POST http://localhost:8000/api/memory/graph/rebuild
+```
 
 ---
 
