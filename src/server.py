@@ -350,6 +350,23 @@ async def api_memory_graph(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/graph/rebuild", methods=["POST"])
+async def api_rebuild_memory_graph(_request):
+    """REST API: Rebuild the memory knowledge graph."""
+    from starlette.responses import JSONResponse
+
+    try:
+        manager = _get_memory_manager()
+        stats = manager.knowledge_graph.rebuild(
+            store=manager.store,
+            embedder=manager.embedder,
+        )
+        return JSONResponse({"status": "rebuilt", **stats})
+    except Exception as e:
+        logger.error(f"Error rebuilding memory graph: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/dashboard", methods=["GET"])
 async def api_memory_dashboard(_request):
     """Dashboard UI for visualizing memory embeddings."""
