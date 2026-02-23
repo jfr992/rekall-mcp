@@ -29,8 +29,11 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from typing import Any
 
 import yaml
+
+from memory.topics import build_topic_clusters, render_hierarchical_context
 
 
 class CacheableContext:
@@ -71,6 +74,8 @@ class CacheableContext:
 
         self._cached_context: str | None = None
         self._cache_hash: str | None = None
+        self._cached_hierarchical_context: str | None = None
+        self._cached_hierarchical_hash: str | None = None
 
     def get_stable_context(self, force_refresh: bool = False) -> str:
         """Get stable, cacheable context string.
@@ -91,6 +96,48 @@ class CacheableContext:
         self._cache_hash = self._compute_hash(self._cached_context)
 
         return self._cached_context
+
+    def get_hierarchical_context(
+        self,
+        force_refresh: bool = False,
+        max_topics: int = 8,
+        similarity_threshold: float = 0.72,
+    ) -> str:
+        """Get hierarchical, topic-grouped context.
+
+        This variant is stable but uses a topic view for easier recall in dashboards.
+        """
+        if self._cached_hierarchical_context and not force_refresh:
+            return self._cached_hierarchical_context
+
+        memories = self._load_memories()
+        if not memories:
+            self._cached_hierarchical_context = self._empty_context()
+            return self._cached_hierarchical_context
+
+        points: list[dict[str, Any]] = []
+        for memory in memories:
+            points.append(
+                {
+                    "memory_id": memory.get("id"),
+                    "content": memory.get("content", ""),
+                    "type": memory.get("type", "note"),
+                    "project": memory.get("project", "general"),
+                    "date": memory.get("created_at", ""),
+                }
+            )
+
+        topics = build_topic_clusters(
+            points,
+            similarity_threshold=similarity_threshold,
+            max_topics=max_topics,
+        )
+        content = render_hierarchical_context(topics, project=self.project)
+
+        self._cached_hierarchical_context = content
+        self._cached_hierarchical_hash = self._compute_hash(content)
+
+        return content
 
     def get_cache_hash(self) -> str:
         """Get hash of current context (for cache invalidation checks)."""
@@ -130,6 +177,7 @@ class CacheableContext:
 
                         memories.append(
                             {
+                                "id": memory.get("id"),
                                 "content": memory.get("content", ""),
                                 "type": memory_type,
                                 "project": project,
