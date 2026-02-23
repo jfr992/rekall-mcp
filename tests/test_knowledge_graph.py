@@ -1,10 +1,9 @@
 """Tests for KnowledgeGraph persistence, traversal, and analysis."""
 
 import json
-
 from pathlib import Path
 
-from memory.knowledge_graph import KnowledgeGraph, TYPE_WEIGHTS
+from memory.knowledge_graph import TYPE_WEIGHTS, KnowledgeGraph
 
 
 def _tmp_graph(tmp_path: Path) -> KnowledgeGraph:
@@ -79,7 +78,6 @@ def test_record_access_increments_count(tmp_path):
     kg.record_access("mem_a")
 
     kg.save()
-    kg2 = _tmp_graph(tmp_path / "_graph.json")
     with open(tmp_path / "_graph.json") as file:
         data = json.load(file)
 

@@ -36,7 +36,7 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
     left_norm_sq = 0.0
     right_norm_sq = 0.0
 
-    for a, b in zip(left, right):
+    for a, b in zip(left, right, strict=True):
         dot += a * b
         left_norm_sq += a * a
         right_norm_sq += b * b
