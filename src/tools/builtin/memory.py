@@ -260,6 +260,16 @@ class OptimizedMemoryTools(BaseToolProvider):
                 description="Get memory system statistics",
                 handler=None,
             ),
+            ToolDefinition(
+                name="consolidate_memories",
+                description="Find superseded or contradictory memories and return consolidation hints",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="proactive_context_summary",
+                description="Generate a proactive memory summary ordered by signal strength",
+                handler=None,
+            ),
         ]
 
     def _get_current_project(self) -> str:
@@ -460,6 +470,38 @@ class OptimizedMemoryTools(BaseToolProvider):
             return output
 
         registered.append("memory_stats")
+
+        @mcp.tool()
+        async def consolidate_memories(
+            project: str | None = None,
+            limit: int = 240,
+            save_summary: bool = False,
+        ) -> str:
+            """Detect potential duplicate, superseded, and contradictory memories.
+
+            Returns:
+                Markdown summary of consolidation candidates.
+            """
+            return self.manager.consolidate_memories(
+                project=project,
+                limit=limit,
+                save_summary=save_summary,
+            )
+
+        registered.append("consolidate_memories")
+
+        @mcp.tool()
+        async def proactive_context_summary(
+            project: str | None = None,
+            limit: int = 120,
+        ) -> str:
+            """Generate a proactive memory summary ordered by likely signal value."""
+            return self.manager.get_proactive_context_summary(
+                project=project,
+                limit=limit,
+            )
+
+        registered.append("proactive_context_summary")
 
         @mcp.tool()
         async def rebuild_knowledge_graph() -> str:
