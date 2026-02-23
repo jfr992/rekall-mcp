@@ -224,3 +224,86 @@ def test_classify_no_contradiction_without_overlap():
         cand_content="Deploy with two-node Postgres cluster",
         similarity=0.9,
     ) == "related_to"
+
+
+# -- Contradiction false positive regression tests ----------------------------
+
+
+def test_complementary_learnings_not_contradictions():
+    """Two learnings about the same topic (LogFleet) that complement each other
+    should NOT be classified as contradictions, even if one contains 'removed'."""
+    assert _classify_relation(
+        new_type="learning",
+        new_content=(
+            "Deployed LogFleet cloud stack to kind cluster: built API image, "
+            "loaded with kind load docker-image, created deploy manifests"
+        ),
+        cand_type="learning",
+        cand_content=(
+            "LogFleet kind cluster setup requires: Build local image with "
+            "docker build, create namespace, apply manifests"
+        ),
+        similarity=0.82,
+    ) == "related_to"
+
+
+def test_requirement_and_plan_not_contradictions():
+    """A requirement and its implementation plan should not conflict."""
+    assert _classify_relation(
+        new_type="requirement",
+        new_content=(
+            "REMINDER: Create tickets for Phase 1 observability implementation. "
+            "Required tickets: Configure infrastructure alerts"
+        ),
+        cand_type="decision",
+        cand_content=(
+            "Observability stack requires 3 phases to reach full production "
+            "readiness: Phase 1 - Configure infrastructure alerting"
+        ),
+        similarity=0.76,
+    ) == "related_to"
+
+
+def test_similar_learnings_about_same_tool_not_contradictions():
+    """Two ACLI Jira learnings that add detail should not conflict."""
+    assert _classify_relation(
+        new_type="learning",
+        new_content=(
+            "ACLI Jira bulk ticket creation: descriptions must be single-line, "
+            "Spike is not a standard issue type - use Story instead"
+        ),
+        cand_type="learning",
+        cand_content=(
+            "Special characters backticks quotes in Jira ticket summaries "
+            "cause ACLI bulk creation failures"
+        ),
+        similarity=0.70,
+    ) == "related_to"
+
+
+def test_real_contradiction_still_detected():
+    """Genuinely opposing statements should still be caught."""
+    assert _classify_relation(
+        new_type="learning",
+        new_content=(
+            "Port deployment_time timestamps are stored in UTC. "
+            "To schedule for EST time, add 5 hours before sending."
+        ),
+        cand_type="learning",
+        cand_content=(
+            "Port deployment_time must be in EST not UTC. "
+            "Use TZ=America/New_York date format."
+        ),
+        similarity=0.70,
+    ) == "contradicts"
+
+
+def test_low_overlap_negation_not_contradiction():
+    """A negation in content with only 1 shared word should not trigger contradiction."""
+    assert _classify_relation(
+        new_type="fact",
+        new_content="Removed the old logging configuration from the server",
+        cand_type="fact",
+        cand_content="Server runs on port 8000 with HTTP transport",
+        similarity=0.65,
+    ) == "related_to"
