@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from core import Embedder, Telemetry, VectorStore
+from memory.linker import auto_link
 
 if TYPE_CHECKING:
     from memory.knowledge_graph import KnowledgeGraph
@@ -255,8 +256,6 @@ class MemoryManager:
 
             # Auto-link to related memories
             try:
-                from memory.linker import auto_link
-
                 link_result = auto_link(
                     graph=self.knowledge_graph,
                     memory_id=memory_id,
@@ -370,16 +369,19 @@ class MemoryManager:
 
             # Phase 1: SEED — standard vector search
             query_vector = self.embedder.encode(query)
+            graph = self.knowledge_graph
+            graph_stats = graph.stats()
+            graph_has_edges = graph_stats["edges"] > 0
+            graph_has_nodes = graph_stats["nodes"] > 0
             seed_results = self.store.search(
                 vector=query_vector,
-                limit=limit * 2 if limit else 0,
+                limit=limit * 2 if limit and graph_has_edges else limit,
                 filters=filters if filters else None,
                 score_threshold=score_threshold,
             )
 
             # Phase 2: EXPAND — graph traversal
-            graph = self.knowledge_graph
-            if graph.stats()["edges"] > 0:
+            if graph_has_edges:
                 seed_ids = {r.get("memory_id") for r in seed_results if r.get("memory_id")}
                 expanded_ids: set[str] = set()
 
@@ -413,6 +415,20 @@ class MemoryManager:
             for result in seed_results:
                 memory_id = result.get("memory_id", "")
                 vector_score = float(result.get("score", 0.0))
+
+                if not graph_has_nodes:
+                    scored.append(
+                        {
+                            "score": round(vector_score, 4),
+                            "content": result.get("content"),
+                            "date": result.get("date"),
+                            "type": result.get("type"),
+                            "project": result.get("project"),
+                            "memory_id": memory_id,
+                        }
+                    )
+                    continue
+
                 importance = graph.get_importance(memory_id) if memory_id else 0.5
                 is_expanded = bool(result.get("_graph_expanded"))
                 graph_proximity = 0.7 if is_expanded else 1.0
