@@ -221,6 +221,36 @@ class TestSaveMemory:
 
         mock_store.save.assert_called_once()
 
+    def test_save_invokes_auto_link(self, memory_manager, mock_store, mock_embedder, monkeypatch):
+        """Saving should run auto-link and persist graph updates."""
+        graph = MagicMock()
+        memory_manager._knowledge_graph = graph
+
+        result = MagicMock(edges_created=2, relations={"related_to": 2})
+        monkeypatch.setattr(
+            "memory.manager.auto_link",
+            lambda **_: result,
+        )
+
+        memory_manager.save("Test memory", type="decision", project="api")
+
+        graph.add_node.assert_called_once()
+        graph.save.assert_called_once()
+
+    def test_save_continues_if_auto_link_fails(self, memory_manager, monkeypatch):
+        """Auto-link exceptions should not break save."""
+        graph = MagicMock()
+        memory_manager._knowledge_graph = graph
+
+        def _broken_link(**_kwargs):
+            raise RuntimeError("linking unavailable")
+
+        monkeypatch.setattr("memory.manager.auto_link", _broken_link)
+
+        memory_id = memory_manager.save("Noisy save", type="note")
+
+        assert memory_id is not None
+
     @pytest.mark.parametrize(
         "memory_type", ["note", "decision", "learning", "preference", "session"]
     )
