@@ -124,7 +124,7 @@ On every `save()` / `observe()`, the auto-linker searches for similar memories a
 | Rule | Condition | Effect |
 |------|-----------|--------|
 | Supersedes | similarity > 0.9 + same type | New replaces old (old importance halved) |
-| Contradicts | Negation patterns detected | Both flagged as conflicting |
+| Contradicts | Asymmetric negation + overlap >= 2 + proximity | Both flagged as conflicting |
 | Led_to | New learning + existing decision | Causation edge |
 | Depends_on | New decision + existing requirement | Dependency edge |
 | Related_to | similarity > 0.5 + same project | Default association |
@@ -168,7 +168,7 @@ Find superseded and contradictory pairs:
 curl http://localhost:8000/api/memory/consolidate
 ```
 
-Review the output. Remove stale entries from `~/.claude/memory/*.yaml`, then rebuild.
+Bidirectional pairs (A supersedes B and B supersedes A) are deduplicated automatically. Review the output, remove stale entries from `~/.claude/memory/*.yaml`, sync, then rebuild.
 
 ---
 
@@ -195,7 +195,22 @@ curl -X POST http://localhost:8000/api/memory/recall \
 curl http://localhost:8000/api/memory/stats
 ```
 
-Returns: total memories, by-type breakdown, knowledge graph node/edge counts.
+Returns total memories, by-type breakdown, and a `knowledge_graph` object:
+
+```json
+{
+  "knowledge_graph": {
+    "nodes": 133,
+    "edges": 286,
+    "relations": {
+      "related_to": 229,
+      "contradicts": 28,
+      "led_to": 21,
+      "depends_on": 8
+    }
+  }
+}
+```
 
 ### Knowledge Graph Health
 

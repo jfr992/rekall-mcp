@@ -29,11 +29,16 @@ Result: Claude re-asks for context every session. Fix: associative memory with t
 - Full documentation update (README, ARCHITECTURE, SETUP, TUNING, MEMORY_PLUGIN, CLAUDE_MEMORY_SETTINGS)
 
 ### Verification
-- Test suite: `237 passed, 9 skipped`
+- Test suite: `245 passed, 9 skipped`
 - Docker compose build + all endpoints verified manually
-- Knowledge graph rebuilt: 138 nodes, 310 edges (from clean YAML-only data)
-- Edge distribution: 72% related_to, 17% contradicts, 6% led_to, 3% supersedes, 2% depends_on
+- Knowledge graph rebuilt: 133 nodes, 286 edges (from clean YAML-only data)
+- Edge distribution: 80% related_to, 9% contradicts, 7% led_to, 2% depends_on
 - Lint cleanup: unused imports removed, explicit `zip(..., strict=True)`
+
+### Tuning commits (post-merge)
+- `617bf0f` — `fix: reduce contradiction false positives in auto-linker`
+- `da42879` — `feat: include knowledge graph metrics in stats endpoint`
+- `34fa420` — `fix: deduplicate bidirectional pairs in consolidation report`
 
 ### Atomic commits
 - `fe8d7d6` — `feat: add KnowledgeGraph class with persistence`

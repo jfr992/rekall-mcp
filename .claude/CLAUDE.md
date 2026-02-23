@@ -167,4 +167,7 @@ docker compose --profile test down
 - Topic clustering (agglomerative) + hierarchical context generation
 - Skill extraction from memory clusters
 - Memory consolidation and proactive context summary
-- All tests passing (237 passed, 9 skipped)
+- Contradiction detection tuned: negation proximity check, min overlap=2, false positives halved
+- Consolidation deduplicates bidirectional pairs (A->B and B->A collapse into one)
+- Stats endpoint includes `knowledge_graph` field (nodes, edges, relations breakdown)
+- All tests passing (245 passed, 9 skipped)
