@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
@@ -18,6 +19,56 @@ logger = logging.getLogger(__name__)
 
 _MAX_CANDIDATES = 10
 _SIMILARITY_THRESHOLD = 0.5
+_CONTRADICTION_SIMILARITY_THRESHOLD = 0.6
+
+_NEGATION_PATTERNS = (
+    r"\bno longer\b",
+    r"\bnot\b",
+    r"\bnever\b",
+    r"\bcan(?:not|'t)\b",
+    r"\bcannot\b",
+    r"\bdo not\b",
+    r"\bdid not\b",
+    r"\bshould not\b",
+    r"\bmust not\b",
+    r"\bdisabl(?:ed|ing|e)\b",
+    r"\bcancel(?:led|ing)?\b",
+    r"\bremoved\b",
+    r"\bstop\b",
+    r"\bavoid(?:ed)?\b",
+    r"\bforbid(?:den)?\b",
+)
+
+_NEGATION_RE = re.compile("|".join(_NEGATION_PATTERNS), re.IGNORECASE)
+_TOKEN_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)?")
+_STOP_WORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "but",
+    "for",
+    "from",
+    "have",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "this",
+    "to",
+    "was",
+    "will",
+    "with",
+    "within",
+    "would",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,6 +134,10 @@ def auto_link(
                     graph._graph.nodes[candidate_id]["importance"] = old_importance * 0.5
                     graph._dirty = True
 
+        elif relation == "contradicts":
+            # Direction from newer memory -> older memory.
+            graph.add_edge(memory_id, candidate_id, "contradicts", weight=candidate["score"])
+
         elif relation == "led_to":
             # Direction decision -> learning.
             graph.add_edge(candidate_id, memory_id, "led_to", weight=candidate["score"])
@@ -118,8 +173,8 @@ def _classify_relation(
 
     Current implementation applies heuristic rules in order.
     """
-    del new_content
-    del cand_content
+    if _is_contradiction(new_content=new_content, cand_content=cand_content, similarity=similarity):
+        return "contradicts"
 
     if similarity > 0.9 and new_type == cand_type:
         return "supersedes"
@@ -134,3 +189,42 @@ def _classify_relation(
         return "related_to"
 
     return "related_to"
+
+
+def _is_contradiction(
+    *,
+    new_content: str,
+    cand_content: str,
+    similarity: float,
+) -> bool:
+    """Return True when texts appear semantically related and logically opposite."""
+    if similarity < _CONTRADICTION_SIMILARITY_THRESHOLD:
+        return False
+
+    new_has_negation = _contains_negation(new_content)
+    cand_has_negation = _contains_negation(cand_content)
+    if not (new_has_negation or cand_has_negation):
+        return False
+
+    # Ignore when both assertions negate the same concept.
+    if new_has_negation and cand_has_negation:
+        return False
+
+    overlap = _token_overlap(new_content, cand_content)
+    return overlap > 0
+
+
+def _contains_negation(content: str) -> bool:
+    """Detect language patterns that usually indicate negation."""
+    return bool(_NEGATION_RE.search(content.lower()))
+
+
+def _token_overlap(a: str, b: str) -> int:
+    """Count non-stopword token overlap between two memories."""
+    return len(_tokenize(a) & _tokenize(b))
+
+
+def _tokenize(content: str) -> set[str]:
+    """Tokenize and normalize text for rough lexical overlap checks."""
+    tokens = {token.lower() for token in _TOKEN_RE.findall(content)}
+    return {token for token in tokens if token not in _STOP_WORDS}

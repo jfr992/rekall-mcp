@@ -139,6 +139,33 @@ def test_cross_project_no_links(tmp_path):
     assert result.edges_created == 0
 
 
+def test_new_memory_contradicts_existing_memory(tmp_path):
+    """A negated statement should create a contradicts relation."""
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    kg.add_node("old_decision", memory_type="decision")
+
+    result = auto_link(
+        graph=kg,
+        memory_id="new_decision",
+        content="Do not use PostgreSQL for this service anymore",
+        memory_type="decision",
+        project="api",
+        embedder=_mock_embedder(),
+        store=_mock_store([
+            {
+                "memory_id": "old_decision",
+                "type": "decision",
+                "content": "Use PostgreSQL for this service",
+                "score": 0.85,
+            },
+        ]),
+    )
+
+    assert result.relations.get("contradicts") == 1
+    edges = kg.get_edges("new_decision", direction="out")
+    assert any(edge.target == "old_decision" and edge.relation == "contradicts" for edge in edges)
+
+
 def test_classify_supersedes():
     assert _classify_relation(
         new_type="decision",
@@ -176,4 +203,24 @@ def test_classify_related_to_default():
         cand_type="fact",
         cand_content="Using us-east-1 region",
         similarity=0.65,
+    ) == "related_to"
+
+
+def test_classify_contradicts():
+    assert _classify_relation(
+        new_type="decision",
+        new_content="Do not enable this endpoint",
+        cand_type="decision",
+        cand_content="Enable this endpoint for admin users",
+        similarity=0.8,
+    ) == "contradicts"
+
+
+def test_classify_no_contradiction_without_overlap():
+    assert _classify_relation(
+        new_type="decision",
+        new_content="Do not use Redis cache",
+        cand_type="note",
+        cand_content="Deploy with two-node Postgres cluster",
+        similarity=0.9,
     ) == "related_to"
