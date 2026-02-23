@@ -1,7 +1,6 @@
 """Integration tests for graph-enhanced recall."""
 
 from datetime import datetime, timedelta
-
 from unittest.mock import MagicMock
 
 from memory.knowledge_graph import KnowledgeGraph
