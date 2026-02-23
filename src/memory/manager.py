@@ -144,6 +144,8 @@ class MemoryManager:
         self._embedder: Embedder | None = None
         self._embedding_model = embedding_model
 
+        self._knowledge_graph: KnowledgeGraph | None = None
+
         # Telemetry
         self._telemetry = Telemetry.get()
 
@@ -173,6 +175,15 @@ class MemoryManager:
         if self._embedder is None:
             self._embedder = Embedder(model=self._embedding_model)
         return self._embedder
+
+    @property
+    def knowledge_graph(self) -> KnowledgeGraph:
+        """Get graph, initializing lazily on first use."""
+        if self._knowledge_graph is None:
+            from memory.knowledge_graph import KnowledgeGraph
+
+            self._knowledge_graph = KnowledgeGraph(self.memory_dir / "_graph.json")
+        return self._knowledge_graph
 
     # -------------------------------------------------------------------------
     # SAVE: Store memories
@@ -231,6 +242,32 @@ class MemoryManager:
             # Save to vector store (searchability)
             vector = self.embedder.encode(content)
             self.store.save(id=memory_id, vector=vector, payload=payload)
+
+            # Build/refresh graph node for this memory
+            self.knowledge_graph.add_node(
+                memory_id,
+                topic=project or "general",
+                memory_type=type,
+            )
+
+            # Auto-link to related memories
+            try:
+                from memory.linker import auto_link
+
+                link_result = auto_link(
+                    graph=self.knowledge_graph,
+                    memory_id=memory_id,
+                    content=content,
+                    memory_type=type,
+                    project=project or "general",
+                    embedder=self.embedder,
+                    store=self.store,
+                )
+                self.knowledge_graph.save()
+                if link_result.edges_created:
+                    logger.info(f"Auto-linked: {link_result.relations}")
+            except Exception:
+                logger.warning("Auto-linking failed, memory saved without graph edges", exc_info=True)
 
             logger.info(f"Saved memory: {memory_id}")
             return memory_id
@@ -577,4 +614,3 @@ class MemoryManager:
         with self._telemetry.track("memory.clear_project"):
             self.store.delete(filters={"project": project})
             logger.info(f"Cleared memories for project: {project}")
-
