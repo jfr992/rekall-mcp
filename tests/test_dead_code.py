@@ -3,7 +3,6 @@
 These assert that specific deprecated artifacts no longer exist.
 """
 
-import pytest
 
 
 class TestDeadCodeRemoved:
@@ -27,8 +26,9 @@ class TestDeadCodeRemoved:
             "MemoryManager.save_memory() alias should be removed"
 
     def test_no_parameters_field_on_tool_definition(self):
-        from tools.base import ToolDefinition
         import dataclasses
+
+        from tools.base import ToolDefinition
         field_names = [f.name for f in dataclasses.fields(ToolDefinition)]
         assert "parameters" not in field_names, \
             "ToolDefinition.parameters field should be removed"
