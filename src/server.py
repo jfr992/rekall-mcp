@@ -409,6 +409,67 @@ async def api_rebuild_memory_graph(_request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/consolidate", methods=["GET"])
+async def api_consolidate_memories(request):
+    """REST API: Return consolidated view of conflicting or superseded memories."""
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        limit = _read_int(query, "limit", 240)
+        save_summary_raw = query.get("save_summary", "").lower()
+        save_summary = save_summary_raw in {"1", "true", "yes", "on"}
+
+        if limit < 1:
+            limit = 1
+
+        manager = _get_memory_manager()
+        summary = manager.consolidate_memories(
+            project=project,
+            limit=limit,
+            save_summary=save_summary,
+        )
+        return JSONResponse(
+            {
+                "project": project or "all",
+                "limit": limit,
+                "save_summary": save_summary,
+                "summary": summary,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error consolidating memories: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/context/proactive", methods=["GET"])
+async def api_proactive_context_summary(request):
+    """REST API: Get proactive context summary by relevance."""
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        limit = _read_int(query, "limit", 120)
+
+        if limit < 1:
+            limit = 1
+
+        manager = _get_memory_manager()
+        summary = manager.get_proactive_context_summary(project=project, limit=limit)
+        return JSONResponse(
+            {
+                "project": project or "all",
+                "limit": limit,
+                "summary": summary,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error building proactive context summary: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/dashboard", methods=["GET"])
 async def api_memory_dashboard(_request):
     """Dashboard UI for visualizing memory embeddings."""

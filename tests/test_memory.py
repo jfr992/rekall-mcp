@@ -515,6 +515,106 @@ class TestSkillContext:
 
         assert context == ""
 
+
+class TestIntelligenceLayer:
+    """Test conflict detection and proactive summary tooling."""
+
+    def test_save_creates_contradiction_edge(self, memory_manager, mock_store):
+        """Saving a contradiction should create a `contradicts` edge."""
+        from memory.knowledge_graph import KnowledgeGraph
+
+        memory_manager._knowledge_graph = KnowledgeGraph(memory_manager.memory_dir / "_graph.json")
+        memory_manager._knowledge_graph.add_node("old_decision", topic="api", memory_type="decision")
+
+        mock_store.search.return_value = [
+            {
+                "memory_id": "old_decision",
+                "type": "decision",
+                "content": "Use Redis cache for sessions",
+                "score": 0.88,
+            },
+        ]
+
+        memory_id = memory_manager.save(
+            content="Do not use Redis cache for sessions",
+            type="decision",
+            project="api",
+        )
+
+        graph_edges = memory_manager._knowledge_graph.get_edges(memory_id, direction="out")
+        assert any(
+            edge.target == "old_decision" and edge.relation == "contradicts"
+            for edge in graph_edges
+        )
+
+    def test_consolidate_memories_reports_signals(self, memory_manager, mock_store):
+        """Consolidation should report supersedes and contradictions."""
+        from memory.knowledge_graph import KnowledgeGraph
+
+        graph = KnowledgeGraph(memory_manager.memory_dir / "_graph.json")
+        memory_manager._knowledge_graph = graph
+
+        graph.add_node("old", topic="api", memory_type="decision")
+        graph.add_node("new", topic="api", memory_type="decision")
+        graph.add_node("conflict_a", topic="api", memory_type="decision")
+        graph.add_node("conflict_b", topic="api", memory_type="decision")
+
+        graph.add_edge("new", "old", "supersedes", weight=0.9)
+        graph.add_edge("conflict_a", "conflict_b", "contradicts", weight=0.82)
+
+        mock_store.scroll.return_value = [
+            {"memory_id": "old", "project": "api", "type": "decision", "content": "Old decision to cache in Redis"},
+            {"memory_id": "new", "project": "api", "type": "decision", "content": "New decision to cache in Redis via RedisJSON"},
+            {"memory_id": "conflict_a", "project": "api", "type": "decision", "content": "Do not cache responses on hot path"},
+            {"memory_id": "conflict_b", "project": "api", "type": "decision", "content": "Cache responses aggressively on hot path"},
+        ]
+
+        report = memory_manager.consolidate_memories(project="api")
+
+        assert "Memory Consolidation: api" in report
+        assert "Superseded Memories" in report
+        assert "old" in report
+        assert "Conflicting Memories" in report
+
+    def test_get_proactive_context_summary_prioritizes_signals(self, memory_manager, mock_store):
+        """Proactive summary should include top signals and conflict section."""
+        from memory.knowledge_graph import KnowledgeGraph
+
+        graph = KnowledgeGraph(memory_manager.memory_dir / "_graph.json")
+        memory_manager._knowledge_graph = graph
+
+        now = datetime.now().strftime("%Y-%m-%d")
+        graph.add_node("high", topic="api", memory_type="decision")
+        graph._graph.nodes["high"]["importance"] = 0.99
+        graph.add_node("old", topic="api", memory_type="decision")
+        graph._graph.nodes["old"]["importance"] = 0.3
+        graph.add_edge("old", "high", "contradicts", weight=0.9)
+
+        mock_store.scroll.return_value = [
+            {
+                "memory_id": "high",
+                "project": "api",
+                "type": "decision",
+                "content": "Use strict authentication for all endpoints",
+                "date": now,
+            },
+            {
+                "memory_id": "old",
+                "project": "api",
+                "type": "decision",
+                "content": "Allow anonymous access to staging endpoint",
+                "date": now,
+            },
+        ]
+
+        report = memory_manager.get_proactive_context_summary(project="api")
+
+        assert "Proactive Context: api" in report
+        assert "Top Signals" in report
+        assert "Conflicts to Review" in report
+        top_signals_section = report.split("Top Signals")[1]
+        assert top_signals_section.index("high") < top_signals_section.index("old")
+
 # =============================================================================
 # STATS TESTS
 # =============================================================================

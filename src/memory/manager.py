@@ -671,6 +671,195 @@ class MemoryManager:
             return render_skill_context(skills, project=project)
 
     # -------------------------------------------------------------------------
+    # MEMORY CONSOLIDATION: Detect superseded/contradictory memories
+    # -------------------------------------------------------------------------
+
+    def consolidate_memories(
+        self,
+        project: str | None = None,
+        limit: int = 240,
+        save_summary: bool = False,
+    ) -> str:
+        """Build a consolidation report for likely redundant or conflicting memories."""
+        with self._telemetry.track("memory.consolidate_memories"):
+            filters = {}
+            if project:
+                filters["project"] = project
+
+            points = self.store.scroll(filters=filters if filters else None, limit=limit)
+            if not points:
+                return "No memories found for consolidation."
+
+            points_by_id = {point.get("memory_id", ""): point for point in points}
+            memory_ids = {mid for mid in points_by_id if mid}
+            graph = self.knowledge_graph
+
+            superseded: list[tuple[str, str, float]] = []
+            contradictions: list[tuple[str, str, float]] = []
+            for source_id in memory_ids:
+                for edge in graph.get_edges(source_id, direction="out"):
+                    if edge.target not in memory_ids:
+                        continue
+
+                    if edge.relation == "supersedes":
+                        superseded.append((edge.source, edge.target, edge.weight))
+                    elif edge.relation == "contradicts":
+                        contradictions.append((edge.source, edge.target, edge.weight))
+
+            # Deduplicate and keep strongest edges.
+            seen_supersedes: dict[tuple[str, str], float] = {}
+            for source_id, target_id, weight in superseded:
+                key = (source_id, target_id)
+                seen_supersedes[key] = max(seen_supersedes.get(key, 0.0), weight)
+
+            seen_conflicts: dict[tuple[str, str], float] = {}
+            for source_id, target_id, weight in contradictions:
+                key = (source_id, target_id)
+                seen_conflicts[key] = max(seen_conflicts.get(key, 0.0), weight)
+
+            lines = [f"# Memory Consolidation: {project or 'all projects'}"]
+
+            if seen_supersedes:
+                lines.append("## Superseded Memories")
+                for (source_id, target_id), weight in sorted(
+                    seen_supersedes.items(), key=lambda item: item[1], reverse=True
+                ):
+                    target = points_by_id.get(target_id, {})
+                    snippet = self._memory_snippet(target.get("content", ""))
+                    lines.append(
+                        f"- `{source_id}` supersedes `{target_id}` "
+                        f"(score: {weight:.3f})"
+                    )
+                    if snippet:
+                        lines.append(f"  - {snippet}")
+
+            if seen_conflicts:
+                lines.append("## Conflicting Memories")
+                for (source_id, target_id), weight in sorted(
+                    seen_conflicts.items(), key=lambda item: item[1], reverse=True
+                ):
+                    source = points_by_id.get(source_id, {})
+                    target = points_by_id.get(target_id, {})
+                    source_snippet = self._memory_snippet(source.get("content", ""))
+                    target_snippet = self._memory_snippet(target.get("content", ""))
+                    lines.append(
+                        f"- `{source_id}` and `{target_id}` may conflict "
+                        f"(score: {weight:.3f})"
+                    )
+                    if source_snippet:
+                        lines.append(f"  - {source_id}: {source_snippet}")
+                    if target_snippet:
+                        lines.append(f"  - {target_id}: {target_snippet}")
+
+            if not seen_supersedes and not seen_conflicts:
+                lines.append("## Consolidation Signals")
+                lines.append("No clear supersedes/contradiction signals detected yet.")
+
+            result = "\n".join(lines)
+
+            if save_summary:
+                summary_id = self.save(
+                    content=result,
+                    type="session",
+                    project=project,
+                )
+                result = f"{result}\n\nSaved consolidation summary as `{summary_id}`."
+
+            return result
+
+    def get_proactive_context_summary(
+        self,
+        project: str | None = None,
+        limit: int = 120,
+    ) -> str:
+        """Generate a proactive summary of high-signal memories."""
+        with self._telemetry.track("memory.proactive_context_summary"):
+            filters = {}
+            if project:
+                filters["project"] = project
+
+            points = self.store.scroll(filters=filters if filters else None, limit=limit)
+            if not points:
+                return "No memories available for a proactive summary."
+
+            points_by_id = {point.get("memory_id", ""): point for point in points}
+            memory_ids = {mid for mid in points_by_id if mid}
+            graph = self.knowledge_graph
+
+            def _score_memory(point: dict) -> float:
+                memory_id = point.get("memory_id", "")
+                if not memory_id:
+                    return 0.0
+
+                importance = graph.get_importance(memory_id) if graph.stats()["nodes"] else 0.5
+                item_date = point.get("date")
+                days_old = 0
+                if item_date:
+                    try:
+                        parsed = datetime.strptime(item_date, "%Y-%m-%d")
+                        days_old = (datetime.now() - parsed).days
+                    except ValueError:
+                        days_old = 0
+                recency = max(0.0, 1.0 - days_old / 365)
+                return importance * 0.6 + recency * 0.4
+
+            conflict_edges = []
+            for source_id in memory_ids:
+                for edge in graph.get_edges(source_id, direction="out"):
+                    if edge.relation == "contradicts" and edge.target in memory_ids:
+                        conflict_edges.append((edge.source, edge.target))
+
+            ranked_points = sorted(
+                points,
+                key=_score_memory,
+                reverse=True,
+            )
+
+            lines = [
+                f"# Proactive Context: {project or 'all projects'}",
+                "",
+                "## Top Signals",
+            ]
+
+            for point in ranked_points[:8]:
+                snippet = self._memory_snippet(point.get("content", ""), max_length=160)
+                if not snippet:
+                    continue
+                lines.append(
+                    f"- [{point.get('type', 'note')}] {snippet} (memory: {point.get('memory_id', 'n/a')})"
+                )
+
+            if conflict_edges:
+                lines.append("")
+                lines.append("## Conflicts to Review")
+                for source_id, target_id in sorted(set(conflict_edges)):
+                    source = self._memory_snippet(points_by_id.get(source_id, {}).get("content", ""))
+                    target = self._memory_snippet(points_by_id.get(target_id, {}).get("content", ""))
+                    lines.append(f"- `{source_id}` conflicts with `{target_id}`")
+                    if source:
+                        lines.append(f"  - {source}")
+                    if target:
+                        lines.append(f"  - {target}")
+
+            if not conflict_edges:
+                lines.append("")
+                lines.append("## Conflicts to Review")
+                lines.append("No contradictions detected among ranked memories.")
+
+            return "\n".join(lines)
+
+    @staticmethod
+    def _memory_snippet(content: str, max_length: int = 120) -> str:
+        """Create a compact inline memory snippet for summaries."""
+        normalized = (content or "").strip().replace("\n", " ")
+        if not normalized:
+            return ""
+
+        if len(normalized) <= max_length:
+            return normalized
+        return f"{normalized[: max_length - 3]}..."
+
+    # -------------------------------------------------------------------------
     # SESSION SUMMARY: End-of-session snapshot
     # -------------------------------------------------------------------------
 
