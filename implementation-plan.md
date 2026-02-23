@@ -50,6 +50,8 @@ Result: Claude re-asks for context every session. Fix: associative memory with t
 - `191889e` — `feat: detect conflicts during auto-link`
 - `12045af` — `feat: add memory consolidation and proactive summary APIs`
 - `5d52fe7` — `test: cover server memory intelligence endpoints`
+- `d620e12` — `chore: clean lint warnings and remove unused code`
+- `619abdb` — `docs: record implementation progress in plan`
 
 ## Phase 1: Knowledge Graph Foundation
 
