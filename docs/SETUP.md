@@ -8,11 +8,12 @@ Give Claude a memory that persists across conversations.
 
 When you chat with Claude, it normally forgets everything when you close the conversation. This tool gives Claude:
 
-- **Persistent memory** - Claude remembers your preferences, decisions, and project context
-- **Smart search** - Claude can find relevant memories by meaning, not just keywords
-- **Project awareness** - Claude knows which project you're working on
+- **Persistent memory** - Remembers preferences, decisions, and project context
+- **Knowledge graph** - Typed relationships between memories (led_to, depends_on, supersedes, etc.)
+- **Graph-enhanced search** - Finds memories by meaning AND structural relationships
+- **Project awareness** - Knows which project you're working on
 
-Before/while configuring behavior, see `docs/CLAUDE_MEMORY_SETTINGS.md` for the canonical policy, API defaults, and what Claude-side tuning to adjust first.
+Before configuring behavior, see `docs/CLAUDE_MEMORY_SETTINGS.md` for the canonical policy and tuning knobs.
 
 ---
 
@@ -30,7 +31,7 @@ docker compose up -d
 
 This starts:
 - **Qdrant** - Vector database for semantic search
-- **MCP Server** - Memory tools with embeddings included
+- **MCP Server** - Memory tools with embeddings + knowledge graph
 
 ### Step 2: Tell Claude About It
 
@@ -51,9 +52,22 @@ docker compose ps
 
 # Check health
 curl http://localhost:8000/health
+
+# Check dashboard
+curl http://localhost:8000/dashboard
 ```
 
-**Done.** Claude can now save and recall memories.
+### Step 4: Build the Knowledge Graph
+
+If you already have memories from a previous version, rebuild the graph to create relationships:
+
+```bash
+curl -X POST http://localhost:8000/api/memory/graph/rebuild
+```
+
+This processes all existing memories and creates typed edges between them. Only needed once after initial setup or upgrade.
+
+**Done.** Claude can now save and recall memories with graph-enhanced retrieval.
 
 ---
 
@@ -68,22 +82,20 @@ Create `.claude/CLAUDE.md` in your project:
 ```markdown
 ## Memory System
 
-This project uses persistent memory. At the START of each session:
-
-1. Call `get_cached_context(project="my-project")` to load context
-2. Include the result in your understanding of this project
+At session start:
+1. Call `get_cached_context(project="my-project")` for flat context
+2. Or `get_hierarchical_context(project="my-project")` for topic-grouped context
 
 When working, save important context:
-- `save_memory("Must use Python 3.11+", type="requirement")`
-- `save_memory("Chose PostgreSQL for JSON support", type="decision")`
-- `save_memory("User prefers concise responses", type="preference")`
-- `save_memory("AWS region is us-east-1", type="fact")`
+- `observe("Chose PostgreSQL for JSON support")` — auto-classifies and auto-links
+- `save_memory("Must use Python 3.11+", type="requirement")` — explicit type
 
-Memory types guide AI behavior:
-- **requirement**: Must be followed (non-negotiable)
-- **decision**: Established choice (can be revisited if asked)
-- **preference**: Show as default, offer alternatives
-- **fact**: Informational context
+Memory types: requirement, decision, preference, fact, learning, note
+
+For maintenance:
+- `memory_stats()` — check graph health (node/edge counts)
+- `rebuild_knowledge_graph()` — if graph shows 0 edges
+- `consolidate_memories()` — find duplicates/conflicts
 ```
 
 ### Option B: Global
@@ -94,11 +106,16 @@ Add to `~/.claude/CLAUDE.md` to use memory in all projects.
 
 | Tool | Purpose |
 |------|---------|
-| `save_memory(content, type, project)` | Save something to remember |
-| `recall_memories(query, ...)` | Search memories semantically |
-| `get_project_context(project)` | Get all context for a project |
-| `get_cached_context(project)` | Get stable context (for caching) |
-| `memory_stats()` | Check storage statistics |
+| `observe(summary)` | Auto-classify, save, and auto-link |
+| `recall_memories(query, ...)` | Graph-enhanced semantic search |
+| `save_memory(content, type, project)` | Manual save with explicit type |
+| `get_cached_context(project)` | Flat context (prompt-cache optimized) |
+| `get_hierarchical_context(project)` | Topic-grouped context tree |
+| `skill_context()` | Extracted skills from memory clusters |
+| `memory_stats()` | Health + graph metrics |
+| `consolidate_memories()` | Detect duplicates/conflicts |
+| `proactive_context_summary()` | Top signals by importance x recency |
+| `rebuild_knowledge_graph()` | Rebuild graph from all memories |
 
 ---
 
@@ -147,381 +164,159 @@ Or manually edit `~/.claude/claude_code_config.json`:
 ### Step 4: Test It
 
 ```bash
-cd src && python -c "
-from config import get_config
-print('Memory enabled:', get_config().tools.memory.enabled)
-"
+curl http://localhost:8000/health
+curl http://localhost:8000/api/memory/stats
 ```
 
 ---
 
-## How It Works (Simple Version)
+## How It Works
 
 ```
 You tell Claude something
-        ↓
+        |
 Claude saves it as a memory
-        ↓
-Memory gets converted to a "vector" (a list of numbers that capture meaning)
-        ↓
-Vector gets stored in Qdrant (a search database)
-        ↓
-Later, Claude can search by meaning to find relevant memories
+        |
+Memory gets embedded + stored in YAML + Qdrant
+        |
+Knowledge graph node created, auto-linked to related memories
+        |
+Later: Claude recalls by meaning + follows graph relationships
 ```
 
-**Your memories are stored in two places:**
-1. **Files** (`~/.claude/memory/`) - Human-readable JSON, safe backup
-2. **Qdrant** - Searchable vector database for fast semantic search
+**Your memories are stored in three places:**
+1. **YAML files** (`~/.claude/memory/`) - Human-readable, source of truth
+2. **Qdrant** - Searchable vector database for semantic search
+3. **Knowledge graph** (`~/.claude/memory/_graph.json`) - Typed relationships
 
 ---
 
 ## Choosing an Embedding Provider
 
-The "embedding" is what converts your text into searchable vectors. You have three options.
+The "embedding" converts text into searchable vectors. Three options:
 
-> **Important:** Once you start using one provider, switching to another requires a migration step. See [Switching Providers](#switching-providers-important) below. Pick one and stick with it if possible.
+> **Important:** Switching providers requires a migration step. See [Switching Providers](#switching-providers-important) below.
 
 ### Option A: sentence-transformers (Default)
 
-**Best for:** Getting started, development, testing
-
-- Runs entirely on your computer
-- Free, no limits
-- Fast
-- Just works out of the box
-
-```yaml
-# config.yaml
-tools:
-  memory:
-    embedding_provider: sentence-transformers
-```
+- Runs on your computer, free, fast, just works
 
 ### Option B: Ollama
 
-**Best for:** Better quality without cloud costs
-
-- Runs on your computer
-- Free, no limits
-- Needs Ollama installed
-- Better quality than sentence-transformers
-
-> **Switching to this?** If you already have memories saved with another provider, you'll need to run `python -m memory.migrate` after changing your config.
-
-Setup:
-```bash
-# Install Ollama
-brew install ollama
-
-# Download the embedding model
-ollama pull nomic-embed-text
-
-# Make sure Ollama is running
-ollama serve
-```
-
-Config:
-```yaml
-tools:
-  memory:
-    embedding_provider: ollama
-    embedding_model: nomic-embed-text
-```
+- Better quality, still free and local
+- Requires: `brew install ollama && ollama pull nomic-embed-text`
 
 ### Option C: Gemini
 
-**Best for:** Best quality, light usage
+- Best quality, free tier (1,500 req/day)
+- Requires: API key from https://ai.google.dev/
 
-- Runs in Google's cloud
-- Free tier: 1,500 requests per day
-- Best quality embeddings
-- Needs internet connection
-
-> **Switching to this?** If you already have memories saved with another provider, you'll need to run `python -m memory.migrate` after changing your config.
-
-Setup:
-1. Go to https://ai.google.dev/
-2. Get a free API key
-3. Set it in your environment: `export GEMINI_API_KEY=your-key`
-
-Config:
-```yaml
-tools:
-  memory:
-    embedding_provider: gemini
-    embedding_api_key: ${GEMINI_API_KEY}
+Set via environment variable:
+```bash
+EMBEDDING_PROVIDER=sentence-transformers  # or ollama, gemini
 ```
 
 ---
 
 ## Switching Providers (Important!)
 
-> **This requires extra steps.** You can't just change the config and expect it to work.
-
-Each embedding provider creates vectors in its own "language." If you save memories with one provider and search with another, the search won't work - it's like asking someone who only speaks French to find a book in a Spanish library.
-
-**What happens if you just change the config without migrating:**
-- Your saved memory files are fine (they're just text)
-- But searches will return wrong results or fail completely
-- Claude won't be able to find your memories
-
-**To switch providers safely:**
+Each embedding provider creates vectors in its own "language." After switching:
 
 ```bash
-# Step 1: Update your config.yaml with the new provider
-# (change embedding_provider to the new value)
-
-# Step 2: Run the migration tool
+# Run the migration tool
 cd src && python -m memory.migrate
 
-# Step 3: Verify it worked
-python -m memory.migrate --dry-run
-# Should show "Found: X, Migrated: X"
+# Then rebuild the knowledge graph
+curl -X POST http://localhost:8000/api/memory/graph/rebuild
 ```
-
-**What the migration does:**
-1. Reads all your memory files from `~/.claude/memory/`
-2. Converts each one to a vector using the NEW provider
-3. Rebuilds the search index from scratch
-4. Your original files are never modified
-
-**How long does it take?**
-- Depends on how many memories you have
-- ~100 memories: a few seconds (local) to ~1 minute (Gemini)
-- The tool shows progress as it runs
-
-**Preview before migrating:**
-```bash
-python -m memory.migrate --dry-run
-```
-This shows how many memories would be migrated without actually doing it.
 
 ---
 
 ## Data Safety & Backups
 
-Your data is stored on your machine, not hidden in Docker volumes:
-
 ```
 ~/.claude/
-├── memory/     # Your memories (YAML files)
-└── qdrant/     # Search index (can be rebuilt)
+├── memory/
+│   ├── *.yaml          # Your memories (source of truth)
+│   └── _graph.json     # Knowledge graph (rebuildable)
+└── qdrant/             # Search index (rebuildable)
 ```
 
 ### Backup
-
-Just copy the folder:
 
 ```bash
 cp -r ~/.claude ~/claude-backup-$(date +%Y%m%d)
 ```
 
-### What if I lose the Qdrant data?
+### Lost Qdrant data?
 
-No problem. Your memory files are the source of truth. Rebuild the search index:
-
+Rebuild from YAML:
 ```bash
 cd src && python -m memory.migrate
+curl -X POST http://localhost:8000/api/memory/graph/rebuild
 ```
 
-### What if I lose the memory files?
+### Lost the graph?
 
-That's the real data. **Back them up.** The Qdrant index alone isn't enough.
-
-### Changing the storage location
-
-Set environment variables before starting:
-
+Rebuild from Qdrant:
 ```bash
-export MEMORY_STORAGE_PATH=~/my-backup-location/memory
-export QDRANT_DATA_PATH=~/my-backup-location/qdrant
-docker compose up -d
+curl -X POST http://localhost:8000/api/memory/graph/rebuild
 ```
+
+### Lost the YAML files?
+
+That's the real data. **Back them up.** Qdrant and graph alone aren't enough.
 
 ---
 
 ## Storage Management
 
-Without limits, memories accumulate forever. Here's how to manage growth.
-
 ### Check current usage
 
 ```bash
-python -m memory.cleanup --stats
+curl http://localhost:8000/api/memory/stats
 ```
 
-Output:
-```
-MEMORY STORAGE STATS
-============================================================
-Path: /home/user/.claude/memory
-Memories: 423
-Size: 1.2 MB
-Oldest: 2024-01-15T10:30:00Z
-Newest: 2024-06-01T14:22:00Z
-
-Projections (at current average size):
-  1,000 memories: ~2.8 MB
-  10,000 memories: ~28 MB
-```
-
-### Set limits in config
-
-```yaml
-# config.yaml
-tools:
-  memory:
-    max_memories: 1000    # Keep only the newest 1000
-    max_age_days: 180     # Delete memories older than 6 months
-```
-
-### Manual cleanup
+### Find duplicates
 
 ```bash
-# Preview what would be deleted (safe)
-python -m memory.cleanup --max-memories 1000 --dry-run
-
-# Actually delete old memories
-python -m memory.cleanup --max-memories 1000
-
-# Delete by age
-python -m memory.cleanup --max-age-days 90
-
-# After cleanup, rebuild search index
-python -m memory.migrate
+curl http://localhost:8000/api/memory/consolidate
 ```
 
-### Recommended limits
+Review superseded pairs, then manually remove stale entries from `~/.claude/memory/*.yaml` and rebuild:
 
-| Use case | max_memories | max_age_days | Estimated size |
-|----------|--------------|--------------|----------------|
-| Light use | 500 | 90 | ~1 MB |
-| Normal use | 1000 | 180 | ~3 MB |
-| Heavy use | 5000 | 365 | ~15 MB |
-| Unlimited | 0 | 0 | Grows forever |
+```bash
+curl -X POST http://localhost:8000/api/memory/graph/rebuild
+```
 
 ---
 
 ## Configuration
 
-### Using a Config File (Recommended)
+### Environment Variables
 
-Create `config.yaml` in the project root:
-
-```yaml
-qdrant:
-  url: http://localhost:6333
-
-tools:
-  memory:
-    enabled: true
-    storage_path: ~/.claude/memory
-    embedding_provider: sentence-transformers
-```
-
-### Using Environment Variables
-
-```bash
-export QDRANT_URL=http://localhost:6333
-export MEMORY_STORAGE_PATH=~/.claude/memory
-export EMBEDDING_PROVIDER=sentence-transformers
-```
-
-### Where Config Files Live
-
-The system looks for config in this order:
-1. Path you specify with `CONFIG_PATH` environment variable
-2. `./config.yaml` in the current directory
-3. `~/.config/memento-mcp/config.yaml` in your home directory
-4. Built-in defaults
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `QDRANT_URL` | `http://localhost:6333` | Qdrant endpoint |
+| `MEMORY_STORAGE_PATH` | `~/.claude/memory` | YAML storage path |
+| `EMBEDDING_PROVIDER` | `sentence-transformers` | Embedding backend |
+| `EMBEDDING_API_KEY` | (none) | For cloud providers |
+| `OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
+| `MCP_TRANSPORT` | `streamable-http` | Protocol (stdio or streamable-http) |
+| `HOST` | `0.0.0.0` | Listen address |
+| `PORT` | `8000` | Listen port |
+| `LOG_LEVEL` | `INFO` | Logging verbosity |
 
 ---
 
 ## Troubleshooting
 
-### "Connection refused" to Qdrant
+**"Connection refused" to Qdrant** - Start it: `docker compose up -d qdrant`
 
-Qdrant isn't running. Start it:
-```bash
-docker compose up -d qdrant
-```
+**Memories not found** - Rebuild the search index: `cd src && python -m memory.migrate`
 
-### Memories not being found
+**Graph has 0 edges** - Rebuild: `curl -X POST http://localhost:8000/api/memory/graph/rebuild`
 
-Your search index might be out of sync. Rebuild it:
-```bash
-cd src && python -m memory.migrate
-```
+**"Rate limit exceeded" (Gemini)** - Switch to sentence-transformers, run migrate, rebuild graph
 
-### "Rate limit exceeded" (Gemini)
-
-You've hit the free tier limit (1,500/day). Options:
-1. Wait until tomorrow
-2. Switch to Ollama or sentence-transformers (free, unlimited) - **remember to run `python -m memory.migrate`**
-3. Upgrade to Gemini paid tier
-
-### Want to see what's happening?
-
-```bash
-LOG_LEVEL=DEBUG python -m server
-```
-
----
-
-## Reference
-
-### All Configuration Options
-
-<details>
-<summary>Click to expand full reference</summary>
-
-#### Qdrant Settings
-
-| Setting | Default | What it does |
-|---------|---------|--------------|
-| `url` | `http://localhost:6333` | Where Qdrant is running |
-| `api_key` | (none) | For Qdrant Cloud |
-
-#### Memory Settings
-
-| Setting | Default | What it does |
-|---------|---------|--------------|
-| `enabled` | `true` | Turn memory on/off |
-| `storage_path` | `~/.claude/memory` | Where memory files are saved |
-| `embedding_provider` | `sentence-transformers` | Which embedding service to use |
-| `embedding_model` | `all-MiniLM-L6-v2` | Model name (varies by provider) |
-| `embedding_api_key` | (none) | API key for cloud providers |
-| `collection` | `agent_memory` | Qdrant collection name |
-
-#### Server Settings
-
-| Setting | Default | What it does |
-|---------|---------|--------------|
-| `transport` | `stdio` | How Claude connects (`stdio` or `http`) |
-| `log_level` | `INFO` | How much logging to show |
-
-#### Environment Variables
-
-| Variable | Overrides |
-|----------|-----------|
-| `QDRANT_URL` | `qdrant.url` |
-| `MEMORY_STORAGE_PATH` | `tools.memory.storage_path` |
-| `EMBEDDING_PROVIDER` | `tools.memory.embedding_provider` |
-| `GEMINI_API_KEY` | `tools.memory.embedding_api_key` |
-| `OLLAMA_URL` | `tools.memory.embedding_base_url` |
-| `LOG_LEVEL` | `server.log_level` |
-| `CONFIG_PATH` | Path to config file |
-
-</details>
-
----
-
-## What's Next?
-
-Once memory is working, Claude can:
-- Remember your coding style preferences
-- Track project decisions and why they were made
-- Recall context from previous conversations
-- Learn your naming conventions and patterns
-
-Just start chatting with Claude and it will automatically save important context.
+**Debug logging:** `LOG_LEVEL=DEBUG python -m server`

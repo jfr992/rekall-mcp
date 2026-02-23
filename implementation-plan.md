@@ -15,26 +15,27 @@ Result: Claude re-asks for context every session. Fix: associative memory with t
 
 ### Branch
 - `feat/knowledge-graph-implementation-complete` (based on `feat-knowledge-graph-phase2-hierarchy`)
+- **Merged to `main`** after full verification
 
-### What I completed on this branch
-- Implemented all planned phases from this document:
-  - Phase 1.1–1.7 (knowledge graph foundation, auto-linking, graph recall, rebuild, visualization, graph-recall tests)
-  - Phase 2 (topics, hierarchical context, hierarchy tooling/API wiring)
-  - Phase 3 (skill extraction + `skill_context`)
-  - Phase 4 (conflict detection, consolidation, proactive summary)
-- Added memory graph intelligence API endpoint coverage:
-  - `/api/memory/consolidate`
-  - `/api/memory/context/proactive`
-  - `/api/memory/graph/rebuild`
+### What was completed
+- All 4 phases implemented across 17 atomic commits:
+  - **Phase 1** (1.1–1.7): Knowledge graph foundation, auto-linking, graph-enhanced recall, rebuild, visualization, integration tests
+  - **Phase 2**: Topic clustering (agglomerative), hierarchical context, API/tool wiring
+  - **Phase 3**: Skill extraction + `skill_context` MCP tool
+  - **Phase 4**: Conflict detection on save, memory consolidation, proactive context summary
+- New REST API endpoints: `/api/memory/graph/rebuild`, `/api/memory/context/hierarchy`, `/api/memory/context/proactive`, `/api/memory/consolidate`
+- New MCP tools: `get_hierarchical_context`, `skill_context`, `consolidate_memories`, `proactive_context_summary`, `rebuild_knowledge_graph`
+- 7 Claude Code skills (memory-restore, memory-observe, memory-recall, memory-stats, memory-rebuild, memory-consolidate, memory-skills)
+- Full documentation update (README, ARCHITECTURE, SETUP, TUNING, MEMORY_PLUGIN, CLAUDE_MEMORY_SETTINGS)
 
 ### Verification
-- Final test run:
-  - `uv run pytest -q` → `237 passed, 9 skipped`
-- Lint cleanup completed for current tree:
-  - Removed unused imports and fixed import ordering warnings
-  - Replaced non-explicit `zip(...)` usage with explicit `zip(..., strict=True)` in `src/memory/graph.py`
+- Test suite: `237 passed, 9 skipped`
+- Docker compose build + all endpoints verified manually
+- Knowledge graph rebuilt: 138 nodes, 310 edges (from clean YAML-only data)
+- Edge distribution: 72% related_to, 17% contradicts, 6% led_to, 3% supersedes, 2% depends_on
+- Lint cleanup: unused imports removed, explicit `zip(..., strict=True)`
 
-### Atomic commits in this branch
+### Atomic commits
 - `fe8d7d6` — `feat: add KnowledgeGraph class with persistence`
 - `7a72c38` — `feat: add auto-linking algorithm`
 - `ef8c58e` — `feat: wire auto-linking into MemoryManager.save`
