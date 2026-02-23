@@ -1,6 +1,8 @@
 # Memento MCP
 
-**Give Claude a memory.** Three steps, five minutes.
+**Give Claude a memory with associative recall.** Three steps, five minutes.
+
+Memento MCP is a persistent memory system with a **knowledge graph** layer. It stores memories as YAML + vector embeddings, connects them with typed relationships, and retrieves context using graph-enhanced semantic search.
 
 ---
 
@@ -34,8 +36,6 @@ claude mcp add --transport http memory http://localhost:8000
 
 ```bash
 curl http://localhost:8000/health
-```
-```bash
 curl http://localhost:8000/dashboard
 ```
 
@@ -47,9 +47,9 @@ curl http://localhost:8000/dashboard
 
 Just talk normally. Claude automatically remembers:
 
-- **Decisions** → "Let's use PostgreSQL"
-- **Preferences** → "I prefer TypeScript"
-- **Lessons** → "That bug was caused by..."
+- **Decisions** - "Let's use PostgreSQL"
+- **Preferences** - "I prefer TypeScript"
+- **Lessons** - "That bug was caused by..."
 
 To check memories: *"What do you remember about this project?"*
 
@@ -60,16 +60,16 @@ from memory import MemoryManager
 
 memory = MemoryManager()
 
-# Save
+# Save (auto-links to related memories in the knowledge graph)
 memory.save("Chose PostgreSQL for JSON support", type="decision", project="my-app")
 memory.save("User prefers concise responses", type="preference")
 
-# Recall (semantic search)
+# Recall (graph-enhanced: vector search + relationship traversal)
 results = memory.recall("what database did we choose?")
 for r in results:
     print(f"[{r['score']:.2f}] {r['content']}")
 
-# Project context
+# Project context (flat or hierarchical)
 context = memory.get_project_context("my-app")
 ```
 
@@ -89,13 +89,43 @@ python -m memory.cli stats
 
 ---
 
+## Knowledge Graph
+
+Every memory is a node. Relationships are typed edges created automatically on save:
+
+| Relation | Meaning | Example |
+|----------|---------|---------|
+| `related_to` | Semantically similar | Two PostgreSQL facts |
+| `led_to` | Temporal causation | Decision led to a learning |
+| `depends_on` | Structural dependency | Decision depends on requirement |
+| `supersedes` | Newer replaces older | Updated decision overwrites old |
+| `contradicts` | Opposing content | Conflicting memories |
+
+### Graph-Enhanced Recall
+
+Recall uses a 3-phase pipeline instead of flat cosine search:
+
+```
+1. SEED    - Vector search (top K x 2 candidates)
+2. EXPAND  - Traverse 1-hop graph neighbors of seed results
+3. RANK    - Composite: vector(50%) + importance(20%) + recency(15%) + proximity(15%)
+```
+
+This finds memories that are *structurally related*, not just textually similar. Falls back to pure vector search when the graph is empty.
+
+### Dashboard
+
+Browse the knowledge graph at `http://localhost:8000/dashboard`. Nodes are memories, edges show typed relationships with labels.
+
+---
+
 ## Memory Plugin (Auto-Triggering Skills)
 
 Make memory completely automatic with the Memory Plugin.
 
 Instead of manually calling memory tools, the plugin:
 - **Auto-restores** context at session start (silently)
-- **Auto-saves** decisions when detected ("decided to use...")
+- **Auto-saves** decisions when detected
 - **Auto-recalls** memories when you ask questions
 - **Works invisibly** - feels like Claude naturally "remembers"
 
@@ -127,20 +157,17 @@ EOF
 
 ### Available Skills
 
-- `/memory-restore` - Load cached memories (auto-triggered at session start)
-- `/memory-observe <note>` - Save an observation manually
-- `/memory-recall <query>` - Search memories semantically
-- `/memory-stats` - Check system health
+| Skill | Purpose |
+|-------|---------|
+| `/memory-restore` | Load context at session start (hierarchical + flat) |
+| `/memory-observe <note>` | Save an observation manually |
+| `/memory-recall <query>` | Graph-enhanced semantic search |
+| `/memory-stats` | Health check with graph metrics |
+| `/memory-rebuild` | Rebuild knowledge graph from all memories |
+| `/memory-consolidate` | Detect duplicate and contradictory memories |
+| `/memory-skills` | Show extracted skills from memory clusters |
 
-### Installation Modes
-
-| Mode | Skills location | Hook location | Best for |
-|------|----------------|---------------|----------|
-| **Global** | `~/.claude/skills/` | `~/.claude/hooks.json` | Memory across all projects |
-| **Project-local** | `.claude/skills/` | `.claude/hooks.json` | Teams sharing config via git |
-| **Hybrid** | `~/.claude/skills/` | `.claude/hooks.json` (project) | Multi-project, selective auto-restore |
-
-See **[How It Works](docs/MEMORY_PLUGIN.md)** for architecture and technical details.
+See **[Memory Plugin](docs/MEMORY_PLUGIN.md)** for architecture and technical details.
 
 ---
 
@@ -149,7 +176,9 @@ See **[How It Works](docs/MEMORY_PLUGIN.md)** for architecture and technical det
 Everything stays on your computer in editable files:
 
 ```
-~/.claude/memory/2026-02-02.yaml   <- Open in any text editor
+~/.claude/memory/
+  2026-02-02.yaml       <- Human-editable memories
+  _graph.json           <- Knowledge graph (auto-managed)
 ```
 
 Nothing is sent anywhere. Backup = copy the folder.
@@ -171,7 +200,7 @@ Memories are converted to **embeddings** (vectors that capture meaning) for sema
 "Use PostgreSQL" -> [0.12, 0.45, 0.78, ...]  <- Numbers that represent meaning
 ```
 
-When you ask "what database?", Claude searches by meaning, not keywords.
+When you ask "what database?", Claude searches by meaning, not keywords. The knowledge graph then expands results by following relationship edges to find structurally related memories.
 
 **Embedding options** (see [docs/SETUP.md](docs/SETUP.md)):
 | Provider | Runs on | Cost | Quality |
@@ -184,22 +213,27 @@ When you ask "what database?", Claude searches by meaning, not keywords.
 
 ## Troubleshooting
 
-**"Connection refused"** → Make sure Docker is running: `docker compose ps`
+**"Connection refused"** - Make sure Docker is running: `docker compose ps`
 
-**"No dashboard UI"** → Make sure transport is HTTP and port is mapped:
+**"No dashboard UI"** - Verify transport is HTTP:
 ```bash
-docker compose exec mcp env | rg 'MCP_TRANSPORT=streamable-http|HOST=0.0.0.0'
-docker compose ps
+docker compose exec mcp env | rg 'MCP_TRANSPORT|HOST'
 ```
 
-**"Claude forgets"** → Add to `~/.claude/CLAUDE.md`:
+**"Claude forgets"** - Install the memory plugin (skills + hook) or add to `~/.claude/CLAUDE.md`:
 ```
 At session start, call get_cached_context() to restore memory.
 ```
 
-**Memories not found** → Rebuild the search index: `cd src && python -m memory.migrate`
+**Memories not found** - Rebuild the knowledge graph:
+```bash
+curl -X POST http://localhost:8000/api/memory/graph/rebuild
+```
 
-**"Rate limit exceeded" (Gemini)** → Switch to sentence-transformers (free, unlimited), then run `python -m memory.migrate`
+**Graph shows 0 edges** - Run rebuild after first install or upgrade:
+```bash
+curl -X POST http://localhost:8000/api/memory/graph/rebuild
+```
 
 **Restart everything:** `docker compose down && docker compose up -d`
 
@@ -213,48 +247,69 @@ At session start, call get_cached_context() to restore memory.
 ```
 You say something important
         |
-Claude saves it -> YAML file (~/.claude/memory/)
+Claude saves it -> YAML file + Qdrant vector + Knowledge Graph node
         |
-Text -> Embedding (vector of numbers capturing meaning)
+Auto-linker finds related memories -> Creates typed edges
         |
-Vector -> Qdrant (search database)
-        |
-Later: Claude searches by meaning, finds relevant memories
+Later: Claude recalls by meaning + follows graph relationships
 ```
 
 ### Example
 
 ```
 You: "Let's use PostgreSQL for JSON support"
-AI:  *saves to memory + creates embedding*
+AI:  saves to memory, creates embedding, auto-links to related memories
 
 [3 days later]
 
 You: "What database did we choose?"
-AI:  *semantic search finds the memory*
+AI:  vector search finds the memory
+     graph expansion surfaces the related requirement and learnings
      "We chose PostgreSQL for its JSON support"
 ```
 
 ### Memory Types
 
-| Type | Example | AI Behavior |
-|------|---------|-------------|
-| `requirement` | "Must use Python 3.11+" | **Must** follow |
-| `decision` | "Chose PostgreSQL" | Reference, can revisit |
-| `preference` | "Prefers Terraform" | Suggest, offer alternatives |
-| `fact` | "Project uses AWS" | Background context |
-| `learning` | "JWT bug fix" | Apply to similar cases |
+| Type | Example | AI Behavior | Importance |
+|------|---------|-------------|------------|
+| `requirement` | "Must use Python 3.11+" | **Must** follow | 1.0 |
+| `decision` | "Chose PostgreSQL" | Reference, can revisit | 0.85 |
+| `preference` | "Prefers Terraform" | Suggest, offer alternatives | 0.75 |
+| `learning` | "JWT bug fix" | Apply to similar cases | 0.65 |
+| `fact` | "Project uses AWS" | Background context | 0.55 |
+| `note` | "General observation" | Low-priority context | 0.35 |
 
-### Tools
+### MCP Tools
 
 | Tool | Purpose |
 |------|---------|
-| `observe(summary)` | Auto-save what was accomplished |
-| `recall_memories(query)` | Search memories |
-| `get_cached_context(project)` | Get all context (for prompt caching) |
-| `memory_stats()` | Storage stats |
-| `GET /api/memory/graph` | Memory nodes + semantic edges for the brain dashboard |
-| `/dashboard` | Browser UI for exploring memory clusters as a neural network |
+| `observe(summary)` | Auto-classify and save |
+| `recall_memories(query)` | Graph-enhanced semantic search |
+| `save_memory(content, type)` | Manual save with explicit type |
+| `get_cached_context(project)` | Flat context (prompt-cache optimized) |
+| `get_hierarchical_context(project)` | Topic-grouped context tree |
+| `skill_context()` | Extracted skills from memory clusters |
+| `memory_stats()` | Health + graph metrics |
+| `consolidate_memories()` | Detect duplicates and conflicts |
+| `proactive_context_summary()` | Top signals ranked by importance x recency |
+| `rebuild_knowledge_graph()` | Rebuild graph from all existing memories |
+
+### REST API
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Health check |
+| `/dashboard` | GET | Graph visualization UI |
+| `/api/memory/save` | POST | Save a memory |
+| `/api/memory/recall` | POST | Graph-enhanced search |
+| `/api/memory/observe` | POST | Auto-classify and save |
+| `/api/memory/stats` | GET | Statistics + graph metrics |
+| `/api/memory/context` | GET | Flat project context |
+| `/api/memory/context/hierarchy` | GET | Topic-grouped hierarchical context |
+| `/api/memory/context/proactive` | GET | Top signals + conflict detection |
+| `/api/memory/graph` | GET | Graph visualization data |
+| `/api/memory/graph/rebuild` | POST | Rebuild knowledge graph |
+| `/api/memory/consolidate` | GET | Detect superseded/conflicting pairs |
 
 </details>
 
@@ -267,7 +322,7 @@ AI:  *semantic search finds the memory*
 - ~80% reduction in repetitive context
 
 ### Prompt Cache Savings
-`get_cached_context()` returns identical content → 90% discount after turn 1
+`get_cached_context()` returns identical content per turn -> 90% discount after turn 1
 
 At high usage: **~$54/month savings** per 10k cached tokens
 
@@ -291,7 +346,10 @@ cd src && python -m server
 Tests run in an isolated environment and **never affect your production data**.
 
 ```bash
-# Run all tests
+# Run all tests (fast, local)
+uv run --extra dev pytest -v
+
+# Run all tests (isolated Docker)
 docker compose --profile test run --rm test
 
 # Run specific test file
@@ -304,52 +362,38 @@ docker compose --profile test down
 **What happens:**
 - `qdrant-test` starts on port 6334 with ephemeral tmpfs storage
 - Tests use `/tmp/test_memory` for YAML files (inside container)
-- Your production data at `~/.claude/memory/` and `~/.claude/qdrant/` stays untouched
+- Production data at `~/.claude/memory/` and `~/.claude/qdrant/` stays untouched
 - Everything auto-deletes when tests finish
-
-### Observability
-
-Every operation is tracked via the Telemetry singleton:
-
-```python
-from core import Telemetry
-
-telemetry = Telemetry.get()
-print(telemetry.summary())
-# memory.save      | 20 calls | p50=12.2ms | 100.0% ok
-# memory.recall    | 15 calls | p50=10.7ms | 100.0% ok
-# embedder.encode  | 35 calls | p50= 6.1ms | 100.0% ok
-
-# OTEL-compatible metrics dict
-metrics = telemetry.get_metrics()
-
-# Track custom operations
-with telemetry.track("my_operation"):
-    pass
-```
 
 ### Project Structure
 
 ```
 src/
-├── server.py       # MCP entry point
-├── core/           # Embeddings, vector store, telemetry, utils
-├── memory/         # Memory manager, cleanup, migration
-├── crawler/        # Documentation crawler (optional)
-├── indexer/        # Document chunker + Qdrant indexer
-└── tools/          # Pluggable tool system
+├── server.py               # MCP server with REST API + dashboard
+├── core/                   # Embedder, VectorStore, Telemetry, utils
+│   └── utils.py            # stable_hash_id() for string->int64 hashing
+├── memory/
+│   ├── manager.py          # MemoryManager (save, recall, get_stats)
+│   ├── knowledge_graph.py  # KnowledgeGraph (networkx DiGraph, persistence)
+│   ├── linker.py           # Auto-linking: classify relations on save
+│   ├── graph.py            # Visualization graph builder
+│   ├── cache_context.py    # Stable cacheable context + hierarchical variant
+│   ├── topics.py           # Topic auto-classification (agglomerative clustering)
+│   └── skills.py           # Skill extraction from memory clusters
+├── crawler/                # Documentation crawler (Scrapy)
+├── indexer/                # Document chunker + Qdrant indexer
+└── tools/                  # MCP tool definitions
 ```
 
 ### Documentation
 
 | Doc | Purpose |
 |-----|---------|
-| [docs/MEMORY_PLUGIN.md](docs/MEMORY_PLUGIN.md) | Memory Plugin architecture and features |
-| [docs/SETUP.md](docs/SETUP.md) | Detailed setup, embedding providers, migration |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Technical design, knowledge graph internals |
+| [docs/SETUP.md](docs/SETUP.md) | Setup, embedding providers, migration |
 | [docs/TUNING.md](docs/TUNING.md) | Customize what Claude remembers |
-| [docs/CLAUDE_MEMORY_SETTINGS.md](docs/CLAUDE_MEMORY_SETTINGS.md) | Claude-specific memory policy and tuning knobs |
-| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Technical design, adding tools |
-| [docs/example-memory.yaml](docs/example-memory.yaml) | Example YAML memory file |
+| [docs/MEMORY_PLUGIN.md](docs/MEMORY_PLUGIN.md) | Memory Plugin skills and hooks |
+| [docs/CLAUDE_MEMORY_SETTINGS.md](docs/CLAUDE_MEMORY_SETTINGS.md) | Claude-specific policy and tuning knobs |
 
 </details>
 

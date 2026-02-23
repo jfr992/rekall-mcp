@@ -246,8 +246,28 @@ class OptimizedMemoryTools(BaseToolProvider):
                 handler=None,
             ),
             ToolDefinition(
+                name="get_hierarchical_context",
+                description="Get hierarchy of memories grouped by inferred topics",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="skill_context",
+                description="Infer skills from recurring memory themes",
+                handler=None,
+            ),
+            ToolDefinition(
                 name="memory_stats",
                 description="Get memory system statistics",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="consolidate_memories",
+                description="Find superseded or contradictory memories and return consolidation hints",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="proactive_context_summary",
+                description="Generate a proactive memory summary ordered by signal strength",
                 handler=None,
             ),
         ]
@@ -387,6 +407,51 @@ class OptimizedMemoryTools(BaseToolProvider):
         registered.append("get_cached_context")
 
         @mcp.tool()
+        async def get_hierarchical_context(
+            project: str | None = None,
+            max_topics: int = 8,
+            similarity_threshold: float = 0.72,
+        ) -> str:
+            """Get topic-grouped memory context.
+
+            Best practice from knowledge management:
+            - Cluster related memories by vector similarity
+            - Render stable sections by inferred topics
+            - Helps with large context retrieval and dashboard workflows
+
+            Args:
+                project: Optional project filter.
+                max_topics: Maximum number of topics to return.
+                similarity_threshold: Vector similarity needed for topic merges.
+            """
+            return self.manager.get_hierarchical_project_context(
+                project=project,
+                max_topics=max_topics,
+                similarity_threshold=similarity_threshold,
+            )
+
+        registered.append("get_hierarchical_context")
+
+        @mcp.tool()
+        async def skill_context(
+            project: str | None = None,
+            min_mentions: int = 2,
+            max_skills: int = 8,
+        ) -> str:
+            """Infer likely skills from memory clusters.
+
+            Repetitive technical terms across memories are grouped as candidate
+            skills to support planning and handoff workflows.
+            """
+            return self.manager.get_skill_context(
+                project=project,
+                min_mentions=min_mentions,
+                max_skills=max_skills,
+            )
+
+        registered.append("skill_context")
+
+        @mcp.tool()
         async def memory_stats() -> str:
             """Get memory system statistics and health."""
             stats = self.manager.get_stats()
@@ -405,5 +470,51 @@ class OptimizedMemoryTools(BaseToolProvider):
             return output
 
         registered.append("memory_stats")
+
+        @mcp.tool()
+        async def consolidate_memories(
+            project: str | None = None,
+            limit: int = 240,
+            save_summary: bool = False,
+        ) -> str:
+            """Detect potential duplicate, superseded, and contradictory memories.
+
+            Returns:
+                Markdown summary of consolidation candidates.
+            """
+            return self.manager.consolidate_memories(
+                project=project,
+                limit=limit,
+                save_summary=save_summary,
+            )
+
+        registered.append("consolidate_memories")
+
+        @mcp.tool()
+        async def proactive_context_summary(
+            project: str | None = None,
+            limit: int = 120,
+        ) -> str:
+            """Generate a proactive memory summary ordered by likely signal value."""
+            return self.manager.get_proactive_context_summary(
+                project=project,
+                limit=limit,
+            )
+
+        registered.append("proactive_context_summary")
+
+        @mcp.tool()
+        async def rebuild_knowledge_graph() -> str:
+            """Rebuild the knowledge graph from all existing memories."""
+            stats = self.manager.knowledge_graph.rebuild(
+                store=self.manager.store,
+                embedder=self.manager.embedder,
+            )
+            return (
+                f"Graph rebuilt: {stats['nodes']} nodes, {stats['edges']} edges "
+                f"({stats['duration_ms']}ms)"
+            )
+
+        registered.append("rebuild_knowledge_graph")
 
         return registered

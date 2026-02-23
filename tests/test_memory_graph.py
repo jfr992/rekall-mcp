@@ -1,11 +1,11 @@
 """Tests for memory graph generation."""
 
 
-def _graph(points):
+def _graph(points, **kwargs):
     """Build graph from memory points with helpers."""
     from memory.graph import build_memory_graph
 
-    return build_memory_graph(points)
+    return build_memory_graph(points, **kwargs)
 
 
 def test_build_memory_graph_returns_nodes_and_links():
@@ -92,3 +92,35 @@ def test_graph_ignores_missing_vectors():
 
     assert len(result["nodes"]) == 1
     assert result["nodes"][0]["id"] == "a"
+
+
+def test_build_memory_graph_prefers_knowledge_graph_edges(tmp_path):
+    """Graph builder should prefer explicit knowledge graph edges when available."""
+    from memory.knowledge_graph import KnowledgeGraph
+
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    kg.add_node("a")
+    kg.add_node("b")
+    kg.add_edge("a", "b", "led_to", weight=0.9)
+
+    result = _graph(
+        [
+            {
+                "memory_id": "a",
+                "vector": [1.0, 0.0],
+                "type": "decision",
+            },
+            {
+                "memory_id": "b",
+                "vector": [1.0, 0.0],
+                "type": "learning",
+            },
+        ],
+        knowledge_graph=kg,
+        min_similarity=1.0,
+    )
+
+    assert len(result["links"]) == 1
+    assert result["links"][0]["source"] == "a"
+    assert result["links"][0]["target"] == "b"
+    assert result["links"][0]["relation"] == "led_to"
