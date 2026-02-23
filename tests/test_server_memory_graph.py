@@ -97,6 +97,55 @@ async def test_api_proactive_context_summary_endpoint(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_api_skill_context_endpoint(monkeypatch):
+    """Skill context endpoint should return skill summary payload."""
+    from server import api_skill_context
+
+    manager = MagicMock()
+    manager.get_skill_context.return_value = "# Skill Context: api\n\n## postgresql (5 mentions)"
+
+    monkeypatch.setattr("server._get_memory_manager", lambda: manager)
+
+    request = SimpleNamespace(
+        query_params=QueryParams({"project": "api", "min_mentions": "3", "max_skills": "5"})
+    )
+    response = await api_skill_context(request)  # type: ignore[arg-type]
+    assert isinstance(response, JSONResponse)
+
+    payload = json.loads(response.body)
+    assert payload["project"] == "api"
+    assert payload["summary"].startswith("# Skill Context")
+    assert payload["min_mentions"] == 3
+    assert payload["max_skills"] == 5
+
+    manager.get_skill_context.assert_called_once_with(
+        project="api", min_mentions=3, max_skills=5
+    )
+
+
+@pytest.mark.asyncio
+async def test_api_skill_context_defaults(monkeypatch):
+    """Skill context endpoint should use sane defaults."""
+    from server import api_skill_context
+
+    manager = MagicMock()
+    manager.get_skill_context.return_value = "# Skill Context: all"
+
+    monkeypatch.setattr("server._get_memory_manager", lambda: manager)
+
+    request = SimpleNamespace(query_params=QueryParams({}))
+    response = await api_skill_context(request)  # type: ignore[arg-type]
+    payload = json.loads(response.body)
+    assert payload["project"] == "all"
+    assert payload["min_mentions"] == 2
+    assert payload["max_skills"] == 8
+
+    manager.get_skill_context.assert_called_once_with(
+        project=None, min_mentions=2, max_skills=8
+    )
+
+
+@pytest.mark.asyncio
 async def test_api_rebuild_graph_endpoint(monkeypatch):
     """Graph rebuild endpoint should expose rebuild stats."""
     from server import api_rebuild_memory_graph
