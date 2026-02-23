@@ -41,6 +41,7 @@ curl http://localhost:8000/health
 | `/api/memory/graph/rebuild` | POST | Rebuild knowledge graph from all memories |
 | `/api/memory/context/hierarchy` | GET | Topic-grouped hierarchical context |
 | `/api/memory/context/proactive` | GET | Top signals + conflict check |
+| `/api/memory/context/skills` | GET | Inferred skills from memory clusters |
 | `/api/memory/consolidate` | GET | Detect superseded/contradictory memory pairs |
 
 ### MCP Tools (native, via claude_code_config.json)

@@ -443,6 +443,36 @@ async def api_consolidate_memories(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/context/skills", methods=["GET"])
+async def api_skill_context(request):
+    """REST API: Get inferred skill context from memory clusters."""
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        min_mentions = _read_int(query, "min_mentions", 2)
+        max_skills = _read_int(query, "max_skills", 8)
+
+        manager = _get_memory_manager()
+        summary = manager.get_skill_context(
+            project=project,
+            min_mentions=min_mentions,
+            max_skills=max_skills,
+        )
+        return JSONResponse(
+            {
+                "project": project or "all",
+                "min_mentions": min_mentions,
+                "max_skills": max_skills,
+                "summary": summary,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error building skill context: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/api/memory/context/proactive", methods=["GET"])
 async def api_proactive_context_summary(request):
     """REST API: Get proactive context summary by relevance."""
