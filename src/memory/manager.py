@@ -30,11 +30,14 @@ import re
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
 from core import Embedder, Telemetry, VectorStore
+
+if TYPE_CHECKING:
+    from memory.knowledge_graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
 
@@ -581,6 +584,46 @@ class MemoryManager:
                 )
 
             return "\n".join(lines)
+
+    # -------------------------------------------------------------------------
+    # HIERARCHICAL CONTEXT: Topic-aware structure
+    # -------------------------------------------------------------------------
+
+    def get_hierarchical_project_context(
+        self,
+        project: str | None = None,
+        limit: int = 120,
+        max_topics: int = 8,
+        similarity_threshold: float = 0.72,
+    ) -> str:
+        """Get project context grouped into topics.
+
+        Args:
+            project: Optional project filter.
+            limit: Max memories to analyze.
+            max_topics: Maximum number of topics to return.
+            similarity_threshold: Similarity cutoff for agglomerative clustering.
+
+        Returns:
+            Topic-grouped markdown context.
+        """
+        with self._telemetry.track("memory.get_hierarchical_project_context"):
+            filters = {}
+            if project:
+                filters["project"] = project
+
+            points = self.store.scroll(filters=filters if filters else None, limit=limit, with_vectors=True)
+            if not points:
+                return ""
+
+            from memory.topics import build_topic_clusters, render_hierarchical_context
+
+            topics = build_topic_clusters(
+                points,
+                similarity_threshold=similarity_threshold,
+                max_topics=max_topics,
+            )
+            return render_hierarchical_context(topics, project=project)
 
     # -------------------------------------------------------------------------
     # SESSION SUMMARY: End-of-session snapshot
