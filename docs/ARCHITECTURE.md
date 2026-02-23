@@ -1,6 +1,6 @@
 # Architecture
 
-This document explains how the system is built and why.
+How the system is built and why.
 
 ---
 
@@ -8,43 +8,39 @@ This document explains how the system is built and why.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         YOUR APPLICATION                         │
-│                    (Claude Code, Scripts, etc.)                  │
+│                       YOUR APPLICATION                          │
+│                  (Claude Code, Scripts, etc.)                    │
 └───────────────────────────────┬─────────────────────────────────┘
                                 │
                                 ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                        MEMORY MANAGER                            │
-│                                                                  │
-│   memory.save("decision about architecture", type="decision")   │
+│                      MEMORY MANAGER                             │
+│                                                                 │
+│   memory.save("decided on PostgreSQL", type="decision")         │
 │   memory.recall("what did we decide?")                          │
-│                                                                  │
-└───────────────────────────────┬─────────────────────────────────┘
-                                │
-                ┌───────────────┴───────────────┐
-                │                               │
-                ▼                               ▼
-┌───────────────────────────┐   ┌───────────────────────────┐
-│      CORE: EMBEDDER       │   │   CORE: VECTOR STORE      │
-│                           │   │                           │
-│  Text → 384-dim vector    │   │  Qdrant database          │
-│  "architecture" → [0.1,   │   │  Save, search, filter     │
-│   0.3, 0.2, ...]          │   │                           │
-└───────────────────────────┘   └───────────────────────────┘
-                                            │
-                                            ▼
-                                ┌───────────────────────────┐
-                                │    LOCAL FILE STORAGE     │
-                                │                           │
-                                │  ~/.claude/memory/        │
-                                │    2026-02-01.yaml        │
-                                │    2026-02-02.yaml        │
-                                └───────────────────────────┘
+│                                                                 │
+└────────┬──────────────┬───────────────────┬─────────────────────┘
+         │              │                   │
+         ▼              ▼                   ▼
+┌────────────────┐ ┌──────────────┐ ┌────────────────────────┐
+│  CORE: EMBEDDER│ │ CORE: VECTOR │ │  KNOWLEDGE GRAPH       │
+│                │ │ STORE        │ │                        │
+│ Text → 384-dim │ │ Qdrant DB    │ │  networkx DiGraph      │
+│ vector         │ │ Save, search │ │  Typed edges           │
+│ all-MiniLM-L6  │ │ filter       │ │  Auto-linking on save  │
+└────────────────┘ └──────┬───────┘ └───────────┬────────────┘
+                          │                     │
+                          ▼                     ▼
+               ┌──────────────────┐  ┌──────────────────────┐
+               │  YAML FILES      │  │  _graph.json         │
+               │  ~/.claude/      │  │  ~/.claude/memory/   │
+               │  memory/*.yaml   │  │  Atomic writes       │
+               └──────────────────┘  └──────────────────────┘
 ```
 
 ---
 
-## Core Principle: DRY (Don't Repeat Yourself)
+## Core Principle: DRY
 
 All shared functionality lives in `core/`:
 
@@ -64,17 +60,17 @@ All tools use these. No duplication.
 
 ### 1. Memory Manager (`memory/manager.py`)
 
-The main interface. Simple API:
+The main interface:
 
 ```python
 from memory import MemoryManager
 
 memory = MemoryManager()
 
-# Save
+# Save (auto-links to knowledge graph)
 memory.save("User prefers diagrams", type="preference")
 
-# Recall
+# Recall (graph-enhanced: seed → expand → rank)
 results = memory.recall("how does user like explanations?")
 
 # Project context
@@ -83,67 +79,114 @@ context = memory.get_project_context("my-app")
 
 **Responsibilities:**
 - Sanitize content (remove credentials)
-- Save to both file and vector store
-- Format search results
-- Track metrics
+- Save to file + vector store + knowledge graph node
+- Auto-link new memories via `linker.auto_link()`
+- Graph-enhanced recall (3-phase pipeline)
+- Track metrics via telemetry
 
-### 2. Embedder (`core/embeddings.py`)
+### 2. Knowledge Graph (`memory/knowledge_graph.py`)
+
+Persistent directed graph of memory relationships.
+
+```python
+from memory.knowledge_graph import KnowledgeGraph
+
+kg = KnowledgeGraph("~/.claude/memory/_graph.json")
+
+# Nodes are memories
+kg.add_node("mem_123", memory_type="decision")
+
+# Edges are typed relationships
+kg.add_edge("mem_123", "mem_456", "led_to", weight=0.8)
+
+# Traversal
+neighbors = kg.get_neighbors("mem_123", hops=1)
+chain = kg.get_chain("mem_123", relation="led_to")
+
+# Analysis
+importance = kg.get_importance("mem_123")
+stats = kg.stats()  # {"nodes": 138, "edges": 310, "relations": {...}}
+```
+
+**Storage:** `~/.claude/memory/_graph.json` (atomic writes via tempfile + os.replace)
+
+**Backend:** networkx DiGraph in memory
+
+**Relation types:**
+
+| Relation | Meaning | Auto-detection rule |
+|----------|---------|---------------------|
+| `related_to` | Semantically similar (default) | similarity > 0.5, same project |
+| `led_to` | Temporal causation | New learning + existing decision |
+| `depends_on` | Structural dependency | New decision + existing requirement |
+| `supersedes` | Newer replaces older | similarity > 0.9 + same type |
+| `contradicts` | Opposing content | Negation patterns detected |
+| `part_of` | Belongs to topic cluster | Topic assignment |
+
+**Importance scoring by type:**
+
+| Type | Base Weight |
+|------|-------------|
+| `requirement` | 1.0 |
+| `decision` | 0.85 |
+| `preference` | 0.75 |
+| `learning` | 0.65 |
+| `fact` | 0.55 |
+| `note` | 0.35 |
+| `session` | 0.25 |
+
+Temporal decay: `importance *= 0.98^(days_idle - 7)` after 7 days of non-access.
+
+### 3. Auto-Linker (`memory/linker.py`)
+
+Classifies relationships between memories on every save.
+
+```python
+from memory.linker import auto_link
+
+result = auto_link(
+    graph=kg, memory_id="new_learning",
+    content="Connection pooling needs pgbouncer",
+    memory_type="learning", project="api",
+    embedder=emb, store=vs,
+)
+# result.edges_created = 3
+# result.relations = {"led_to": 1, "related_to": 2}
+```
+
+**Rules applied in priority order (first match wins per candidate):**
+
+1. **CONTRADICTS** - Negation patterns detected in content
+2. **SUPERSEDES** - similarity > 0.9 + same type (old importance halved)
+3. **LED_TO** - New learning + candidate is decision
+4. **DEPENDS_ON** - New decision + candidate is requirement
+5. **RELATED_TO** - Default for similar memories
+
+Both `save()` and `rebuild()` call the same `auto_link()` function (DRY).
+
+### 4. Embedder (`core/embeddings.py`)
 
 Converts text to vectors for semantic search.
 
-```python
-from core import Embedder
+**Model:** `all-MiniLM-L6-v2` (384 dimensions, ~80MB, runs on CPU, ~6ms per encoding)
 
-embedder = Embedder()
-vector = embedder.encode("architecture decisions")
-# Returns: [0.1, 0.3, 0.2, ...] (384 floats)
-```
+LRU cache (512 entries) prevents redundant encodings.
 
-**Model:** `all-MiniLM-L6-v2`
-- 384 dimensions
-- ~80MB
-- Runs on CPU
-- ~6ms per encoding
+### 5. Vector Store (`core/vector_store.py`)
 
-### 3. Vector Store (`core/vector_store.py`)
+Wrapper around Qdrant for vector operations. Supports save, search (with filters), scroll, delete.
 
-Wrapper around Qdrant for vector operations.
+### 6. Topic Clustering (`memory/topics.py`)
 
-```python
-from core import VectorStore
+Agglomerative clustering discovers topics from memory vectors. Topic labels are derived from the most frequent terms in each cluster. Falls back to lexical extraction when clustering fails.
 
-store = VectorStore(collection="memories")
+### 7. Skill Extraction (`memory/skills.py`)
 
-# Save
-store.save(id="mem_001", vector=[...], payload={"type": "decision"})
+Extracts capabilities from memory clusters using term-frequency analysis. Each skill represents a learned capability backed by multiple related memories.
 
-# Search
-results = store.search(vector=[...], filters={"type": "decision"})
-```
+### 8. Telemetry (`core/telemetry.py`)
 
-**Why Qdrant?**
-- Fast (sub-10ms searches)
-- Runs locally (Docker)
-- Open source
-- Good Python SDK
-
-### 4. Telemetry (`core/telemetry.py`)
-
-Tracks all operations for observability.
-
-```python
-from core import Telemetry
-
-telemetry = Telemetry.get()
-
-# Automatic tracking
-with telemetry.track("memory.save"):
-    # ... operation ...
-
-# Get metrics
-metrics = telemetry.get_metrics()
-# Returns OTEL-compatible dict with counts, latencies, percentiles
-```
+Tracks all operations with counts, latencies, percentiles. OTEL-compatible metrics dict.
 
 ---
 
@@ -160,68 +203,81 @@ metrics = telemetry.get_metrics()
 3. Generate embedding               │
    "Decided to use Python" → [0.1, 0.3, ...]
                                     │
-4. Save to file (durability)        │
-   ~/.claude/memory/2026-02-01.yaml
+4. Save to YAML file (durability)   │
+   ~/.claude/memory/2026-02-23.yaml │
                                     │
 5. Save to Qdrant (searchability)   │
-   Collection: agent_memory
+   Collection: agent_memory         │
                                     │
-6. Record telemetry                 │
-   memory.save: 1 call, 15ms
+6. Add node to knowledge graph      │
+   importance = 0.85 (decision)     │
+                                    │
+7. Auto-link to related memories    │
+   Find candidates via Qdrant       │
+   Classify: led_to, depends_on...  │
+   Create typed edges               │
+                                    │
+8. Save graph (atomic write)        │
+   ~/.claude/memory/_graph.json     │
+                                    │
+9. Record telemetry                 │
+   memory.save: 1 call, 15ms       │
 ```
 
-### Recalling Memories
+### Recalling Memories (Graph-Enhanced)
 
 ```
 1. User calls memory.recall("what technology did we choose?")
                                     │
-2. Generate query embedding         │
-   "what technology..." → [0.2, 0.1, ...]
+2. Phase 1: SEED                    │
+   Generate query embedding         │
+   Vector search → top limit×2      │
+   candidates from Qdrant           │
                                     │
-3. Search Qdrant (semantic)         │
-   Find vectors similar to query
+3. Phase 2: EXPAND                  │
+   For each seed result:            │
+     Get 1-hop graph neighbors      │
+     Record access on node          │
+   Fetch expanded memories          │
+   from Qdrant                      │
                                     │
-4. Return results with scores       │
-   [{"content": "Decided to use Python", "score": 0.85}]
+4. Phase 3: RANK                    │
+   For each candidate:              │
+     vector_score × 0.50            │
+     + importance × 0.20            │
+     + recency × 0.15              │
+     + graph_proximity × 0.15      │
+   Sort by composite score          │
                                     │
-5. Record telemetry                 │
-   memory.recall: 1 call, 12ms
+5. Return top N results             │
+   Includes: score, vector_score,   │
+   content, type, project, date     │
 ```
+
+Falls back to pure vector search when the knowledge graph has 0 edges.
 
 ---
 
 ## Storage
 
-### Dual Storage Strategy
+### Triple Storage Strategy
 
-| Storage | Purpose | Trade-off |
-|---------|---------|-----------|
-| **Files** | Durability, backup, human-readable | No semantic search |
-| **Qdrant** | Fast semantic search | Requires running server |
+| Storage | Purpose | File |
+|---------|---------|------|
+| **YAML files** | Durability, backup, human-readable | `~/.claude/memory/*.yaml` |
+| **Qdrant** | Fast semantic search | `~/.claude/qdrant/` (Docker volume) |
+| **Knowledge graph** | Typed relationships, traversal | `~/.claude/memory/_graph.json` |
 
-If Qdrant is unavailable, file storage still works.
+YAML files are the source of truth. Qdrant and the graph can be rebuilt from YAML at any time.
 
 ### File Structure
 
 ```
 ~/.claude/memory/
-├── 2026-02-01.yaml
+├── 2026-02-01.yaml      # Day's memories
 ├── 2026-02-02.yaml
-└── ...
-```
-
-Each file is a YAML list of memories for that date:
-```yaml
-- id: 2026-02-01_decision_a4044b26
-  timestamp: '2026-02-01T10:30:00'
-  type: decision
-  project: my-app
-  content: Chose PostgreSQL for JSON support
-- id: 2026-02-01_learning_b3921c45
-  timestamp: '2026-02-01T14:15:32'
-  type: learning
-  project: my-app
-  content: JWT validation fails with trailing slash in issuer URL
+├── ...
+└── _graph.json           # Knowledge graph (networkx export)
 ```
 
 ### Qdrant Collection
@@ -238,20 +294,7 @@ Indexes: date, project, type (for filtering)
 
 ### Credential Sanitization
 
-Before any content is stored, it passes through sanitization:
-
-```python
-PATTERNS = [
-    r'api_key=...',      # Generic API keys
-    r'ghp_...',          # GitHub tokens
-    r'sk-...',           # OpenAI keys
-    r'password=...',     # Passwords
-    r'-----BEGIN...',    # PEM keys
-    # ... 12 patterns total
-]
-```
-
-**All matched content → `[REDACTED]`**
+Content passes through pattern-based sanitization before storage. Matches API keys, tokens, passwords, PEM keys, and other secrets. All matched content becomes `[REDACTED]`.
 
 ### Local-Only by Default
 
@@ -261,44 +304,29 @@ PATTERNS = [
 
 ---
 
-## Performance
-
-### Benchmarks (from real tests)
-
-| Operation | Avg Latency | Throughput |
-|-----------|-------------|------------|
-| memory.save | 13ms | 75/sec |
-| memory.recall | 13ms | 77/sec |
-| memory.context | 4ms | 253/sec |
-| embedder.encode | 6ms | 135/sec |
-| vector_store.search | 4ms | 250/sec |
-
-### Optimization Choices
-
-1. **Lazy loading**: Model loads on first use, not at import
-2. **Batch encoding**: 2.7x faster than single encoding
-3. **Connection pooling**: Qdrant client reused
-4. **Payload indexes**: Fast filtering by date/project/type
-
----
-
 ## Testing
 
 ```
 tests/
-├── test_core.py         # Telemetry, Embedder, VectorStore
-├── test_memory.py       # MemoryManager
-└── test_memory_cli.py   # CLI commands
+├── test_knowledge_graph.py       # KnowledgeGraph persistence, traversal, analysis
+├── test_auto_linking.py          # Auto-linking rules and classification
+├── test_graph_enhanced_recall.py # Graph-enhanced recall pipeline
+├── test_graph_rebuild.py         # Graph rebuild from Qdrant
+├── test_topics.py                # Topic clustering
+├── test_skills.py                # Skill extraction
+├── test_cache_context.py         # Cacheable + hierarchical context
+├── test_memory_graph.py          # Visualization graph builder
+├── test_server_memory_graph.py   # Server endpoint tests
+├── test_core.py                  # Telemetry, Embedder, VectorStore
+├── test_memory.py                # MemoryManager
+├── test_memory_cli.py            # CLI commands
+├── test_performance.py           # Benchmarks
+└── ...
 
-Coverage:
-- core/telemetry.py: 95%
-- core/embeddings.py: 85%
-- core/vector_store.py: 80%
-- memory/manager.py: 86%
-- memory/cli.py: 98%
+237 passed, 9 skipped
 ```
 
-All tests use mocks to avoid needing real Qdrant/model.
+All tests use mocks to avoid needing real Qdrant/model. Integration tests use isolated Docker containers.
 
 ---
 
@@ -308,60 +336,20 @@ All tests use mocks to avoid needing real Qdrant/model.
 
 | Operation | Description |
 |-----------|-------------|
-| `memory.save` | Saving a memory |
-| `memory.recall` | Searching memories |
+| `memory.save` | Saving a memory (includes auto-linking) |
+| `memory.recall` | Graph-enhanced search |
 | `memory.get_project_context` | Getting project context |
 | `memory.get_stats` | Getting system stats |
-| `memory.clear_project` | Deleting project memories |
-| `embedder.encode` | Text → vector conversion |
-| `embedder.encode_batch` | Batch encoding |
-| `embedder.load_model` | Model initialization |
+| `embedder.encode` | Text to vector conversion |
 | `vector_store.save` | Saving to Qdrant |
 | `vector_store.search` | Searching Qdrant |
 | `vector_store.scroll` | Listing from Qdrant |
-| `vector_store.delete` | Deleting from Qdrant |
-| `vector_store.connect` | Connecting to Qdrant |
 
-### Per-Operation Metrics
-
-Each operation records: `count`, `errors`, `success_rate_pct`, `avg_ms`, `p50_ms`, `p95_ms`, `p99_ms`.
-
-Access via `Telemetry.get().get_metrics()` (OTEL-compatible dict) or `Telemetry.get().summary()` for a human-readable table.
+Per-operation metrics: `count`, `errors`, `success_rate_pct`, `avg_ms`, `p50_ms`, `p95_ms`, `p99_ms`.
 
 ---
 
 ## Extension Points
-
-### Adding a New Tool Provider
-
-```python
-# tools/builtin/my_tool.py
-from tools.base import BaseToolProvider, ToolDefinition
-
-class MyToolProvider(BaseToolProvider):
-    name = "my_tool"
-    description = "What it does"
-
-    def get_tools(self) -> list[ToolDefinition]:
-        return [
-            ToolDefinition(
-                name="do_something",
-                description="Does something useful",
-                handler=self.do_something,
-            ),
-        ]
-
-    async def do_something(self, arg: str) -> str:
-        return f"Did something with {arg}"
-```
-
-Register in `tools/builtin/__init__.py` and enable in config:
-
-```yaml
-tools:
-  my_tool:
-    enabled: true
-```
 
 ### Adding a New Memory Type
 
@@ -369,18 +357,16 @@ tools:
 memory.save("Custom content", type="my_custom_type")
 ```
 
+Types without a defined weight in `TYPE_WEIGHTS` default to 0.35 importance.
+
+### Adding a New Relation Type
+
+Add to `RELATION_TYPES` in `knowledge_graph.py` and add classification logic in `linker.py:_classify_relation()`.
+
 ### Custom Embedding Model
 
 ```python
 embedder = Embedder(model="paraphrase-MiniLM-L6-v2")
 ```
 
-### Custom Vector Store
-
-```python
-store = VectorStore(
-    collection="my_collection",
-    url="http://qdrant-server:6333",
-    embedding_dim=768,  # Different model
-)
-```
+After switching models, rebuild the index: `python -m memory.migrate`

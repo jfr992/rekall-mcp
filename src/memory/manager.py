@@ -30,11 +30,16 @@ import re
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
 from core import Embedder, Telemetry, VectorStore
+from memory.linker import auto_link
+from memory.skills import extract_skills, render_skill_context
+
+if TYPE_CHECKING:
+    from memory.knowledge_graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +149,8 @@ class MemoryManager:
         self._embedder: Embedder | None = None
         self._embedding_model = embedding_model
 
+        self._knowledge_graph: KnowledgeGraph | None = None
+
         # Telemetry
         self._telemetry = Telemetry.get()
 
@@ -173,6 +180,15 @@ class MemoryManager:
         if self._embedder is None:
             self._embedder = Embedder(model=self._embedding_model)
         return self._embedder
+
+    @property
+    def knowledge_graph(self) -> KnowledgeGraph:
+        """Get graph, initializing lazily on first use."""
+        if self._knowledge_graph is None:
+            from memory.knowledge_graph import KnowledgeGraph
+
+            self._knowledge_graph = KnowledgeGraph(self.memory_dir / "_graph.json")
+        return self._knowledge_graph
 
     # -------------------------------------------------------------------------
     # SAVE: Store memories
@@ -231,6 +247,30 @@ class MemoryManager:
             # Save to vector store (searchability)
             vector = self.embedder.encode(content)
             self.store.save(id=memory_id, vector=vector, payload=payload)
+
+            # Build/refresh graph node for this memory
+            self.knowledge_graph.add_node(
+                memory_id,
+                topic=project or "general",
+                memory_type=type,
+            )
+
+            # Auto-link to related memories
+            try:
+                link_result = auto_link(
+                    graph=self.knowledge_graph,
+                    memory_id=memory_id,
+                    content=content,
+                    memory_type=type,
+                    project=project or "general",
+                    embedder=self.embedder,
+                    store=self.store,
+                )
+                self.knowledge_graph.save()
+                if link_result.edges_created:
+                    logger.info(f"Auto-linked: {link_result.relations}")
+            except Exception:
+                logger.warning("Auto-linking failed, memory saved without graph edges", exc_info=True)
 
             logger.info(f"Saved memory: {memory_id}")
             return memory_id
@@ -328,27 +368,103 @@ class MemoryManager:
                 cutoff = (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
                 filters["date"] = {"gte": cutoff}
 
-            # Search
+            # Phase 1: SEED — standard vector search
             query_vector = self.embedder.encode(query)
-            results = self.store.search(
+            graph = self.knowledge_graph
+            graph_stats = graph.stats()
+            graph_has_edges = graph_stats["edges"] > 0
+            graph_has_nodes = graph_stats["nodes"] > 0
+            seed_results = self.store.search(
                 vector=query_vector,
-                limit=limit,
+                limit=limit * 2 if limit and graph_has_edges else limit,
                 filters=filters if filters else None,
                 score_threshold=score_threshold,
             )
 
-            # Format results
-            return [
-                {
-                    "score": r.get("score"),
-                    "content": r.get("content"),
-                    "date": r.get("date"),
-                    "type": r.get("type"),
-                    "project": r.get("project"),
-                    "memory_id": r.get("memory_id"),
-                }
-                for r in results
-            ]
+            # Phase 2: EXPAND — graph traversal
+            if graph_has_edges:
+                seed_ids = {r.get("memory_id") for r in seed_results if r.get("memory_id")}
+                expanded_ids: set[str] = set()
+
+                for memory_id in seed_ids:
+                    if not isinstance(memory_id, str):
+                        continue
+                    graph.record_access(memory_id)
+                    neighbors = graph.get_neighbors(memory_id, hops=1)
+                    expanded_ids.update(neighbors)
+
+                # Deduplicate expanded items and ignore seed IDs.
+                new_ids = expanded_ids - seed_ids
+                for expanded_id in list(new_ids):
+                    expanded_results = self.store.search(
+                        vector=query_vector,
+                        limit=1,
+                        filters={"memory_id": expanded_id},
+                        score_threshold=0.0,
+                    )
+
+                    for result in expanded_results:
+                        memory_id = result.get("memory_id")
+                        if memory_id not in seed_ids:
+                            seed_results.append({**result, "_graph_expanded": True})
+                            seed_ids.add(memory_id)
+
+                graph.save()
+
+            # Phase 3: RANK — combined scoring
+            scored: list[dict[str, float]] = []
+            for result in seed_results:
+                memory_id = result.get("memory_id", "")
+                vector_score = float(result.get("score", 0.0))
+
+                if not graph_has_nodes:
+                    scored.append(
+                        {
+                            "score": round(vector_score, 4),
+                            "content": result.get("content"),
+                            "date": result.get("date"),
+                            "type": result.get("type"),
+                            "project": result.get("project"),
+                            "memory_id": memory_id,
+                        }
+                    )
+                    continue
+
+                importance = graph.get_importance(memory_id) if memory_id else 0.5
+                is_expanded = bool(result.get("_graph_expanded"))
+                graph_proximity = 0.7 if is_expanded else 1.0
+
+                days_old = 0
+                if result.get("date"):
+                    try:
+                        mem_date = datetime.strptime(result["date"], "%Y-%m-%d")
+                        days_old = (datetime.now() - mem_date).days
+                    except ValueError:
+                        days_old = 0
+
+                recency = max(0.0, 1.0 - days_old / 365)
+
+                final_score = (
+                    vector_score * 0.50
+                    + importance * 0.20
+                    + recency * 0.15
+                    + graph_proximity * 0.15
+                )
+
+                scored.append(
+                    {
+                        "score": round(final_score, 4),
+                        "vector_score": round(vector_score, 4),
+                        "content": result.get("content"),
+                        "date": result.get("date"),
+                        "type": result.get("type"),
+                        "project": result.get("project"),
+                        "memory_id": memory_id,
+                    }
+                )
+
+            scored.sort(key=lambda item: item["score"], reverse=True)
+            return scored[:limit]
 
     def recall_formatted(
         self,
@@ -487,6 +603,263 @@ class MemoryManager:
             return "\n".join(lines)
 
     # -------------------------------------------------------------------------
+    # HIERARCHICAL CONTEXT: Topic-aware structure
+    # -------------------------------------------------------------------------
+
+    def get_hierarchical_project_context(
+        self,
+        project: str | None = None,
+        limit: int = 120,
+        max_topics: int = 8,
+        similarity_threshold: float = 0.72,
+    ) -> str:
+        """Get project context grouped into topics.
+
+        Args:
+            project: Optional project filter.
+            limit: Max memories to analyze.
+            max_topics: Maximum number of topics to return.
+            similarity_threshold: Similarity cutoff for agglomerative clustering.
+
+        Returns:
+            Topic-grouped markdown context.
+        """
+        with self._telemetry.track("memory.get_hierarchical_project_context"):
+            filters = {}
+            if project:
+                filters["project"] = project
+
+            points = self.store.scroll(filters=filters if filters else None, limit=limit, with_vectors=True)
+            if not points:
+                return ""
+
+            from memory.topics import build_topic_clusters, render_hierarchical_context
+
+            topics = build_topic_clusters(
+                points,
+                similarity_threshold=similarity_threshold,
+                max_topics=max_topics,
+            )
+            return render_hierarchical_context(topics, project=project)
+
+    # -------------------------------------------------------------------------
+    # SKILL CONTEXT: Inferred capabilities
+    # -------------------------------------------------------------------------
+
+    def get_skill_context(
+        self,
+        project: str | None = None,
+        limit: int = 200,
+        min_mentions: int = 2,
+        max_skills: int = 8,
+    ) -> str:
+        """Get inferred skill context from memory evidence."""
+        with self._telemetry.track("memory.get_skill_context"):
+            filters = {}
+            if project:
+                filters["project"] = project
+
+            points = self.store.scroll(filters=filters if filters else None, limit=limit)
+            if not points:
+                return ""
+
+            skills = extract_skills(
+                points,
+                min_mentions=min_mentions,
+                max_skills=max_skills,
+            )
+            return render_skill_context(skills, project=project)
+
+    # -------------------------------------------------------------------------
+    # MEMORY CONSOLIDATION: Detect superseded/contradictory memories
+    # -------------------------------------------------------------------------
+
+    def consolidate_memories(
+        self,
+        project: str | None = None,
+        limit: int = 240,
+        save_summary: bool = False,
+    ) -> str:
+        """Build a consolidation report for likely redundant or conflicting memories."""
+        with self._telemetry.track("memory.consolidate_memories"):
+            filters = {}
+            if project:
+                filters["project"] = project
+
+            points = self.store.scroll(filters=filters if filters else None, limit=limit)
+            if not points:
+                return "No memories found for consolidation."
+
+            points_by_id = {point.get("memory_id", ""): point for point in points}
+            memory_ids = {mid for mid in points_by_id if mid}
+            graph = self.knowledge_graph
+
+            superseded: list[tuple[str, str, float]] = []
+            contradictions: list[tuple[str, str, float]] = []
+            for source_id in memory_ids:
+                for edge in graph.get_edges(source_id, direction="out"):
+                    if edge.target not in memory_ids:
+                        continue
+
+                    if edge.relation == "supersedes":
+                        superseded.append((edge.source, edge.target, edge.weight))
+                    elif edge.relation == "contradicts":
+                        contradictions.append((edge.source, edge.target, edge.weight))
+
+            # Deduplicate and keep strongest edges.
+            seen_supersedes: dict[tuple[str, str], float] = {}
+            for source_id, target_id, weight in superseded:
+                key = (source_id, target_id)
+                seen_supersedes[key] = max(seen_supersedes.get(key, 0.0), weight)
+
+            seen_conflicts: dict[tuple[str, str], float] = {}
+            for source_id, target_id, weight in contradictions:
+                key = (source_id, target_id)
+                seen_conflicts[key] = max(seen_conflicts.get(key, 0.0), weight)
+
+            lines = [f"# Memory Consolidation: {project or 'all projects'}"]
+
+            if seen_supersedes:
+                lines.append("## Superseded Memories")
+                for (source_id, target_id), weight in sorted(
+                    seen_supersedes.items(), key=lambda item: item[1], reverse=True
+                ):
+                    target = points_by_id.get(target_id, {})
+                    snippet = self._memory_snippet(target.get("content", ""))
+                    lines.append(
+                        f"- `{source_id}` supersedes `{target_id}` "
+                        f"(score: {weight:.3f})"
+                    )
+                    if snippet:
+                        lines.append(f"  - {snippet}")
+
+            if seen_conflicts:
+                lines.append("## Conflicting Memories")
+                for (source_id, target_id), weight in sorted(
+                    seen_conflicts.items(), key=lambda item: item[1], reverse=True
+                ):
+                    source = points_by_id.get(source_id, {})
+                    target = points_by_id.get(target_id, {})
+                    source_snippet = self._memory_snippet(source.get("content", ""))
+                    target_snippet = self._memory_snippet(target.get("content", ""))
+                    lines.append(
+                        f"- `{source_id}` and `{target_id}` may conflict "
+                        f"(score: {weight:.3f})"
+                    )
+                    if source_snippet:
+                        lines.append(f"  - {source_id}: {source_snippet}")
+                    if target_snippet:
+                        lines.append(f"  - {target_id}: {target_snippet}")
+
+            if not seen_supersedes and not seen_conflicts:
+                lines.append("## Consolidation Signals")
+                lines.append("No clear supersedes/contradiction signals detected yet.")
+
+            result = "\n".join(lines)
+
+            if save_summary:
+                summary_id = self.save(
+                    content=result,
+                    type="session",
+                    project=project,
+                )
+                result = f"{result}\n\nSaved consolidation summary as `{summary_id}`."
+
+            return result
+
+    def get_proactive_context_summary(
+        self,
+        project: str | None = None,
+        limit: int = 120,
+    ) -> str:
+        """Generate a proactive summary of high-signal memories."""
+        with self._telemetry.track("memory.proactive_context_summary"):
+            filters = {}
+            if project:
+                filters["project"] = project
+
+            points = self.store.scroll(filters=filters if filters else None, limit=limit)
+            if not points:
+                return "No memories available for a proactive summary."
+
+            points_by_id = {point.get("memory_id", ""): point for point in points}
+            memory_ids = {mid for mid in points_by_id if mid}
+            graph = self.knowledge_graph
+
+            def _score_memory(point: dict) -> float:
+                memory_id = point.get("memory_id", "")
+                if not memory_id:
+                    return 0.0
+
+                importance = graph.get_importance(memory_id) if graph.stats()["nodes"] else 0.5
+                item_date = point.get("date")
+                days_old = 0
+                if item_date:
+                    try:
+                        parsed = datetime.strptime(item_date, "%Y-%m-%d")
+                        days_old = (datetime.now() - parsed).days
+                    except ValueError:
+                        days_old = 0
+                recency = max(0.0, 1.0 - days_old / 365)
+                return importance * 0.6 + recency * 0.4
+
+            conflict_edges = []
+            for source_id in memory_ids:
+                for edge in graph.get_edges(source_id, direction="out"):
+                    if edge.relation == "contradicts" and edge.target in memory_ids:
+                        conflict_edges.append((edge.source, edge.target))
+
+            ranked_points = sorted(
+                points,
+                key=_score_memory,
+                reverse=True,
+            )
+
+            lines = [
+                f"# Proactive Context: {project or 'all projects'}",
+                "",
+                "## Top Signals",
+            ]
+
+            for point in ranked_points[:8]:
+                snippet = self._memory_snippet(point.get("content", ""), max_length=160)
+                if not snippet:
+                    continue
+                lines.append(
+                    f"- [{point.get('type', 'note')}] {snippet} (memory: {point.get('memory_id', 'n/a')})"
+                )
+
+            if conflict_edges:
+                lines.append("")
+                lines.append("## Conflicts to Review")
+                for source_id, target_id in sorted(set(conflict_edges)):
+                    source = self._memory_snippet(points_by_id.get(source_id, {}).get("content", ""))
+                    target = self._memory_snippet(points_by_id.get(target_id, {}).get("content", ""))
+                    lines.append(f"- `{source_id}` conflicts with `{target_id}`")
+                    if source:
+                        lines.append(f"  - {source}")
+                    if target:
+                        lines.append(f"  - {target}")
+
+            if not conflict_edges:
+                lines.append("")
+                lines.append("## Conflicts to Review")
+                lines.append("No contradictions detected among ranked memories.")
+
+            return "\n".join(lines)
+
+    @staticmethod
+    def _memory_snippet(content: str, max_length: int = 120) -> str:
+        """Create a compact inline memory snippet for summaries."""
+        normalized = (content or "").strip().replace("\n", " ")
+        if not normalized:
+            return ""
+
+        if len(normalized) <= max_length:
+            return normalized
+        return f"{normalized[: max_length - 3]}..."
+
+    # -------------------------------------------------------------------------
     # SESSION SUMMARY: End-of-session snapshot
     # -------------------------------------------------------------------------
 
@@ -577,4 +950,3 @@ class MemoryManager:
         with self._telemetry.track("memory.clear_project"):
             self.store.delete(filters={"project": project})
             logger.info(f"Cleared memories for project: {project}")
-

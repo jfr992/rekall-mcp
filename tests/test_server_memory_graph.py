@@ -1,6 +1,12 @@
 """Tests for the memory graph endpoint helpers."""
 
+import json
 from datetime import datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import MagicMock
+
+import pytest
+from starlette.responses import JSONResponse
 
 
 class QueryParams:
@@ -38,3 +44,79 @@ def test_parse_graph_filters_without_days_has_no_date_filter():
 
     assert filters["project"] == "api"
     assert "date" not in filters
+
+
+@pytest.mark.asyncio
+async def test_api_consolidate_memories_endpoint(monkeypatch):
+    """Consolidation endpoint should parse query params and return summary."""
+    from server import api_consolidate_memories
+
+    manager = MagicMock()
+    manager.consolidate_memories.return_value = "## Conflicting Memories\n- none"
+
+    monkeypatch.setattr("server._get_memory_manager", lambda: manager)
+
+    request = SimpleNamespace(
+        query_params=QueryParams(
+            {"project": "api", "limit": "50", "save_summary": "true"},
+        )
+    )
+
+    response = await api_consolidate_memories(request)  # type: ignore[arg-type]
+    assert isinstance(response, JSONResponse)
+
+    payload = json.loads(response.body)
+    assert payload["project"] == "api"
+    assert payload["summary"] == "## Conflicting Memories\n- none"
+    assert payload["limit"] == 50
+    assert payload["save_summary"] is True
+
+    manager.consolidate_memories.assert_called_once_with(project="api", limit=50, save_summary=True)
+
+
+@pytest.mark.asyncio
+async def test_api_proactive_context_summary_endpoint(monkeypatch):
+    """Proactive summary endpoint should return summary payload."""
+    from server import api_proactive_context_summary
+
+    manager = MagicMock()
+    manager.get_proactive_context_summary.return_value = "# Proactive Context"
+
+    monkeypatch.setattr("server._get_memory_manager", lambda: manager)
+
+    request = SimpleNamespace(query_params=QueryParams({"project": "api", "limit": "11"}))
+    response = await api_proactive_context_summary(request)  # type: ignore[arg-type]
+    assert isinstance(response, JSONResponse)
+
+    payload = json.loads(response.body)
+    assert payload["project"] == "api"
+    assert payload["summary"] == "# Proactive Context"
+    assert payload["limit"] == 11
+
+    manager.get_proactive_context_summary.assert_called_once_with(project="api", limit=11)
+
+
+@pytest.mark.asyncio
+async def test_api_rebuild_graph_endpoint(monkeypatch):
+    """Graph rebuild endpoint should expose rebuild stats."""
+    from server import api_rebuild_memory_graph
+
+    manager = MagicMock()
+    manager.knowledge_graph.rebuild.return_value = {
+        "nodes": 10,
+        "edges": 3,
+        "duration_ms": 42,
+    }
+    monkeypatch.setattr("server._get_memory_manager", lambda: manager)
+
+    request = SimpleNamespace()
+    response = await api_rebuild_memory_graph(request)  # type: ignore[arg-type]
+
+    assert isinstance(response, JSONResponse)
+    payload = json.loads(response.body)
+    assert payload == {
+        "status": "rebuilt",
+        "nodes": 10,
+        "edges": 3,
+        "duration_ms": 42,
+    }

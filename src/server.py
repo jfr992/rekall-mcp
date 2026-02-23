@@ -14,13 +14,13 @@ Usage:
     MCP_CONFIG=tools.yaml python -m server
 """
 
+import logging
+import os
+import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
-import logging
-import os
-import sys
 
 from mcp.server.fastmcp import FastMCP
 
@@ -297,6 +297,47 @@ async def api_get_context(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/context/hierarchy", methods=["GET"])
+async def api_get_hierarchical_context(request):
+    """REST API: Get topic-grouped context for a project."""
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        limit = _read_int(query, "limit", 120)
+        max_topics = _read_int(query, "max_topics", 8)
+        similarity_threshold = _read_float(query, "similarity_threshold", 0.72)
+
+        if limit < 1:
+            limit = 1
+        if max_topics < 1:
+            max_topics = 1
+
+        manager = _get_memory_manager()
+        context = manager.get_hierarchical_project_context(
+            project=project,
+            limit=limit,
+            max_topics=max_topics,
+            similarity_threshold=similarity_threshold,
+        )
+
+        return JSONResponse(
+            {
+                "project": project or "general",
+                "context": context,
+                "params": {
+                    "limit": limit,
+                    "max_topics": max_topics,
+                    "similarity_threshold": similarity_threshold,
+                },
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error getting hierarchical context: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/api/memory/stats", methods=["GET"])
 async def api_memory_stats(request):
     """REST API: Get memory statistics."""
@@ -340,6 +381,7 @@ async def api_memory_graph(request):
             points,
             neighbor_count=neighbor_count,
             min_similarity=min_similarity,
+            knowledge_graph=manager.knowledge_graph,
         )
 
         return JSONResponse({"query": {"limit": limit, "filters": filters}, "graph": graph})
@@ -347,6 +389,84 @@ async def api_memory_graph(request):
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception as e:
         logger.error(f"Error building memory graph: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/graph/rebuild", methods=["POST"])
+async def api_rebuild_memory_graph(_request):
+    """REST API: Rebuild the memory knowledge graph."""
+    from starlette.responses import JSONResponse
+
+    try:
+        manager = _get_memory_manager()
+        stats = manager.knowledge_graph.rebuild(
+            store=manager.store,
+            embedder=manager.embedder,
+        )
+        return JSONResponse({"status": "rebuilt", **stats})
+    except Exception as e:
+        logger.error(f"Error rebuilding memory graph: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/consolidate", methods=["GET"])
+async def api_consolidate_memories(request):
+    """REST API: Return consolidated view of conflicting or superseded memories."""
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        limit = _read_int(query, "limit", 240)
+        save_summary_raw = query.get("save_summary", "").lower()
+        save_summary = save_summary_raw in {"1", "true", "yes", "on"}
+
+        if limit < 1:
+            limit = 1
+
+        manager = _get_memory_manager()
+        summary = manager.consolidate_memories(
+            project=project,
+            limit=limit,
+            save_summary=save_summary,
+        )
+        return JSONResponse(
+            {
+                "project": project or "all",
+                "limit": limit,
+                "save_summary": save_summary,
+                "summary": summary,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error consolidating memories: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/context/proactive", methods=["GET"])
+async def api_proactive_context_summary(request):
+    """REST API: Get proactive context summary by relevance."""
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        limit = _read_int(query, "limit", 120)
+
+        if limit < 1:
+            limit = 1
+
+        manager = _get_memory_manager()
+        summary = manager.get_proactive_context_summary(project=project, limit=limit)
+        return JSONResponse(
+            {
+                "project": project or "all",
+                "limit": limit,
+                "summary": summary,
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error building proactive context summary: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 

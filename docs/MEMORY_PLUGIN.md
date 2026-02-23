@@ -2,9 +2,9 @@
 
 ## Overview
 
-The Memory Plugin transforms memento-mcp from a passive memory store into an intelligent, auto-triggering system that seamlessly preserves context across Claude Code sessions. Instead of manually calling MCP tools, the plugin uses **Claude Code skills** that automatically detect when to restore, save, or search memories.
+The Memory Plugin transforms memento-mcp from a passive memory store into an intelligent, auto-triggering system with a knowledge graph layer. Instead of manually calling MCP tools, the plugin uses **Claude Code skills** and **hooks** that automatically restore, save, and search memories.
 
-Before wiring this in, review `docs/CLAUDE_MEMORY_SETTINGS.md` for the canonical policy and tuning knobs (project scoping, dashboard defaults, and recovery playbook).
+See `docs/CLAUDE_MEMORY_SETTINGS.md` for the canonical policy and tuning knobs.
 
 ## What Problem Does It Solve?
 
@@ -12,110 +12,93 @@ Before wiring this in, review `docs/CLAUDE_MEMORY_SETTINGS.md` for the canonical
 - Manually call `get_cached_context()` at session start
 - Remember to call `observe()` after decisions
 - Explicitly invoke `recall_memories()` when stuck
-- Context lost between sessions
+- No relationships between memories
 
-**After**: Automatic, invisible memory
-- New session? Context auto-restored silently
-- Made a decision? Auto-saved when detected
-- Need past context? Auto-recalled when you ask questions
-- Seamless experience across sessions
+**After**: Automatic, graph-enhanced memory
+- Context auto-restored (hierarchical + flat) at session start
+- Auto-saved when decisions detected
+- Graph-enhanced recall surfaces structurally related memories
+- Knowledge graph connects decisions to learnings to requirements
 
 ## Architecture
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
-│                      Claude Code Session                      │
-│                                                                │
-│  ┌─────────────┐         ┌──────────────┐                    │
-│  │   Hooks     │────────>│    Skills    │                    │
-│  │  Auto-fire  │         │  /memory-*   │                    │
-│  └─────────────┘         └───────┬──────┘                    │
-│                                   │                            │
-└───────────────────────────────────┼────────────────────────────┘
-                                    │ HTTP REST API
-                                    ▼
+│                      Claude Code Session                     │
+│                                                              │
+│  ┌─────────────┐         ┌──────────────┐                   │
+│  │   Hooks     │────────>│    Skills    │                   │
+│  │  Auto-fire  │         │  /memory-*   │                   │
+│  └─────────────┘         └───────┬──────┘                   │
+│                                  │                           │
+└──────────────────────────────────┼───────────────────────────┘
+                                   │ HTTP REST API
+                                   ▼
 ┌──────────────────────────────────────────────────────────────┐
-│                   Memento-MCP Server (:8000)                  │
-│                                                                │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐       │
-│  │   /observe   │  │   /recall    │  │  /context    │       │
-│  │ Auto-classify│  │   Semantic   │  │  Formatted   │       │
-│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘       │
-│         │                  │                  │                │
-└─────────┼──────────────────┼──────────────────┼────────────────┘
-          │                  │                  │
-          ▼                  ▼                  ▼
-┌─────────────────┐    ┌──────────────────────────┐
-│  YAML Storage   │    │   Qdrant Vector Store    │
-│  ~/.claude/     │    │  Semantic Search Index   │
-│  memory/*.yaml  │    │  sentence-transformers   │
-└─────────────────┘    └──────────────────────────┘
+│                  Memento-MCP Server (:8000)                   │
+│                                                              │
+│  ┌────────────┐ ┌────────────┐ ┌────────────┐ ┌──────────┐ │
+│  │  /observe  │ │  /recall   │ │  /context   │ │  /graph  │ │
+│  │ Auto-class │ │ Graph-     │ │ Flat +      │ │ Rebuild  │ │
+│  │ + autolink │ │ enhanced   │ │ Hierarchical│ │ Visualize│ │
+│  └─────┬──────┘ └─────┬─────┘ └─────┬───────┘ └────┬─────┘ │
+│        │              │              │               │       │
+└────────┼──────────────┼──────────────┼───────────────┼───────┘
+         │              │              │               │
+         ▼              ▼              ▼               ▼
+┌─────────────────┐ ┌─────────────────┐ ┌──────────────────┐
+│  YAML Storage   │ │  Qdrant Vector  │ │ Knowledge Graph  │
+│  ~/.claude/     │ │  Store          │ │ _graph.json      │
+│  memory/*.yaml  │ │  384-dim cosine │ │ networkx DiGraph  │
+└─────────────────┘ └─────────────────┘ └──────────────────┘
 ```
 
 ## Components
 
 ### 1. Skills (Global, ~/.claude/skills/)
 
-Four specialized skills that interact with the REST API:
+Seven specialized skills that interact with the REST API:
 
 #### `/memory-restore` - Session Start Auto-Load
-**Purpose**: Restore cached memories at session start
+**Purpose**: Restore context at session start using hierarchical + flat context
 **Trigger**: New session, resume after compaction, explicit invocation
 **Action**:
-- Fetches `GET /api/memory/context`
+- Fetches `GET /api/memory/context/hierarchy` (primary)
+- Falls back to `GET /api/memory/context` (flat)
 - Silently injects memories into working context
-- Shows stats summary
 
-**Implementation**:
-```yaml
----
-name: memory-restore
-user-invocable: true
----
-!`curl -s http://localhost:8000/api/memory/context | jq -r '.context'`
-```
-
-#### `/memory-observe` - Auto-Save Significant Events
+#### `/memory-observe` - Auto-Save Events
 **Purpose**: Record architecture decisions, bug fixes, preferences
-**Trigger**: Decision language ("decided to use", "chose", "going with")
 **Action**:
 - Posts to `/api/memory/observe` with auto-classification
-- Saves to YAML + embeds in Qdrant
-- Returns confirmation
+- Server auto-links to related memories in knowledge graph
+- Returns confirmation with classified type
 
-**Implementation**:
-```yaml
----
-name: memory-observe
-allowed-tools: Bash(curl *)
----
-!`echo '{"summary": "$ARGUMENTS", "type": "auto"}' |
-  curl -s http://localhost:8000/api/memory/observe -X POST -d @-`
-```
-
-#### `/memory-recall` - Intelligent Search
-**Purpose**: Find relevant past context using semantic search
-**Trigger**: Questions about past work, stuck situations
+#### `/memory-recall` - Graph-Enhanced Search
+**Purpose**: Find relevant past context using semantic search + graph traversal
 **Action**:
-- Posts to `/api/memory/recall` with query
-- Returns top 5 matches with scores
-- Synthesizes results into response
-
-**Implementation**:
-```yaml
----
-name: memory-recall
-context: fork
-agent: Explore
----
-!`echo '{"query": "$ARGUMENTS", "limit": 5}' |
-  curl -s http://localhost:8000/api/memory/recall -X POST -d @-`
-```
+- Posts to `/api/memory/recall` with query (default limit=8)
+- Results include graph-expanded neighbors ranked by composite score
+- Scoring: vector(50%) + importance(20%) + recency(15%) + proximity(15%)
 
 #### `/memory-stats` - Health Check
 **Purpose**: Diagnostics and health monitoring
-**Trigger**: User requests stats, troubleshooting
-**Action**: Fetches `GET /api/memory/stats`
+**Action**: Fetches `GET /api/memory/stats` including knowledge graph node/edge counts
+
+#### `/memory-rebuild` - Rebuild Knowledge Graph
+**Purpose**: Create typed relationships between all existing memories
+**Action**: Posts to `/api/memory/graph/rebuild`
+**When**: After upgrades, corrupted graph, or 0 edges in stats
+
+#### `/memory-consolidate` - Detect Duplicates
+**Purpose**: Find superseded and contradictory memory pairs
+**Action**: Fetches `GET /api/memory/consolidate`
+**When**: After bulk imports, to clean up memory drift
+
+#### `/memory-skills` - Show Extracted Skills
+**Purpose**: Display capabilities learned from memory clusters
+**Action**: Fetches `GET /api/memory/context/proactive`
+**When**: Understanding what knowledge is available
 
 ### 2. Hooks (Global, ~/.claude/hooks.json)
 
@@ -137,95 +120,60 @@ Auto-triggers memory restoration on every new message:
 }
 ```
 
-**How it works**:
-- Fires on every user message (new session, resume, or post-compaction)
-- Instructs Claude to check if restoration is needed
-- Silently loads context without user-facing output
+### 3. REST API
 
-### 3. REST API (Memento-MCP Server)
+#### Core Endpoints
 
-#### `GET /api/memory/context`
-Returns formatted project context for restoration.
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/health` | GET | Health check |
+| `/dashboard` | GET | Graph visualization UI |
+| `/api/memory/save` | POST | Save a memory |
+| `/api/memory/recall` | POST | Graph-enhanced semantic search |
+| `/api/memory/observe` | POST | Auto-classify and save |
+| `/api/memory/stats` | GET | Statistics + graph metrics |
+| `/api/memory/context` | GET | Flat project context |
 
-**Query Params**: `?project=<name>` (optional, defaults to "general")
-**Response**:
+#### Knowledge Graph Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/memory/graph` | GET | Graph visualization data (nodes + edges) |
+| `/api/memory/graph/rebuild` | POST | Rebuild knowledge graph from all memories |
+| `/api/memory/context/hierarchy` | GET | Topic-grouped hierarchical context |
+| `/api/memory/context/proactive` | GET | Top signals + conflict detection |
+| `/api/memory/consolidate` | GET | Detect superseded/conflicting pairs |
+
+#### API Details
+
+**`POST /api/memory/recall`**
 ```json
 {
-  "project": "memento-mcp",
-  "context": "# Project Context: memento-mcp\n\n## [2026-02-02] fact\n..."
+  "query": "database choice",
+  "limit": 5,
+  "project": "my-app"
 }
 ```
+Response includes `score` (composite), `vector_score`, `content`, `type`, `date`, `memory_id`.
 
-#### `POST /api/memory/observe`
-Auto-classifies and saves observations.
+Graph-enhanced: seeds expanded via 1-hop traversal, re-ranked by composite score.
 
-**Body**:
+**`POST /api/memory/observe`**
 ```json
 {
   "summary": "Decided to use PostgreSQL for reliability",
   "type": "auto"
 }
 ```
+Response: `memory_id`, `status`, `classified_type`. Auto-links to related memories in knowledge graph.
 
-**Response**:
-```json
-{
-  "memory_id": "2026-02-03_decision_a4044b26",
-  "status": "observed",
-  "classified_type": "decision"
-}
-```
+**`GET /api/memory/graph`**
+Query params: `limit` (default 120), `neighbor_count` (default 5), `min_similarity` (default 0.35), `project`, `type`, `days`.
 
-**Auto-classification**: Uses embedding similarity to classify as:
-- `decision` - Architecture/tech choices
-- `learning` - Bug fixes, gotchas
-- `preference` - User working style
-- `requirement` - Hard constraints
-- `fact` - Contextual info
+When knowledge graph has edges, returns real typed edges instead of cosine similarity.
 
-#### `POST /api/memory/recall`
-Semantic search across memories.
-
-**Body**:
-```json
-{
-  "query": "database choice",
-  "limit": 5
-}
-```
-
-**Response**:
-```json
-{
-  "query": "database choice",
-  "count": 3,
-  "memories": [
-    {
-      "score": 0.85,
-      "content": "Decided to use PostgreSQL for reliability",
-      "type": "decision",
-      "date": "2026-02-03",
-      "memory_id": "..."
-    }
-  ]
-}
-```
-
-#### `GET /api/memory/stats`
-System health and statistics.
-
-**Response**:
-```json
-{
-  "total_memories": 1587,
-  "memory_files": 2,
-  "by_type": {
-    "decision": 3,
-    "learning": 11,
-    "preference": 8
-  }
-}
-```
+**`POST /api/memory/graph/rebuild`**
+Returns: `{status, nodes, edges, duration_ms}`.
 
 ## How Auto-Triggering Works
 
@@ -235,136 +183,70 @@ System health and statistics.
 2. User sends first message
 3. Hook fires: "If new session, invoke /memory-restore"
 4. Claude detects new session, invokes skill
-5. Skill executes: `curl http://localhost:8000/api/memory/context`
-6. Memories loaded silently into context
-7. Claude responds with full context awareness
+5. Skill fetches hierarchical context (topic-grouped tree)
+6. Falls back to flat context if hierarchy unavailable
+7. Memories loaded silently into context
+8. Claude responds with full context awareness
 
 ### Auto-Observe Flow
 
 1. User: "I've decided to use PostgreSQL for this project"
-2. Claude detects decision language matching skill description
+2. Claude detects decision language
 3. Claude invokes: `/memory-observe PostgreSQL chosen for reliability`
-4. Skill posts to `/api/memory/observe` with auto-classification
-5. Server embeds text, classifies as "decision", saves to YAML + Qdrant
-6. Confirmation returned to Claude
-7. Claude acknowledges decision (doesn't mention memory save)
+4. Skill posts to `/api/memory/observe`
+5. Server: embeds text, classifies as "decision", saves to YAML + Qdrant
+6. Server: auto-links to related memories (requirements, past learnings)
+7. Knowledge graph updated with typed edges
+8. Claude acknowledges decision
 
-### Auto-Recall Flow
+### Graph-Enhanced Recall Flow
 
 1. User: "What database did we choose?"
-2. Claude detects question about past context
-3. Claude invokes: `/memory-recall database choice`
-4. Skill queries semantic search
-5. Returns: `[decision] Decided to use PostgreSQL (score: 0.85)`
-6. Claude synthesizes and answers: "We chose PostgreSQL for reliability"
+2. Claude invokes: `/memory-recall database choice`
+3. Server: vector search finds seed results
+4. Server: expands seeds via 1-hop graph traversal
+5. Server: ranks by composite score (vector + importance + recency + proximity)
+6. Returns: decision about PostgreSQL + related requirements and learnings
+7. Claude synthesizes and answers
 
 ## Storage Layer
 
 ### YAML Files (~/.claude/memory/)
 
-Human-readable, git-friendly storage:
+Human-readable, git-friendly:
 
 ```yaml
-# 2026-02-03.yaml
-- id: 2026-02-03_decision_a4044b26
-  timestamp: '2026-02-03T02:07:15'
+- id: 2026-02-23_decision_a4044b26
+  timestamp: '2026-02-23T02:07:15'
   type: decision
   project: memento-mcp
-  content: Implemented memory plugin with 4 auto-triggering skills
-
-- id: 2026-02-03_learning_b3921c45
-  timestamp: '2026-02-03T01:15:32'
-  type: learning
-  project: memento-mcp
-  content: Fixed context endpoint validation error by defaulting to 'general' project
+  content: Implemented knowledge graph with typed relationships
 ```
 
 ### Qdrant Vector Store
 
-Enables semantic search:
 - **Embeddings**: sentence-transformers/all-MiniLM-L6-v2 (384 dimensions)
-- **Index**: ~1500 memories indexed in <100ms
 - **Search**: Cosine similarity with configurable threshold
 - **Filters**: By type, project, date range
 
-## Performance Characteristics
+### Knowledge Graph (~/.claude/memory/_graph.json)
 
-| Operation | Latency | Notes |
-|-----------|---------|-------|
-| Context Restoration | <50ms | Simple file read |
-| Semantic Search | 50-80ms | Local embedder, no API calls |
-| Observe (Save) | 80-120ms | Embedding + dual write (YAML + Qdrant) |
-| Stats | <20ms | In-memory aggregation |
+- **Backend**: networkx DiGraph
+- **Nodes**: memory_id with importance score, access count, last accessed date
+- **Edges**: typed (related_to, led_to, depends_on, contradicts, supersedes, part_of)
+- **Persistence**: Atomic writes (tempfile + os.replace)
 
-**Total overhead per session**: ~100ms (one-time context load)
+## Memory Types
 
-## What Gets Saved Automatically
-
-### ✅ DO SAVE (High Value)
-
-- **Decisions**: "Decided to use React instead of Vue for better TypeScript support"
-- **Gotchas**: "Fixed bug where JWT validation failed with trailing slashes"
-- **Preferences**: "User prefers Terraform over CloudFormation"
-- **Requirements**: "API rate limit is 100 requests/hour"
-- **Constraints**: "Must support offline mode for field technicians"
-
-### ❌ DON'T SAVE (Low Value)
-
-- Generic programming knowledge: "Python uses indentation for blocks"
-- Temporary context: "Currently working on file X"
-- Speculative ideas: "Maybe we could try GraphQL?"
-- Redundant info: "The config file is in ./config/" (already in codebase)
-- Obvious facts: "React is a JavaScript library"
-
-## Advanced Features
-
-### Project Isolation
-
-Memories are tagged by project for context separation:
-
-```bash
-# Get memento-mcp specific context
-curl 'http://localhost:8000/api/memory/context?project=memento-mcp'
-
-# Get general memories (cross-project)
-curl 'http://localhost:8000/api/memory/context?project=general'
-```
-
-### Memory Types and Usage
-
-| Type | Use Case | Example |
-|------|----------|---------|
-| `decision` | Architecture choices | "Using gRPC for microservice communication" |
-| `learning` | Bug fixes, discoveries | "CORS errors need `credentials: true` flag" |
-| `preference` | User working style | "Prefers functional over class components" |
-| `requirement` | Hard constraints | "Must support IE11 for enterprise clients" |
-| `fact` | Contextual info | "Staging server is at staging.example.com" |
-| `note` | General observations | "Team meeting notes from 2026-02-01" |
-
-### Filtered Recall
-
-Search with filters:
-
-```bash
-# Only decisions from last 7 days
-curl -X POST http://localhost:8000/api/memory/recall \
-  -d '{"query": "architecture", "type": "decision", "days": 7}'
-
-# Project-specific search
-curl -X POST http://localhost:8000/api/memory/recall \
-  -d '{"query": "bug fixes", "project": "memento-mcp"}'
-```
-
-### Score Thresholds
-
-Semantic search returns similarity scores (0.0 - 1.0):
-
-- **0.8+**: Near-exact match
-- **0.6-0.8**: Strong semantic similarity
-- **0.4-0.6**: Moderate relevance
-- **<0.4**: Weak match (usually filtered out)
-
-Skills default to 0.6 threshold for quality results.
+| Type | Use Case | Importance Weight |
+|------|----------|-------------------|
+| `requirement` | Hard constraints | 1.0 |
+| `decision` | Architecture choices | 0.85 |
+| `preference` | User working style | 0.75 |
+| `learning` | Bug fixes, discoveries | 0.65 |
+| `fact` | Contextual info | 0.55 |
+| `note` | General observations | 0.35 |
+| `session` | Session summaries | 0.25 |
 
 ## Graceful Degradation
 
@@ -383,191 +265,54 @@ If the memento-mcp server is down:
 
 Skills fail silently and provide actionable diagnostics.
 
-## Comparison: Manual vs Plugin
+## Security
 
-### Manual (MCP Tools Only)
-
-```python
-# User must remember to:
-1. Call get_cached_context() at session start
-2. Call observe() after every decision
-3. Call recall_memories() when stuck
-4. Understand when each tool is appropriate
-```
-
-**Cognitive load**: HIGH
-**Adoption**: LOW (easy to forget)
-**UX**: Mechanical, interrupts flow
-
-### Plugin (Skills + Hooks)
-
-```python
-# Automatic:
-1. Context restored on session start (hook)
-2. Observations triggered by decision language (skill)
-3. Recall triggered by questions (skill)
-4. No user action required
-```
-
-**Cognitive load**: ZERO
-**Adoption**: AUTOMATIC
-**UX**: Invisible, feels like Claude "remembers"
-
-## Extensibility
-
-### Adding Custom Skills
-
-Create new memory-related skills:
-
-```bash
-mkdir -p ~/.claude/skills/memory-export
-cat > ~/.claude/skills/memory-export/SKILL.md << 'EOF'
----
-name: memory-export
-description: Export all memories to JSON for backup
-user-invocable: true
----
-
-!`curl -s http://localhost:8000/api/memory/stats | jq .`
-EOF
-```
-
-### Customizing Auto-Triggers
-
-Edit skill descriptions to change trigger sensitivity:
-
-```yaml
-# More aggressive (triggers more often)
-description: Record any technical choice. Auto-triggers on words like "using", "with", "chose", "picked".
-
-# More conservative (only major decisions)
-description: Record major architecture decisions only. Auto-triggers on "decided to", "going with".
-```
-
-### Adding New API Endpoints
-
-Extend the REST API in `src/server.py`:
-
-```python
-@mcp.custom_route("/api/memory/export", methods=["GET"])
-async def api_export_memories(request):
-    manager = _get_memory_manager()
-    all_memories = manager.get_all_memories()
-    return JSONResponse({"memories": all_memories})
-```
-
-Then create a skill that calls it.
-
-## Security Considerations
-
-### Local-First
-- All data stays on your machine
-- No external API calls
-- YAML files are human-auditable
-
-### Sensitive Data
-- Skills have `allowed-tools: Bash(curl *)` restriction
-- Can only call localhost:8000
-- No network access beyond memento-mcp server
-
-### Git Safety
-- Add `~/.claude/memory/` to global gitignore
-- Memories may contain API keys or credentials
-- Review before committing YAML files
+- **Local-first**: All data stays on your machine
+- **No external API calls**: Embeddings run locally by default
+- **Skills restricted**: `allowed-tools: Bash(curl *)` — can only call localhost
+- **YAML auditable**: Human-readable, version-controllable
+- **Credential sanitization**: API keys, tokens, passwords auto-redacted
 
 ## Troubleshooting
 
 ### Skills Not Appearing
 
 ```bash
-# Check skills directory
 ls ~/.claude/skills/memory-*/SKILL.md
-
-# Restart Claude Code session
-# Skills are loaded at startup
+# Restart Claude Code session (skills loaded at startup)
 ```
 
 ### Auto-Restore Not Working
 
 ```bash
-# Verify hook exists
-cat ~/.claude/hooks.json
-
-# Check if hook is firing (look for invocation in conversation)
-
-# Test manual invocation
-/memory-restore
+cat ~/.claude/hooks.json   # Verify hook exists
+/memory-restore            # Test manual invocation
 ```
 
-### Memories Not Saving
+### Knowledge Graph Empty
 
 ```bash
-# Check server health
-curl http://localhost:8000/health
+curl http://localhost:8000/api/memory/stats | jq '.knowledge_graph'
+# If edges = 0:
+curl -X POST http://localhost:8000/api/memory/graph/rebuild
+```
 
-# Check disk space
-df -h ~/.claude/memory
+### Duplicate Memories
 
-# Check Qdrant logs
-docker compose logs qdrant
+```bash
+curl http://localhost:8000/api/memory/consolidate | jq .
+# Review superseded pairs, remove stale YAML entries, rebuild graph
 ```
 
 ### Poor Search Results
 
-```bash
-# Lower score threshold in skill
-# Edit: ~/.claude/skills/memory-recall/SKILL.md
-# Change: "score_threshold": 0.6 → "score_threshold": 0.4
-
-# Add more context to query
-/memory-recall "database choice for user authentication system"
-# vs
-/memory-recall "database"
-```
-
-## Performance Tuning
-
-### Reduce Context Load Time
-
-```yaml
-# In memory-restore skill, limit results
-!`curl -s 'http://localhost:8000/api/memory/context?limit=10'`
-```
-
-### Batch Operations
-
-Instead of individual observations:
-
-```bash
-# Save multiple at once via API
-curl -X POST http://localhost:8000/api/memory/save \
-  -d '{"content": "Batch memory 1", "type": "note"}'
-```
-
-### Qdrant Optimization
-
-For >10k memories, configure Qdrant indexing:
-
-```yaml
-# docker-compose.yml
-qdrant:
-  environment:
-    - QDRANT__STORAGE__OPTIMIZERS__INDEXING_THRESHOLD=5000
-```
-
-## Roadmap
-
-Potential future enhancements:
-
-- [ ] **Smart project detection**: Auto-tag memories with current git repo
-- [ ] **Confidence scores**: Show when Claude is uncertain about triggers
-- [ ] **Memory deduplication**: Detect and merge similar observations
-- [ ] **Export/import**: Backup and restore memory sets
-- [ ] **Analytics**: Track memory usage patterns over time
-- [ ] **Multi-agent**: Share memories across different AI assistants
+- Increase limit: `/memory-recall "database choice" --limit 10`
+- Check if graph has edges (graph expansion improves recall significantly)
+- Rebuild graph if stale: `curl -X POST http://localhost:8000/api/memory/graph/rebuild`
 
 ## See Also
 
-- [Setup Guide](./SETUP.md) - Detailed setup, embedding providers, migration
+- [Setup Guide](./SETUP.md) - Installation and embedding providers
 - [Tuning Guide](./TUNING.md) - Customize what Claude remembers
-- [Architecture](./ARCHITECTURE.md) - Technical design
+- [Architecture](./ARCHITECTURE.md) - Technical design and knowledge graph internals
+- [Claude Memory Settings](./CLAUDE_MEMORY_SETTINGS.md) - Policy reference and tuning knobs
