@@ -440,6 +440,55 @@ class TestProjectContext:
         assert context == ""
 
 
+class TestHierarchicalContext:
+    """Test topic-aware context generation."""
+
+    def test_get_hierarchical_project_context_from_vectors(self, memory_manager, mock_store):
+        """Manager should build topic clusters from vector-backed points."""
+        mock_store.scroll.return_value = [
+            {
+                "memory_id": "a",
+                "content": "PostgreSQL index optimization",
+                "type": "decision",
+                "project": "api",
+                "date": "2026-02-24",
+                "vector": [1.0, 0.0, 0.0],
+            },
+            {
+                "memory_id": "b",
+                "content": "PostgreSQL query tuning",
+                "type": "learning",
+                "project": "api",
+                "date": "2026-02-23",
+                "vector": [0.98, 0.01, 0.0],
+            },
+            {
+                "memory_id": "c",
+                "content": "UI palette contrast fix",
+                "type": "note",
+                "project": "api",
+                "date": "2026-02-22",
+                "vector": [-1.0, 0.0, 0.0],
+            },
+        ]
+
+        context = memory_manager.get_hierarchical_project_context(project="api")
+
+        assert "# Hierarchical Context" in context
+        assert "postgre" in context.lower()
+        call_args = mock_store.scroll.call_args.kwargs
+        assert call_args["with_vectors"] is True
+        assert call_args["filters"] == {"project": "api"}
+
+    def test_hierarchical_project_context_empty(self, memory_manager, mock_store):
+        """Empty store should return empty context string."""
+        mock_store.scroll.return_value = []
+
+        context = memory_manager.get_hierarchical_project_context(project="api")
+
+        assert context == ""
+
+
 # =============================================================================
 # STATS TESTS
 # =============================================================================
@@ -573,6 +622,7 @@ class TestCliRecallType:
     def test_recall_passes_type_not_memory_type(self):
         """Verify the CLI source uses `type=memory_type`."""
         from pathlib import Path
+
         import memory.cli
         source = Path(memory.cli.__file__).read_text()
         # The recall function body should use type= not memory_type=
@@ -585,6 +635,7 @@ class TestCliSaveAlias:
 
     def test_save_uses_save_not_save_memory(self):
         from pathlib import Path
+
         import memory.cli
         source = Path(memory.cli.__file__).read_text()
         assert "mgr.save(" in source
