@@ -668,6 +668,32 @@ class TestStats:
 
         assert stats["total_memories"] == 0  # Graceful fallback
 
+    def test_stats_includes_knowledge_graph_metrics(self, memory_manager, mock_store):
+        """Stats should include knowledge graph node/edge counts."""
+        mock_store.count.return_value = 5
+
+        # Add some nodes and edges to the graph
+        kg = memory_manager.knowledge_graph
+        kg.add_node("a", memory_type="decision")
+        kg.add_node("b", memory_type="learning")
+        kg.add_edge("a", "b", "led_to", weight=0.8)
+
+        stats = memory_manager.get_stats()
+
+        assert "knowledge_graph" in stats
+        assert stats["knowledge_graph"]["nodes"] == 2
+        assert stats["knowledge_graph"]["edges"] == 1
+        assert "relations" in stats["knowledge_graph"]
+
+    def test_stats_graph_metrics_empty_when_no_graph(self, memory_manager, mock_store):
+        """Stats should show 0 nodes/edges when graph is empty."""
+        mock_store.count.return_value = 0
+
+        stats = memory_manager.get_stats()
+
+        assert stats["knowledge_graph"]["nodes"] == 0
+        assert stats["knowledge_graph"]["edges"] == 0
+
 
 # =============================================================================
 # BUG FIX TESTS (Phase 2)
