@@ -406,4 +406,18 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("memory_stats")
 
+        @mcp.tool()
+        async def rebuild_knowledge_graph() -> str:
+            """Rebuild the knowledge graph from all existing memories."""
+            stats = self.manager.knowledge_graph.rebuild(
+                store=self.manager.store,
+                embedder=self.manager.embedder,
+            )
+            return (
+                f"Graph rebuilt: {stats['nodes']} nodes, {stats['edges']} edges "
+                f"({stats['duration_ms']}ms)"
+            )
+
+        registered.append("rebuild_knowledge_graph")
+
         return registered
