@@ -105,7 +105,7 @@ chain = kg.get_chain("mem_123", relation="led_to")
 
 # Analysis
 importance = kg.get_importance("mem_123")
-stats = kg.stats()  # {"nodes": 138, "edges": 310, "relations": {...}}
+stats = kg.stats()  # {"nodes": 133, "edges": 286, "relations": {...}}
 ```
 
 **Storage:** `~/.claude/memory/_graph.json` (atomic writes via tempfile + os.replace)
@@ -120,7 +120,7 @@ stats = kg.stats()  # {"nodes": 138, "edges": 310, "relations": {...}}
 | `led_to` | Temporal causation | New learning + existing decision |
 | `depends_on` | Structural dependency | New decision + existing requirement |
 | `supersedes` | Newer replaces older | similarity > 0.9 + same type |
-| `contradicts` | Opposing content | Negation patterns detected |
+| `contradicts` | Opposing content | Asymmetric negation + overlap >= 2 + proximity |
 | `part_of` | Belongs to topic cluster | Topic assignment |
 
 **Importance scoring by type:**
@@ -156,7 +156,7 @@ result = auto_link(
 
 **Rules applied in priority order (first match wins per candidate):**
 
-1. **CONTRADICTS** - Negation patterns detected in content
+1. **CONTRADICTS** - Requires all 4: similarity >= 0.6, exactly one text has negation (asymmetric), token overlap >= 2 non-stopwords, negation within 3 words of a shared concept
 2. **SUPERSEDES** - similarity > 0.9 + same type (old importance halved)
 3. **LED_TO** - New learning + candidate is decision
 4. **DEPENDS_ON** - New decision + candidate is requirement
@@ -323,7 +323,7 @@ tests/
 ├── test_performance.py           # Benchmarks
 └── ...
 
-237 passed, 9 skipped
+245 passed, 9 skipped
 ```
 
 All tests use mocks to avoid needing real Qdrant/model. Integration tests use isolated Docker containers.
