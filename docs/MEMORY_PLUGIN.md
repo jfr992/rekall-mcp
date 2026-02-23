@@ -97,7 +97,7 @@ Seven specialized skills that interact with the REST API:
 
 #### `/memory-skills` - Show Extracted Skills
 **Purpose**: Display capabilities learned from memory clusters
-**Action**: Fetches `GET /api/memory/context/proactive`
+**Action**: Fetches `GET /api/memory/context/skills`
 **When**: Understanding what knowledge is available
 
 ### 2. Hooks (Global, ~/.claude/hooks.json)
@@ -142,6 +142,7 @@ Auto-triggers memory restoration on every new message:
 | `/api/memory/graph/rebuild` | POST | Rebuild knowledge graph from all memories |
 | `/api/memory/context/hierarchy` | GET | Topic-grouped hierarchical context |
 | `/api/memory/context/proactive` | GET | Top signals + conflict detection |
+| `/api/memory/context/skills` | GET | Inferred skills from memory clusters |
 | `/api/memory/consolidate` | GET | Detect superseded/conflicting pairs |
 
 #### API Details
