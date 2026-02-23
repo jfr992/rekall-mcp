@@ -934,11 +934,22 @@ class MemoryManager:
                 except Exception:
                     pass
 
+            # Knowledge graph metrics
+            try:
+                graph_stats = self.knowledge_graph.stats()
+            except Exception:
+                graph_stats = {"nodes": 0, "edges": 0, "relations": {}}
+
             return {
                 "total_memories": vector_count,
                 "memory_files": file_count,
                 "memory_dir": str(self.memory_dir),
                 "by_type": type_counts,
+                "knowledge_graph": {
+                    "nodes": graph_stats.get("nodes", 0),
+                    "edges": graph_stats.get("edges", 0),
+                    "relations": graph_stats.get("relations", {}),
+                },
             }
 
     # -------------------------------------------------------------------------
