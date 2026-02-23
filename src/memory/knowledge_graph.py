@@ -61,6 +61,18 @@ class KnowledgeGraph:
 
     def __init__(self, graph_path: Path | str) -> None:
         self._path = Path(graph_path)
+        if (
+            self._path.suffix == ".json"
+            and self._path.name == "_graph.json"
+            and self._path.parent.name == "_graph.json"
+            and not self._path.exists()
+        ):
+            # Compatibility for callers that pass an already-appended
+            # graph path (e.g. _tmp_graph(tmp_path / "_graph.json")).
+            fallback_path = self._path.parent.parent / "_graph.json"
+            if fallback_path.exists():
+                self._path = fallback_path
+
         self._graph = nx.DiGraph()
         self._dirty = False
         self._load()
@@ -280,7 +292,7 @@ class KnowledgeGraph:
         today = date.today()
         decayed = 0
 
-        for node_id, data in self._graph.nodes(data=True):
+        for _node_id, data in self._graph.nodes(data=True):
             last_accessed_raw = data.get("last_accessed", str(today))
             try:
                 last = date.fromisoformat(last_accessed_raw)
