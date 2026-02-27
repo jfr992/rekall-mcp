@@ -176,6 +176,8 @@ LRU cache (512 entries) prevents redundant encodings.
 
 Wrapper around Qdrant for vector operations. Supports save, search (with filters), scroll, delete.
 
+**Filter note:** The `date` field is stored as a `YYYY-MM-DD` string. Qdrant's `Range` filter requires numeric values, so date/`days` filtering is applied post-retrieval in Python (lexicographic comparison of ISO date strings is correct). The `project` and `type` fields use exact-match filters in Qdrant as normal.
+
 ### 6. Topic Clustering (`memory/topics.py`)
 
 Agglomerative clustering discovers topics from memory vectors. Topic labels are derived from the most frequent terms in each cluster. Falls back to lexical extraction when clustering fails.

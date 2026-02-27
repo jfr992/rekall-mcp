@@ -9,6 +9,10 @@ Policy: See memento-mcp/docs/CLAUDE_MEMORY_SETTINGS.md for session-start and rec
 
 # Session Memory Restoration
 
+## Hierarchical Context (topic-grouped)
+!`curl -s 'http://localhost:8000/api/memory/context/hierarchy?max_topics=8' 2>/dev/null | jq -r '.context // empty' || echo ""`
+
+## Flat Context (fallback)
 !`curl -s http://localhost:8000/api/memory/context 2>/dev/null | jq -r '.context // "No memories available"'`
 
 Synthesize the above memories naturally into your understanding. Don't list them explicitly.

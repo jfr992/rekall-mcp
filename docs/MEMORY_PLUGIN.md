@@ -171,6 +171,8 @@ Response: `memory_id`, `status`, `classified_type`. Auto-links to related memori
 **`GET /api/memory/graph`**
 Query params: `limit` (default 120), `neighbor_count` (default 5), `min_similarity` (default 0.35), `project`, `type`, `days`.
 
+> **Note on `days` filtering**: The `date` field is stored as a `YYYY-MM-DD` string. Since Qdrant's `Range` filter requires numeric values, date filtering is applied post-retrieval in Python. Results are fetched first, then filtered by `date >= cutoff`. This is transparent to callers.
+
 When knowledge graph has edges, returns real typed edges instead of cosine similarity.
 
 **`POST /api/memory/graph/rebuild`**
