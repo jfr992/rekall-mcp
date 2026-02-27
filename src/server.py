@@ -225,10 +225,12 @@ def _parse_graph_filters(query_params) -> dict[str, str | dict[str, str]]:
     if mem_type:
         filters["type"] = mem_type
 
+    # Note: date is stored as a string (YYYY-MM-DD) in Qdrant; Range filter requires
+    # numeric fields. Date cutoff is returned separately for post-retrieval filtering.
     days = query_params.get("days")
-    if days:
-        cutoff = (datetime.now() - timedelta(days=int(days))).strftime("%Y-%m-%d")
-        filters["date"] = {"gte": cutoff}
+    filters["_cutoff_date"] = (
+        (datetime.now() - timedelta(days=int(days))).strftime("%Y-%m-%d") if days else None
+    )
 
     return filters
 
@@ -370,9 +372,12 @@ async def api_memory_graph(request):
             neighbor_count = 1
 
         filters = _parse_graph_filters(query_params)
+        cutoff_date = filters.pop("_cutoff_date", None)
 
         manager = _get_memory_manager()
-        points = manager.store.scroll(filters=filters, limit=limit, with_vectors=True)
+        points = manager.store.scroll(filters=filters if filters else None, limit=limit, with_vectors=True)
+        if cutoff_date:
+            points = [p for p in points if (p.get("date") or "") >= cutoff_date]
 
         # Local import keeps route tests easy and avoids import-time coupling.
         from memory.graph import build_memory_graph
