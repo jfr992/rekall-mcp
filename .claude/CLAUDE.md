@@ -172,3 +172,4 @@ docker compose --profile test down
 - Consolidation deduplicates bidirectional pairs (A->B and B->A collapse into one)
 - Stats endpoint includes `knowledge_graph` field (nodes, edges, relations breakdown)
 - All tests passing (245 passed, 9 skipped)
+- **Fix**: `days` filter in `recall_memories()` and `/api/memory/graph` — Qdrant `Range` requires numeric values but `date` is stored as a `YYYY-MM-DD` string. Removed from Qdrant filter; applied post-retrieval via Python string comparison (`manager.py:367-474`, `server.py:228-379`)
