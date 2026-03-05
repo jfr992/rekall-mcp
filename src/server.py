@@ -595,7 +595,7 @@ async def api_memory_dashboard(_request):
     """Dashboard UI for visualizing memory embeddings."""
     from starlette.responses import HTMLResponse
 
-    html = """<!doctype html>
+    html = r"""<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -717,6 +717,10 @@ async def api_memory_dashboard(_request):
           <button id="clear">Clear</button>
         </div>
       </div>
+      <div id="pending-panel" style="position:fixed;top:10px;right:10px;width:320px;max-height:400px;overflow-y:auto;background:#1a202c;border:1px solid #4a5568;border-radius:8px;padding:16px;color:#e2e8f0;font-size:13px;z-index:100;">
+        <h3 style="margin:0 0 12px 0;color:#63b3ed;">Pending Items</h3>
+        <div id="pending-items">Loading...</div>
+      </div>
       <div style="height: 10px;"></div>
       <div class="grid">
         <div class="panel card">
@@ -761,6 +765,7 @@ async def api_memory_dashboard(_request):
       const ctx = canvas.getContext("2d");
       const statusEl = document.getElementById("status");
       const infoEl = document.getElementById("info");
+      const pendingItemsEl = document.getElementById("pending-items");
 
       function typeCount(nodes) {
         const byType = {};
@@ -805,6 +810,18 @@ async def api_memory_dashboard(_request):
           const y = (n.position.y + 1) * 0.5 * (state.height - 80) + 40;
           return {...n, x, y, vx: velocity.x, vy: velocity.y, fx: x, fy: y};
         });
+      }
+
+      async function loadPending() {
+        try {
+          const resp = await fetch("/api/tracker/items");
+          const data = await resp.json();
+          pendingItemsEl.innerHTML = data.result.replace(
+            /\*\*(.*?)\*\*/g, "<strong>$1</strong>"
+          ).replace(/\n/g, "<br>");
+        } catch (e) {
+          pendingItemsEl.textContent = "Failed to load";
+        }
       }
 
       function loadGraph() {
@@ -991,6 +1008,8 @@ async def api_memory_dashboard(_request):
       window.addEventListener("resize", resizeCanvas);
 
       resizeCanvas();
+      loadPending();
+      setInterval(loadPending, 30000); // Refresh every 30s
       loadGraph();
       loop();
     </script>
