@@ -505,6 +505,91 @@ async def api_proactive_context_summary(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+# --- Tracker API ---
+
+
+@mcp.custom_route("/api/tracker/items", methods=["GET"])
+async def _handle_get_pending(request):
+    """GET /api/tracker/items - List pending items."""
+    from starlette.responses import JSONResponse
+    from tools.builtin.tracker import TrackerTools
+
+    tracker = TrackerTools()
+    overdue = request.query_params.get("overdue", "false").lower() == "true"
+    result = await tracker._get_pending(overdue=overdue)
+    return JSONResponse({"result": result})
+
+
+@mcp.custom_route("/api/tracker/items", methods=["POST"])
+async def _handle_track_item(request):
+    """POST /api/tracker/items - Track a new item."""
+    from starlette.responses import JSONResponse
+    from tools.builtin.tracker import TrackerTools
+
+    body = await request.json()
+    tracker = TrackerTools()
+    result = await tracker._track_item(
+        title=body["title"],
+        due_date=body.get("due_date"),
+        context=body.get("context"),
+        ticket_id=body.get("ticket_id"),
+        priority=body.get("priority", "normal"),
+    )
+    return JSONResponse({"result": result})
+
+
+@mcp.custom_route("/api/tracker/items/{item_id}/complete", methods=["POST"])
+async def _handle_complete_item(request):
+    """POST /api/tracker/items/{item_id}/complete - Complete an item."""
+    from starlette.responses import JSONResponse
+    from tools.builtin.tracker import TrackerTools
+
+    tracker = TrackerTools()
+    item_id = request.path_params["item_id"]
+    result = await tracker._complete_item(item_id)
+    return JSONResponse({"result": result})
+
+
+@mcp.custom_route("/api/tracker/items/{item_id}/defer", methods=["POST"])
+async def _handle_defer_item(request):
+    """POST /api/tracker/items/{item_id}/defer - Defer an item."""
+    from starlette.responses import JSONResponse
+    from tools.builtin.tracker import TrackerTools
+
+    tracker = TrackerTools()
+    item_id = request.path_params["item_id"]
+    body = await request.json()
+    result = await tracker._defer_item(item_id, body["new_date"])
+    return JSONResponse({"result": result})
+
+
+# --- Briefing API ---
+
+
+@mcp.custom_route("/api/briefing/session", methods=["GET"])
+async def _handle_session_briefing(request):
+    """GET /api/briefing/session - Quick session briefing."""
+    from starlette.responses import JSONResponse
+    from tools.builtin.briefing import BriefingTools
+
+    briefing = BriefingTools()
+    project = request.query_params.get("project")
+    result = await briefing._session_briefing(project=project)
+    return JSONResponse({"result": result})
+
+
+@mcp.custom_route("/api/briefing/daily", methods=["GET"])
+async def _handle_daily_briefing(request):
+    """GET /api/briefing/daily - Full daily briefing."""
+    from starlette.responses import JSONResponse
+    from tools.builtin.briefing import BriefingTools
+
+    briefing = BriefingTools()
+    project = request.query_params.get("project")
+    result = await briefing._daily_briefing(project=project)
+    return JSONResponse({"result": result})
+
+
 @mcp.custom_route("/dashboard", methods=["GET"])
 async def api_memory_dashboard(_request):
     """Dashboard UI for visualizing memory embeddings."""
