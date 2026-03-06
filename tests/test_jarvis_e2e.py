@@ -66,12 +66,13 @@ def test_full_jarvis_flow(jarvis_env):
     assert "OVERDUE" in result
     assert "TOPE-789" in result
     assert "Verify SRR" in result
-    assert "PostgreSQL" in result or "Recent Findings" in result
+    assert "Recent Findings" in result
+    assert "PostgreSQL" in result
 
     asyncio.run(tracker._complete_item("TODO-001"))
 
     result = asyncio.run(briefing._session_briefing())
-    assert ("TOPE-789" not in result) or ("OVERDUE" not in result.split("TOPE-789")[0])
+    assert "TOPE-789" not in result
 
     asyncio.run(tracker._defer_item("TODO-002", "2026-04-01"))
     items = tracker._load_items()

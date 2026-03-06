@@ -88,6 +88,24 @@ class ToolRegistry:
             enabled=True,  # Enabled by default
         )
 
+        # Tracker tools - pending items management
+        self._tools["tracker"] = ToolInfo(
+            name="tracker",
+            description="Pending items tracker with due dates",
+            builtin=True,
+            requires=[],
+            enabled=True,  # Enabled by default
+        )
+
+        # Briefing tools - proactive session summaries
+        self._tools["briefing"] = ToolInfo(
+            name="briefing",
+            description="Proactive briefing engine",
+            builtin=True,
+            requires=[],
+            enabled=True,  # Enabled by default
+        )
+
         # Spectro tools - requires API key
         self._tools["spectro"] = ToolInfo(
             name="spectro",
