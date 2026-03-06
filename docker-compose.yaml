@@ -95,7 +95,12 @@ services:
     volumes:
       - ./src:/app/src
       - ${MEMORY_STORAGE_PATH:-~/.claude/memory}:/data/memory
-      - ~/.memento:/root/.memento
+      - ~/.memento:/home/mcp/.memento:ro
+      # Mount workspace roots read-only so scanner can find git repos.
+      # Mounted at host absolute paths so returned paths are valid on host.
+      - ~/Repos:/Users/jfr9044/Repos:ro
+      - ~/scripts:/Users/jfr9044/scripts:ro
+      - ~/.config/superpowers/worktrees:/Users/jfr9044/.config/superpowers/worktrees:ro
     depends_on:
       - qdrant
     profiles:
