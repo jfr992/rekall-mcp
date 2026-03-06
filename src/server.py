@@ -393,7 +393,8 @@ async def api_memory_graph(request):
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception as e:
-        logger.error(f"Error building memory graph: {e}")
+        import traceback
+        logger.error(f"Error building memory graph: {e}\n{traceback.format_exc()}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 

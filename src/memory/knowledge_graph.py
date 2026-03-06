@@ -88,8 +88,14 @@ class KnowledgeGraph:
         with open(self._path) as file:
             data = json.load(file)
 
-        for node_id, attrs in data.get("nodes", {}).items():
-            self._graph.add_node(node_id, **attrs)
+        raw_nodes = data.get("nodes", {})
+        if isinstance(raw_nodes, list):
+            # Legacy format: nodes is a plain list of IDs (no attributes).
+            for node_id in raw_nodes:
+                self._graph.add_node(node_id)
+        else:
+            for node_id, attrs in raw_nodes.items():
+                self._graph.add_node(node_id, **attrs)
 
         for edge in data.get("edges", []):
             self._graph.add_edge(
