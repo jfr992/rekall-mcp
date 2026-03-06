@@ -195,6 +195,110 @@ class AgentOrchestraTools(BaseToolProvider):
             f"{'Error: ' + run.error[:200] if run.error else ''}"
         )
 
+    async def _agent_status(self, status: str | None = None) -> str:
+        """Show status of all agent runs, optionally filtered."""
+        runs = list(self._runs.values())
+        if status:
+            runs = [r for r in runs if r.status.value == status]
+
+        if not runs:
+            return "No agent runs found."
+
+        emoji = {
+            RunStatus.PENDING: "[ ]",
+            RunStatus.RUNNING: "[~]",
+            RunStatus.COMPLETED: "[x]",
+            RunStatus.FAILED: "[!]",
+            RunStatus.REVIEW: "[?]",
+        }
+        lines = ["## Agent Runs"]
+        for run in runs:
+            lines.append(
+                f"- {emoji.get(run.status, '[ ]')} **{run.run_id}** ({run.agent}): "
+                f"{run.task[:60]} [{run.status.value}]"
+            )
+        return "\n".join(lines)
+
+    async def _orchestrate(
+        self,
+        goal: str,
+        subtasks: list[dict],
+        working_dir: str = "",
+    ) -> str:
+        """Decompose a goal into subtasks and dispatch to agents."""
+        results = []
+        for sub in subtasks:
+            result = await self._dispatch_task(
+                task=sub["task"],
+                agent=sub.get("agent"),
+                working_dir=sub.get("working_dir", working_dir),
+                context=f"Part of goal: {goal}",
+            )
+            results.append(result)
+
+        return (
+            f"## Orchestration: {goal}\n\n"
+            f"Dispatched {len(subtasks)} subtasks:\n\n"
+            + "\n\n---\n\n".join(results)
+        )
+
+    async def _review_result(
+        self,
+        run_id: str,
+        action: str | None = None,
+        feedback: str = "",
+    ) -> str:
+        """Review an agent run's output. Optionally approve or reject."""
+        if run_id not in self._runs:
+            return f"Unknown run: {run_id}"
+
+        run = self._runs[run_id]
+
+        if action == "approve":
+            run.status = RunStatus.COMPLETED
+            return f"**{run_id}** approved and marked completed."
+
+        if action == "reject":
+            run.status = RunStatus.PENDING
+            if feedback:
+                run.task = f"{run.task}\n\nFeedback from review: {feedback}"
+            return (
+                f"**{run_id}** rejected and reset to pending.\n"
+                f"Feedback: {feedback}\n"
+                f"Re-dispatch with `dispatch_task` or `orchestrate` to retry."
+            )
+
+        return (
+            f"## Review: {run_id} ({run.agent})\n"
+            f"**Status:** {run.status.value}\n"
+            f"**Task:** {run.task}\n\n"
+            f"### Output\n```\n{run.output[:2000]}\n```\n\n"
+            f"{'### Error\n```\n' + run.error[:500] + '\n```' if run.error else ''}\n\n"
+            f"Actions: `approve` | `reject` (with feedback)"
+        )
+
+    async def _memory_observe(self, content: str, memory_type: str = "note", **kwargs) -> str:
+        """Placeholder for memory integration. Override with actual observe handler."""
+        return "Memory integration not configured."
+
+    async def _persist_run(self, run_id: str) -> str:
+        """Persist a completed run as a memory for future context."""
+        if run_id not in self._runs:
+            return f"Unknown run: {run_id}"
+
+        run = self._runs[run_id]
+        content = (
+            f"Agent run [{run.agent}]: {run.task}\n"
+            f"Status: {run.status.value}\n"
+            f"Output: {run.output[:1000]}"
+        )
+
+        return await self._memory_observe(
+            content=content,
+            memory_type="agent_run",
+            project="orchestra",
+        )
+
     def get_tools(self) -> list[ToolDefinition]:
         return [
             ToolDefinition(
@@ -204,5 +308,26 @@ class AgentOrchestraTools(BaseToolProvider):
                     "Auto-selects best agent if none specified."
                 ),
                 handler=self._dispatch_task,
+            ),
+            ToolDefinition(
+                name="agent_status",
+                description="Show status of all agent runs, optionally filtered by status.",
+                handler=self._agent_status,
+            ),
+            ToolDefinition(
+                name="orchestrate",
+                description=(
+                    "Decompose a goal into subtasks and dispatch each to the "
+                    "best agent. Accepts a list of {task, agent?, working_dir?} objects."
+                ),
+                handler=self._orchestrate,
+            ),
+            ToolDefinition(
+                name="review_result",
+                description=(
+                    "Review an agent run's output. Show output, approve to mark "
+                    "complete, or reject with feedback to reset for retry."
+                ),
+                handler=self._review_result,
             ),
         ]

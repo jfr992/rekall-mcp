@@ -97,6 +97,156 @@ def test_dispatch_task_auto_executes_by_default():
     asyncio.run(_exercise())
 
 
+def test_agent_status_shows_all_runs():
+    orchestra = AgentOrchestraTools()
+    asyncio.run(
+        orchestra._dispatch_task(
+            task="Task A",
+            agent="claude",
+            auto_execute=False,
+        )
+    )
+    asyncio.run(
+        orchestra._dispatch_task(
+            task="Task B",
+            agent="gemini",
+            auto_execute=False,
+        )
+    )
+
+    result = asyncio.run(orchestra._agent_status())
+    assert "RUN-001" in result
+    assert "RUN-002" in result
+    assert "claude" in result
+    assert "gemini" in result
+
+
+def test_agent_status_filters_by_status():
+    orchestra = AgentOrchestraTools()
+    asyncio.run(
+        orchestra._dispatch_task(
+            task="Task A",
+            agent="claude",
+            auto_execute=False,
+        )
+    )
+    asyncio.run(
+        orchestra._dispatch_task(
+            task="Task B",
+            agent="gemini",
+            auto_execute=False,
+        )
+    )
+    orchestra._runs["RUN-001"].status = RunStatus.COMPLETED
+
+    result = asyncio.run(orchestra._agent_status(status="pending"))
+    assert "RUN-001" not in result
+    assert "RUN-002" in result
+
+
+def test_orchestrate_decomposes_and_dispatches():
+    orchestra = AgentOrchestraTools()
+    with patch(
+        "tools.builtin.orchestra.AgentOrchestraTools._execute_run",
+        new=AsyncMock(return_value="ok"),
+    ):
+        result = asyncio.run(
+            orchestra._orchestrate(
+                goal="Build a REST API with auth, tests, and docs",
+                subtasks=[
+                    {"task": "Design API architecture", "agent": "claude"},
+                    {"task": "Write API tests", "agent": "codex"},
+                    {"task": "Generate API documentation", "agent": "gemini"},
+                ],
+            )
+        )
+    assert len(orchestra._runs) == 3
+    assert "RUN-001" in result
+    assert "RUN-002" in result
+    assert "RUN-003" in result
+
+
+def test_review_result_shows_completed_output():
+    orchestra = AgentOrchestraTools()
+    asyncio.run(
+        orchestra._dispatch_task(
+            task="Write tests",
+            agent="claude",
+            auto_execute=False,
+        )
+    )
+    run = orchestra._runs["RUN-001"]
+    run.status = RunStatus.COMPLETED
+    run.output = "def test_auth():\n    assert login('user', 'pass') == True"
+
+    result = asyncio.run(orchestra._review_result("RUN-001"))
+    assert "test_auth" in result
+    assert "COMPLETED" in result or "completed" in result
+
+
+def test_review_result_approve():
+    orchestra = AgentOrchestraTools()
+    asyncio.run(
+        orchestra._dispatch_task(
+            task="Write code",
+            agent="codex",
+            auto_execute=False,
+        )
+    )
+    run = orchestra._runs["RUN-001"]
+    run.status = RunStatus.REVIEW
+    run.output = "function hello() { return 'world'; }"
+
+    result = asyncio.run(orchestra._review_result("RUN-001", action="approve"))
+    assert run.status == RunStatus.COMPLETED
+    assert "approved" in result.lower()
+
+
+def test_review_result_reject():
+    orchestra = AgentOrchestraTools()
+    asyncio.run(
+        orchestra._dispatch_task(
+            task="Write code",
+            agent="codex",
+            auto_execute=False,
+        )
+    )
+    run = orchestra._runs["RUN-001"]
+    run.status = RunStatus.REVIEW
+    run.output = "bad code"
+
+    result = asyncio.run(
+        orchestra._review_result(
+            "RUN-001", action="reject", feedback="Missing error handling"
+        )
+    )
+    assert run.status == RunStatus.PENDING
+    assert "Missing error handling" in result
+
+
+def test_persist_run_creates_memory():
+    orchestra = AgentOrchestraTools()
+    asyncio.run(
+        orchestra._dispatch_task(
+            task="Fix auth bug",
+            agent="claude",
+            auto_execute=False,
+        )
+    )
+    run = orchestra._runs["RUN-001"]
+    run.status = RunStatus.COMPLETED
+    run.output = "Fixed the JWT validation in auth.py"
+
+    mock_observe = AsyncMock(return_value="Saved")
+    orchestra._memory_observe = mock_observe
+
+    asyncio.run(orchestra._persist_run("RUN-001"))
+    mock_observe.assert_called_once()
+    call_kwargs = mock_observe.call_args[1]
+    assert "agent_run" in call_kwargs.get("memory_type", "")
+    assert "claude" in call_kwargs.get("content", "")
+
+
 def test_execute_run_calls_subprocess():
     orchestra = AgentOrchestraTools()
     asyncio.run(
