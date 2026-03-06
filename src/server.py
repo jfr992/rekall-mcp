@@ -507,14 +507,33 @@ async def api_proactive_context_summary(request):
 
 # --- Tracker API ---
 
+# Shared instances for REST handlers
+_tracker = None
+_briefing = None
+
+
+def _get_tracker():
+    global _tracker
+    if _tracker is None:
+        from tools.builtin.tracker import TrackerTools
+        _tracker = TrackerTools()
+    return _tracker
+
+
+def _get_briefing():
+    global _briefing
+    if _briefing is None:
+        from tools.builtin.briefing import BriefingTools
+        _briefing = BriefingTools()
+    return _briefing
+
 
 @mcp.custom_route("/api/tracker/items", methods=["GET"])
 async def _handle_get_pending(request):
     """GET /api/tracker/items - List pending items."""
     from starlette.responses import JSONResponse
-    from tools.builtin.tracker import TrackerTools
 
-    tracker = TrackerTools()
+    tracker = _get_tracker()
     overdue = request.query_params.get("overdue", "false").lower() == "true"
     result = await tracker._get_pending(overdue=overdue)
     return JSONResponse({"result": result})
@@ -524,10 +543,9 @@ async def _handle_get_pending(request):
 async def _handle_track_item(request):
     """POST /api/tracker/items - Track a new item."""
     from starlette.responses import JSONResponse
-    from tools.builtin.tracker import TrackerTools
 
     body = await request.json()
-    tracker = TrackerTools()
+    tracker = _get_tracker()
     result = await tracker._track_item(
         title=body["title"],
         due_date=body.get("due_date"),
@@ -542,9 +560,8 @@ async def _handle_track_item(request):
 async def _handle_complete_item(request):
     """POST /api/tracker/items/{item_id}/complete - Complete an item."""
     from starlette.responses import JSONResponse
-    from tools.builtin.tracker import TrackerTools
 
-    tracker = TrackerTools()
+    tracker = _get_tracker()
     item_id = request.path_params["item_id"]
     result = await tracker._complete_item(item_id)
     return JSONResponse({"result": result})
@@ -554,9 +571,8 @@ async def _handle_complete_item(request):
 async def _handle_defer_item(request):
     """POST /api/tracker/items/{item_id}/defer - Defer an item."""
     from starlette.responses import JSONResponse
-    from tools.builtin.tracker import TrackerTools
 
-    tracker = TrackerTools()
+    tracker = _get_tracker()
     item_id = request.path_params["item_id"]
     body = await request.json()
     result = await tracker._defer_item(item_id, body["new_date"])
@@ -570,9 +586,8 @@ async def _handle_defer_item(request):
 async def _handle_session_briefing(request):
     """GET /api/briefing/session - Quick session briefing."""
     from starlette.responses import JSONResponse
-    from tools.builtin.briefing import BriefingTools
 
-    briefing = BriefingTools()
+    briefing = _get_briefing()
     project = request.query_params.get("project")
     result = await briefing._session_briefing(project=project)
     return JSONResponse({"result": result})
@@ -582,9 +597,8 @@ async def _handle_session_briefing(request):
 async def _handle_daily_briefing(request):
     """GET /api/briefing/daily - Full daily briefing."""
     from starlette.responses import JSONResponse
-    from tools.builtin.briefing import BriefingTools
 
-    briefing = BriefingTools()
+    briefing = _get_briefing()
     project = request.query_params.get("project")
     result = await briefing._daily_briefing(project=project)
     return JSONResponse({"result": result})
@@ -597,423 +611,708 @@ async def api_memory_dashboard(_request):
 
     html = r"""<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Memento Memory Brain</title>
-    <style>
-      :root {
-        --bg-1: #0b1020;
-        --bg-2: #121935;
-        --line: rgba(255, 255, 255, 0.15);
-        --accent: #9f7aea;
-        --accent-2: #63b3ed;
-        --text: #eaf0ff;
-      }
-      html, body {
-        margin: 0;
-        height: 100%;
-      }
-      body {
-        font-family: "Space Grotesk", "Manrope", "Fira Sans", sans-serif;
-        color: var(--text);
-        background:
-          radial-gradient(circle at 15% 10%, #202b58 0%, transparent 40%),
-          radial-gradient(circle at 85% 90%, #13263e 0%, transparent 45%),
-          linear-gradient(140deg, var(--bg-1), var(--bg-2));
-      }
-      .shell {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 18px;
-        box-sizing: border-box;
-      }
-      h1 { margin: 0 0 12px; }
-      .panel {
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: rgba(12, 19, 42, 0.5);
-        backdrop-filter: blur(10px);
-      }
-      .controls {
-        padding: 12px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-      .controls input,
-      .controls select,
-      .controls button {
-        background: rgba(16, 23, 52, 0.7);
-        border: 1px solid var(--line);
-        color: var(--text);
-        border-radius: 8px;
-        padding: 8px 10px;
-      }
-      .controls button {
-        cursor: pointer;
-      }
-      .controls button:hover { color: #fff; border-color: var(--accent); }
-      .grid {
-        display: grid;
-        grid-template-columns: 1.2fr 1fr;
-        gap: 12px;
-      }
-      .card {
-        padding: 12px;
-      }
-      .legend { font-size: 12px; color: #d1d8ff; }
-      .legend span { display: inline-block; margin-right: 10px; }
-      #brain {
-        width: 100%;
-        aspect-ratio: 16 / 10;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background:
-          radial-gradient(circle at 50% 50%, rgba(99, 179, 237, 0.08), transparent 45%);
-      }
-      #info {
-        white-space: pre-wrap;
-        max-height: 540px;
-        overflow: auto;
-        font-size: 13px;
-      }
-      .muted { color: #8f98bf; }
-      @media (max-width: 960px) {
-        .grid { grid-template-columns: 1fr; }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="shell">
-      <h1>Memento Memory Brain</h1>
-      <div class="panel">
-        <div class="controls">
-          <label>Project: <input id="project" placeholder="general" /></label>
-          <label>Type:
-            <select id="memoryType">
-              <option value="">all</option>
-              <option value="requirement">requirement</option>
-              <option value="fact">fact</option>
-              <option value="decision">decision</option>
-              <option value="preference">preference</option>
-              <option value="learning">learning</option>
-              <option value="session">session</option>
-              <option value="note">note</option>
-            </select>
-          </label>
-          <label>Limit: <input id="limit" type="number" value="160" min="20" max="400" /></label>
-          <label>Neighbors: <input id="neighbors" type="number" value="4" min="1" max="12" /></label>
-          <label>Min Score: <input id="similarity" type="number" step="0.01" value="0.35" min="0" max="1" /></label>
-          <label>Days:
-            <select id="days">
-              <option value="">all</option>
-              <option value="7">7</option>
-              <option value="30">30</option>
-              <option value="90">90</option>
-            </select>
-          </label>
-          <button id="refresh">Refresh</button>
-          <button id="clear">Clear</button>
-        </div>
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>MEMENTO // Command</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Anybody:wght@400;700;900&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080a0f;
+  --surface:#0d1117;
+  --surface-2:#131922;
+  --border:#1e2a3a;
+  --border-hi:#2d4a6f;
+  --text:#c9d6e3;
+  --text-dim:#5a6b7f;
+  --text-bright:#e8f0fa;
+  --cyan:#00d4aa;
+  --cyan-dim:rgba(0,212,170,0.15);
+  --amber:#f0a030;
+  --amber-dim:rgba(240,160,48,0.12);
+  --red:#ff4d4d;
+  --red-dim:rgba(255,77,77,0.12);
+  --blue:#4d9fff;
+  --purple:#a78bfa;
+  --green:#34d399;
+  --orange:#fb923c;
+  --mono:"JetBrains Mono",ui-monospace,monospace;
+  --display:"Anybody","JetBrains Mono",monospace;
+}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:var(--mono);font-size:12px;color:var(--text);
+  background:var(--bg);
+  background-image:
+    repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,212,170,0.008) 2px,rgba(0,212,170,0.008) 3px);
+}
+
+/* --- LAYOUT --- */
+.hud{display:grid;height:100vh;grid-template-rows:42px 1fr;grid-template-columns:1fr;overflow:hidden}
+.topbar{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 16px;border-bottom:1px solid var(--border);
+  background:var(--surface);
+}
+.topbar-left{display:flex;align-items:center;gap:16px}
+.logo{font-family:var(--display);font-weight:900;font-size:15px;letter-spacing:3px;color:var(--cyan);text-transform:uppercase}
+.logo span{color:var(--text-dim);font-weight:400;letter-spacing:1px;font-size:11px;margin-left:8px}
+.clock{font-size:11px;color:var(--text-dim);letter-spacing:1px}
+.topbar-right{display:flex;align-items:center;gap:12px}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
+.status-label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1.5px}
+
+.main{display:grid;grid-template-columns:320px 1fr 340px;grid-template-rows:1fr;overflow:hidden}
+
+/* --- PANELS --- */
+.panel{
+  border-right:1px solid var(--border);overflow:hidden;
+  display:flex;flex-direction:column;
+}
+.panel:last-child{border-right:none}
+.panel-head{
+  padding:10px 14px;border-bottom:1px solid var(--border);
+  background:var(--surface);
+  display:flex;align-items:center;justify-content:space-between;
+  flex-shrink:0;
+}
+.panel-title{
+  font-family:var(--display);font-size:10px;font-weight:700;
+  text-transform:uppercase;letter-spacing:2px;color:var(--text-dim);
+}
+.panel-badge{
+  font-size:9px;padding:2px 7px;border-radius:3px;
+  background:var(--cyan-dim);color:var(--cyan);font-weight:500;
+  letter-spacing:0.5px;
+}
+.panel-badge.warn{background:var(--amber-dim);color:var(--amber)}
+.panel-badge.crit{background:var(--red-dim);color:var(--red)}
+.panel-body{flex:1;overflow-y:auto;padding:10px 14px}
+.panel-body::-webkit-scrollbar{width:4px}
+.panel-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* --- TRACKER --- */
+.tracker-section{margin-bottom:14px}
+.tracker-section-title{
+  font-size:9px;text-transform:uppercase;letter-spacing:1.5px;
+  color:var(--text-dim);margin-bottom:6px;padding-bottom:4px;
+  border-bottom:1px solid var(--border);
+}
+.tracker-item{
+  padding:8px 10px;margin-bottom:4px;border-radius:4px;
+  background:var(--surface-2);border-left:3px solid var(--border);
+  transition:border-color 0.15s,background 0.15s;
+  cursor:default;
+}
+.tracker-item:hover{background:rgba(0,212,170,0.04);border-left-color:var(--cyan)}
+.tracker-item.overdue{border-left-color:var(--red);background:var(--red-dim)}
+.tracker-item.high{border-left-color:var(--amber)}
+.tracker-item-id{font-size:9px;color:var(--text-dim);letter-spacing:0.5px}
+.tracker-item-title{font-size:12px;color:var(--text-bright);margin:2px 0}
+.tracker-item-meta{font-size:10px;color:var(--text-dim);display:flex;gap:8px;flex-wrap:wrap}
+.tracker-item-meta .tag{
+  padding:1px 5px;border-radius:2px;font-size:9px;
+  background:var(--surface);border:1px solid var(--border);
+}
+.tracker-item-meta .tag.ticket{color:var(--blue);border-color:rgba(77,159,255,0.3)}
+.tracker-item-meta .tag.due{color:var(--amber);border-color:rgba(240,160,48,0.3)}
+.tracker-item-meta .tag.overdue{color:var(--red);border-color:rgba(255,77,77,0.3)}
+.tracker-empty{color:var(--text-dim);font-style:italic;padding:20px 0;text-align:center;font-size:11px}
+
+/* --- TRACK FORM --- */
+.track-form{
+  padding:10px 14px;border-top:1px solid var(--border);
+  background:var(--surface);flex-shrink:0;
+}
+.track-form input,.track-form select{
+  width:100%;padding:6px 8px;margin-bottom:4px;
+  background:var(--surface-2);border:1px solid var(--border);
+  color:var(--text);font-family:var(--mono);font-size:11px;
+  border-radius:3px;outline:none;
+}
+.track-form input:focus,.track-form select:focus{border-color:var(--cyan)}
+.track-form .row{display:flex;gap:4px}
+.track-form .row>*{flex:1}
+.track-btn{
+  width:100%;padding:6px;margin-top:4px;cursor:pointer;
+  background:var(--cyan-dim);color:var(--cyan);
+  border:1px solid rgba(0,212,170,0.3);border-radius:3px;
+  font-family:var(--mono);font-size:10px;font-weight:500;
+  text-transform:uppercase;letter-spacing:1.5px;
+  transition:background 0.15s;
+}
+.track-btn:hover{background:rgba(0,212,170,0.25)}
+
+/* --- CENTER: BRAIN --- */
+.center{display:flex;flex-direction:column;overflow:hidden;background:var(--bg)}
+.brain-controls{
+  padding:8px 14px;border-bottom:1px solid var(--border);
+  display:flex;flex-wrap:wrap;gap:6px;align-items:center;
+  background:var(--surface);flex-shrink:0;
+}
+.brain-controls label{font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px}
+.brain-controls input,.brain-controls select{
+  background:var(--surface-2);border:1px solid var(--border);
+  color:var(--text);font-family:var(--mono);font-size:10px;
+  padding:4px 6px;border-radius:3px;outline:none;
+}
+.brain-controls input:focus,.brain-controls select:focus{border-color:var(--cyan)}
+.brain-controls input[type="number"]{width:50px}
+.brain-controls button{
+  padding:4px 10px;cursor:pointer;font-family:var(--mono);font-size:10px;
+  background:var(--surface-2);border:1px solid var(--border);
+  color:var(--text);border-radius:3px;text-transform:uppercase;letter-spacing:1px;
+  transition:border-color 0.15s;
+}
+.brain-controls button:hover{border-color:var(--cyan);color:var(--cyan)}
+.brain-wrap{flex:1;position:relative;overflow:hidden}
+#brain{width:100%;height:100%;display:block}
+.brain-status{
+  position:absolute;bottom:8px;left:14px;
+  font-size:10px;color:var(--text-dim);letter-spacing:0.5px;
+}
+.brain-legend{
+  position:absolute;bottom:8px;right:14px;
+  display:flex;gap:10px;font-size:10px;
+}
+.brain-legend .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle}
+
+/* --- RIGHT PANEL --- */
+.briefing-section{margin-bottom:16px}
+.briefing-section-title{
+  font-size:9px;text-transform:uppercase;letter-spacing:1.5px;
+  color:var(--text-dim);margin-bottom:8px;padding-bottom:4px;
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+}
+.briefing-item{
+  padding:6px 8px;margin-bottom:3px;border-radius:3px;
+  background:var(--surface-2);font-size:11px;line-height:1.5;
+}
+.briefing-item .type-tag{
+  display:inline-block;font-size:8px;padding:1px 4px;border-radius:2px;
+  text-transform:uppercase;letter-spacing:0.5px;margin-right:4px;
+  vertical-align:middle;
+}
+.briefing-item .type-tag.decision{background:rgba(251,146,60,0.15);color:var(--orange)}
+.briefing-item .type-tag.learning{background:rgba(52,211,153,0.15);color:var(--green)}
+.briefing-item .type-tag.requirement{background:rgba(255,77,77,0.15);color:var(--red)}
+.briefing-item .type-tag.fact{background:rgba(77,159,255,0.15);color:var(--blue)}
+
+.memory-detail{
+  white-space:pre-wrap;font-size:11px;line-height:1.6;color:var(--text);
+  padding:10px;background:var(--surface-2);border-radius:4px;
+  border:1px solid var(--border);min-height:120px;
+}
+.memory-detail .mem-type{color:var(--cyan);font-weight:500}
+.memory-detail .mem-date{color:var(--text-dim)}
+
+/* --- JIRA/GITLAB --- */
+.ext-item{
+  padding:5px 8px;margin-bottom:3px;border-radius:3px;
+  background:var(--surface-2);font-size:11px;
+  display:flex;align-items:flex-start;gap:6px;
+}
+.ext-item .ext-key{
+  font-size:9px;color:var(--blue);white-space:nowrap;
+  font-weight:500;min-width:60px;padding-top:1px;
+}
+.ext-item .ext-title{color:var(--text);line-height:1.4}
+.ext-item .ext-status{
+  font-size:8px;padding:1px 4px;border-radius:2px;
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--text-dim);white-space:nowrap;margin-left:auto;
+}
+
+/* --- RESPONSIVE --- */
+@media(max-width:1100px){
+  .main{grid-template-columns:280px 1fr 280px}
+}
+@media(max-width:900px){
+  .main{grid-template-columns:1fr;grid-template-rows:auto 400px auto}
+  .panel{border-right:none;border-bottom:1px solid var(--border)}
+}
+</style>
+</head>
+<body>
+<div class="hud">
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo">MEMENTO<span>// command</span></div>
+    </div>
+    <div class="topbar-right">
+      <div class="status-dot"></div>
+      <div class="status-label">System Active</div>
+      <div class="clock" id="clock"></div>
+    </div>
+  </div>
+
+  <!-- MAIN 3-COLUMN -->
+  <div class="main">
+    <!-- LEFT: TRACKER -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">Tracker</div>
+        <div class="panel-badge" id="pending-badge">0</div>
       </div>
-      <div id="pending-panel" style="position:fixed;top:10px;right:10px;width:320px;max-height:400px;overflow-y:auto;background:#1a202c;border:1px solid #4a5568;border-radius:8px;padding:16px;color:#e2e8f0;font-size:13px;z-index:100;">
-        <h3 style="margin:0 0 12px 0;color:#63b3ed;">Pending Items</h3>
-        <div id="pending-items">Loading...</div>
+      <div class="panel-body" id="tracker-body">
+        <div class="tracker-empty">Loading tracker...</div>
       </div>
-      <div style="height: 10px;"></div>
-      <div class="grid">
-        <div class="panel card">
-          <canvas id="brain" width="900" height="560"></canvas>
-          <div class="legend">
-            <span>🔵 fact</span>
-            <span>🟣 preference</span>
-            <span>🟠 decision</span>
-            <span>🔴 requirement</span>
-            <span>🟢 learning</span>
-            <span>⚪ note</span>
-            <span>⚪ session</span>
-          </div>
-          <p class="muted" id="status">Loading graph…</p>
+      <div class="track-form">
+        <input type="text" id="track-title" placeholder="Track new item..."/>
+        <div class="row">
+          <input type="date" id="track-due"/>
+          <input type="text" id="track-ticket" placeholder="TOPE-000"/>
         </div>
-        <div class="panel card">
-          <h3>Memory</h3>
-          <div id="info" class="muted">Click a node to inspect memory details.</div>
+        <div class="row">
+          <select id="track-priority">
+            <option value="normal">Normal</option>
+            <option value="high">High</option>
+            <option value="low">Low</option>
+          </select>
+          <input type="text" id="track-context" placeholder="Context..."/>
+        </div>
+        <button class="track-btn" id="track-submit">+ Track Item</button>
+      </div>
+    </div>
+
+    <!-- CENTER: BRAIN -->
+    <div class="center">
+      <div class="brain-controls">
+        <label>Proj <input id="project" placeholder="all" style="width:60px"/></label>
+        <label>Type
+          <select id="memoryType">
+            <option value="">all</option>
+            <option value="requirement">req</option>
+            <option value="fact">fact</option>
+            <option value="decision">dec</option>
+            <option value="preference">pref</option>
+            <option value="learning">learn</option>
+            <option value="session">sess</option>
+            <option value="note">note</option>
+          </select>
+        </label>
+        <label>Lim <input id="limit" type="number" value="160" min="20" max="400"/></label>
+        <label>Nbr <input id="neighbors" type="number" value="4" min="1" max="12"/></label>
+        <label>Sim <input id="similarity" type="number" step="0.01" value="0.35" min="0" max="1" style="width:45px"/></label>
+        <label>Days
+          <select id="days">
+            <option value="">all</option>
+            <option value="7">7d</option>
+            <option value="30">30d</option>
+            <option value="90">90d</option>
+          </select>
+        </label>
+        <button id="refresh">Refresh</button>
+        <button id="clear">Reset</button>
+      </div>
+      <div class="brain-wrap">
+        <canvas id="brain"></canvas>
+        <div class="brain-status" id="status">Initializing...</div>
+        <div class="brain-legend">
+          <span><span class="dot" style="background:#4d9fff"></span>fact</span>
+          <span><span class="dot" style="background:#a78bfa"></span>pref</span>
+          <span><span class="dot" style="background:#fb923c"></span>dec</span>
+          <span><span class="dot" style="background:#ff4d4d"></span>req</span>
+          <span><span class="dot" style="background:#34d399"></span>learn</span>
+          <span><span class="dot" style="background:#94a3b8"></span>other</span>
         </div>
       </div>
     </div>
-    <script>
-      const colorByType = {
-        requirement: "#f56565",
-        fact: "#63b3ed",
-        decision: "#ed8936",
-        preference: "#9f7aea",
-        learning: "#48bb78",
-        session: "#a0aec0",
-        note: "#CBD5E0"
-      };
 
-      const state = {
-        width: 0,
-        height: 0,
-        nodes: [],
-        links: [],
-        selected: null,
-      };
+    <!-- RIGHT: BRIEFING + DETAIL -->
+    <div class="panel">
+      <div class="panel-head">
+        <div class="panel-title">Briefing</div>
+        <button id="briefing-refresh" style="font-size:9px;padding:2px 8px;background:var(--surface-2);border:1px solid var(--border);color:var(--text-dim);border-radius:3px;cursor:pointer;font-family:var(--mono);letter-spacing:1px">DAILY</button>
+      </div>
+      <div class="panel-body" id="briefing-body">
+        <div class="briefing-section" id="briefing-findings">
+          <div class="briefing-section-title">Recent Findings</div>
+          <div class="tracker-empty">Loading briefing...</div>
+        </div>
+        <div class="briefing-section" id="briefing-jira" style="display:none">
+          <div class="briefing-section-title">Jira Tickets</div>
+          <div id="jira-items"></div>
+        </div>
+        <div class="briefing-section" id="briefing-mrs" style="display:none">
+          <div class="briefing-section-title">Open MRs</div>
+          <div id="mr-items"></div>
+        </div>
+        <div class="briefing-section">
+          <div class="briefing-section-title">Memory Detail</div>
+          <div class="memory-detail" id="info">Click a node in the graph to inspect memory details.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
 
-      const canvas = document.getElementById("brain");
-      const ctx = canvas.getContext("2d");
-      const statusEl = document.getElementById("status");
-      const infoEl = document.getElementById("info");
-      const pendingItemsEl = document.getElementById("pending-items");
+<script>
+// --- CLOCK ---
+function updateClock(){
+  const now=new Date();
+  const h=String(now.getHours()).padStart(2,'0');
+  const m=String(now.getMinutes()).padStart(2,'0');
+  const s=String(now.getSeconds()).padStart(2,'0');
+  document.getElementById('clock').textContent=`${h}:${m}:${s}`;
+}
+setInterval(updateClock,1000);updateClock();
 
-      function typeCount(nodes) {
-        const byType = {};
-        for (const node of nodes) {
-          byType[node.type] = (byType[node.type] || 0) + 1;
+// --- COLORS ---
+const colorByType={
+  requirement:"#ff4d4d",fact:"#4d9fff",decision:"#fb923c",
+  preference:"#a78bfa",learning:"#34d399",session:"#94a3b8",note:"#94a3b8"
+};
+
+// --- STATE ---
+const state={width:0,height:0,nodes:[],links:[],selected:null};
+const canvas=document.getElementById("brain");
+const ctx=canvas.getContext("2d");
+
+function typeCount(nodes){
+  const m={};for(const n of nodes)m[n.type]=(m[n.type]||0)+1;return m;
+}
+
+// --- CANVAS ---
+function resizeCanvas(){
+  const r=canvas.parentElement.getBoundingClientRect();
+  const s=window.devicePixelRatio||1;
+  canvas.width=r.width*s;canvas.height=r.height*s;
+  ctx.setTransform(s,0,0,s,0,0);
+  state.width=r.width;state.height=r.height;
+}
+
+// --- TRACKER ---
+async function loadTracker(){
+  try{
+    const resp=await fetch("/api/tracker/items");
+    const data=await resp.json();
+    renderTracker(data.result);
+  }catch(e){
+    document.getElementById("tracker-body").innerHTML='<div class="tracker-empty">Failed to load tracker</div>';
+  }
+}
+
+function renderTracker(raw){
+  const body=document.getElementById("tracker-body");
+  const badge=document.getElementById("pending-badge");
+
+  // Parse the markdown-ish response
+  const lines=raw.split('\n').filter(l=>l.trim());
+  if(lines.length<=1 && raw.includes("No pending")){
+    body.innerHTML='<div class="tracker-empty">All clear - no pending items</div>';
+    badge.textContent="0";badge.className="panel-badge";
+    return;
+  }
+
+  const items=[];
+  let currentItem=null;
+  for(const line of lines){
+    if(line.startsWith("# "))continue;
+    const itemMatch=line.match(/^- \*\*([^*]+)\*\*(?:\s*\[([^\]]+)\])?\s*:\s*(.+?)(?:\s*\(due\s+([^)]+)\))?\s*(\*\*OVERDUE\*\*)?$/);
+    if(itemMatch){
+      currentItem={id:itemMatch[1],ticket:itemMatch[2]||null,title:itemMatch[3].trim(),due:itemMatch[4]||null,overdue:!!itemMatch[5],context:null};
+      items.push(currentItem);
+    }else if(line.trim().startsWith("_")&&currentItem){
+      currentItem.context=line.trim().replace(/^_|_$/g,'');
+    }
+  }
+
+  const overdue=items.filter(i=>i.overdue);
+  const upcoming=items.filter(i=>!i.overdue);
+
+  badge.textContent=String(items.length);
+  badge.className=overdue.length>0?"panel-badge crit":"panel-badge";
+
+  let html='';
+  if(overdue.length){
+    html+='<div class="tracker-section"><div class="tracker-section-title">Overdue</div>';
+    for(const i of overdue)html+=renderTrackerItem(i,true);
+    html+='</div>';
+  }
+  if(upcoming.length){
+    html+='<div class="tracker-section"><div class="tracker-section-title">Upcoming</div>';
+    for(const i of upcoming)html+=renderTrackerItem(i,false);
+    html+='</div>';
+  }
+  body.innerHTML=html;
+}
+
+function renderTrackerItem(item,isOverdue){
+  let meta='';
+  if(item.ticket)meta+=`<span class="tag ticket">${item.ticket}</span>`;
+  if(item.due)meta+=`<span class="tag ${isOverdue?'overdue':'due'}">${item.due}</span>`;
+  return`<div class="tracker-item ${isOverdue?'overdue':''} ${item.priority==='high'?'high':''}">
+    <div class="tracker-item-id">${item.id}</div>
+    <div class="tracker-item-title">${item.title}</div>
+    <div class="tracker-item-meta">${meta}</div>
+    ${item.context?`<div style="font-size:10px;color:var(--text-dim);margin-top:3px">${item.context}</div>`:''}
+  </div>`;
+}
+
+// --- TRACK NEW ITEM ---
+document.getElementById("track-submit").addEventListener("click",async()=>{
+  const title=document.getElementById("track-title").value.trim();
+  if(!title)return;
+  const payload={title,priority:document.getElementById("track-priority").value};
+  const due=document.getElementById("track-due").value;
+  const ticket=document.getElementById("track-ticket").value.trim();
+  const context=document.getElementById("track-context").value.trim();
+  if(due)payload.due_date=due;
+  if(ticket)payload.ticket_id=ticket;
+  if(context)payload.context=context;
+  try{
+    await fetch("/api/tracker/items",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
+    document.getElementById("track-title").value="";
+    document.getElementById("track-due").value="";
+    document.getElementById("track-ticket").value="";
+    document.getElementById("track-context").value="";
+    loadTracker();
+  }catch(e){console.error("Track failed",e)}
+});
+
+// --- BRIEFING ---
+async function loadBriefing(mode){
+  const endpoint=mode==="daily"?"/api/briefing/daily":"/api/briefing/session";
+  try{
+    const resp=await fetch(endpoint);
+    const data=await resp.json();
+    renderBriefing(data.result,mode);
+  }catch(e){
+    document.getElementById("briefing-findings").innerHTML='<div class="tracker-empty">Failed to load briefing</div>';
+  }
+}
+
+function renderBriefing(raw,mode){
+  const findingsEl=document.getElementById("briefing-findings");
+  const jiraEl=document.getElementById("briefing-jira");
+  const mrsEl=document.getElementById("briefing-mrs");
+
+  // Parse sections from the briefing markdown
+  const sections=raw.split(/^## /m).filter(Boolean);
+  let findingsHtml='<div class="briefing-section-title">Recent Findings</div>';
+  let hasFindings=false;
+  let jiraHtml='';
+  let mrsHtml='';
+
+  for(const section of sections){
+    const lines=section.split('\n');
+    const title=lines[0].trim().replace(/^#+\s*/,'');
+
+    if(title.includes("OVERDUE")||title.includes("Pending")||title.includes("Recent")){
+      const items=lines.slice(1).filter(l=>l.startsWith("- "));
+      if(items.length){
+        hasFindings=true;
+        for(const item of items){
+          const typeMatch=item.match(/\[(decision|learning|requirement|fact)\]/i);
+          const type=typeMatch?typeMatch[1].toLowerCase():'';
+          const content=item.replace(/^-\s*/,'').replace(/\[.*?\]\s*/,'').trim();
+          findingsHtml+=`<div class="briefing-item">${type?`<span class="type-tag ${type}">${type}</span>`:''}${escHtml(content)}</div>`;
         }
-        return byType;
       }
-
-      function resizeCanvas() {
-        const rect = canvas.getBoundingClientRect();
-        const scale = window.devicePixelRatio || 1;
-        canvas.width = rect.width * scale;
-        canvas.height = rect.height * scale;
-        ctx.setTransform(scale, 0, 0, scale, 0, 0);
-        state.width = rect.width;
-        state.height = rect.height;
-      }
-
-      function buildQuery() {
-        const project = document.getElementById("project").value.trim();
-        const memoryType = document.getElementById("memoryType").value;
-        const limit = Number(document.getElementById("limit").value || 160);
-        const neighbors = Number(document.getElementById("neighbors").value || 4);
-        const similarity = Number(document.getElementById("similarity").value || 0.35);
-        const days = document.getElementById("days").value;
-        const q = new URLSearchParams({
-          limit: String(limit),
-          neighbor_count: String(neighbors),
-          min_similarity: String(similarity),
-        });
-        if (project) q.set("project", project);
-        if (memoryType) q.set("type", memoryType);
-        if (days) q.set("days", days);
-        return q.toString();
-      }
-
-      function normalizeNodes(dataNodes) {
-        return dataNodes.map((n) => {
-          const velocity = {x: (Math.random() - 0.5) * 0.5, y: (Math.random() - 0.5) * 0.5};
-          const x = (n.position.x + 1) * 0.5 * (state.width - 80) + 40;
-          const y = (n.position.y + 1) * 0.5 * (state.height - 80) + 40;
-          return {...n, x, y, vx: velocity.x, vy: velocity.y, fx: x, fy: y};
-        });
-      }
-
-      async function loadPending() {
-        try {
-          const resp = await fetch("/api/tracker/items");
-          const data = await resp.json();
-          pendingItemsEl.innerHTML = data.result.replace(
-            /\*\*(.*?)\*\*/g, "<strong>$1</strong>"
-          ).replace(/\n/g, "<br>");
-        } catch (e) {
-          pendingItemsEl.textContent = "Failed to load";
-        }
-      }
-
-      function loadGraph() {
-        statusEl.textContent = "Loading graph…";
-        fetch("/api/memory/graph?" + buildQuery())
-          .then((res) => res.json())
-          .then((payload) => {
-            const graph = payload.graph || {};
-            const rawNodes = graph.nodes || [];
-            const rawLinks = graph.links || [];
-            state.nodes = normalizeNodes(rawNodes);
-            state.links = rawLinks;
-            state.selected = null;
-            statusEl.textContent = `Nodes: ${state.nodes.length}, Links: ${state.links.length}`;
-            renderInfo();
-          })
-          .catch((err) => {
-            statusEl.textContent = `Failed to load graph: ${err.message}`;
-          });
-      }
-
-      function renderInfo() {
-        if (!state.nodes.length) {
-          infoEl.textContent = "No nodes loaded. Try increasing limit or loosening filters.";
-          return;
-        }
-        const total = state.nodes.length;
-        const types = typeCount(state.nodes);
-        const selected = state.selected
-          ? `${state.selected.type} · ${state.selected.date}\n\n${state.selected.content}`
-          : "Click a node to inspect memory details.";
-        infoEl.textContent =
-          `Total nodes: ${total}\n` +
-          `Requirements: ${types.requirement || 0}\n` +
-          `Facts: ${types.fact || 0}\n` +
-          `Decisions: ${types.decision || 0}\n` +
-          `Preferences: ${types.preference || 0}\n` +
-          `Learnings: ${types.learning || 0}\n\n` +
-          selected;
-      }
-
-      function stepPhysics() {
-        if (!state.nodes.length) {
-          requestAnimationFrame(stepPhysics);
-          return;
-        }
-
-        const linkStrength = 0.0025;
-        const damping = 0.85;
-        const repulsion = 9000;
-
-        for (let i = 0; i < state.nodes.length; i++) {
-          state.nodes[i].vx *= damping;
-          state.nodes[i].vy *= damping;
-        }
-
-        for (let i = 0; i < state.nodes.length; i++) {
-          for (let j = i + 1; j < state.nodes.length; j++) {
-            const a = state.nodes[i];
-            const b = state.nodes[j];
-            const dx = a.x - b.x;
-            const dy = a.y - b.y;
-            const dist2 = Math.max(80, dx * dx + dy * dy);
-            const force = repulsion / dist2;
-            const invDist = 1 / Math.sqrt(dist2);
-            const fx = force * dx * invDist;
-            const fy = force * dy * invDist;
-            a.vx += fx * 0.001;
-            a.vy += fy * 0.001;
-            b.vx -= fx * 0.001;
-            b.vy -= fy * 0.001;
+    }
+    if(title.includes("Jira")){
+      const items=lines.slice(1).filter(l=>l.startsWith("- "));
+      if(items.length){
+        for(const item of items){
+          const match=item.match(/\*\*([^*]+)\*\*:\s*(.+?)(?:\s*\(([^)]+)\))?$/);
+          if(match){
+            jiraHtml+=`<div class="ext-item"><span class="ext-key">${escHtml(match[1])}</span><span class="ext-title">${escHtml(match[2])}</span>${match[3]?`<span class="ext-status">${escHtml(match[3])}</span>`:''}</div>`;
           }
         }
-
-        for (const link of state.links) {
-          const source = state.nodes.find((n) => n.id === link.source);
-          const target = state.nodes.find((n) => n.id === link.target);
-          if (!source || !target) continue;
-
-          const dx = target.x - source.x;
-          const dy = target.y - source.y;
-          const dist = Math.max(20, Math.sqrt(dx * dx + dy * dy));
-          const rest = 120 * (1 - link.weight);
-          const force = (dist - rest) * linkStrength;
-          const nx = dx / dist;
-          const ny = dy / dist;
-          const fx = force * nx;
-          const fy = force * ny;
-          source.vx += fx;
-          source.vy += fy;
-          target.vx -= fx;
-          target.vy -= fy;
-        }
-
-        for (const node of state.nodes) {
-          node.x += node.vx;
-          node.y += node.vy;
-          node.x = Math.min(state.width - 20, Math.max(20, node.x));
-          node.y = Math.min(state.height - 20, Math.max(20, node.y));
-        }
       }
-
-      function render() {
-        resizeCanvas();
-        ctx.clearRect(0, 0, state.width, state.height);
-        ctx.save();
-        ctx.fillStyle = "rgba(0, 0, 0, 0)";
-        ctx.fillRect(0, 0, state.width, state.height);
-
-        for (const link of state.links) {
-          const source = state.nodes.find((n) => n.id === link.source);
-          const target = state.nodes.find((n) => n.id === link.target);
-          if (!source || !target) continue;
-          const alpha = Math.min(0.85, Math.max(0.1, link.weight));
-          ctx.strokeStyle = `rgba(156, 163, 175, ${alpha})`;
-          ctx.lineWidth = 1 + alpha * 2;
-          ctx.beginPath();
-          ctx.moveTo(source.x, source.y);
-          ctx.lineTo(target.x, target.y);
-          ctx.stroke();
-        }
-
-        for (const node of state.nodes) {
-          const selected = state.selected && state.selected.id === node.id;
-          const radius = Math.max(3.5, 3 + Math.min(6, Math.sqrt((node.degree || 0) + 1)));
-          const color = colorByType[node.type] || "#a0aec0";
-          ctx.beginPath();
-          ctx.fillStyle = color;
-          ctx.globalAlpha = selected ? 1 : 0.85;
-          ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-          ctx.fill();
-
-          if (selected) {
-            ctx.strokeStyle = "#fff";
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-          }
-          ctx.globalAlpha = 1;
-        }
-
-        ctx.restore();
-      }
-
-      function loop() {
-        stepPhysics();
-        render();
-        requestAnimationFrame(loop);
-      }
-
-      function pickNode(evt) {
-        const bounds = canvas.getBoundingClientRect();
-        const x = evt.clientX - bounds.left;
-        const y = evt.clientY - bounds.top;
-        let closest = null;
-        let closestDist = 100000;
-        for (const node of state.nodes) {
-          const dx = node.x - x;
-          const dy = node.y - y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < closestDist && dist < 20) {
-            closestDist = dist;
-            closest = node;
+    }
+    if(title.includes("MR")){
+      const items=lines.slice(1).filter(l=>l.startsWith("- "));
+      if(items.length){
+        for(const item of items){
+          const match=item.match(/\*\*([^*]+)\*\*\s*\(([^)]+)\)\s*(.*)/);
+          if(match){
+            mrsHtml+=`<div class="ext-item"><span class="ext-title">${escHtml(match[1])}</span><span class="ext-status">${escHtml(match[2])}</span></div>`;
           }
         }
-        if (closest) {
-          state.selected = closest;
-          renderInfo();
-        }
       }
+    }
+  }
 
-      document.getElementById("refresh").addEventListener("click", () => {
-        loadGraph();
-      });
-      document.getElementById("clear").addEventListener("click", () => {
-        document.getElementById("project").value = "";
-        document.getElementById("memoryType").value = "";
-        document.getElementById("limit").value = "160";
-        document.getElementById("neighbors").value = "4";
-        document.getElementById("similarity").value = "0.35";
-        document.getElementById("days").value = "";
-        loadGraph();
-      });
-      canvas.addEventListener("click", pickNode);
-      window.addEventListener("resize", resizeCanvas);
+  if(!hasFindings)findingsHtml+='<div class="tracker-empty">All clear</div>';
+  findingsEl.innerHTML=findingsHtml;
 
-      resizeCanvas();
-      loadPending();
-      setInterval(loadPending, 30000); // Refresh every 30s
-      loadGraph();
-      loop();
-    </script>
-  </body>
+  if(jiraHtml){jiraEl.style.display="block";document.getElementById("jira-items").innerHTML=jiraHtml;}
+  else{jiraEl.style.display="none"}
+
+  if(mrsHtml){mrsEl.style.display="block";document.getElementById("mr-items").innerHTML=mrsHtml;}
+  else{mrsEl.style.display="none"}
+}
+
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+let briefingMode="session";
+document.getElementById("briefing-refresh").addEventListener("click",()=>{
+  briefingMode=briefingMode==="session"?"daily":"session";
+  const btn=document.getElementById("briefing-refresh");
+  btn.textContent=briefingMode==="session"?"DAILY":"SESSION";
+  loadBriefing(briefingMode);
+});
+
+// --- GRAPH ---
+function buildQuery(){
+  const p=document.getElementById("project").value.trim();
+  const t=document.getElementById("memoryType").value;
+  const l=Number(document.getElementById("limit").value||160);
+  const n=Number(document.getElementById("neighbors").value||4);
+  const s=Number(document.getElementById("similarity").value||0.35);
+  const d=document.getElementById("days").value;
+  const q=new URLSearchParams({limit:String(l),neighbor_count:String(n),min_similarity:String(s)});
+  if(p)q.set("project",p);if(t)q.set("type",t);if(d)q.set("days",d);
+  return q.toString();
+}
+
+function normalizeNodes(dataNodes){
+  return dataNodes.map(n=>{
+    const vx=(Math.random()-0.5)*0.5,vy=(Math.random()-0.5)*0.5;
+    const x=(n.position.x+1)*0.5*(state.width-80)+40;
+    const y=(n.position.y+1)*0.5*(state.height-80)+40;
+    return{...n,x,y,vx,vy,fx:x,fy:y};
+  });
+}
+
+function loadGraph(){
+  document.getElementById("status").textContent="Loading...";
+  fetch("/api/memory/graph?"+buildQuery())
+    .then(r=>r.json()).then(p=>{
+      const g=p.graph||{};
+      state.nodes=normalizeNodes(g.nodes||[]);
+      state.links=g.links||[];
+      state.selected=null;
+      const tc=typeCount(state.nodes);
+      document.getElementById("status").textContent=
+        `${state.nodes.length} nodes / ${state.links.length} edges`;
+      renderInfo();
+    }).catch(e=>{
+      document.getElementById("status").textContent=`Error: ${e.message}`;
+    });
+}
+
+function renderInfo(){
+  const el=document.getElementById("info");
+  if(state.selected){
+    el.innerHTML=
+      `<span class="mem-type">${state.selected.type}</span> <span class="mem-date">${state.selected.date||''}</span>\n\n${escHtml(state.selected.content||'')}`;
+  }else{
+    el.textContent="Click a node in the graph to inspect memory details.";
+  }
+}
+
+// --- PHYSICS ---
+function stepPhysics(){
+  if(!state.nodes.length)return;
+  const damping=0.85,repulsion=9000,linkStr=0.0025;
+  for(const n of state.nodes){n.vx*=damping;n.vy*=damping}
+  for(let i=0;i<state.nodes.length;i++){
+    for(let j=i+1;j<state.nodes.length;j++){
+      const a=state.nodes[i],b=state.nodes[j];
+      const dx=a.x-b.x,dy=a.y-b.y;
+      const d2=Math.max(80,dx*dx+dy*dy);
+      const f=repulsion/d2,inv=1/Math.sqrt(d2);
+      const fx=f*dx*inv*0.001,fy=f*dy*inv*0.001;
+      a.vx+=fx;a.vy+=fy;b.vx-=fx;b.vy-=fy;
+    }
+  }
+  for(const link of state.links){
+    const src=state.nodes.find(n=>n.id===link.source);
+    const tgt=state.nodes.find(n=>n.id===link.target);
+    if(!src||!tgt)continue;
+    const dx=tgt.x-src.x,dy=tgt.y-src.y;
+    const dist=Math.max(20,Math.sqrt(dx*dx+dy*dy));
+    const rest=120*(1-link.weight),f=(dist-rest)*linkStr;
+    const nx=dx/dist,ny=dy/dist;
+    src.vx+=f*nx;src.vy+=f*ny;tgt.vx-=f*nx;tgt.vy-=f*ny;
+  }
+  for(const n of state.nodes){
+    n.x+=n.vx;n.y+=n.vy;
+    n.x=Math.min(state.width-20,Math.max(20,n.x));
+    n.y=Math.min(state.height-20,Math.max(20,n.y));
+  }
+}
+
+function render(){
+  resizeCanvas();
+  ctx.clearRect(0,0,state.width,state.height);
+
+  // Draw subtle grid
+  ctx.strokeStyle="rgba(30,42,58,0.5)";ctx.lineWidth=0.5;
+  for(let x=0;x<state.width;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,state.height);ctx.stroke()}
+  for(let y=0;y<state.height;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(state.width,y);ctx.stroke()}
+
+  // Links
+  for(const link of state.links){
+    const src=state.nodes.find(n=>n.id===link.source);
+    const tgt=state.nodes.find(n=>n.id===link.target);
+    if(!src||!tgt)continue;
+    const a=Math.min(0.6,Math.max(0.08,link.weight));
+    ctx.strokeStyle=`rgba(0,212,170,${a})`;
+    ctx.lineWidth=0.5+a*1.5;
+    ctx.beginPath();ctx.moveTo(src.x,src.y);ctx.lineTo(tgt.x,tgt.y);ctx.stroke();
+  }
+
+  // Nodes
+  for(const node of state.nodes){
+    const sel=state.selected&&state.selected.id===node.id;
+    const r=Math.max(3,2.5+Math.min(5,Math.sqrt((node.degree||0)+1)));
+    const color=colorByType[node.type]||"#94a3b8";
+    ctx.beginPath();ctx.fillStyle=color;
+    ctx.globalAlpha=sel?1:0.75;
+    ctx.arc(node.x,node.y,r,0,Math.PI*2);ctx.fill();
+    if(sel){
+      ctx.strokeStyle="#00d4aa";ctx.lineWidth=2;ctx.stroke();
+      ctx.beginPath();ctx.arc(node.x,node.y,r+4,0,Math.PI*2);
+      ctx.strokeStyle="rgba(0,212,170,0.3)";ctx.lineWidth=1;ctx.stroke();
+    }
+    ctx.globalAlpha=1;
+  }
+}
+
+function loop(){stepPhysics();render();requestAnimationFrame(loop)}
+
+canvas.addEventListener("click",evt=>{
+  const b=canvas.parentElement.getBoundingClientRect();
+  const x=evt.clientX-b.left,y=evt.clientY-b.top;
+  let closest=null,cd=1e6;
+  for(const n of state.nodes){
+    const d=Math.sqrt((n.x-x)**2+(n.y-y)**2);
+    if(d<cd&&d<20){cd=d;closest=n}
+  }
+  if(closest){state.selected=closest;renderInfo()}
+});
+
+document.getElementById("refresh").addEventListener("click",loadGraph);
+document.getElementById("clear").addEventListener("click",()=>{
+  document.getElementById("project").value="";
+  document.getElementById("memoryType").value="";
+  document.getElementById("limit").value="160";
+  document.getElementById("neighbors").value="4";
+  document.getElementById("similarity").value="0.35";
+  document.getElementById("days").value="";
+  loadGraph();
+});
+window.addEventListener("resize",resizeCanvas);
+
+// --- INIT ---
+resizeCanvas();
+loadTracker();
+loadBriefing("session");
+setInterval(loadTracker,30000);
+loadGraph();
+loop();
+</script>
+</body>
 </html>
 """
     return HTMLResponse(html)
