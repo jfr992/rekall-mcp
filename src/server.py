@@ -683,8 +683,18 @@ async def _handle_workspaces(_request):
     from starlette.responses import JSONResponse
     from tools.builtin.workspaces import WorkspaceScanner
 
-    scanner = WorkspaceScanner(roots=_get_workspace_roots())
+    roots = _get_workspace_roots()
+    scanner = WorkspaceScanner(roots=roots)
     workspaces = scanner.scan()
+
+    # If scanning found nothing (e.g. running in Docker without host mounts),
+    # fall back to listing the configured roots as selectable workspaces.
+    # Use original (unexpanded) paths so they resolve on the host, not in the container.
+    if not workspaces:
+        for root_str in roots:
+            name = Path(root_str).name or root_str
+            workspaces.append({"name": name, "path": root_str})
+
     return JSONResponse({"workspaces": workspaces})
 
 
