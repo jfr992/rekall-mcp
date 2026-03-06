@@ -34,10 +34,11 @@ class WorkspaceScanner:
         for child in children:
             if not child.is_dir() or child.name.startswith("."):
                 continue
-            if (child / ".git").exists():
+            is_workspace = (child / ".git").exists() or (child / "CLAUDE.md").exists()
+            if is_workspace:
                 path_str = str(child)
                 if path_str not in seen:
                     seen.add(path_str)
                     results.append({"name": child.name, "path": path_str})
-            else:
+            if not (child / ".git").exists():
                 self._scan_dir(child, depth + 1, results, seen)
