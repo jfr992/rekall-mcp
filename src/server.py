@@ -702,12 +702,16 @@ async def _handle_orchestra_chat(request):
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
 
-    orchestrator = ChatOrchestrator()
-    result = await orchestrator.handle_chat(
-        message=message,
-        workspace=workspace,
-        history=history,
-    )
+    try:
+        orchestrator = ChatOrchestrator()
+        result = await orchestrator.handle_chat(
+            message=message,
+            workspace=workspace,
+            history=history,
+        )
+    except Exception:
+        logger.exception("Chat orchestrator error")
+        return JSONResponse({"error": "Orchestrator failed", "message": "", "dispatches": []}, status_code=500)
 
     _chat_history.append({"role": "user", "content": message})
     _chat_history.append({"role": "assistant", "content": result["message"]})

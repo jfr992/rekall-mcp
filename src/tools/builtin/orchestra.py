@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import enum
+import os
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
@@ -156,6 +157,8 @@ class AgentOrchestraTools(BaseToolProvider):
 
         # Build CLI command
         cmd = [*agent_config.cli_command, prompt]
+        skip_keys = {"CLAUDECODE", "ANTHROPIC_API_KEY"}
+        env = {k: v for k, v in os.environ.items() if k not in skip_keys}
 
         try:
             process = await asyncio.create_subprocess_exec(
@@ -163,6 +166,7 @@ class AgentOrchestraTools(BaseToolProvider):
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=run.working_dir or None,
+                env=env,
             )
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),

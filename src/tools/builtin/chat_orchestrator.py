@@ -1,7 +1,9 @@
-"""Chat orchestrator - Claude API backend for multi-agent dispatch."""
+"""Chat orchestrator - Claude CLI backend for multi-agent dispatch."""
 
 from __future__ import annotations
 
+import asyncio
+import json
 import re
 
 from tools.builtin.agent_config import AgentConfigManager
@@ -13,19 +15,10 @@ DISPATCH_PATTERN = re.compile(
 
 
 class ChatOrchestrator:
-    """Orchestrates multi-agent workflows via Claude API."""
+    """Orchestrates multi-agent workflows via Claude CLI."""
 
     def __init__(self) -> None:
         self._config = AgentConfigManager()
-        self._client = None  # Lazy init
-
-    def _get_client(self):
-        """Lazy-init Anthropic client."""
-        if self._client is None:
-            import anthropic
-
-            self._client = anthropic.Anthropic()
-        return self._client
 
     def build_system_prompt(self, workspace: str, recent_memories: str = "") -> str:
         """Build the orchestrator system prompt with workspace context."""
@@ -48,15 +41,53 @@ class ChatOrchestrator:
             intents.append(intent)
         return intents
 
-    async def _call_claude_api(self, system: str, messages: list[dict]):
-        """Call Claude API with conversation."""
-        client = self._get_client()
-        return client.messages.create(
-            model="claude-sonnet-4-20250514",
-            max_tokens=4096,
-            system=system,
-            messages=messages,
+    async def _call_claude_cli(self, system: str, messages: list[dict]) -> str:
+        """Call Claude CLI in print mode with system prompt and conversation."""
+        # Build the user prompt from the last message; history is context
+        last_msg = messages[-1]["content"] if messages else ""
+
+        # claude -p sends stdin as the prompt; use sonnet for fast orchestration
+        cmd = [
+            "claude", "-p",
+            "--output-format", "text",
+            "--model", "sonnet",
+        ]
+
+        # Combine system + conversation context into the prompt
+        prompt_parts = [f"<system>{system}</system>"]
+        for msg in messages[:-1]:
+            role = msg["role"]
+            prompt_parts.append(f"<{role}>{msg['content']}</{role}>")
+        prompt_parts.append(last_msg)
+        full_prompt = "\n\n".join(prompt_parts)
+
+        import os
+        # Remove CLAUDECODE (prevents nested session error) and
+        # ANTHROPIC_API_KEY (OAuth token doesn't work with -p; let CLI use Max auth)
+        skip_keys = {"CLAUDECODE", "ANTHROPIC_API_KEY"}
+        env = {k: v for k, v in os.environ.items() if k not in skip_keys}
+
+        process = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+            env=env,
         )
+        stdout, stderr = await asyncio.wait_for(
+            process.communicate(input=full_prompt.encode()),
+            timeout=120,
+        )
+
+        if process.returncode != 0:
+            error = stderr.decode("utf-8", errors="replace")
+            output = stdout.decode("utf-8", errors="replace")
+            raise RuntimeError(
+                f"Claude CLI failed (exit {process.returncode}): "
+                f"stderr={error!r} stdout={output!r}"
+            )
+
+        return stdout.decode("utf-8", errors="replace").strip()
 
     async def _execute_dispatch(self, intent: dict, workspace: str) -> dict:
         """Execute a single dispatch via the orchestra tool provider."""
@@ -90,8 +121,7 @@ class ChatOrchestrator:
         system = self.build_system_prompt(workspace)
         messages = history + [{"role": "user", "content": message}]
 
-        response = await self._call_claude_api(system, messages)
-        response_text = response.content[0].text
+        response_text = await self._call_claude_cli(system, messages)
 
         intents = self.parse_dispatch_intents(response_text)
         dispatches = []
