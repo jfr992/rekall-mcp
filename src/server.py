@@ -16,6 +16,7 @@ Usage:
 
 import logging
 import os
+import asyncio
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -120,6 +121,15 @@ def setup_tools() -> None:
 
     for provider, tools in loaded.items():
         logger.info(f"Loaded {provider}: {len(tools)} tools")
+
+    # Register terminal dispatch tools (dynamic tools)
+    from tools.builtin.terminal_manager import TerminalManager
+
+    terminal_manager = TerminalManager()
+    for tool_def in terminal_manager.get_tools():
+        @mcp.tool(name=tool_def.name, description=tool_def.description)
+        async def _terminal_tool_handler(tool_handler=tool_def.handler, **kwargs):
+            return await tool_handler(**kwargs)
 
 
 # Register tools at module load time (skip during testing)
@@ -512,7 +522,7 @@ async def api_proactive_context_summary(request):
 _tracker = None
 _briefing = None
 _orchestra = None
-_chat_history: list[dict] = []
+_terminal_manager = None
 
 
 def _get_tracker():
@@ -539,6 +549,15 @@ def _get_orchestra():
     return _orchestra
 
 
+def _get_terminal_manager():
+    global _terminal_manager
+    if _terminal_manager is None:
+        from tools.builtin.terminal_manager import TerminalManager
+
+        _terminal_manager = TerminalManager()
+    return _terminal_manager
+
+
 def _get_workspace_roots() -> list[str]:
     """Load workspace roots from config or defaults."""
     config_path = Path.home() / ".memento" / "dashboard.json"
@@ -553,6 +572,108 @@ def _get_workspace_roots() -> list[str]:
             logger.debug("Failed to parse workspace config; using defaults", exc_info=True)
 
     return ["~/Repos", "~/scripts", "~/.config/superpowers/worktrees"]
+
+
+async def terminal_ws(websocket):
+    """WebSocket relay for terminal sessions."""
+    from terminal_relay import TerminalRelay
+
+    session_id = websocket.path_params["session_id"]
+    await websocket.accept()
+
+    relay = TerminalRelay(session_id)
+    try:
+        await relay.start()
+
+        async def pty_to_ws():
+            while True:
+                data = await relay.read()
+                if not data:
+                    break
+                await websocket.send_bytes(data)
+
+        async def ws_to_pty():
+            while True:
+                data = await websocket.receive_bytes()
+                is_resize, payload = relay._parse_input(data)
+                if is_resize:
+                    relay.resize(payload["cols"], payload["rows"])
+                else:
+                    relay.write(payload)
+
+        await asyncio.gather(pty_to_ws(), ws_to_pty())
+    except Exception:
+        pass
+    finally:
+        relay.stop()
+
+
+async def terminal_list(request):
+    """GET /api/terminal/list — list all terminal sessions."""
+    from starlette.responses import JSONResponse
+
+    del request
+    manager = _get_terminal_manager()
+    sessions = await manager.list_sessions()
+    return JSONResponse(sessions)
+
+
+async def terminal_create(request):
+    """POST /api/terminal/create — create a new terminal session."""
+    from starlette.responses import JSONResponse
+
+    body = await request.json()
+    manager = _get_terminal_manager()
+    result = await manager.create_session(
+        session_type=body.get("type", "agent-manual"),
+        agent_name=body.get("agent", "claude"),
+        workspace=body.get("workspace", ""),
+        task=body.get("task", ""),
+        mcp_url=body.get("mcp_url", ""),
+    )
+    return JSONResponse(result)
+
+
+async def terminal_kill(request):
+    """POST /api/terminal/{session_id}/kill — kill a terminal session."""
+    from starlette.responses import JSONResponse
+
+    session_id = request.path_params["session_id"]
+    manager = _get_terminal_manager()
+    killed = await manager.kill_session(session_id)
+    return JSONResponse({"session_id": session_id, "killed": killed})
+
+
+async def terminal_ensure_orchestrator(request):
+    """POST /api/terminal/orchestrator — ensure orchestrator session exists."""
+    from starlette.responses import JSONResponse
+
+    body = await request.json()
+    manager = _get_terminal_manager()
+
+    sessions = await manager.list_sessions()
+    orchestrator = next(
+        (
+            s
+            for s in sessions
+            if s["type"] == "orchestrator" and s["status"] == "running"
+        ),
+        None,
+    )
+    if orchestrator is not None:
+        return JSONResponse(orchestrator)
+
+    workspace = body.get("workspace", str(Path.home()))
+    mcp_url = body.get("mcp_url", "http://localhost:8002/mcp")
+
+    result = await manager.create_session(
+        session_type="orchestrator",
+        agent_name="claude",
+        workspace=workspace,
+        task="main orchestrator",
+        mcp_url=mcp_url,
+    )
+    return JSONResponse(result)
 
 
 @mcp.custom_route("/api/tracker/items", methods=["GET"])
@@ -688,19 +809,75 @@ async def _handle_workspaces(_request):
     return JSONResponse({"workspaces": workspaces})
 
 
+def _get_chat_store():
+    from tools.builtin.chat_store import ChatStore
+    if not hasattr(_get_chat_store, "_instance"):
+        _get_chat_store._instance = ChatStore()
+    return _get_chat_store._instance
+
+
+@mcp.custom_route("/api/orchestra/sessions", methods=["GET"])
+async def _handle_list_sessions(request):
+    """GET /api/orchestra/sessions - List chat sessions."""
+    from starlette.responses import JSONResponse
+    store = _get_chat_store()
+    return JSONResponse({"sessions": store.list_sessions()})
+
+
+@mcp.custom_route("/api/orchestra/sessions", methods=["POST"])
+async def _handle_create_session(request):
+    """POST /api/orchestra/sessions - Create a new chat session."""
+    from starlette.responses import JSONResponse
+    body = await request.json()
+    workspace = body.get("workspace", "")
+    title = body.get("title", "")
+    session = _get_chat_store().create_session(workspace=workspace, title=title)
+    return JSONResponse(session)
+
+
+@mcp.custom_route("/api/orchestra/sessions/{session_id}", methods=["DELETE"])
+async def _handle_delete_session(request):
+    """DELETE /api/orchestra/sessions/{session_id} - Delete a session."""
+    from starlette.responses import JSONResponse
+    session_id = request.path_params["session_id"]
+    deleted = _get_chat_store().delete_session(session_id)
+    return JSONResponse({"deleted": deleted})
+
+
+@mcp.custom_route("/api/orchestra/sessions/{session_id}/messages", methods=["GET"])
+async def _handle_get_messages(request):
+    """GET /api/orchestra/sessions/{session_id}/messages - Get session messages."""
+    from starlette.responses import JSONResponse
+    session_id = request.path_params["session_id"]
+    messages = _get_chat_store().get_messages(session_id)
+    return JSONResponse({"messages": messages})
+
+
 @mcp.custom_route("/api/orchestra/chat", methods=["POST"])
 async def _handle_orchestra_chat(request):
     """POST /api/orchestra/chat - Send message to orchestrator."""
+    import json as _json
     from starlette.responses import JSONResponse
     from tools.builtin.chat_orchestrator import ChatOrchestrator
 
     body = await request.json()
     message = body.get("message", "")
     workspace = body.get("workspace", "")
-    history = body.get("history", [])
+    session_id = body.get("session_id", "")
 
     if not message:
         return JSONResponse({"error": "message is required"}, status_code=400)
+
+    store = _get_chat_store()
+
+    # Auto-create session if none provided
+    if not session_id:
+        session = store.create_session(workspace=workspace)
+        session_id = session["id"]
+
+    # Load history from DB
+    db_messages = store.get_messages(session_id)
+    history = [{"role": m["role"], "content": m["content"]} for m in db_messages]
 
     try:
         orchestrator = ChatOrchestrator()
@@ -713,19 +890,13 @@ async def _handle_orchestra_chat(request):
         logger.exception("Chat orchestrator error")
         return JSONResponse({"error": "Orchestrator failed", "message": "", "dispatches": []}, status_code=500)
 
-    _chat_history.append({"role": "user", "content": message})
-    _chat_history.append({"role": "assistant", "content": result["message"]})
+    # Persist to SQLite
+    store.add_message(session_id, "user", message)
+    dispatches_json = _json.dumps(result.get("dispatches", []))
+    store.add_message(session_id, "assistant", result["message"], dispatches_json)
 
+    result["session_id"] = session_id
     return JSONResponse(result)
-
-
-@mcp.custom_route("/api/orchestra/chat/history", methods=["GET"])
-async def _handle_chat_history(request):
-    """GET /api/orchestra/chat/history - Retrieve chat message history."""
-    from starlette.responses import JSONResponse
-
-    limit = _read_int(request.query_params, "limit", 100)
-    return JSONResponse({"messages": _chat_history[-limit:]})
 
 
 @mcp.custom_route("/api/orchestra/runs/{run_id}/output", methods=["GET"])
@@ -798,6 +969,10 @@ async def api_memory_dashboard(_request):
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Anybody:wght@400;700;900&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.min.css"/>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@xterm/addon-web-links@0.11.0/lib/addon-web-links.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -1134,6 +1309,98 @@ dialog .dialog-actions button{
   padding:4px 10px;
 }
 
+/* --- TERMINAL --- */
+.center-panel{
+  display:flex;
+  flex-direction:column;
+  height:100%;
+  overflow:hidden;
+}
+.terminal-tab-bar{
+  display:flex;
+  align-items:center;
+  background:#1a1a2e;
+  border-bottom:1px solid #333;
+  padding:4px 8px;
+  gap:4px;
+  overflow-x:auto;
+}
+.terminal-tab-bar .tab-list{
+  display:flex;
+  gap:4px;
+  flex:1;
+  overflow-x:auto;
+}
+.terminal-tab{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:6px 12px;
+  background:#16213e;
+  border:1px solid #333;
+  border-radius:6px 6px 0 0;
+  color:#a0a0b0;
+  cursor:pointer;
+  font-size:12px;
+  white-space:nowrap;
+}
+.terminal-tab.active{
+  background:#0f3460;
+  color:#00d2ff;
+  border-color:#00d2ff;
+}
+.terminal-tab .tab-close{
+  opacity:0.5;
+  cursor:pointer;
+  font-size:10px;
+}
+.terminal-tab .tab-close:hover{
+  opacity:1;
+  color:#ff4444;
+}
+.terminal-tab .tab-status{
+  width:6px;
+  height:6px;
+  border-radius:50%;
+  background:#4caf50;
+}
+.terminal-tab .tab-status.dead{background:#666;}
+
+.tab-add-btn{
+  background:none;
+  border:1px dashed #555;
+  color:#888;
+  padding:4px 10px;
+  border-radius:4px;
+  cursor:pointer;
+  font-size:14px;
+}
+.tab-add-btn:hover{
+  color:#00d2ff;
+  border-color:#00d2ff;
+}
+
+.terminal-container{
+  flex:1;
+  position:relative;
+  background:#000;
+}
+.terminal-pane{
+  position:absolute;
+  inset:0;
+}
+.terminal-pane[hidden]{display:none;}
+
+.terminal-status-bar{
+  display:flex;
+  align-items:center;
+  padding:4px 12px;
+  background:#1a1a2e;
+  border-top:1px solid #333;
+  font-size:11px;
+  color:#666;
+}
+
 .memory-detail{
   white-space:pre-wrap;font-size:11px;line-height:1.6;color:var(--text);
   padding:10px;background:var(--surface-2);border-radius:4px;
@@ -1216,14 +1483,15 @@ dialog .dialog-actions button{
       </div>
     </div>
 
-    <!-- CENTER: Orchestra Chat -->
-    <div class="center" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
-      <div class="chat-messages" id="chat-messages" style="flex:1;overflow-y:auto;padding:12px;">
-        <div class="chat-msg system-message">Welcome to Orchestra. Type a message to start.</div>
+    <!-- CENTER: TERMINAL TABS -->
+    <div class="center-panel" id="center-panel" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+      <div id="terminal-tabs" class="terminal-tab-bar">
+        <div class="tab-list" id="tab-list"></div>
+        <button class="tab-add-btn" onclick="addManualAgent()" title="Add terminal session">+</button>
       </div>
-      <div style="border-top:1px solid var(--border);padding:8px 12px;display:flex;gap:8px;flex-shrink:0;">
-        <textarea id="chat-input" rows="1" placeholder="Ask the orchestrator..." style="flex:1;resize:none;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px;outline:none;"></textarea>
-        <button id="chat-send" style="background:var(--cyan);color:var(--bg);border:none;border-radius:4px;padding:8px 16px;cursor:pointer;font-family:var(--mono);font-weight:700;font-size:11px;letter-spacing:1px;">SEND</button>
+      <div id="terminal-container" class="terminal-container"></div>
+      <div id="terminal-status" class="terminal-status-bar">
+        <span id="status-text">No sessions</span>
       </div>
     </div>
 
@@ -1557,156 +1825,177 @@ async function loadWorkspaces() {
 
 document.getElementById('workspace-select').addEventListener('change', function() {
   localStorage.setItem('activeWorkspace', this.value);
-  appendSystemMessage('Workspace changed to: ' + this.value);
 });
 
-// --- CHAT ---
-const chatMessages = document.getElementById('chat-messages');
-const chatInput = document.getElementById('chat-input');
-const chatSend = document.getElementById('chat-send');
-let chatHistory = JSON.parse(localStorage.getItem('chatHistory') || '[]');
+// --- TERMINAL UI ---
+const terminals = {};
+let activeSession = null;
+const terminalDecoder = new TextDecoder();
+const terminalEncoder = new TextEncoder();
 
-function appendMessage(role, content) {
-  const div = document.createElement('div');
-  div.className = 'chat-msg ' + role;
-  div.textContent = content;
-  chatMessages.appendChild(div);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
+function createTerminalPane(sessionId) {
+  const container = document.getElementById('terminal-container');
+  const pane = document.createElement('div');
+  pane.className = 'terminal-pane';
+  pane.id = `pane-${sessionId}`;
+  pane.dataset.session = sessionId;
+  pane.hidden = true;
+  container.appendChild(pane);
 
-function appendSystemMessage(text) {
-  const div = document.createElement('div');
-  div.className = 'chat-msg system-message';
-  div.textContent = text;
-  chatMessages.appendChild(div);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-}
+  const term = new Terminal({
+    cursorBlink: true,
+    fontSize: 13,
+    fontFamily: '"JetBrains Mono", "Fira Code", monospace',
+    theme: {background: '#0a0a1a', foreground: '#e0e0e0', cursor: '#00d2ff'},
+  });
 
-function appendRunCard(dispatch) {
-  const card = document.createElement('div');
-  card.className = 'agent-run-card';
-  card.id = 'run-' + dispatch.run_id;
-  card.innerHTML =
-    '<div class="run-header" onclick="toggleRunCard(this.parentElement)">' +
-      '<span style="color:var(--cyan);font-weight:700;">' + escHtml(dispatch.agent) + '</span> ' +
-      '<span class="run-status ' + dispatch.status + '">' + escHtml(dispatch.status) + '</span> ' +
-      '<span style="color:var(--text-dim);font-size:11px;">' + escHtml(dispatch.run_id) + '</span>' +
-    '</div>' +
-    '<div style="font-size:11px;color:var(--text-dim);margin-top:4px;">' + escHtml(dispatch.task || '') + '</div>' +
-    '<div class="run-output">Loading...</div>' +
-    '<div class="run-actions">' +
-      '<button onclick="reviewRun(\'' + escHtml(dispatch.run_id) + '\',\'approve\')">APPROVE</button>' +
-      '<button onclick="reviewRun(\'' + escHtml(dispatch.run_id) + '\',\'reject\')">REJECT</button>' +
-    '</div>';
-  chatMessages.appendChild(card);
-  chatMessages.scrollTop = chatMessages.scrollHeight;
-  pollRunStatus(dispatch.run_id);
-}
+  const fitAddon = new FitAddon.FitAddon();
+  const webLinksAddon = new WebLinksAddon.WebLinksAddon();
+  term.loadAddon(fitAddon);
+  term.loadAddon(webLinksAddon);
+  term.open(pane);
 
-function toggleRunCard(card) {
-  card.classList.toggle('expanded');
-  if (card.classList.contains('expanded')) {
-    loadRunOutput(card.id.replace('run-', ''));
-  }
-}
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const ws = new WebSocket(`${proto}//${location.host}/api/terminal/${sessionId}/ws`);
+  ws.binaryType = 'arraybuffer';
+  ws.onmessage = (event) => {
+    const data = event.data instanceof ArrayBuffer
+      ? new Uint8Array(event.data)
+      : new TextEncoder().encode(event.data);
+    term.write(terminalDecoder.decode(data));
+  };
+  ws.onclose = () => {
+    term.write('\r\n\x1b[33m[session disconnected]\x1b[0m\r\n');
+  };
 
-async function loadRunOutput(runId) {
-  try {
-    const res = await fetch('/api/orchestra/runs/' + runId + '/output');
-    const data = await res.json();
-    const card = document.getElementById('run-' + runId);
-    if (card) {
-      card.querySelector('.run-output').textContent = data.output || 'No output yet.';
+  term.onData((data) => {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send(terminalEncoder.encode(data));
     }
-  } catch (e) {
-    console.error('Failed to load run output:', e);
+  });
+
+  term.onResize(({cols, rows}) => {
+    if (ws.readyState !== WebSocket.OPEN) return;
+    const payload = JSON.stringify({cols, rows});
+    const payloadBytes = terminalEncoder.encode(payload);
+    const bytes = new Uint8Array(payloadBytes.length + 1);
+    bytes[0] = 1;
+    bytes.set(payloadBytes, 1);
+    ws.send(bytes);
+  });
+
+  terminals[sessionId] = {term, ws, fitAddon, pane};
+  return terminals[sessionId];
+}
+
+function removeTerminal(sessionId) {
+  const entry = terminals[sessionId];
+  if (!entry) return;
+
+  entry.ws.close();
+  entry.term.dispose();
+  entry.pane.remove();
+  delete terminals[sessionId];
+  if (activeSession === sessionId) activeSession = null;
+}
+
+function switchTab(sessionId) {
+  if (activeSession && terminals[activeSession]) {
+    terminals[activeSession].pane.hidden = true;
+    document
+      .querySelector(`.terminal-tab[data-session="${activeSession}"]`)
+      ?.classList.remove('active');
+  }
+
+  activeSession = sessionId;
+  if (terminals[sessionId]) {
+    terminals[sessionId].pane.hidden = false;
+    terminals[sessionId].fitAddon.fit();
+    terminals[sessionId].term.focus();
+    document
+      .querySelector(`.terminal-tab[data-session="${sessionId}"]`)
+      ?.classList.add('active');
   }
 }
 
-async function pollRunStatus(runId) {
-  const poll = setInterval(async () => {
-    try {
-      const res = await fetch('/api/orchestra/runs/' + runId + '/output');
-      const data = await res.json();
-      const card = document.getElementById('run-' + runId);
-      if (!card) { clearInterval(poll); return; }
-      const badge = card.querySelector('.run-status');
-      badge.className = 'run-status ' + data.status;
-      badge.textContent = data.status;
-      if (data.status === 'review') card.classList.add('review');
-      if (['completed', 'failed'].includes(data.status)) {
-        clearInterval(poll);
-        card.querySelector('.run-output').textContent = data.output || data.error || 'Done.';
-      }
-    } catch (e) { clearInterval(poll); }
-  }, 3000);
-}
+function renderTabBar(sessions) {
+  const tabList = document.getElementById('tab-list');
+  tabList.innerHTML = '';
 
-async function reviewRun(runId, action) {
-  try {
-    await fetch('/api/orchestra/runs/' + runId + '/review', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({action: action}),
-    });
-    appendSystemMessage(runId + ' ' + action + 'd.');
-  } catch (e) {
-    appendSystemMessage('Failed to ' + action + ' ' + runId);
-  }
-}
+  for (const session of sessions) {
+    const label = session.type === 'orchestrator'
+      ? 'Orchestrator'
+      : `${session.agent_name || 'agent'}${session.task ? ': ' + session.task.slice(0, 30) : ''}`;
 
-async function sendChat() {
-  const msg = chatInput.value.trim();
-  if (!msg) return;
+    const tab = document.createElement('div');
+    tab.className = `terminal-tab${session.session_id === activeSession ? ' active' : ''}`;
+    tab.dataset.session = session.session_id;
+    tab.onclick = () => switchTab(session.session_id);
+    tab.innerHTML = `
+      <span class="tab-status ${session.status === 'dead' ? 'dead' : ''}"></span>
+      <span>${escHtml(label)}</span>
+      <span class="tab-close" onclick="event.stopPropagation(); killSession('${escHtml(session.session_id)}')">&times;</span>
+    `;
+    tabList.appendChild(tab);
 
-  const workspace = document.getElementById('workspace-select').value;
-  chatInput.value = '';
-  chatInput.style.height = 'auto';
-  appendMessage('user', msg);
-
-  chatHistory.push({role: 'user', content: msg});
-
-  try {
-    const res = await fetch('/api/orchestra/chat', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        message: msg,
-        workspace: workspace,
-        history: chatHistory.slice(-20),
-      }),
-    });
-    const data = await res.json();
-
-    if (data.error) {
-      appendSystemMessage('Error: ' + data.error);
-      return;
+    if (!terminals[session.session_id]) {
+      createTerminalPane(session.session_id);
     }
+  }
 
-    appendMessage('assistant', data.message);
-    chatHistory.push({role: 'assistant', content: data.message});
+  if (!activeSession && sessions.length > 0) {
+    switchTab(sessions[0].session_id);
+  }
 
-    if (data.dispatches && data.dispatches.length > 0) {
-      data.dispatches.forEach(d => appendRunCard(d));
-    }
+  const running = sessions.filter((s) => s.status === 'running').length;
+  const statusText = document.getElementById('status-text');
+  statusText.textContent = sessions.length
+    ? `${sessions.length} session${sessions.length !== 1 ? 's' : ''} | ${running} running`
+    : 'No sessions';
+}
 
-    localStorage.setItem('chatHistory', JSON.stringify(chatHistory.slice(-100)));
+async function pollSessions() {
+  try {
+    const resp = await fetch('/api/terminal/list');
+    const sessions = await resp.json();
+    renderTabBar(sessions);
   } catch (e) {
-    appendSystemMessage('Failed to reach orchestrator: ' + e.message);
+    console.error('Failed to load terminal sessions:', e);
   }
 }
 
-chatSend.addEventListener('click', sendChat);
-chatInput.addEventListener('keydown', function(e) {
-  if (e.key === 'Enter' && !e.shiftKey) {
-    e.preventDefault();
-    sendChat();
-  }
-});
+async function addManualAgent() {
+  const agent = prompt('Agent type (claude, codex, gemini):', 'claude');
+  if (!agent) return;
 
-chatInput.addEventListener('input', function() {
-  this.style.height = 'auto';
-  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+  const workspace = document.getElementById('workspace-select').value || '/tmp';
+  await fetch('/api/terminal/create', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({type: 'agent-manual', agent, workspace}),
+  });
+  await pollSessions();
+}
+
+async function killSession(sessionId) {
+  await fetch(`/api/terminal/${sessionId}/kill`, {method: 'POST'});
+  removeTerminal(sessionId);
+  await pollSessions();
+}
+
+async function initOrchestrator() {
+  const workspace = document.getElementById('workspace-select')?.value || '/tmp';
+  await fetch('/api/terminal/orchestrator', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({workspace}),
+  });
+}
+
+window.addEventListener('resize', () => {
+  if (activeSession && terminals[activeSession]) {
+    terminals[activeSession].fitAddon.fit();
+  }
 });
 
 // --- CONFIG PANEL ---
@@ -1929,11 +2218,20 @@ function render(){
 function loop(){stepPhysics();render();requestAnimationFrame(loop)}
 
 // --- INIT ---
-loadTracker();
-loadBriefing("session");
-loadWorkspaces();
-loadConfig();
+(async () => {
+  loadTracker();
+  loadBriefing("session");
+  await loadWorkspaces();
+  try {
+    await initOrchestrator();
+  } catch (err) {
+    console.error('Failed to initialize orchestrator', err);
+  }
+  await pollSessions();
+  loadConfig();
+})();
 setInterval(loadTracker,30000);
+setInterval(pollSessions, 5000);
 </script>
 </body>
 </html>
@@ -1997,7 +2295,7 @@ def main() -> None:
 
         import uvicorn
         from starlette.applications import Starlette
-        from starlette.routing import Route
+        from starlette.routing import Route, WebSocketRoute
 
         original_app = mcp.streamable_http_app()
         mcp_endpoint = original_app.routes[0].endpoint  # StreamableHTTPASGIApp
@@ -2014,7 +2312,14 @@ def main() -> None:
                 yield
 
         # Mount MCP at root, plus all custom routes
-        routes = [Route("/", endpoint=mcp_endpoint)] + custom_routes
+        terminal_routes = [
+            Route("/api/terminal/list", terminal_list, methods=["GET"]),
+            Route("/api/terminal/create", terminal_create, methods=["POST"]),
+            Route("/api/terminal/{session_id}/kill", terminal_kill, methods=["POST"]),
+            Route("/api/terminal/orchestrator", terminal_ensure_orchestrator, methods=["POST"]),
+            WebSocketRoute("/api/terminal/{session_id}/ws", terminal_ws),
+        ]
+        routes = [Route("/", endpoint=mcp_endpoint)] + custom_routes + terminal_routes
         app = Starlette(routes=routes, lifespan=lifespan)
 
         uvicorn.run(app, host=host, port=port, log_level="info")
