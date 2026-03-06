@@ -511,6 +511,7 @@ async def api_proactive_context_summary(request):
 # Shared instances for REST handlers
 _tracker = None
 _briefing = None
+_orchestra = None
 
 
 def _get_tracker():
@@ -527,6 +528,30 @@ def _get_briefing():
         from tools.builtin.briefing import BriefingTools
         _briefing = BriefingTools()
     return _briefing
+
+
+def _get_orchestra():
+    global _orchestra
+    if _orchestra is None:
+        from tools.builtin.orchestra import AgentOrchestraTools
+        _orchestra = AgentOrchestraTools()
+    return _orchestra
+
+
+def _get_workspace_roots() -> list[str]:
+    """Load workspace roots from config or defaults."""
+    config_path = Path.home() / ".memento" / "dashboard.json"
+    if config_path.exists():
+        import json
+
+        try:
+            with open(config_path) as f:
+                config = json.load(f)
+            return config.get("workspace_roots", [])
+        except Exception:
+            logger.debug("Failed to parse workspace config; using defaults", exc_info=True)
+
+    return ["~/Repos", "~/scripts", "~/.config/superpowers/worktrees"]
 
 
 @mcp.custom_route("/api/tracker/items", methods=["GET"])
@@ -603,6 +628,63 @@ async def _handle_daily_briefing(request):
     project = request.query_params.get("project")
     result = await briefing._daily_briefing(project=project)
     return JSONResponse({"result": result})
+
+
+@mcp.custom_route("/api/orchestra/dispatch", methods=["POST"])
+async def _handle_orchestra_dispatch(request):
+    """POST /api/orchestra/dispatch - Dispatch a task to an AI agent."""
+    from starlette.responses import JSONResponse
+
+    orchestra = _get_orchestra()
+    body = await request.json()
+    result = await orchestra._dispatch_task(
+        task=body["task"],
+        agent=body.get("agent"),
+        working_dir=body.get("working_dir", ""),
+        context=body.get("context", ""),
+    )
+    return JSONResponse({"result": result})
+
+
+@mcp.custom_route("/api/orchestra/status", methods=["GET"])
+async def _handle_orchestra_status(request):
+    """GET /api/orchestra/status - Show all agent runs."""
+    from starlette.responses import JSONResponse
+
+    orchestra = _get_orchestra()
+    status_filter = request.query_params.get("status")
+    result = await orchestra._agent_status(status=status_filter)
+    return JSONResponse({"result": result})
+
+
+@mcp.custom_route("/api/orchestra/runs/{run_id}/review", methods=["POST"])
+async def _handle_orchestra_review(request):
+    """POST /api/orchestra/runs/{run_id}/review - Review an agent run."""
+    from starlette.responses import JSONResponse
+
+    orchestra = _get_orchestra()
+    run_id = request.path_params["run_id"]
+
+    body = {}
+    if request.headers.get("content-length", "0") != "0":
+        body = await request.json()
+    result = await orchestra._review_result(
+        run_id=run_id,
+        action=body.get("action"),
+        feedback=body.get("feedback", ""),
+    )
+    return JSONResponse({"result": result})
+
+
+@mcp.custom_route("/api/workspaces", methods=["GET"])
+async def _handle_workspaces(_request):
+    """GET /api/workspaces - List available workspaces (git repos)."""
+    from starlette.responses import JSONResponse
+    from tools.builtin.workspaces import WorkspaceScanner
+
+    scanner = WorkspaceScanner(roots=_get_workspace_roots())
+    workspaces = scanner.scan()
+    return JSONResponse({"workspaces": workspaces})
 
 
 @mcp.custom_route("/dashboard", methods=["GET"])
@@ -853,6 +935,89 @@ body::before{
 .briefing-item .type-tag.requirement{background:rgba(255,77,77,0.15);color:var(--red)}
 .briefing-item .type-tag.fact{background:rgba(77,159,255,0.15);color:var(--blue)}
 
+.orchestra-output{
+  white-space:pre-wrap;
+  font-size:11px;
+  line-height:1.4;
+  color:var(--text-dim);
+  padding:8px;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  border-radius:3px;
+  min-height:120px;
+  max-height:180px;
+  overflow:auto;
+}
+
+.orchestra-controls{
+  display:flex;
+  gap:6px;
+  margin-bottom:8px;
+}
+
+.orchestra-controls button{
+  font-size:9px;
+  padding:2px 8px;
+  background:var(--surface-2);
+  border:1px solid var(--border);
+  color:var(--text-dim);
+  border-radius:3px;
+  cursor:pointer;
+  font-family:var(--mono);
+  letter-spacing:1px;
+}
+
+dialog{
+  border:1px solid var(--border-hi);
+  background:var(--surface);
+  color:var(--text);
+  padding:14px;
+  border-radius:6px;
+  max-width:420px;
+}
+
+dialog form{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  min-width:320px;
+}
+
+dialog label{
+  display:flex;
+  flex-direction:column;
+  font-size:10px;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  color:var(--text-dim);
+}
+
+dialog textarea,
+dialog input,
+dialog select{
+  margin-top:4px;
+  border:1px solid var(--border);
+  background:var(--surface-2);
+  color:var(--text);
+  border-radius:3px;
+  padding:6px;
+}
+
+dialog textarea{
+  min-height:72px;
+  resize:vertical;
+}
+
+dialog .dialog-actions{
+  display:flex;
+  justify-content:flex-end;
+  gap:8px;
+}
+
+dialog .dialog-actions button{
+  padding:4px 10px;
+}
+
 .memory-detail{
   white-space:pre-wrap;font-size:11px;line-height:1.6;color:var(--text);
   padding:10px;background:var(--surface-2);border-radius:4px;
@@ -998,10 +1163,44 @@ body::before{
           <div class="briefing-section-title">Memory Detail</div>
           <div class="memory-detail" id="info">Click a node in the graph to inspect memory details.</div>
         </div>
+        <div class="briefing-section">
+          <div class="briefing-section-title">Agent Orchestra</div>
+          <div class="orchestra-controls">
+            <button id="orchestra-refresh">REFRESH</button>
+            <button id="orchestra-dispatch">+ DISPATCH</button>
+          </div>
+          <pre class="orchestra-output" id="agent-runs-list">Loading agent runs...</pre>
+        </div>
       </div>
     </div>
   </div>
 </div>
+
+<dialog id="dispatch-dialog">
+  <form onsubmit="dispatchTask(event)">
+    <label>
+      Task
+      <textarea name="task" required></textarea>
+    </label>
+    <label>
+      Agent
+      <select name="agent">
+        <option value="">Auto-select</option>
+        <option value="claude">Claude (architecture)</option>
+        <option value="gemini">Gemini (prototyping)</option>
+        <option value="codex">Codex (implementation)</option>
+      </select>
+    </label>
+    <label>
+      Working Dir
+      <input name="working_dir" type="text" />
+    </label>
+    <div class="dialog-actions">
+      <button type="button" onclick="this.closest('dialog').close()">CANCEL</button>
+      <button type="submit">DISPATCH</button>
+    </div>
+  </form>
+</dialog>
 
 <script>
 // --- CLOCK ---
@@ -1227,6 +1426,40 @@ function renderBriefing(raw,mode){
   else{mrsEl.style.display="none"}
 }
 
+async function refreshAgentStatus(){
+  try{
+    const resp=await fetch("/api/orchestra/status");
+    const data=await resp.json();
+    document.getElementById("agent-runs-list").textContent=data.result||"No runs.";
+  }catch(e){
+    document.getElementById("agent-runs-list").textContent="Failed to load agent runs.";
+  }
+}
+
+function showDispatchForm(){
+  document.getElementById("dispatch-dialog").showModal();
+}
+
+async function dispatchTask(event){
+  event.preventDefault();
+  const form=event.target;
+  const payload={
+    task: form.task.value,
+    agent: form.agent.value || undefined,
+    working_dir: form.working_dir.value || undefined,
+  };
+
+  await fetch("/api/orchestra/dispatch",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(payload),
+  });
+
+  form.closest("dialog").close();
+  refreshAgentStatus();
+  loadTracker();
+}
+
 function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 
 let briefingMode="session";
@@ -1236,6 +1469,8 @@ document.getElementById("briefing-refresh").addEventListener("click",()=>{
   btn.textContent=briefingMode==="session"?"DAILY":"SESSION";
   loadBriefing(briefingMode);
 });
+document.getElementById("orchestra-refresh").addEventListener("click",refreshAgentStatus);
+document.getElementById("orchestra-dispatch").addEventListener("click",showDispatchForm);
 
 // --- GRAPH ---
 function buildQuery(){
@@ -1397,6 +1632,8 @@ resizeCanvas();
 loadTracker();
 loadBriefing("session");
 setInterval(loadTracker,30000);
+setInterval(refreshAgentStatus,10000);
+refreshAgentStatus();
 loadGraph();
 loop();
 </script>
