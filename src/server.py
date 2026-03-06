@@ -512,6 +512,7 @@ async def api_proactive_context_summary(request):
 _tracker = None
 _briefing = None
 _orchestra = None
+_chat_history: list[dict] = []
 
 
 def _get_tracker():
@@ -685,6 +686,98 @@ async def _handle_workspaces(_request):
     scanner = WorkspaceScanner(roots=_get_workspace_roots())
     workspaces = scanner.scan()
     return JSONResponse({"workspaces": workspaces})
+
+
+@mcp.custom_route("/api/orchestra/chat", methods=["POST"])
+async def _handle_orchestra_chat(request):
+    """POST /api/orchestra/chat - Send message to orchestrator."""
+    from starlette.responses import JSONResponse
+    from tools.builtin.chat_orchestrator import ChatOrchestrator
+
+    body = await request.json()
+    message = body.get("message", "")
+    workspace = body.get("workspace", "")
+    history = body.get("history", [])
+
+    if not message:
+        return JSONResponse({"error": "message is required"}, status_code=400)
+
+    orchestrator = ChatOrchestrator()
+    result = await orchestrator.handle_chat(
+        message=message,
+        workspace=workspace,
+        history=history,
+    )
+
+    _chat_history.append({"role": "user", "content": message})
+    _chat_history.append({"role": "assistant", "content": result["message"]})
+
+    return JSONResponse(result)
+
+
+@mcp.custom_route("/api/orchestra/chat/history", methods=["GET"])
+async def _handle_chat_history(request):
+    """GET /api/orchestra/chat/history - Retrieve chat message history."""
+    from starlette.responses import JSONResponse
+
+    limit = _read_int(request.query_params, "limit", 100)
+    return JSONResponse({"messages": _chat_history[-limit:]})
+
+
+@mcp.custom_route("/api/orchestra/runs/{run_id}/output", methods=["GET"])
+async def _handle_run_output(request):
+    """GET /api/orchestra/runs/{run_id}/output - Get run output."""
+    from starlette.responses import JSONResponse
+
+    orchestra = _get_orchestra()
+    run_id = request.path_params["run_id"]
+
+    if run_id not in orchestra._runs:
+        return JSONResponse({"error": f"Unknown run: {run_id}"}, status_code=404)
+
+    run = orchestra._runs[run_id]
+    return JSONResponse(
+        {
+            "run_id": run.run_id,
+            "agent": run.agent,
+            "task": run.task,
+            "status": run.status.value,
+            "output": run.output,
+            "error": run.error,
+        }
+    )
+
+
+@mcp.custom_route("/api/config", methods=["GET"])
+async def _handle_get_config(request):
+    """GET /api/config - Return current agent and MCP configs."""
+    from starlette.responses import JSONResponse
+    from tools.builtin.agent_config import AgentConfigManager
+
+    del request
+    manager = AgentConfigManager()
+    return JSONResponse(
+        {
+            "agents": manager.get_all_configs(),
+            "workspace_roots": _get_workspace_roots(),
+        }
+    )
+
+
+@mcp.custom_route("/api/config", methods=["PUT"])
+async def _handle_put_config(request):
+    """PUT /api/config - Update agent configs."""
+    from starlette.responses import JSONResponse
+    from tools.builtin.agent_config import AgentConfigManager
+
+    body = await request.json()
+    manager = AgentConfigManager()
+
+    if "agents" in body:
+        for agent_name, config in body["agents"].items():
+            manager.save_config(agent_name, config)
+
+    return JSONResponse({"status": "updated"})
 
 
 @mcp.custom_route("/dashboard", methods=["GET"])

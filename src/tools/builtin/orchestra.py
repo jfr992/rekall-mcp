@@ -224,6 +224,7 @@ class AgentOrchestraTools(BaseToolProvider):
         goal: str,
         subtasks: list[dict],
         working_dir: str = "",
+        auto_execute: bool = True,
     ) -> str:
         """Decompose a goal into subtasks and dispatch to agents."""
         results = []
@@ -231,6 +232,7 @@ class AgentOrchestraTools(BaseToolProvider):
             result = await self._dispatch_task(
                 task=sub["task"],
                 agent=sub.get("agent"),
+                auto_execute=auto_execute,
                 working_dir=sub.get("working_dir", working_dir),
                 context=f"Part of goal: {goal}",
             )
@@ -268,12 +270,14 @@ class AgentOrchestraTools(BaseToolProvider):
                 f"Re-dispatch with `dispatch_task` or `orchestrate` to retry."
             )
 
+        error_block = f"### Error\n```\n{run.error[:500]}\n```" if run.error else ""
+
         return (
             f"## Review: {run_id} ({run.agent})\n"
             f"**Status:** {run.status.value}\n"
             f"**Task:** {run.task}\n\n"
             f"### Output\n```\n{run.output[:2000]}\n```\n\n"
-            f"{'### Error\n```\n' + run.error[:500] + '\n```' if run.error else ''}\n\n"
+            f"{error_block}\n\n"
             f"Actions: `approve` | `reject` (with feedback)"
         )
 
