@@ -649,19 +649,43 @@ body{
   background-image:
     repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,212,170,0.008) 2px,rgba(0,212,170,0.008) 3px);
 }
+/* --- GRAIN OVERLAY --- */
+body::before{
+  content:'';position:fixed;top:0;left:0;width:100%;height:100%;
+  pointer-events:none;z-index:9999;opacity:0.03;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* --- PANEL REVEAL --- */
+@keyframes panelReveal{
+  from{opacity:0;transform:translateY(8px)}
+  to{opacity:1;transform:translateY(0)}
+}
+@keyframes shimmer{
+  0%{background-position:-200% 0}
+  100%{background-position:200% 0}
+}
+.panel,.center{animation:panelReveal 0.4s ease-out both}
+.panel:nth-child(1){animation-delay:0.05s}
+.center{animation-delay:0.15s}
+.panel:nth-child(3){animation-delay:0.25s}
 
 /* --- LAYOUT --- */
 .hud{display:grid;height:100vh;grid-template-rows:42px 1fr;grid-template-columns:1fr;overflow:hidden}
 .topbar{
   display:flex;align-items:center;justify-content:space-between;
   padding:0 16px;border-bottom:1px solid var(--border);
-  background:var(--surface);
+  background:var(--surface);position:relative;
 }
 .topbar-left{display:flex;align-items:center;gap:16px}
 .logo{font-family:var(--display);font-weight:900;font-size:15px;letter-spacing:3px;color:var(--cyan);text-transform:uppercase}
 .logo span{color:var(--text-dim);font-weight:400;letter-spacing:1px;font-size:11px;margin-left:8px}
 .clock{font-size:11px;color:var(--text-dim);letter-spacing:1px}
 .topbar-right{display:flex;align-items:center;gap:12px}
+.topbar::after{
+  content:'';position:absolute;bottom:0;left:0;width:100%;height:1px;
+  background:linear-gradient(90deg,transparent 0%,var(--cyan) 30%,var(--cyan) 70%,transparent 100%);
+  opacity:0.4;
+}
 .status-dot{width:6px;height:6px;border-radius:50%;background:var(--cyan);box-shadow:0 0 8px var(--cyan);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.4}}
 .status-label{font-size:10px;color:var(--text-dim);text-transform:uppercase;letter-spacing:1.5px}
@@ -722,6 +746,31 @@ body{
 .tracker-item-meta .tag.due{color:var(--amber);border-color:rgba(240,160,48,0.3)}
 .tracker-item-meta .tag.overdue{color:var(--red);border-color:rgba(255,77,77,0.3)}
 .tracker-empty{color:var(--text-dim);font-style:italic;padding:20px 0;text-align:center;font-size:11px}
+.tracker-item-actions{
+  display:none;gap:4px;margin-top:5px;
+}
+.tracker-item:hover .tracker-item-actions{display:flex}
+.tracker-action{
+  padding:2px 8px;font-size:9px;font-family:var(--mono);
+  border:1px solid var(--border);border-radius:2px;
+  background:var(--surface);color:var(--text-dim);
+  cursor:pointer;text-transform:uppercase;letter-spacing:0.5px;
+  transition:all 0.15s;
+}
+.tracker-action:hover{border-color:var(--cyan);color:var(--cyan)}
+.tracker-action.complete:hover{border-color:var(--green);color:var(--green)}
+.tracker-action.defer:hover{border-color:var(--amber);color:var(--amber)}
+/* skeleton loader */
+.skeleton{
+  background:linear-gradient(90deg,var(--surface-2) 25%,var(--border) 50%,var(--surface-2) 75%);
+  background-size:200% 100%;animation:shimmer 1.5s infinite;
+  border-radius:3px;height:42px;margin-bottom:4px;
+}
+/* glow on selected node info */
+.memory-detail.has-selection{
+  border-color:rgba(0,212,170,0.3);
+  box-shadow:0 0 20px rgba(0,212,170,0.05),inset 0 0 20px rgba(0,212,170,0.02);
+}
 
 /* --- TRACK FORM --- */
 .track-form{
@@ -990,12 +1039,14 @@ function resizeCanvas(){
 
 // --- TRACKER ---
 async function loadTracker(){
+  const body=document.getElementById("tracker-body");
+  body.innerHTML='<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
   try{
     const resp=await fetch("/api/tracker/items");
     const data=await resp.json();
     renderTracker(data.result);
   }catch(e){
-    document.getElementById("tracker-body").innerHTML='<div class="tracker-empty">Failed to load tracker</div>';
+    body.innerHTML='<div class="tracker-empty">Failed to load tracker</div>';
   }
 }
 
@@ -1046,14 +1097,37 @@ function renderTracker(raw){
 
 function renderTrackerItem(item,isOverdue){
   let meta='';
-  if(item.ticket)meta+=`<span class="tag ticket">${item.ticket}</span>`;
-  if(item.due)meta+=`<span class="tag ${isOverdue?'overdue':'due'}">${item.due}</span>`;
+  if(item.ticket)meta+=`<span class="tag ticket">${escHtml(item.ticket)}</span>`;
+  if(item.due)meta+=`<span class="tag ${isOverdue?'overdue':'due'}">${escHtml(item.due)}</span>`;
   return`<div class="tracker-item ${isOverdue?'overdue':''} ${item.priority==='high'?'high':''}">
-    <div class="tracker-item-id">${item.id}</div>
-    <div class="tracker-item-title">${item.title}</div>
+    <div class="tracker-item-id">${escHtml(item.id)}</div>
+    <div class="tracker-item-title">${escHtml(item.title)}</div>
     <div class="tracker-item-meta">${meta}</div>
-    ${item.context?`<div style="font-size:10px;color:var(--text-dim);margin-top:3px">${item.context}</div>`:''}
+    ${item.context?`<div style="font-size:10px;color:var(--text-dim);margin-top:3px">${escHtml(item.context)}</div>`:''}
+    <div class="tracker-item-actions">
+      <button class="tracker-action complete" onclick="completeItem('${escHtml(item.id)}')">Done</button>
+      <button class="tracker-action defer" onclick="deferItem('${escHtml(item.id)}')">Defer</button>
+    </div>
   </div>`;
+}
+
+async function completeItem(id){
+  try{
+    await fetch("/api/tracker/items/"+encodeURIComponent(id)+"/complete",{method:"POST"});
+    loadTracker();
+  }catch(e){console.error("Complete failed",e)}
+}
+
+async function deferItem(id){
+  const newDate=prompt("Defer to date (YYYY-MM-DD):");
+  if(!newDate||!/^\d{4}-\d{2}-\d{2}$/.test(newDate))return;
+  try{
+    await fetch("/api/tracker/items/"+encodeURIComponent(id)+"/defer",{
+      method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({new_date:newDate})
+    });
+    loadTracker();
+  }catch(e){console.error("Defer failed",e)}
 }
 
 // --- TRACK NEW ITEM ---
@@ -1080,6 +1154,7 @@ document.getElementById("track-submit").addEventListener("click",async()=>{
 // --- BRIEFING ---
 async function loadBriefing(mode){
   const endpoint=mode==="daily"?"/api/briefing/daily":"/api/briefing/session";
+  document.getElementById("briefing-findings").innerHTML='<div class="briefing-section-title">Recent Findings</div><div class="skeleton"></div><div class="skeleton" style="height:28px"></div>';
   try{
     const resp=await fetch(endpoint);
     const data=await resp.json();
@@ -1203,9 +1278,11 @@ function loadGraph(){
 function renderInfo(){
   const el=document.getElementById("info");
   if(state.selected){
+    el.classList.add("has-selection");
     el.innerHTML=
-      `<span class="mem-type">${state.selected.type}</span> <span class="mem-date">${state.selected.date||''}</span>\n\n${escHtml(state.selected.content||'')}`;
+      `<span class="mem-type">${escHtml(state.selected.type)}</span> <span class="mem-date">${escHtml(state.selected.date||'')}</span>\n\n${escHtml(state.selected.content||'')}`;
   }else{
+    el.classList.remove("has-selection");
     el.textContent="Click a node in the graph to inspect memory details.";
   }
 }
@@ -1267,8 +1344,18 @@ function render(){
     const sel=state.selected&&state.selected.id===node.id;
     const r=Math.max(3,2.5+Math.min(5,Math.sqrt((node.degree||0)+1)));
     const color=colorByType[node.type]||"#94a3b8";
+
+    // Outer glow for selected
+    if(sel){
+      const glow=ctx.createRadialGradient(node.x,node.y,r,node.x,node.y,r*4);
+      glow.addColorStop(0,color.replace(')',',0.3)').replace('rgb','rgba'));
+      glow.addColorStop(1,"transparent");
+      ctx.beginPath();ctx.fillStyle=glow;
+      ctx.arc(node.x,node.y,r*4,0,Math.PI*2);ctx.fill();
+    }
+
     ctx.beginPath();ctx.fillStyle=color;
-    ctx.globalAlpha=sel?1:0.75;
+    ctx.globalAlpha=sel?1:0.7;
     ctx.arc(node.x,node.y,r,0,Math.PI*2);ctx.fill();
     if(sel){
       ctx.strokeStyle="#00d4aa";ctx.lineWidth=2;ctx.stroke();
