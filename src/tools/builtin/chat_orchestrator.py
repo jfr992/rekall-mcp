@@ -47,10 +47,12 @@ class ChatOrchestrator:
         last_msg = messages[-1]["content"] if messages else ""
 
         # claude -p sends stdin as the prompt; use sonnet for fast orchestration
+        # --strict-mcp-config with no --mcp-config disables all MCP servers
         cmd = [
             "claude", "-p",
             "--output-format", "text",
             "--model", "sonnet",
+            "--strict-mcp-config",
         ]
 
         # Combine system + conversation context into the prompt
@@ -104,12 +106,58 @@ class ChatOrchestrator:
             if len(parts) >= 2:
                 run_id = parts[1]
 
+        # Give the background task a moment to spawn the process and capture PID
+        await asyncio.sleep(1)
+
+        # Pull PID and CLI command from the run object
+        pid = 0
+        cli_command = ""
+        if run_id and run_id in orchestra._runs:
+            run = orchestra._runs[run_id]
+            pid = run.pid
+            cli_command = run.cli_command
+
         return {
             "run_id": run_id,
             "agent": intent["agent"],
             "task": intent["task"],
             "status": "pending",
+            "pid": pid,
+            "cli_command": cli_command,
         }
+
+    async def _fetch_recent_memories(self, query: str) -> str:
+        """Fetch recent memories from the memento REST API."""
+        import json as _json
+        import urllib.request
+
+        def _fetch():
+            payload = _json.dumps({
+                "query": query,
+                "limit": 5,
+            }).encode()
+            req = urllib.request.Request(
+                "http://localhost:8002/api/memory/recall",
+                data=payload,
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = _json.loads(resp.read())
+                memories = data.get("memories", [])
+                if not memories:
+                    return ""
+                parts = []
+                for m in memories[:5]:
+                    content = m.get("content", "")
+                    mem_type = m.get("type", "")
+                    parts.append(f"[{mem_type}] {content}")
+                return "\n".join(parts)
+
+        try:
+            return await asyncio.get_event_loop().run_in_executor(None, _fetch)
+        except Exception:
+            return ""
 
     async def handle_chat(
         self,
@@ -118,7 +166,8 @@ class ChatOrchestrator:
         history: list[dict],
     ) -> dict:
         """Process a chat message through the orchestrator."""
-        system = self.build_system_prompt(workspace)
+        memories = await self._fetch_recent_memories(message)
+        system = self.build_system_prompt(workspace, recent_memories=memories)
         messages = history + [{"role": "user", "content": message}]
 
         response_text = await self._call_claude_cli(system, messages)

@@ -47,6 +47,8 @@ class AgentRun:
     started_at: str = ""
     completed_at: str = ""
     working_dir: str = ""
+    pid: int = 0
+    cli_command: str = ""
 
 
 DEFAULT_AGENTS = [
@@ -157,6 +159,7 @@ class AgentOrchestraTools(BaseToolProvider):
 
         # Build CLI command
         cmd = [*agent_config.cli_command, prompt]
+        run.cli_command = " ".join(agent_config.cli_command)
         skip_keys = {"CLAUDECODE", "ANTHROPIC_API_KEY"}
         env = {k: v for k, v in os.environ.items() if k not in skip_keys}
 
@@ -168,6 +171,7 @@ class AgentOrchestraTools(BaseToolProvider):
                 cwd=run.working_dir or None,
                 env=env,
             )
+            run.pid = process.pid
             stdout, stderr = await asyncio.wait_for(
                 process.communicate(),
                 timeout=300,

@@ -56,7 +56,11 @@ PROMPT_TEMPLATES: dict[str, str] = {
         "- Note any risks or trade-offs discovered\n"
     ),
     "claude": (
-        "You are the orchestrator of a multi-agent development team.\n\n"
+        "You are the orchestrator of a multi-agent development team.\n"
+        "You are running in non-interactive, stateless print mode with NO tools, NO filesystem access, NO MCP servers.\n"
+        "NEVER ask for permissions, approvals, or file access. NEVER say you need to read files or access tools.\n"
+        "You can ONLY use the context provided below. Answer directly from it.\n"
+        "If the context is insufficient, say so honestly — do NOT pretend you could access more with permissions.\n\n"
         "Available agents:\n"
         "- codex: Fast programmer. Give detailed, step-by-step implementation instructions.\n"
         "- gemini: Deep researcher. Use for docs, patterns, exploration.\n"
@@ -71,7 +75,7 @@ PROMPT_TEMPLATES: dict[str, str] = {
         "4. You may include conversational text before/after the directives\n\n"
         "IMPORTANT: Only emit <<DISPATCH>> when the user wants to delegate work to an agent.\n"
         "For simple questions, information, or conversation, respond directly without dispatching.\n\n"
-        "Available memories: {recent_memories}\n"
+        "Recent project memories (auto-loaded from memento):\n{recent_memories}\n"
     ),
 }
 
