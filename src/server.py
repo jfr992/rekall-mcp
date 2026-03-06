@@ -1060,6 +1060,25 @@ body::before{
   letter-spacing:1px;
 }
 
+/* --- CHAT --- */
+.chat-messages{display:flex;flex-direction:column;gap:8px;}
+.chat-msg{padding:8px 12px;border-radius:6px;max-width:85%;word-wrap:break-word;font-size:12px;line-height:1.5;}
+.chat-msg.user{align-self:flex-end;background:var(--cyan-dim);border:1px solid rgba(0,212,170,0.3);color:var(--text-bright);}
+.chat-msg.assistant{align-self:flex-start;background:var(--surface-2);border:1px solid var(--border);color:var(--text);}
+.chat-msg.system-message{align-self:center;color:var(--text-dim);font-size:11px;font-style:italic;}
+.agent-run-card{background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin:4px 0;}
+.agent-run-card .run-header{display:flex;align-items:center;gap:8px;cursor:pointer;}
+.agent-run-card .run-status{font-size:10px;padding:2px 6px;border-radius:3px;text-transform:uppercase;}
+.agent-run-card .run-status.pending{background:var(--amber-dim);color:var(--amber);}
+.agent-run-card .run-status.running{background:var(--cyan-dim);color:var(--cyan);}
+.agent-run-card .run-status.completed{background:rgba(52,211,153,0.12);color:var(--green);}
+.agent-run-card .run-status.failed{background:var(--red-dim);color:var(--red);}
+.agent-run-card .run-status.review{background:rgba(167,139,250,0.12);color:var(--purple);}
+.agent-run-card .run-output{display:none;margin-top:8px;padding:8px;background:var(--bg);border-radius:4px;font-size:11px;white-space:pre-wrap;max-height:200px;overflow-y:auto;}
+.agent-run-card.expanded .run-output{display:block;}
+.agent-run-card .run-actions{display:none;margin-top:8px;gap:8px;}
+.agent-run-card.review .run-actions{display:flex;}
+
 dialog{
   border:1px solid var(--border-hi);
   background:var(--surface);
@@ -1152,8 +1171,12 @@ dialog .dialog-actions button{
   <div class="topbar">
     <div class="topbar-left">
       <div class="logo">MEMENTO<span>// command</span></div>
+      <select id="workspace-select" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:11px;padding:4px 8px;border-radius:4px;">
+        <option value="">Select workspace...</option>
+      </select>
     </div>
     <div class="topbar-right">
+      <button id="brain-toggle" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text-dim);font-family:var(--mono);font-size:10px;padding:4px 10px;border-radius:4px;cursor:pointer;letter-spacing:1px">[BRAIN]</button>
       <div class="status-dot"></div>
       <div class="status-label">System Active</div>
       <div class="clock" id="clock"></div>
@@ -1189,47 +1212,14 @@ dialog .dialog-actions button{
       </div>
     </div>
 
-    <!-- CENTER: BRAIN -->
-    <div class="center">
-      <div class="brain-controls">
-        <label>Proj <input id="project" placeholder="all" style="width:60px"/></label>
-        <label>Type
-          <select id="memoryType">
-            <option value="">all</option>
-            <option value="requirement">req</option>
-            <option value="fact">fact</option>
-            <option value="decision">dec</option>
-            <option value="preference">pref</option>
-            <option value="learning">learn</option>
-            <option value="session">sess</option>
-            <option value="note">note</option>
-          </select>
-        </label>
-        <label>Lim <input id="limit" type="number" value="160" min="20" max="400"/></label>
-        <label>Nbr <input id="neighbors" type="number" value="4" min="1" max="12"/></label>
-        <label>Sim <input id="similarity" type="number" step="0.01" value="0.35" min="0" max="1" style="width:45px"/></label>
-        <label>Days
-          <select id="days">
-            <option value="">all</option>
-            <option value="7">7d</option>
-            <option value="30">30d</option>
-            <option value="90">90d</option>
-          </select>
-        </label>
-        <button id="refresh">Refresh</button>
-        <button id="clear">Reset</button>
+    <!-- CENTER: Orchestra Chat -->
+    <div class="center" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+      <div class="chat-messages" id="chat-messages" style="flex:1;overflow-y:auto;padding:12px;">
+        <div class="chat-msg system-message">Welcome to Orchestra. Type a message to start.</div>
       </div>
-      <div class="brain-wrap">
-        <canvas id="brain"></canvas>
-        <div class="brain-status" id="status">Initializing...</div>
-        <div class="brain-legend">
-          <span><span class="dot" style="background:#4d9fff"></span>fact</span>
-          <span><span class="dot" style="background:#a78bfa"></span>pref</span>
-          <span><span class="dot" style="background:#fb923c"></span>dec</span>
-          <span><span class="dot" style="background:#ff4d4d"></span>req</span>
-          <span><span class="dot" style="background:#34d399"></span>learn</span>
-          <span><span class="dot" style="background:#94a3b8"></span>other</span>
-        </div>
+      <div style="border-top:1px solid var(--border);padding:8px 12px;display:flex;gap:8px;flex-shrink:0;">
+        <textarea id="chat-input" rows="1" placeholder="Ask the orchestrator..." style="flex:1;resize:none;background:var(--surface-2);border:1px solid var(--border);border-radius:4px;color:var(--text);font-family:var(--mono);font-size:12px;padding:8px;outline:none;"></textarea>
+        <button id="chat-send" style="background:var(--cyan);color:var(--bg);border:none;border-radius:4px;padding:8px 16px;cursor:pointer;font-family:var(--mono);font-weight:700;font-size:11px;letter-spacing:1px;">SEND</button>
       </div>
     </div>
 
@@ -1257,43 +1247,65 @@ dialog .dialog-actions button{
           <div class="memory-detail" id="info">Click a node in the graph to inspect memory details.</div>
         </div>
         <div class="briefing-section">
-          <div class="briefing-section-title">Agent Orchestra</div>
-          <div class="orchestra-controls">
-            <button id="orchestra-refresh">REFRESH</button>
-            <button id="orchestra-dispatch">+ DISPATCH</button>
+          <div class="briefing-section-title">Config</div>
+          <div id="config-panel" style="font-size:11px;">
+            <div style="color:var(--text-dim);margin-bottom:6px;">MCPs</div>
+            <div id="config-mcps">Loading...</div>
+            <div style="color:var(--text-dim);margin:8px 0 6px;">Agent Configs</div>
+            <div id="config-agents">Loading...</div>
           </div>
-          <pre class="orchestra-output" id="agent-runs-list">Loading agent runs...</pre>
         </div>
       </div>
     </div>
   </div>
 </div>
 
-<dialog id="dispatch-dialog">
-  <form onsubmit="dispatchTask(event)">
-    <label>
-      Task
-      <textarea name="task" required></textarea>
-    </label>
-    <label>
-      Agent
-      <select name="agent">
-        <option value="">Auto-select</option>
-        <option value="claude">Claude (architecture)</option>
-        <option value="gemini">Gemini (prototyping)</option>
-        <option value="codex">Codex (implementation)</option>
-      </select>
-    </label>
-    <label>
-      Working Dir
-      <input name="working_dir" type="text" />
-    </label>
-    <div class="dialog-actions">
-      <button type="button" onclick="this.closest('dialog').close()">CANCEL</button>
-      <button type="submit">DISPATCH</button>
+<!-- BRAIN GRAPH MODAL -->
+<div id="brain-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;z-index:1000;">
+  <div id="brain-backdrop" style="position:absolute;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);"></div>
+  <div style="position:relative;margin:40px auto;width:80%;height:calc(100% - 80px);background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;display:flex;flex-direction:column;">
+    <div class="brain-controls" style="padding:8px 14px;border-bottom:1px solid var(--border);display:flex;flex-wrap:wrap;gap:6px;align-items:center;background:var(--surface);flex-shrink:0;">
+      <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px">Proj <input id="project" placeholder="all" style="width:60px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10px;padding:4px 6px;border-radius:3px;"/></label>
+      <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px">Type
+        <select id="memoryType" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10px;padding:4px 6px;border-radius:3px;">
+          <option value="">all</option>
+          <option value="requirement">req</option>
+          <option value="fact">fact</option>
+          <option value="decision">dec</option>
+          <option value="preference">pref</option>
+          <option value="learning">learn</option>
+          <option value="session">sess</option>
+          <option value="note">note</option>
+        </select>
+      </label>
+      <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px">Lim <input id="limit" type="number" value="160" min="20" max="400" style="width:50px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10px;padding:4px 6px;border-radius:3px;"/></label>
+      <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px">Nbr <input id="neighbors" type="number" value="4" min="1" max="12" style="width:50px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10px;padding:4px 6px;border-radius:3px;"/></label>
+      <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px">Sim <input id="similarity" type="number" step="0.01" value="0.35" min="0" max="1" style="width:45px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10px;padding:4px 6px;border-radius:3px;"/></label>
+      <label style="font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:4px">Days
+        <select id="days" style="background:var(--surface-2);border:1px solid var(--border);color:var(--text);font-family:var(--mono);font-size:10px;padding:4px 6px;border-radius:3px;">
+          <option value="">all</option>
+          <option value="7">7d</option>
+          <option value="30">30d</option>
+          <option value="90">90d</option>
+        </select>
+      </label>
+      <button id="refresh" style="padding:4px 10px;cursor:pointer;font-family:var(--mono);font-size:10px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:3px;text-transform:uppercase;letter-spacing:1px;">Refresh</button>
+      <button id="clear" style="padding:4px 10px;cursor:pointer;font-family:var(--mono);font-size:10px;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:3px;text-transform:uppercase;letter-spacing:1px;">Reset</button>
     </div>
-  </form>
-</dialog>
+    <div style="flex:1;position:relative;overflow:hidden;">
+      <canvas id="brain" style="width:100%;height:100%;display:block;"></canvas>
+      <div id="status" style="position:absolute;bottom:8px;left:14px;font-size:10px;color:var(--text-dim);letter-spacing:0.5px;">Initializing...</div>
+      <div style="position:absolute;bottom:8px;right:14px;display:flex;gap:10px;font-size:10px;">
+        <span><span class="dot" style="background:#4d9fff;width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle"></span>fact</span>
+        <span><span class="dot" style="background:#a78bfa;width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle"></span>pref</span>
+        <span><span class="dot" style="background:#fb923c;width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle"></span>dec</span>
+        <span><span class="dot" style="background:#ff4d4d;width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle"></span>req</span>
+        <span><span class="dot" style="background:#34d399;width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle"></span>learn</span>
+        <span><span class="dot" style="background:#94a3b8;width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle"></span>other</span>
+      </div>
+    </div>
+  </div>
+</div>
 
 <script>
 // --- CLOCK ---
@@ -1312,10 +1324,9 @@ const colorByType={
   preference:"#a78bfa",learning:"#34d399",session:"#94a3b8",note:"#94a3b8"
 };
 
-// --- STATE ---
+// --- BRAIN GRAPH STATE (lazy init) ---
 const state={width:0,height:0,nodes:[],links:[],selected:null};
-const canvas=document.getElementById("brain");
-const ctx=canvas.getContext("2d");
+let canvas=null,ctx=null,brainInitialized=false;
 
 function typeCount(nodes){
   const m={};for(const n of nodes)m[n.type]=(m[n.type]||0)+1;return m;
@@ -1323,6 +1334,7 @@ function typeCount(nodes){
 
 // --- CANVAS ---
 function resizeCanvas(){
+  if(!canvas)return;
   const r=canvas.parentElement.getBoundingClientRect();
   const s=window.devicePixelRatio||1;
   canvas.width=r.width*s;canvas.height=r.height*s;
@@ -1519,38 +1531,207 @@ function renderBriefing(raw,mode){
   else{mrsEl.style.display="none"}
 }
 
-async function refreshAgentStatus(){
-  try{
-    const resp=await fetch("/api/orchestra/status");
-    const data=await resp.json();
-    document.getElementById("agent-runs-list").textContent=data.result||"No runs.";
-  }catch(e){
-    document.getElementById("agent-runs-list").textContent="Failed to load agent runs.";
+// --- WORKSPACE SELECTOR ---
+async function loadWorkspaces() {
+  try {
+    const res = await fetch('/api/workspaces');
+    const data = await res.json();
+    const select = document.getElementById('workspace-select');
+    select.innerHTML = '<option value="">Select workspace...</option>';
+    data.workspaces.forEach(ws => {
+      const opt = document.createElement('option');
+      opt.value = ws.path;
+      opt.textContent = ws.name;
+      select.appendChild(opt);
+    });
+    const saved = localStorage.getItem('activeWorkspace');
+    if (saved) select.value = saved;
+  } catch (e) {
+    console.error('Failed to load workspaces:', e);
   }
 }
 
-function showDispatchForm(){
-  document.getElementById("dispatch-dialog").showModal();
+document.getElementById('workspace-select').addEventListener('change', function() {
+  localStorage.setItem('activeWorkspace', this.value);
+  appendSystemMessage('Workspace changed to: ' + this.value);
+});
+
+// --- CHAT ---
+const chatMessages = document.getElementById('chat-messages');
+const chatInput = document.getElementById('chat-input');
+const chatSend = document.getElementById('chat-send');
+let chatHistory = JSON.parse(localStorage.getItem('chatHistory') || '[]');
+
+function appendMessage(role, content) {
+  const div = document.createElement('div');
+  div.className = 'chat-msg ' + role;
+  div.textContent = content;
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
-async function dispatchTask(event){
-  event.preventDefault();
-  const form=event.target;
-  const payload={
-    task: form.task.value,
-    agent: form.agent.value || undefined,
-    working_dir: form.working_dir.value || undefined,
-  };
+function appendSystemMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'chat-msg system-message';
+  div.textContent = text;
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
 
-  await fetch("/api/orchestra/dispatch",{
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    body: JSON.stringify(payload),
-  });
+function appendRunCard(dispatch) {
+  const card = document.createElement('div');
+  card.className = 'agent-run-card';
+  card.id = 'run-' + dispatch.run_id;
+  card.innerHTML =
+    '<div class="run-header" onclick="toggleRunCard(this.parentElement)">' +
+      '<span style="color:var(--cyan);font-weight:700;">' + escHtml(dispatch.agent) + '</span> ' +
+      '<span class="run-status ' + dispatch.status + '">' + escHtml(dispatch.status) + '</span> ' +
+      '<span style="color:var(--text-dim);font-size:11px;">' + escHtml(dispatch.run_id) + '</span>' +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--text-dim);margin-top:4px;">' + escHtml(dispatch.task || '') + '</div>' +
+    '<div class="run-output">Loading...</div>' +
+    '<div class="run-actions">' +
+      '<button onclick="reviewRun(\'' + escHtml(dispatch.run_id) + '\',\'approve\')">APPROVE</button>' +
+      '<button onclick="reviewRun(\'' + escHtml(dispatch.run_id) + '\',\'reject\')">REJECT</button>' +
+    '</div>';
+  chatMessages.appendChild(card);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+  pollRunStatus(dispatch.run_id);
+}
 
-  form.closest("dialog").close();
-  refreshAgentStatus();
-  loadTracker();
+function toggleRunCard(card) {
+  card.classList.toggle('expanded');
+  if (card.classList.contains('expanded')) {
+    loadRunOutput(card.id.replace('run-', ''));
+  }
+}
+
+async function loadRunOutput(runId) {
+  try {
+    const res = await fetch('/api/orchestra/runs/' + runId + '/output');
+    const data = await res.json();
+    const card = document.getElementById('run-' + runId);
+    if (card) {
+      card.querySelector('.run-output').textContent = data.output || 'No output yet.';
+    }
+  } catch (e) {
+    console.error('Failed to load run output:', e);
+  }
+}
+
+async function pollRunStatus(runId) {
+  const poll = setInterval(async () => {
+    try {
+      const res = await fetch('/api/orchestra/runs/' + runId + '/output');
+      const data = await res.json();
+      const card = document.getElementById('run-' + runId);
+      if (!card) { clearInterval(poll); return; }
+      const badge = card.querySelector('.run-status');
+      badge.className = 'run-status ' + data.status;
+      badge.textContent = data.status;
+      if (data.status === 'review') card.classList.add('review');
+      if (['completed', 'failed'].includes(data.status)) {
+        clearInterval(poll);
+        card.querySelector('.run-output').textContent = data.output || data.error || 'Done.';
+      }
+    } catch (e) { clearInterval(poll); }
+  }, 3000);
+}
+
+async function reviewRun(runId, action) {
+  try {
+    await fetch('/api/orchestra/runs/' + runId + '/review', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({action: action}),
+    });
+    appendSystemMessage(runId + ' ' + action + 'd.');
+  } catch (e) {
+    appendSystemMessage('Failed to ' + action + ' ' + runId);
+  }
+}
+
+async function sendChat() {
+  const msg = chatInput.value.trim();
+  if (!msg) return;
+
+  const workspace = document.getElementById('workspace-select').value;
+  chatInput.value = '';
+  chatInput.style.height = 'auto';
+  appendMessage('user', msg);
+
+  chatHistory.push({role: 'user', content: msg});
+
+  try {
+    const res = await fetch('/api/orchestra/chat', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        message: msg,
+        workspace: workspace,
+        history: chatHistory.slice(-20),
+      }),
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      appendSystemMessage('Error: ' + data.error);
+      return;
+    }
+
+    appendMessage('assistant', data.message);
+    chatHistory.push({role: 'assistant', content: data.message});
+
+    if (data.dispatches && data.dispatches.length > 0) {
+      data.dispatches.forEach(d => appendRunCard(d));
+    }
+
+    localStorage.setItem('chatHistory', JSON.stringify(chatHistory.slice(-100)));
+  } catch (e) {
+    appendSystemMessage('Failed to reach orchestrator: ' + e.message);
+  }
+}
+
+chatSend.addEventListener('click', sendChat);
+chatInput.addEventListener('keydown', function(e) {
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    sendChat();
+  }
+});
+
+chatInput.addEventListener('input', function() {
+  this.style.height = 'auto';
+  this.style.height = Math.min(this.scrollHeight, 120) + 'px';
+});
+
+// --- CONFIG PANEL ---
+async function loadConfig() {
+  try {
+    const res = await fetch('/api/config');
+    const data = await res.json();
+    const mcpDiv = document.getElementById('config-mcps');
+    const seen = {};
+    mcpDiv.innerHTML = '';
+    Object.entries(data.agents).forEach(([name, cfg]) => {
+      if (cfg.mcpServers) {
+        Object.keys(cfg.mcpServers).forEach(mcp => {
+          if (!seen[mcp]) {
+            seen[mcp] = true;
+            mcpDiv.innerHTML += '<div style="margin:2px 0;">' + escHtml(mcp) + ' <span style="color:var(--green);">[active]</span></div>';
+          }
+        });
+      }
+    });
+    const agentsDiv = document.getElementById('config-agents');
+    agentsDiv.innerHTML = '';
+    Object.entries(data.agents).forEach(([name, cfg]) => {
+      const mcpCount = cfg.mcpServers ? Object.keys(cfg.mcpServers).length : 0;
+      agentsDiv.innerHTML += '<div style="margin:2px 0;">' + escHtml(name) + ' <span style="color:var(--text-dim);">[' + mcpCount + ' MCP]</span></div>';
+    });
+  } catch (e) {
+    console.error('Failed to load config:', e);
+  }
 }
 
 function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
@@ -1562,10 +1743,56 @@ document.getElementById("briefing-refresh").addEventListener("click",()=>{
   btn.textContent=briefingMode==="session"?"DAILY":"SESSION";
   loadBriefing(briefingMode);
 });
-document.getElementById("orchestra-refresh").addEventListener("click",refreshAgentStatus);
-document.getElementById("orchestra-dispatch").addEventListener("click",showDispatchForm);
 
-// --- GRAPH ---
+// --- BRAIN GRAPH MODAL ---
+document.getElementById('brain-toggle').addEventListener('click', function() {
+  const modal = document.getElementById('brain-modal');
+  modal.style.display = modal.style.display === 'none' ? 'block' : 'none';
+  if (modal.style.display === 'block') initBrainGraph();
+});
+
+document.getElementById('brain-backdrop').addEventListener('click', function() {
+  document.getElementById('brain-modal').style.display = 'none';
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.getElementById('brain-modal').style.display = 'none';
+  }
+});
+
+// --- GRAPH (wrapped in initBrainGraph) ---
+function initBrainGraph(){
+  if(brainInitialized)return;
+  brainInitialized=true;
+  canvas=document.getElementById("brain");
+  ctx=canvas.getContext("2d");
+  resizeCanvas();
+  loadGraph();
+  loop();
+  canvas.addEventListener("click",evt=>{
+    const b=canvas.parentElement.getBoundingClientRect();
+    const x=evt.clientX-b.left,y=evt.clientY-b.top;
+    let closest=null,cd=1e6;
+    for(const n of state.nodes){
+      const d=Math.sqrt((n.x-x)**2+(n.y-y)**2);
+      if(d<cd&&d<20){cd=d;closest=n}
+    }
+    if(closest){state.selected=closest;renderInfo()}
+  });
+  document.getElementById("refresh").addEventListener("click",loadGraph);
+  document.getElementById("clear").addEventListener("click",()=>{
+    document.getElementById("project").value="";
+    document.getElementById("memoryType").value="";
+    document.getElementById("limit").value="160";
+    document.getElementById("neighbors").value="4";
+    document.getElementById("similarity").value="0.35";
+    document.getElementById("days").value="";
+    loadGraph();
+  });
+  window.addEventListener("resize",resizeCanvas);
+}
+
 function buildQuery(){
   const p=document.getElementById("project").value.trim();
   const t=document.getElementById("memoryType").value;
@@ -1697,38 +1924,12 @@ function render(){
 
 function loop(){stepPhysics();render();requestAnimationFrame(loop)}
 
-canvas.addEventListener("click",evt=>{
-  const b=canvas.parentElement.getBoundingClientRect();
-  const x=evt.clientX-b.left,y=evt.clientY-b.top;
-  let closest=null,cd=1e6;
-  for(const n of state.nodes){
-    const d=Math.sqrt((n.x-x)**2+(n.y-y)**2);
-    if(d<cd&&d<20){cd=d;closest=n}
-  }
-  if(closest){state.selected=closest;renderInfo()}
-});
-
-document.getElementById("refresh").addEventListener("click",loadGraph);
-document.getElementById("clear").addEventListener("click",()=>{
-  document.getElementById("project").value="";
-  document.getElementById("memoryType").value="";
-  document.getElementById("limit").value="160";
-  document.getElementById("neighbors").value="4";
-  document.getElementById("similarity").value="0.35";
-  document.getElementById("days").value="";
-  loadGraph();
-});
-window.addEventListener("resize",resizeCanvas);
-
 // --- INIT ---
-resizeCanvas();
 loadTracker();
 loadBriefing("session");
+loadWorkspaces();
+loadConfig();
 setInterval(loadTracker,30000);
-setInterval(refreshAgentStatus,10000);
-refreshAgentStatus();
-loadGraph();
-loop();
 </script>
 </body>
 </html>
