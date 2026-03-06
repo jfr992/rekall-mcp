@@ -173,8 +173,9 @@ class KnowledgeGraph:
         if memory_id not in self._graph:
             return
 
-        self._graph.nodes[memory_id]["access_count"] += 1
-        self._graph.nodes[memory_id]["last_accessed"] = date.today().isoformat()
+        node = self._graph.nodes[memory_id]
+        node["access_count"] = node.get("access_count", 0) + 1
+        node["last_accessed"] = date.today().isoformat()
         self._dirty = True
 
     def remove_node(self, memory_id: str) -> None:
@@ -310,8 +311,9 @@ class KnowledgeGraph:
                 continue
 
             factor = 0.98 ** (days_idle - 7)
-            new_importance = max(0.1, data["importance"] * factor)
-            if new_importance != data["importance"]:
+            importance = data.get("importance", 0.35)
+            new_importance = max(0.1, importance * factor)
+            if new_importance != importance:
                 data["importance"] = new_importance
                 decayed += 1
                 self._dirty = True
