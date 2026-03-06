@@ -109,6 +109,7 @@ class AgentOrchestraTools(BaseToolProvider):
         agent: str | None = None,
         working_dir: str = "",
         context: str = "",
+        auto_execute: bool = True,
     ) -> str:
         """Dispatch a task to an AI agent for execution."""
         if agent and agent not in self._agents:
@@ -127,6 +128,9 @@ class AgentOrchestraTools(BaseToolProvider):
             started_at=datetime.now(timezone.utc).isoformat(),
         )
         self._runs[run_id] = run
+
+        if auto_execute:
+            asyncio.create_task(self._execute_run(run_id))
 
         return (
             f"Dispatched **{run_id}** to **{selected}**\n"
@@ -160,7 +164,10 @@ class AgentOrchestraTools(BaseToolProvider):
                 stderr=asyncio.subprocess.PIPE,
                 cwd=run.working_dir or None,
             )
-            stdout, stderr = await process.communicate()
+            stdout, stderr = await asyncio.wait_for(
+                process.communicate(),
+                timeout=300,
+            )
 
             run.output = stdout.decode("utf-8", errors="replace")
             run.error = stderr.decode("utf-8", errors="replace")
@@ -174,6 +181,10 @@ class AgentOrchestraTools(BaseToolProvider):
         except FileNotFoundError:
             run.status = RunStatus.FAILED
             run.error = f"Agent CLI not found: {agent_config.cli_command[0]}"
+        except asyncio.TimeoutError:
+            process.kill()
+            run.status = RunStatus.FAILED
+            run.error = "Agent run timed out after 300 seconds"
         except Exception as e:
             run.status = RunStatus.FAILED
             run.error = str(e)

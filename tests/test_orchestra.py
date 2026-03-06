@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from tools.builtin.orchestra import AgentOrchestraTools, AgentConfig, AgentRun, RunStatus
 
@@ -45,6 +45,7 @@ def test_dispatch_task_creates_run():
             task="Write unit tests for auth module",
             agent="claude",
             working_dir="/tmp/test-project",
+            auto_execute=False,
         )
     )
     assert "RUN-001" in result
@@ -62,6 +63,7 @@ def test_dispatch_task_rejects_unknown_agent():
         orchestra._dispatch_task(
             task="Do something",
             agent="unknown_agent",
+            auto_execute=False,
         )
     )
     assert "Unknown agent" in result
@@ -72,6 +74,7 @@ def test_dispatch_task_auto_selects_agent():
     result = asyncio.run(
         orchestra._dispatch_task(
             task="Refactor the authentication middleware",
+            auto_execute=False,
         )
     )
     assert "RUN-001" in result
@@ -79,9 +82,31 @@ def test_dispatch_task_auto_selects_agent():
     assert run.agent in {"claude", "gemini", "codex"}
 
 
+def test_dispatch_task_auto_executes_by_default():
+    async def _exercise():
+        orchestra = AgentOrchestraTools()
+        with patch(
+            "tools.builtin.orchestra.AgentOrchestraTools._execute_run",
+            new=AsyncMock(return_value="ok"),
+        ) as mock_execute:
+            await orchestra._dispatch_task(task="Auto execute task", agent="claude")
+            await asyncio.sleep(0)
+
+        assert mock_execute.call_count == 1
+
+    asyncio.run(_exercise())
+
+
 def test_execute_run_calls_subprocess():
     orchestra = AgentOrchestraTools()
-    asyncio.run(orchestra._dispatch_task(task="Write tests", agent="claude", working_dir="/tmp"))
+    asyncio.run(
+        orchestra._dispatch_task(
+            task="Write tests",
+            agent="claude",
+            working_dir="/tmp",
+            auto_execute=False,
+        )
+    )
     run = orchestra._runs["RUN-001"]
 
     mock_process = AsyncMock()
@@ -100,7 +125,9 @@ def test_execute_run_calls_subprocess():
 
 def test_execute_run_handles_failure():
     orchestra = AgentOrchestraTools()
-    asyncio.run(orchestra._dispatch_task(task="Do something", agent="gemini"))
+    asyncio.run(
+        orchestra._dispatch_task(task="Do something", agent="gemini", auto_execute=False)
+    )
 
     mock_process = AsyncMock()
     mock_process.communicate = AsyncMock(return_value=(b"", b"Error: rate limited"))
@@ -121,6 +148,7 @@ def test_execute_run_injects_memento_context():
             task="Fix auth bug",
             agent="claude",
             context="The auth module uses JWT tokens stored in Redis",
+            auto_execute=False,
         )
     )
 
