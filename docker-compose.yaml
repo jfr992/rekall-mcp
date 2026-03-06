@@ -89,11 +89,13 @@ services:
       - MCP_TRANSPORT=streamable-http
       - LOG_LEVEL=DEBUG
       - MEMORY_STORAGE_PATH=/data/memory
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
     ports:
       - "8001:8000"
     volumes:
       - ./src:/app/src
       - ${MEMORY_STORAGE_PATH:-~/.claude/memory}:/data/memory
+      - ~/.memento:/root/.memento
     depends_on:
       - qdrant
     profiles:
