@@ -122,14 +122,35 @@ def setup_tools() -> None:
     for provider, tools in loaded.items():
         logger.info(f"Loaded {provider}: {len(tools)} tools")
 
-    # Register terminal dispatch tools (dynamic tools)
+    # Register terminal dispatch tools with explicit signatures
+    # (FastMCP infers input schema from function annotations)
     from tools.builtin.terminal_manager import TerminalManager
 
-    terminal_manager = TerminalManager()
-    for tool_def in terminal_manager.get_tools():
-        @mcp.tool(name=tool_def.name, description=tool_def.description)
-        async def _terminal_tool_handler(tool_handler=tool_def.handler, **kwargs):
-            return await tool_handler(**kwargs)
+    _tm = TerminalManager()
+
+    @mcp.tool(name="dispatch_agent", description="Spawn a new agent terminal session with a task")
+    async def _dispatch_agent(agent: str, task: str, workspace: str) -> dict:
+        return await _tm.create_session(
+            session_type="agent-dispatched",
+            agent_name=agent,
+            workspace=workspace,
+            task=task,
+        )
+
+    @mcp.tool(name="list_agents", description="List active terminal sessions and their status")
+    async def _list_agents() -> list[dict]:
+        await _tm.sync_status()
+        return await _tm.list_sessions()
+
+    @mcp.tool(name="agent_output", description="Capture last N lines from an agent's terminal")
+    async def _agent_output(session_id: str, lines: int = 20) -> dict:
+        output = await _tm.capture_output(session_id, lines)
+        return {"session_id": session_id, "output": output}
+
+    @mcp.tool(name="kill_agent", description="Terminate an agent terminal session")
+    async def _kill_agent(session_id: str) -> dict:
+        killed = await _tm.kill_session(session_id)
+        return {"session_id": session_id, "killed": killed}
 
 
 # Register tools at module load time (skip during testing)
@@ -590,6 +611,8 @@ async def terminal_ws(websocket):
                 data = await relay.read()
                 if not data:
                     break
+                if data == b"__timeout__":
+                    continue  # select() timed out, retry
                 await websocket.send_bytes(data)
 
         async def ws_to_pty():
@@ -602,8 +625,9 @@ async def terminal_ws(websocket):
                     relay.write(payload)
 
         await asyncio.gather(pty_to_ws(), ws_to_pty())
-    except Exception:
-        pass
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Terminal WS error for {session_id}: {e}", exc_info=True)
     finally:
         relay.stop()
 
@@ -648,20 +672,44 @@ async def terminal_ensure_orchestrator(request):
     """POST /api/terminal/orchestrator — ensure orchestrator session exists."""
     from starlette.responses import JSONResponse
 
-    body = await request.json()
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
     manager = _get_terminal_manager()
+
+    # Sync tmux status — cleans dead DB records and fixes stale state
+    await manager.sync_status()
 
     sessions = await manager.list_sessions()
     orchestrator = next(
-        (
-            s
-            for s in sessions
-            if s["type"] == "orchestrator" and s["status"] == "running"
-        ),
+        (s for s in sessions if s["type"] == "orchestrator"),
         None,
     )
     if orchestrator is not None:
         return JSONResponse(orchestrator)
+
+    # Check if a memento-orch tmux session exists but DB lost track of it
+    import asyncio as _asyncio
+    proc = await _asyncio.create_subprocess_exec(
+        "tmux", "list-sessions", "-F", "#{session_name}",
+        stdout=_asyncio.subprocess.PIPE,
+        stderr=_asyncio.subprocess.PIPE,
+    )
+    stdout, _ = await proc.communicate()
+    if stdout:
+        for name in stdout.decode().strip().split("\n"):
+            if name.startswith("memento-orch-"):
+                # Re-register the orphaned tmux session in the DB
+                result = manager._store.create_session(
+                    session_id=name,
+                    session_type="orchestrator",
+                    agent_name="claude",
+                    task="main orchestrator",
+                    workspace=body.get("workspace", str(Path.home())),
+                    cli_command="claude (reconnected)",
+                )
+                return JSONResponse(result)
 
     workspace = body.get("workspace", str(Path.home()))
     mcp_url = body.get("mcp_url", "http://localhost:8002/mcp")
@@ -725,6 +773,34 @@ async def _handle_defer_item(request):
     body = await request.json()
     result = await tracker._defer_item(item_id, body["new_date"])
     return JSONResponse({"result": result})
+
+
+@mcp.custom_route("/api/tracker/jira", methods=["GET"])
+async def _handle_tracker_jira(request):
+    """GET /api/tracker/jira - Fetch assigned Jira tickets via acli."""
+    from starlette.responses import JSONResponse
+    import json as _json
+
+    try:
+        jql = 'assignee = currentUser() AND status IN ("In Progress", "To Do") ORDER BY updated DESC'
+        proc = await asyncio.create_subprocess_exec(
+            "acli", "jira", "workitem", "search",
+            "--jql", jql,
+            "--fields", "key,summary,status,priority",
+            "--json",
+            "--limit", "20",
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=15)
+        if proc.returncode == 0 and stdout:
+            tickets = _json.loads(stdout.decode())
+            if isinstance(tickets, dict):
+                tickets = tickets.get("issues", tickets.get("data", []))
+            return JSONResponse({"tickets": tickets if isinstance(tickets, list) else []})
+        return JSONResponse({"tickets": []})
+    except Exception:
+        return JSONResponse({"tickets": []})
 
 
 # --- Briefing API ---
@@ -1101,6 +1177,20 @@ body::before{
 .tracker-item-meta .tag.due{color:var(--amber);border-color:rgba(240,160,48,0.3)}
 .tracker-item-meta .tag.overdue{color:var(--red);border-color:rgba(255,77,77,0.3)}
 .tracker-empty{color:var(--text-dim);font-style:italic;padding:20px 0;text-align:center;font-size:11px}
+.jira-item{
+  padding:6px 8px;margin-bottom:3px;border-radius:3px;
+  background:var(--surface-2);border-left:2px solid var(--blue);
+  cursor:default;
+}
+.jira-item:hover{background:rgba(77,159,255,0.06)}
+.jira-item-key{font-size:9px;color:var(--blue);font-weight:500;letter-spacing:0.5px}
+.jira-item-summary{font-size:11px;color:var(--text-bright);margin:2px 0;line-height:1.4}
+.jira-item-status{
+  font-size:8px;padding:1px 5px;border-radius:2px;
+  background:var(--surface);border:1px solid var(--border);
+  color:var(--text-dim);display:inline-block;
+}
+.jira-item-status.in-progress{color:var(--cyan);border-color:rgba(0,212,170,0.3)}
 .tracker-item-actions{
   display:none;gap:4px;margin-top:5px;
 }
@@ -1323,7 +1413,7 @@ dialog .dialog-actions button{
   border-bottom:1px solid #333;
   padding:4px 8px;
   gap:4px;
-  overflow-x:auto;
+  position:relative;
 }
 .terminal-tab-bar .tab-list{
   display:flex;
@@ -1380,14 +1470,58 @@ dialog .dialog-actions button{
   border-color:#00d2ff;
 }
 
+.agent-picker{
+  position:relative;
+  display:inline-block;
+}
+.agent-picker-menu{
+  display:none;
+  position:absolute;
+  top:calc(100% + 6px);
+  right:0;
+  background:#1e1e2e;
+  border:1px solid #444;
+  border-radius:6px;
+  overflow:hidden;
+  box-shadow:0 4px 16px rgba(0,0,0,0.5);
+  z-index:100;
+  min-width:140px;
+}
+.agent-picker-menu.open{display:block;}
+.agent-picker-item{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:8px 14px;
+  color:#ccc;
+  cursor:pointer;
+  font-size:13px;
+  white-space:nowrap;
+  transition:background 0.15s;
+}
+.agent-picker-item:hover{
+  background:#00d2ff22;
+  color:#00d2ff;
+}
+.agent-picker-item .agent-icon{
+  width:8px;height:8px;
+  border-radius:50%;
+  flex-shrink:0;
+}
+.agent-picker-item .agent-icon.claude{background:#c084fc;}
+.agent-picker-item .agent-icon.codex{background:#34d399;}
+.agent-picker-item .agent-icon.gemini{background:#60a5fa;}
+
 .terminal-container{
   flex:1;
   position:relative;
   background:#000;
+  overflow:hidden;
 }
 .terminal-pane{
   position:absolute;
   inset:0;
+  overflow:hidden;
 }
 .terminal-pane[hidden]{display:none;}
 
@@ -1399,6 +1533,129 @@ dialog .dialog-actions button{
   border-top:1px solid #333;
   font-size:11px;
   color:#666;
+}
+
+/* --- SUB-AGENT DRAWER --- */
+.subagent-drawer{
+  background:#0e0e1e;
+  border-top:2px solid #00d2ff33;
+  display:none;
+  flex-direction:column;
+  height:40%;
+  min-height:180px;
+  flex-shrink:0;
+  transition:height 0.2s ease;
+}
+.subagent-drawer.zoomed{
+  flex:1;
+  height:auto;
+  min-height:0;
+}
+.center-panel.sa-zoomed > #terminal-tabs,
+.center-panel.sa-zoomed > #terminal-container{
+  display:none !important;
+}
+.subagent-drawer.open{display:flex}
+.subagent-drawer-header{
+  display:flex;
+  align-items:center;
+  padding:6px 12px;
+  background:#1a1a2e;
+  border-bottom:1px solid #333;
+  cursor:pointer;
+  user-select:none;
+}
+.subagent-drawer-header .drawer-title{
+  font-size:11px;
+  color:#00d2ff;
+  letter-spacing:1px;
+  text-transform:uppercase;
+  flex:1;
+}
+.subagent-drawer-header .drawer-count{
+  font-size:10px;
+  background:#00d2ff22;
+  color:#00d2ff;
+  padding:1px 6px;
+  border-radius:3px;
+  margin-right:8px;
+}
+.subagent-drawer-header .drawer-toggle{
+  font-size:12px;
+  color:#666;
+  transition:transform 0.2s;
+}
+.subagent-drawer-header .drawer-zoom{
+  font-size:10px;
+  color:#666;
+  cursor:pointer;
+  margin-right:8px;
+  padding:1px 6px;
+  border:1px solid #333;
+  border-radius:3px;
+  background:transparent;
+  transition:color 0.15s, border-color 0.15s;
+}
+.subagent-drawer-header .drawer-zoom:hover{color:#00d2ff;border-color:#00d2ff55}
+.subagent-drawer.zoomed .drawer-zoom{color:#00d2ff;border-color:#00d2ff}
+.subagent-drawer.collapsed .drawer-toggle{transform:rotate(180deg)}
+.subagent-drawer.collapsed .subagent-drawer-body{display:none}
+.subagent-drawer-body{
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  flex:1;
+  min-height:0;
+}
+.subagent-cards{
+  display:flex;
+  gap:4px;
+  padding:6px 8px;
+  overflow-x:auto;
+  flex-shrink:0;
+}
+.subagent-card{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  padding:6px 10px;
+  background:#16213e;
+  border:1px solid #333;
+  border-radius:4px;
+  cursor:pointer;
+  min-width:140px;
+  max-width:200px;
+  font-size:11px;
+  transition:border-color 0.15s, background 0.15s;
+}
+.subagent-card:hover{border-color:#00d2ff55;background:#1a2740}
+.subagent-card.active{border-color:#00d2ff;background:#0f3460}
+.subagent-card .sa-header{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.subagent-card .sa-status{
+  width:6px;height:6px;border-radius:50%;background:#4caf50;flex-shrink:0;
+}
+.subagent-card .sa-status.dead{background:#666}
+.subagent-card .sa-agent{color:#a0a0b0;font-weight:500}
+.subagent-card .sa-task{color:#666;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.subagent-card .sa-close{
+  font-size:10px;color:#666;margin-left:auto;cursor:pointer;
+}
+.subagent-card .sa-close:hover{color:#ff4444}
+.subagent-terminal{
+  flex:1;
+  min-height:120px;
+  position:relative;
+  background:#000;
+  overflow:hidden;
+}
+.subagent-terminal .terminal-pane{
+  position:absolute;
+  inset:0;
+  overflow:hidden;
 }
 
 .memory-detail{
@@ -1487,9 +1744,29 @@ dialog .dialog-actions button{
     <div class="center-panel" id="center-panel" style="display:flex;flex-direction:column;height:100%;overflow:hidden">
       <div id="terminal-tabs" class="terminal-tab-bar">
         <div class="tab-list" id="tab-list"></div>
-        <button class="tab-add-btn" onclick="addManualAgent()" title="Add terminal session">+</button>
+        <div class="agent-picker">
+          <button class="tab-add-btn" onclick="toggleAgentPicker(event)" title="Add terminal session">+</button>
+          <div class="agent-picker-menu" id="agent-picker-menu">
+            <div class="agent-picker-item" onclick="addManualAgent('claude')"><span class="agent-icon claude"></span>Claude</div>
+            <div class="agent-picker-item" onclick="addManualAgent('codex')"><span class="agent-icon codex"></span>Codex</div>
+            <div class="agent-picker-item" onclick="addManualAgent('gemini')"><span class="agent-icon gemini"></span>Gemini</div>
+          </div>
+        </div>
       </div>
       <div id="terminal-container" class="terminal-container"></div>
+      <!-- Sub-agent drawer: dispatched agents appear here as children -->
+      <div id="subagent-drawer" class="subagent-drawer">
+        <div class="subagent-drawer-header" onclick="toggleSubagentDrawer()">
+          <span class="drawer-title">Dispatched Agents</span>
+          <span class="drawer-count" id="subagent-count">0</span>
+          <span class="drawer-zoom" onclick="event.stopPropagation(); toggleSubagentZoom()" title="Zoom in/out">&#x26F6;</span>
+          <span class="drawer-toggle">&#9660;</span>
+        </div>
+        <div class="subagent-drawer-body">
+          <div class="subagent-cards" id="subagent-cards"></div>
+          <div class="subagent-terminal" id="subagent-terminal"></div>
+        </div>
+      </div>
       <div id="terminal-status" class="terminal-status-bar">
         <span id="status-text">No sessions</span>
       </div>
@@ -1513,10 +1790,6 @@ dialog .dialog-actions button{
         <div class="briefing-section" id="briefing-mrs" style="display:none">
           <div class="briefing-section-title">Open MRs</div>
           <div id="mr-items"></div>
-        </div>
-        <div class="briefing-section">
-          <div class="briefing-section-title">Memory Detail</div>
-          <div class="memory-detail" id="info">Click a node in the graph to inspect memory details.</div>
         </div>
         <div class="briefing-section">
           <div class="briefing-section-title">Config</div>
@@ -1566,6 +1839,7 @@ dialog .dialog-actions button{
     </div>
     <div style="flex:1;position:relative;overflow:hidden;">
       <canvas id="brain" style="width:100%;height:100%;display:block;"></canvas>
+      <div id="info" style="position:absolute;top:8px;right:14px;z-index:10;max-width:320px;max-height:40%;overflow-y:auto;background:var(--surface);border:1px solid var(--accent);border-radius:6px;padding:12px 14px;font-size:11px;line-height:1.6;display:none;white-space:pre-wrap;color:var(--text);box-shadow:0 4px 12px rgba(0,0,0,0.4);"></div>
       <div id="status" style="position:absolute;bottom:8px;left:14px;font-size:10px;color:var(--text-dim);letter-spacing:0.5px;">Initializing...</div>
       <div style="position:absolute;bottom:8px;right:14px;display:flex;gap:10px;font-size:10px;">
         <span><span class="dot" style="background:#4d9fff;width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:3px;vertical-align:middle"></span>fact</span>
@@ -1619,46 +1893,72 @@ async function loadTracker(){
   const body=document.getElementById("tracker-body");
   body.innerHTML='<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
   try{
-    const resp=await fetch("/api/tracker/items");
-    const data=await resp.json();
-    renderTracker(data.result);
+    const [trackerResp,jiraResp]=await Promise.all([
+      fetch("/api/tracker/items"),
+      fetch("/api/tracker/jira").catch(()=>null)
+    ]);
+    const trackerData=await trackerResp.json();
+    let jiraTickets=[];
+    if(jiraResp&&jiraResp.ok){
+      const jd=await jiraResp.json();
+      jiraTickets=jd.tickets||[];
+    }
+    renderTracker(trackerData.result,jiraTickets);
   }catch(e){
     body.innerHTML='<div class="tracker-empty">Failed to load tracker</div>';
   }
 }
 
-function renderTracker(raw){
+function renderTracker(raw,jiraTickets){
   const body=document.getElementById("tracker-body");
   const badge=document.getElementById("pending-badge");
 
   // Parse the markdown-ish response
   const lines=raw.split('\n').filter(l=>l.trim());
-  if(lines.length<=1 && raw.includes("No pending")){
-    body.innerHTML='<div class="tracker-empty">All clear - no pending items</div>';
-    badge.textContent="0";badge.className="panel-badge";
-    return;
-  }
+  const noManualItems=lines.length<=1 && raw.includes("No pending");
 
   const items=[];
   let currentItem=null;
-  for(const line of lines){
-    if(line.startsWith("# "))continue;
-    const itemMatch=line.match(/^- \*\*([^*]+)\*\*(?:\s*\[([^\]]+)\])?\s*:\s*(.+?)(?:\s*\(due\s+([^)]+)\))?\s*(\*\*OVERDUE\*\*)?$/);
-    if(itemMatch){
-      currentItem={id:itemMatch[1],ticket:itemMatch[2]||null,title:itemMatch[3].trim(),due:itemMatch[4]||null,overdue:!!itemMatch[5],context:null};
-      items.push(currentItem);
-    }else if(line.trim().startsWith("_")&&currentItem){
-      currentItem.context=line.trim().replace(/^_|_$/g,'');
+  if(!noManualItems){
+    for(const line of lines){
+      if(line.startsWith("# "))continue;
+      const itemMatch=line.match(/^- \*\*([^*]+)\*\*(?:\s*\[([^\]]+)\])?\s*:\s*(.+?)(?:\s*\(due\s+([^)]+)\))?\s*(\*\*OVERDUE\*\*)?$/);
+      if(itemMatch){
+        currentItem={id:itemMatch[1],ticket:itemMatch[2]||null,title:itemMatch[3].trim(),due:itemMatch[4]||null,overdue:!!itemMatch[5],context:null};
+        items.push(currentItem);
+      }else if(line.trim().startsWith("_")&&currentItem){
+        currentItem.context=line.trim().replace(/^_|_$/g,'');
+      }
     }
   }
 
+  const totalCount=items.length+(jiraTickets?jiraTickets.length:0);
   const overdue=items.filter(i=>i.overdue);
   const upcoming=items.filter(i=>!i.overdue);
 
-  badge.textContent=String(items.length);
+  badge.textContent=String(totalCount);
   badge.className=overdue.length>0?"panel-badge crit":"panel-badge";
 
   let html='';
+
+  // Jira tickets first
+  if(jiraTickets&&jiraTickets.length){
+    html+='<div class="tracker-section"><div class="tracker-section-title">Jira Tickets</div>';
+    for(const t of jiraTickets){
+      const key=t.key||'';
+      const summary=t.fields?.summary||t.summary||'';
+      const status=t.fields?.status?.name||t.status||'';
+      const priority=t.fields?.priority?.name||'';
+      const statusCls=status.toLowerCase().includes('progress')?'in-progress':'';
+      html+=`<div class="jira-item">
+        <div class="jira-item-key">${escHtml(key)}</div>
+        <div class="jira-item-summary">${escHtml(summary)}</div>
+        <div class="jira-item-status ${statusCls}">${escHtml(status)}</div>
+      </div>`;
+    }
+    html+='</div>';
+  }
+
   if(overdue.length){
     html+='<div class="tracker-section"><div class="tracker-section-title">Overdue</div>';
     for(const i of overdue)html+=renderTrackerItem(i,true);
@@ -1669,6 +1969,8 @@ function renderTracker(raw){
     for(const i of upcoming)html+=renderTrackerItem(i,false);
     html+='</div>';
   }
+
+  if(!html)html='<div class="tracker-empty">All clear - no pending items</div>';
   body.innerHTML=html;
 }
 
@@ -1830,11 +2132,12 @@ document.getElementById('workspace-select').addEventListener('change', function(
 // --- TERMINAL UI ---
 const terminals = {};
 let activeSession = null;
+let activeSubagent = null;
 const terminalDecoder = new TextDecoder();
 const terminalEncoder = new TextEncoder();
 
-function createTerminalPane(sessionId) {
-  const container = document.getElementById('terminal-container');
+function createTerminalPane(sessionId, container) {
+  container = container || document.getElementById('terminal-container');
   const pane = document.createElement('div');
   pane.className = 'terminal-pane';
   pane.id = `pane-${sessionId}`;
@@ -1847,7 +2150,15 @@ function createTerminalPane(sessionId) {
     fontSize: 13,
     fontFamily: '"JetBrains Mono", "Fira Code", monospace',
     theme: {background: '#0a0a1a', foreground: '#e0e0e0', cursor: '#00d2ff'},
+    scrollback: 5000,
+    allowProposedApi: true,
   });
+
+  // Ensure terminal captures all keyboard/mouse input like a real terminal
+  // preventDefault + stopPropagation prevents the page from scrolling when wheeling inside the terminal
+  pane.addEventListener('wheel', (e) => { e.preventDefault(); e.stopPropagation(); }, {passive: false});
+  // Click on pane focuses xterm so arrow keys, scrollback etc. work
+  pane.addEventListener('mousedown', () => term.focus());
 
   const fitAddon = new FitAddon.FitAddon();
   const webLinksAddon = new WebLinksAddon.WebLinksAddon();
@@ -1855,14 +2166,30 @@ function createTerminalPane(sessionId) {
   term.loadAddon(webLinksAddon);
   term.open(pane);
 
+  // Prevent browser from stealing arrow/tab/etc keys — let xterm.js handle them
+  term.attachCustomKeyEventHandler((e) => {
+    // Allow Ctrl+C/V for copy/paste
+    if (e.ctrlKey && (e.key === 'c' || e.key === 'v')) return false;
+    return true;
+  });
+
   const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
   const ws = new WebSocket(`${proto}//${location.host}/api/terminal/${sessionId}/ws`);
   ws.binaryType = 'arraybuffer';
+  ws.onopen = () => {
+    fitAddon.fit();
+    const {cols, rows} = term;
+    const payload = terminalEncoder.encode(JSON.stringify({cols, rows}));
+    const bytes = new Uint8Array(payload.length + 1);
+    bytes[0] = 1;
+    bytes.set(payload, 1);
+    ws.send(bytes);
+  };
   ws.onmessage = (event) => {
     const data = event.data instanceof ArrayBuffer
       ? new Uint8Array(event.data)
       : new TextEncoder().encode(event.data);
-    term.write(terminalDecoder.decode(data));
+    term.write(data);
   };
   ws.onclose = () => {
     term.write('\r\n\x1b[33m[session disconnected]\x1b[0m\r\n');
@@ -1897,6 +2224,7 @@ function removeTerminal(sessionId) {
   entry.pane.remove();
   delete terminals[sessionId];
   if (activeSession === sessionId) activeSession = null;
+  if (activeSubagent === sessionId) activeSubagent = null;
 }
 
 function switchTab(sessionId) {
@@ -1918,11 +2246,101 @@ function switchTab(sessionId) {
   }
 }
 
+// --- SUB-AGENT DRAWER ---
+function toggleSubagentDrawer() {
+  const drawer = document.getElementById('subagent-drawer');
+  drawer.classList.toggle('collapsed');
+  // Re-fit active sub-agent terminal when expanding
+  if (!drawer.classList.contains('collapsed') && activeSubagent && terminals[activeSubagent]) {
+    setTimeout(() => terminals[activeSubagent].fitAddon.fit(), 50);
+  }
+  // Re-fit main terminal since available space changed
+  if (activeSession && terminals[activeSession]) {
+    setTimeout(() => terminals[activeSession].fitAddon.fit(), 50);
+  }
+}
+
+function toggleSubagentZoom() {
+  const drawer = document.getElementById('subagent-drawer');
+  const center = document.getElementById('center-panel');
+  drawer.classList.toggle('zoomed');
+  center.classList.toggle('sa-zoomed');
+  // Re-fit terminals after layout change
+  setTimeout(() => {
+    if (activeSubagent && terminals[activeSubagent]) terminals[activeSubagent].fitAddon.fit();
+    if (activeSession && terminals[activeSession]) terminals[activeSession].fitAddon.fit();
+  }, 50);
+}
+
+function switchSubagent(sessionId) {
+  // Hide previous sub-agent terminal
+  if (activeSubagent && terminals[activeSubagent]) {
+    terminals[activeSubagent].pane.hidden = true;
+  }
+  document.querySelectorAll('.subagent-card').forEach(c => c.classList.remove('active'));
+
+  activeSubagent = sessionId;
+  if (terminals[sessionId]) {
+    terminals[sessionId].pane.hidden = false;
+    terminals[sessionId].fitAddon.fit();
+    terminals[sessionId].term.focus();
+  }
+  document.querySelector(`.subagent-card[data-session="${sessionId}"]`)?.classList.add('active');
+}
+
+function renderSubagentDrawer(dispatched) {
+  const drawer = document.getElementById('subagent-drawer');
+  const cards = document.getElementById('subagent-cards');
+  const countEl = document.getElementById('subagent-count');
+  const saTermContainer = document.getElementById('subagent-terminal');
+
+  if (dispatched.length === 0) {
+    drawer.classList.remove('open');
+    return;
+  }
+
+  drawer.classList.add('open');
+  countEl.textContent = dispatched.length;
+  cards.innerHTML = '';
+
+  for (const sa of dispatched) {
+    const card = document.createElement('div');
+    card.className = `subagent-card${sa.session_id === activeSubagent ? ' active' : ''}`;
+    card.dataset.session = sa.session_id;
+    card.onclick = () => switchSubagent(sa.session_id);
+    card.innerHTML = `
+      <div class="sa-header">
+        <span class="sa-status ${sa.status === 'dead' ? 'dead' : ''}"></span>
+        <span class="sa-agent">${escHtml(sa.agent_name || 'agent')}</span>
+        <span class="sa-close" onclick="event.stopPropagation(); killSession('${escHtml(sa.session_id)}')">&times;</span>
+      </div>
+      <div class="sa-task">${escHtml(sa.task || 'no task')}</div>
+    `;
+    cards.appendChild(card);
+
+    // Create terminal pane in sub-agent container if not exists
+    if (!terminals[sa.session_id]) {
+      createTerminalPane(sa.session_id, saTermContainer);
+    }
+  }
+
+  // Auto-select first sub-agent if none selected
+  if (!activeSubagent || !dispatched.find(s => s.session_id === activeSubagent)) {
+    switchSubagent(dispatched[0].session_id);
+  }
+}
+
 function renderTabBar(sessions) {
   const tabList = document.getElementById('tab-list');
   tabList.innerHTML = '';
 
-  for (const session of sessions) {
+  // Split sessions: tabs (orchestrator + manual) vs drawer (dispatched)
+  // Orchestrator always first (leftmost), new tabs append to the right
+  const tabSessions = sessions.filter(s => s.type !== 'agent-dispatched')
+    .sort((a, b) => a.type === 'orchestrator' ? -1 : b.type === 'orchestrator' ? 1 : 0);
+  const dispatched = sessions.filter(s => s.type === 'agent-dispatched');
+
+  for (const session of tabSessions) {
     const label = session.type === 'orchestrator'
       ? 'Orchestrator'
       : `${session.agent_name || 'agent'}${session.task ? ': ' + session.task.slice(0, 30) : ''}`;
@@ -1943,9 +2361,12 @@ function renderTabBar(sessions) {
     }
   }
 
-  if (!activeSession && sessions.length > 0) {
-    switchTab(sessions[0].session_id);
+  if (!activeSession && tabSessions.length > 0) {
+    switchTab(tabSessions[0].session_id);
   }
+
+  // Render dispatched agents in the sub-agent drawer
+  renderSubagentDrawer(dispatched);
 
   const running = sessions.filter((s) => s.status === 'running').length;
   const statusText = document.getElementById('status-text');
@@ -1964,10 +2385,18 @@ async function pollSessions() {
   }
 }
 
-async function addManualAgent() {
-  const agent = prompt('Agent type (claude, codex, gemini):', 'claude');
-  if (!agent) return;
+function toggleAgentPicker(e) {
+  e.stopPropagation();
+  const menu = document.getElementById('agent-picker-menu');
+  menu.classList.toggle('open');
+}
 
+document.addEventListener('click', () => {
+  document.getElementById('agent-picker-menu')?.classList.remove('open');
+});
+
+async function addManualAgent(agent) {
+  document.getElementById('agent-picker-menu').classList.remove('open');
   const workspace = document.getElementById('workspace-select').value || '/tmp';
   await fetch('/api/terminal/create', {
     method: 'POST',
@@ -1995,6 +2424,9 @@ async function initOrchestrator() {
 window.addEventListener('resize', () => {
   if (activeSession && terminals[activeSession]) {
     terminals[activeSession].fitAddon.fit();
+  }
+  if (activeSubagent && terminals[activeSubagent]) {
+    terminals[activeSubagent].fitAddon.fit();
   }
 });
 
@@ -2071,7 +2503,7 @@ function initBrainGraph(){
       const d=Math.sqrt((n.x-x)**2+(n.y-y)**2);
       if(d<cd&&d<20){cd=d;closest=n}
     }
-    if(closest){state.selected=closest;renderInfo()}
+    state.selected=closest||null;renderInfo();
   });
   document.getElementById("refresh").addEventListener("click",loadGraph);
   document.getElementById("clear").addEventListener("click",()=>{
@@ -2126,13 +2558,13 @@ function loadGraph(){
 
 function renderInfo(){
   const el=document.getElementById("info");
+  if(!el)return;
   if(state.selected){
-    el.classList.add("has-selection");
+    el.style.display="block";
     el.innerHTML=
       `<span class="mem-type">${escHtml(state.selected.type)}</span> <span class="mem-date">${escHtml(state.selected.date||'')}</span>\n\n${escHtml(state.selected.content||'')}`;
   }else{
-    el.classList.remove("has-selection");
-    el.textContent="Click a node in the graph to inspect memory details.";
+    el.style.display="none";
   }
 }
 
@@ -2319,7 +2751,10 @@ def main() -> None:
             Route("/api/terminal/orchestrator", terminal_ensure_orchestrator, methods=["POST"]),
             WebSocketRoute("/api/terminal/{session_id}/ws", terminal_ws),
         ]
-        routes = [Route("/", endpoint=mcp_endpoint)] + custom_routes + terminal_routes
+        routes = [
+            Route("/", endpoint=mcp_endpoint),
+            Route("/mcp", endpoint=mcp_endpoint),
+        ] + custom_routes + terminal_routes
         app = Starlette(routes=routes, lifespan=lifespan)
 
         uvicorn.run(app, host=host, port=port, log_level="info")
