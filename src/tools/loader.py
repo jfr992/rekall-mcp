@@ -85,6 +85,14 @@ class ToolLoader:
             from .builtin import MemoryTools
 
             return MemoryTools()
+        elif name == "tracker":
+            from .builtin import TrackerTools
+
+            return TrackerTools()
+        elif name == "briefing":
+            from .builtin import BriefingTools
+
+            return BriefingTools()
         elif name == "spectro":
             from .builtin.spectro import SpectroTools
 
@@ -95,3 +103,4 @@ class ToolLoader:
     def get_loaded(self) -> dict[str, list[str]]:
         """Get dict of loaded providers and their tools."""
         return self._loaded.copy()
+

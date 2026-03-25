@@ -41,7 +41,6 @@ from qdrant_client.http.models import (
     Range,
     SparseVector,
     SparseVectorParams,
-    SparseVectorsConfig,
     VectorParams,
 )
 
@@ -130,9 +129,8 @@ class VectorStore:
             logger.info(f"Creating collection: {self.collection}")
             sparse_config = None
             if self.sparse_encoder is not None:
-                sparse_config = SparseVectorsConfig(
-                    bm25=SparseVectorParams()
-                )
+                # SparseVectorsConfig is a Dict alias — use plain dict
+                sparse_config = {"bm25": SparseVectorParams()}
             self._client.create_collection(
                 collection_name=self.collection,
                 vectors_config=VectorParams(
