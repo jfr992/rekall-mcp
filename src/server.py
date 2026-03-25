@@ -584,6 +584,48 @@ async def api_proactive_context_summary(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/compact", methods=["POST"])
+async def api_compact_memories(request):
+    """REST API: Compact old memories by summarizing groups with an LLM.
+
+    Body (JSON):
+        older_than_days: Age threshold in days (default: 30)
+        dry_run: Preview without executing (default: true)
+        project: Limit to a specific project (optional)
+        llm_provider: "anthropic" or "openai" (default: "anthropic")
+    """
+    from starlette.responses import JSONResponse
+
+    try:
+        body = await request.json()
+        older_than_days = int(body.get("older_than_days", 30))
+        dry_run = bool(body.get("dry_run", True))
+        project = body.get("project")
+        llm_provider = body.get("llm_provider", "anthropic")
+
+        manager = _get_memory_manager()
+
+        # Load all memories from vector store
+        filters = {"project": project} if project else None
+        memories = manager.store.scroll(filters=filters, limit=1000)
+
+        from memory.compact import compact_memories
+
+        result = compact_memories(
+            memories,
+            dry_run=dry_run,
+            older_than_days=older_than_days,
+            manager=manager if not dry_run else None,
+            llm_provider=llm_provider,
+            memory_dir=manager.memory_dir if not dry_run else None,
+        )
+
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error(f"Error compacting memories: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/dashboard", methods=["GET"])
 async def api_memory_dashboard(_request):
     """Dashboard UI for visualizing memory embeddings."""
