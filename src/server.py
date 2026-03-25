@@ -299,6 +299,85 @@ async def api_get_context(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/context/smart", methods=["GET"])
+async def api_smart_context(request):
+    """REST API: Smart, project-aware, token-capped context for session injection.
+
+    Query params:
+        project: Filter by project name (optional)
+        limit: Max memories to consider (default: 30)
+        max_tokens: Token budget (default: 2000)
+    """
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        limit = _read_int(query, "limit", 30)
+        max_tokens = _read_int(query, "max_tokens", 2000)
+
+        if limit < 1:
+            limit = 1
+        if max_tokens < 100:
+            max_tokens = 100
+
+        from memory.smart_context import get_smart_context
+
+        manager = _get_memory_manager()
+        result = get_smart_context(manager, project=project, limit=limit, max_tokens=max_tokens)
+
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error(f"Error building smart context: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/recall/quick", methods=["GET"])
+async def api_quick_recall(request):
+    """REST API: Fast, high-threshold recall for per-prompt injection.
+
+    Returns at most 2 highly relevant memories. Designed for <100ms response.
+
+    Query params:
+        q: Query text (required)
+        limit: Max results (default: 2, max: 3)
+        threshold: Minimum similarity score (default: 0.7)
+    """
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        q = query.get("q", "").strip()
+        limit = min(_read_int(query, "limit", 2), 3)
+        threshold = _read_float(query, "threshold", 0.7)
+
+        if not q:
+            return JSONResponse({"error": "q is required"}, status_code=400)
+
+        manager = _get_memory_manager()
+        results = manager.recall(
+            query=q,
+            limit=limit,
+            score_threshold=threshold,
+        )
+
+        # Return minimal payload for prompt injection
+        memories = [
+            {
+                "content": r.get("content", ""),
+                "type": r.get("type", ""),
+                "date": r.get("date", ""),
+                "score": r.get("score", 0.0),
+            }
+            for r in results
+        ]
+
+        return JSONResponse({"query": q, "memories": memories, "count": len(memories)})
+    except Exception as e:
+        logger.error(f"Error in quick recall: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/api/memory/context/hierarchy", methods=["GET"])
 async def api_get_hierarchical_context(request):
     """REST API: Get topic-grouped context for a project."""
