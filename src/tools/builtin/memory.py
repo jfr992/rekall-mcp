@@ -232,7 +232,7 @@ class OptimizedMemoryTools(BaseToolProvider):
             ),
             ToolDefinition(
                 name="recall_memories",
-                description="Search memories semantically",
+                description="Search memories using hybrid BM25 + semantic search (exact terms AND meaning)",
                 handler=None,
             ),
             ToolDefinition(
@@ -343,15 +343,19 @@ class OptimizedMemoryTools(BaseToolProvider):
             project: str | None = None,
             days: int | None = None,
         ) -> str:
-            """Search memories using semantic similarity.
+            """Search memories using hybrid BM25 + semantic search.
 
-            Best practice from LangChain/Qdrant:
-            - Semantic search finds meaning, not just keywords
-            - Filter by type/project/date for precise results
-            - Returns formatted with guidance on how to use each type
+            Uses RRF (Reciprocal Rank Fusion) to combine:
+            - BM25 sparse vectors: exact term matching (great for ticket IDs, error codes, names)
+            - Dense semantic vectors: meaning-based similarity (great for concepts, paraphrasing)
+
+            Use this for:
+            - Exact lookups: "TOPE-123", "SCRAM-SHA-256", "stable_hash_id"
+            - Semantic queries: "authentication problems", "database connection issues"
+            - Mixed: "pgbouncer connection pooling" (finds both exact and semantic matches)
 
             Args:
-                query: What to search for
+                query: What to search for (exact terms or conceptual queries both work)
                 limit: Maximum results (default: 5)
                 memory_type: Filter by type (decision, learning, preference, requirement, fact)
                 project: Filter by project name
