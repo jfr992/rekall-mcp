@@ -176,8 +176,9 @@ class TestSmartContextTruncation:
             assert "h" in ids or len(selected) >= 1
 
 
+@pytest.mark.integration
 class TestGetSmartContext:
-    """Test the get_smart_context manager-level function."""
+    """Test the get_smart_context manager-level function (requires Qdrant)."""
 
     def test_get_smart_context_returns_dict(self, tmp_path, monkeypatch):
         """get_smart_context returns dict with context and metadata."""
