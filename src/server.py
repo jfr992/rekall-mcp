@@ -99,9 +99,8 @@ async def app_lifespan(_server: FastMCP) -> AsyncIterator[dict]:
 
 # Create the MCP server
 # Set host to 0.0.0.0 for Docker container access
-# stateless_http=True eliminates session management, preventing "Session not found"
-# errors when Claude Code reconnects after context compaction or session resume.
-# This is safe because we don't use elicitation or sampling features.
+# stateless_http must be True for Claude Code compatibility.
+# Claude Code sends each request independently without session tracking.
 mcp = FastMCP(
     "AI Memory & Tools Server",
     lifespan=app_lifespan,
@@ -130,7 +129,7 @@ if not _is_testing:
 
 
 # Add server management tools
-@mcp.tool()
+@mcp.tool(structured_output=False)
 async def list_available_tools() -> str:
     """List all available tools and their status.
 
@@ -159,7 +158,7 @@ async def list_available_tools() -> str:
     return output
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 async def get_telemetry_summary() -> str:
     """Get performance telemetry for all operations.
 

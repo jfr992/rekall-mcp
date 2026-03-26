@@ -286,7 +286,7 @@ class OptimizedMemoryTools(BaseToolProvider):
         """Register optimized memory tools."""
         registered = []
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def observe(summary: str, type: str = "auto", context: str | None = None) -> str:
             """Record what was just accomplished for future reference.
 
@@ -335,7 +335,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("observe")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def recall_memories(
             query: str,
             limit: int = 5,
@@ -367,7 +367,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("recall_memories")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def save_memory(
             content: str, memory_type: str = "note", project: str | None = None
         ) -> str:
@@ -388,7 +388,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("save_memory")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def get_cached_context(project: str | None = None) -> str:
             """Get stable context optimized for prompt caching.
 
@@ -410,7 +410,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("get_cached_context")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def get_hierarchical_context(
             project: str | None = None,
             max_topics: int = 8,
@@ -436,7 +436,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("get_hierarchical_context")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def skill_context(
             project: str | None = None,
             min_mentions: int = 2,
@@ -455,7 +455,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("skill_context")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def memory_stats() -> str:
             """Get memory system statistics and health."""
             stats = self.manager.get_stats()
@@ -475,7 +475,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("memory_stats")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def consolidate_memories(
             project: str | None = None,
             limit: int = 240,
@@ -494,7 +494,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("consolidate_memories")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def proactive_context_summary(
             project: str | None = None,
             limit: int = 120,
@@ -507,7 +507,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("proactive_context_summary")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def rebuild_knowledge_graph() -> str:
             """Rebuild the knowledge graph from all existing memories."""
             stats = self.manager.knowledge_graph.rebuild(
