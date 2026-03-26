@@ -149,6 +149,10 @@ class MemoryManager:
         self._embedder: Embedder | None = None
         self._embedding_model = embedding_model
 
+        # BM25 sparse encoder for hybrid search
+        self._sparse_encoder = None
+        self._bm25_path = self.memory_dir / "_bm25_vocab.json"
+
         self._knowledge_graph: KnowledgeGraph | None = None
 
         # Telemetry
@@ -159,12 +163,24 @@ class MemoryManager:
     # -------------------------------------------------------------------------
 
     @property
+    def sparse_encoder(self):
+        """Get BM25 encoder, loading from disk if available."""
+        if self._sparse_encoder is None and self._bm25_path.exists():
+            from core import BM25Encoder
+
+            enc = BM25Encoder()
+            enc.load(str(self._bm25_path))
+            self._sparse_encoder = enc
+        return self._sparse_encoder
+
+    @property
     def store(self) -> VectorStore:
         """Get vector store, initializing if needed."""
         if self._store is None:
             self._store = VectorStore(
                 collection=self.COLLECTION,
                 url=self._qdrant_url,
+                sparse_encoder=self.sparse_encoder,
             )
             # Create indexes for filtering
             for field in ["date", "project", "type"]:
@@ -246,7 +262,7 @@ class MemoryManager:
 
             # Save to vector store (searchability)
             vector = self.embedder.encode(content)
-            self.store.save(id=memory_id, vector=vector, payload=payload)
+            self.store.save(id=memory_id, vector=vector, payload=payload, content=content)
 
             # Build/refresh graph node for this memory
             self.knowledge_graph.add_node(
@@ -383,6 +399,7 @@ class MemoryManager:
                 limit=limit * 2 if limit and graph_has_edges else limit,
                 filters=filters if filters else None,
                 score_threshold=score_threshold,
+                query_text=query,
             )
 
             # Phase 2: EXPAND — graph traversal

@@ -95,3 +95,4 @@ class ToolLoader:
     def get_loaded(self) -> dict[str, list[str]]:
         """Get dict of loaded providers and their tools."""
         return self._loaded.copy()
+
