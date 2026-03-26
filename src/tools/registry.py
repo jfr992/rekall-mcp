@@ -88,24 +88,6 @@ class ToolRegistry:
             enabled=True,  # Enabled by default
         )
 
-        # Tracker tools - Jarvis mode pending item tracking
-        self._tools["tracker"] = ToolInfo(
-            name="tracker",
-            description="Pending items tracker with due dates and status",
-            builtin=True,
-            requires=[],
-            enabled=True,  # Enabled by default for Jarvis mode
-        )
-
-        # Briefing tools - session summaries and daily briefings
-        self._tools["briefing"] = ToolInfo(
-            name="briefing",
-            description="Proactive briefing engine for session start and daily summaries",
-            builtin=True,
-            requires=[],
-            enabled=True,  # Enabled by default for Jarvis mode
-        )
-
         # Spectro tools - requires API key
         self._tools["spectro"] = ToolInfo(
             name="spectro",
