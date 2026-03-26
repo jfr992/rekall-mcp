@@ -232,7 +232,7 @@ class OptimizedMemoryTools(BaseToolProvider):
             ),
             ToolDefinition(
                 name="recall_memories",
-                description="Search memories semantically",
+                description="Search memories using hybrid BM25 + semantic search (exact terms AND meaning)",
                 handler=None,
             ),
             ToolDefinition(
@@ -286,7 +286,7 @@ class OptimizedMemoryTools(BaseToolProvider):
         """Register optimized memory tools."""
         registered = []
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def observe(summary: str, type: str = "auto", context: str | None = None) -> str:
             """Record what was just accomplished for future reference.
 
@@ -335,7 +335,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("observe")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def recall_memories(
             query: str,
             limit: int = 5,
@@ -343,15 +343,19 @@ class OptimizedMemoryTools(BaseToolProvider):
             project: str | None = None,
             days: int | None = None,
         ) -> str:
-            """Search memories using semantic similarity.
+            """Search memories using hybrid BM25 + semantic search.
 
-            Best practice from LangChain/Qdrant:
-            - Semantic search finds meaning, not just keywords
-            - Filter by type/project/date for precise results
-            - Returns formatted with guidance on how to use each type
+            Uses RRF (Reciprocal Rank Fusion) to combine:
+            - BM25 sparse vectors: exact term matching (great for ticket IDs, error codes, names)
+            - Dense semantic vectors: meaning-based similarity (great for concepts, paraphrasing)
+
+            Use this for:
+            - Exact lookups: "TOPE-123", "SCRAM-SHA-256", "stable_hash_id"
+            - Semantic queries: "authentication problems", "database connection issues"
+            - Mixed: "pgbouncer connection pooling" (finds both exact and semantic matches)
 
             Args:
-                query: What to search for
+                query: What to search for (exact terms or conceptual queries both work)
                 limit: Maximum results (default: 5)
                 memory_type: Filter by type (decision, learning, preference, requirement, fact)
                 project: Filter by project name
@@ -363,7 +367,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("recall_memories")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def save_memory(
             content: str, memory_type: str = "note", project: str | None = None
         ) -> str:
@@ -384,7 +388,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("save_memory")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def get_cached_context(project: str | None = None) -> str:
             """Get stable context optimized for prompt caching.
 
@@ -406,7 +410,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("get_cached_context")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def get_hierarchical_context(
             project: str | None = None,
             max_topics: int = 8,
@@ -432,7 +436,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("get_hierarchical_context")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def skill_context(
             project: str | None = None,
             min_mentions: int = 2,
@@ -451,7 +455,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("skill_context")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def memory_stats() -> str:
             """Get memory system statistics and health."""
             stats = self.manager.get_stats()
@@ -471,7 +475,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("memory_stats")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def consolidate_memories(
             project: str | None = None,
             limit: int = 240,
@@ -490,7 +494,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("consolidate_memories")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def proactive_context_summary(
             project: str | None = None,
             limit: int = 120,
@@ -503,7 +507,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("proactive_context_summary")
 
-        @mcp.tool()
+        @mcp.tool(structured_output=False)
         async def rebuild_knowledge_graph() -> str:
             """Rebuild the knowledge graph from all existing memories."""
             stats = self.manager.knowledge_graph.rebuild(

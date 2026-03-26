@@ -99,9 +99,8 @@ async def app_lifespan(_server: FastMCP) -> AsyncIterator[dict]:
 
 # Create the MCP server
 # Set host to 0.0.0.0 for Docker container access
-# stateless_http=True eliminates session management, preventing "Session not found"
-# errors when Claude Code reconnects after context compaction or session resume.
-# This is safe because we don't use elicitation or sampling features.
+# stateless_http must be True for Claude Code compatibility.
+# Claude Code sends each request independently without session tracking.
 mcp = FastMCP(
     "AI Memory & Tools Server",
     lifespan=app_lifespan,
@@ -130,7 +129,7 @@ if not _is_testing:
 
 
 # Add server management tools
-@mcp.tool()
+@mcp.tool(structured_output=False)
 async def list_available_tools() -> str:
     """List all available tools and their status.
 
@@ -159,7 +158,7 @@ async def list_available_tools() -> str:
     return output
 
 
-@mcp.tool()
+@mcp.tool(structured_output=False)
 async def get_telemetry_summary() -> str:
     """Get performance telemetry for all operations.
 
@@ -296,6 +295,85 @@ async def api_get_context(request):
         return JSONResponse({"project": project, "context": context})
     except Exception as e:
         logger.error(f"Error getting context: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/context/smart", methods=["GET"])
+async def api_smart_context(request):
+    """REST API: Smart, project-aware, token-capped context for session injection.
+
+    Query params:
+        project: Filter by project name (optional)
+        limit: Max memories to consider (default: 30)
+        max_tokens: Token budget (default: 2000)
+    """
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        limit = _read_int(query, "limit", 30)
+        max_tokens = _read_int(query, "max_tokens", 2000)
+
+        if limit < 1:
+            limit = 1
+        if max_tokens < 100:
+            max_tokens = 100
+
+        from memory.smart_context import get_smart_context
+
+        manager = _get_memory_manager()
+        result = get_smart_context(manager, project=project, limit=limit, max_tokens=max_tokens)
+
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error(f"Error building smart context: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/recall/quick", methods=["GET"])
+async def api_quick_recall(request):
+    """REST API: Fast, high-threshold recall for per-prompt injection.
+
+    Returns at most 2 highly relevant memories. Designed for <100ms response.
+
+    Query params:
+        q: Query text (required)
+        limit: Max results (default: 2, max: 3)
+        threshold: Minimum similarity score (default: 0.7)
+    """
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        q = query.get("q", "").strip()
+        limit = min(_read_int(query, "limit", 2), 3)
+        threshold = _read_float(query, "threshold", 0.7)
+
+        if not q:
+            return JSONResponse({"error": "q is required"}, status_code=400)
+
+        manager = _get_memory_manager()
+        results = manager.recall(
+            query=q,
+            limit=limit,
+            score_threshold=threshold,
+        )
+
+        # Return minimal payload for prompt injection
+        memories = [
+            {
+                "content": r.get("content", ""),
+                "type": r.get("type", ""),
+                "date": r.get("date", ""),
+                "score": r.get("score", 0.0),
+            }
+            for r in results
+        ]
+
+        return JSONResponse({"query": q, "memories": memories, "count": len(memories)})
+    except Exception as e:
+        logger.error(f"Error in quick recall: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -502,6 +580,48 @@ async def api_proactive_context_summary(request):
         )
     except Exception as e:
         logger.error(f"Error building proactive context summary: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/compact", methods=["POST"])
+async def api_compact_memories(request):
+    """REST API: Compact old memories by summarizing groups with an LLM.
+
+    Body (JSON):
+        older_than_days: Age threshold in days (default: 30)
+        dry_run: Preview without executing (default: true)
+        project: Limit to a specific project (optional)
+        llm_provider: "anthropic" or "openai" (default: "anthropic")
+    """
+    from starlette.responses import JSONResponse
+
+    try:
+        body = await request.json()
+        older_than_days = int(body.get("older_than_days", 30))
+        dry_run = bool(body.get("dry_run", True))
+        project = body.get("project")
+        llm_provider = body.get("llm_provider", "anthropic")
+
+        manager = _get_memory_manager()
+
+        # Load all memories from vector store
+        filters = {"project": project} if project else None
+        memories = manager.store.scroll(filters=filters, limit=1000)
+
+        from memory.compact import compact_memories
+
+        result = compact_memories(
+            memories,
+            dry_run=dry_run,
+            older_than_days=older_than_days,
+            manager=manager if not dry_run else None,
+            llm_provider=llm_provider,
+            memory_dir=manager.memory_dir if not dry_run else None,
+        )
+
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error(f"Error compacting memories: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 

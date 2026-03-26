@@ -33,9 +33,14 @@ from qdrant_client.http.models import (
     Distance,
     FieldCondition,
     Filter,
+    Fusion,
+    FusionQuery,
     MatchValue,
     PointStruct,
+    Prefetch,
     Range,
+    SparseVector,
+    SparseVectorParams,
     VectorParams,
 )
 
@@ -78,6 +83,7 @@ class VectorStore:
         url: str = "http://localhost:6333",
         api_key: str | None = None,
         embedding_dim: int = 384,
+        sparse_encoder: Any | None = None,
     ) -> None:
         """Initialize vector store.
 
@@ -86,11 +92,13 @@ class VectorStore:
             url: Qdrant server URL
             api_key: Optional API key for Qdrant Cloud
             embedding_dim: Vector dimensions (default: 384 for MiniLM)
+            sparse_encoder: BM25Encoder for hybrid search (optional)
         """
         self.collection = collection
         self.url = url
         self.api_key = api_key
         self.embedding_dim = embedding_dim
+        self.sparse_encoder = sparse_encoder
 
         self._client: QdrantClient | None = None
         self._telemetry = Telemetry.get()
@@ -119,12 +127,17 @@ class VectorStore:
 
         if self.collection not in collections:
             logger.info(f"Creating collection: {self.collection}")
+            sparse_config = None
+            if self.sparse_encoder is not None:
+                # SparseVectorsConfig is a Dict alias — use plain dict
+                sparse_config = {"bm25": SparseVectorParams()}
             self._client.create_collection(
                 collection_name=self.collection,
                 vectors_config=VectorParams(
                     size=self.embedding_dim,
                     distance=Distance.COSINE,
                 ),
+                sparse_vectors_config=sparse_config,
             )
 
     def create_index(self, field: str, field_type: str = "keyword") -> None:
@@ -155,6 +168,7 @@ class VectorStore:
         id: str | int,
         vector: list[float],
         payload: dict[str, Any] | None = None,
+        content: str | None = None,
     ) -> None:
         """Save a vector with metadata.
 
@@ -162,27 +176,51 @@ class VectorStore:
             id: Unique identifier (string or int)
             vector: Embedding vector
             payload: Metadata dict (searchable via filters)
+            content: Original text for sparse BM25 encoding (optional)
 
         Example:
             store.save(
                 id="mem_001",
                 vector=embedder.encode("Decided to use Python"),
-                payload={"type": "decision", "project": "my-app"}
+                payload={"type": "decision", "project": "my-app"},
+                content="Decided to use Python",
             )
         """
         with self._telemetry.track("vector_store.save"):
-            # Convert string ID to stable int for Qdrant
             point_id = id if isinstance(id, int) else stable_hash_id(id)
 
-            point = PointStruct(
-                id=point_id,
-                vector=vector,
-                payload=payload or {},
-            )
+            # Build sparse vector if encoder and content available
+            if self.sparse_encoder is not None and content:
+                sparse = self.sparse_encoder.encode(content)
+                if sparse:
+                    self.client.upsert(
+                        collection_name=self.collection,
+                        points=[
+                            {
+                                "id": point_id,
+                                "vector": {
+                                    "": vector,
+                                    "bm25": SparseVector(
+                                        indices=list(sparse.keys()),
+                                        values=list(sparse.values()),
+                                    ),
+                                },
+                                "payload": payload or {},
+                            }
+                        ],
+                    )
+                    return
 
+            # Dense-only save (no encoder or no content)
             self.client.upsert(
                 collection_name=self.collection,
-                points=[point],
+                points=[
+                    PointStruct(
+                        id=point_id,
+                        vector=vector,
+                        payload=payload or {},
+                    )
+                ],
             )
 
     def save_batch(
@@ -241,30 +279,61 @@ class VectorStore:
         limit: int = 10,
         filters: dict[str, Any] | None = None,
         score_threshold: float = 0.0,
+        query_text: str = "",
     ) -> list[dict[str, Any]]:
-        """Search for similar vectors.
+        """Search for similar vectors (hybrid if sparse encoder available).
 
         Args:
-            vector: Query vector
+            vector: Query vector (dense)
             limit: Maximum results
             filters: Filter by payload fields {"field": "value"}
             score_threshold: Minimum similarity (0-1)
+            query_text: Original query text for BM25 sparse search
 
         Returns:
             List of results with score and payload
 
         Example:
             results = store.search(
-                vector=embedder.encode("architecture"),
+                vector=embedder.encode("TOPE-123"),
+                query_text="TOPE-123",
                 limit=5,
-                filters={"project": "my-app"}
             )
         """
         with self._telemetry.track("vector_store.search"):
-            # Build filter
             query_filter = self._build_filter(filters) if filters else None
 
-            # Execute search
+            # Hybrid search if encoder + query text available
+            if self.sparse_encoder is not None and query_text:
+                sparse = self.sparse_encoder.encode(query_text)
+                if sparse:
+                    prefetch_limit = limit * 2
+                    results = self.client.query_points(
+                        collection_name=self.collection,
+                        prefetch=[
+                            Prefetch(
+                                query=vector,
+                                using="",
+                                limit=prefetch_limit,
+                                filter=query_filter,
+                            ),
+                            Prefetch(
+                                query=SparseVector(
+                                    indices=list(sparse.keys()),
+                                    values=list(sparse.values()),
+                                ),
+                                using="bm25",
+                                limit=prefetch_limit,
+                                filter=query_filter,
+                            ),
+                        ],
+                        query=FusionQuery(fusion=Fusion.RRF),
+                        limit=limit,
+                    ).points
+
+                    return [{"score": hit.score, **hit.payload} for hit in results]
+
+            # Dense-only search
             results = self.client.query_points(
                 collection_name=self.collection,
                 query=vector,
@@ -273,7 +342,6 @@ class VectorStore:
                 score_threshold=score_threshold,
             ).points
 
-            # Format results
             return [
                 {
                     "score": hit.score,
