@@ -344,6 +344,156 @@ class MemoryManager:
             raise
 
     # -------------------------------------------------------------------------
+    # DELETE: Remove memories
+    # -------------------------------------------------------------------------
+
+    def delete(self, memory_id: str) -> bool:
+        """Delete a memory from YAML, vector store, and knowledge graph.
+
+        Args:
+            memory_id: The memory ID (e.g., "2026-04-01_fact_aaa")
+
+        Returns:
+            True if deleted, False if not found
+        """
+        # Parse date from memory_id: "2026-04-01_fact_hash" → "2026-04-01"
+        date = memory_id[:10] if len(memory_id) >= 10 else None
+        if not date or len(date) != 10 or date[4] != "-" or date[7] != "-":
+            return False
+
+        yaml_file = self.memory_dir / f"{date}.yaml"
+        if not yaml_file.exists():
+            return False
+
+        with open(yaml_file) as f:
+            data = yaml.safe_load(f) or {}
+
+        found = False
+        for type_key in list(data.keys()):
+            if not isinstance(data[type_key], list):
+                continue
+            original_len = len(data[type_key])
+            data[type_key] = [m for m in data[type_key] if m.get("id") != memory_id]
+            if len(data[type_key]) < original_len:
+                found = True
+                if not data[type_key]:
+                    del data[type_key]
+
+        if not found:
+            return False
+
+        # Check if file is now empty (only 'date' key or nothing)
+        has_memories = any(isinstance(v, list) and v for v in data.values())
+        if not has_memories:
+            yaml_file.unlink()
+        else:
+            fd, tmp = tempfile.mkstemp(dir=self.memory_dir, suffix=".yaml.tmp")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+                os.replace(tmp, yaml_file)
+            except BaseException:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                raise
+
+        # Best-effort: delete from vector store
+        try:
+            from core import stable_hash_id
+            from qdrant_client.models import PointIdsList
+
+            self.store.client.delete(
+                collection_name=self.store.collection,
+                points_selector=PointIdsList(points=[stable_hash_id(memory_id)]),
+            )
+        except Exception:
+            logger.warning(f"Failed to delete {memory_id} from vector store", exc_info=True)
+
+        # Best-effort: delete from knowledge graph
+        try:
+            self.knowledge_graph.remove_node(memory_id)
+            self.knowledge_graph.save()
+        except Exception:
+            logger.warning(f"Failed to delete {memory_id} from knowledge graph", exc_info=True)
+
+        logger.info(f"Deleted memory: {memory_id}")
+        return True
+
+    def cleanup(
+        self,
+        max_age_days_facts: int | None = None,
+        prune_superseded: bool = False,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        """Clean up stale and redundant memories.
+
+        Args:
+            max_age_days_facts: Delete facts older than N days
+            prune_superseded: Delete memories superseded in knowledge graph
+            dry_run: Report what would be deleted without deleting
+
+        Returns:
+            Stats dict with pruning counts and flagged contradictions
+        """
+        stats: dict[str, Any] = {
+            "facts_pruned": 0,
+            "superseded_pruned": 0,
+            "contradictions_flagged": 0,
+            "contradictions": [],
+            "dry_run": dry_run,
+        }
+
+        # 1. Prune old facts
+        if max_age_days_facts is not None:
+            cutoff = (datetime.now() - timedelta(days=max_age_days_facts)).strftime("%Y-%m-%d")
+
+            for yaml_file in sorted(self.memory_dir.glob("*.yaml")):
+                file_date = yaml_file.stem
+                if file_date.startswith("_") or file_date >= cutoff:
+                    continue
+
+                with open(yaml_file) as f:
+                    data = yaml.safe_load(f) or {}
+
+                if "facts" in data and isinstance(data["facts"], list):
+                    count = len(data["facts"])
+                    if not dry_run:
+                        for fact in list(data["facts"]):
+                            self.delete(fact["id"])
+                    stats["facts_pruned"] += count
+
+        # 2. Prune superseded memories
+        if prune_superseded:
+            graph = self.knowledge_graph
+            superseded_ids = set()
+            for _source, target, edge_data in graph._graph.edges(data=True):
+                if edge_data.get("relation") == "supersedes":
+                    superseded_ids.add(target)
+
+            for memory_id in superseded_ids:
+                if not dry_run:
+                    self.delete(memory_id)
+                stats["superseded_pruned"] += 1
+
+            # 3. Flag contradictions (do NOT delete)
+            seen_pairs: set[tuple[str, str]] = set()
+            for source, target, edge_data in graph._graph.edges(data=True):
+                if edge_data.get("relation") == "contradicts":
+                    pair = tuple(sorted([source, target]))
+                    if pair in seen_pairs:
+                        continue
+                    seen_pairs.add(pair)
+                    stats["contradictions_flagged"] += 1
+                    stats["contradictions"].append({
+                        "memory_a": source,
+                        "memory_b": target,
+                    })
+
+        return stats
+
+    # -------------------------------------------------------------------------
     # RECALL: Find relevant memories
     # -------------------------------------------------------------------------
 
