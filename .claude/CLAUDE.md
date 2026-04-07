@@ -173,3 +173,4 @@ docker compose --profile test down
 - Stats endpoint includes `knowledge_graph` field (nodes, edges, relations breakdown)
 - All tests passing (245 passed, 9 skipped)
 - **Fix**: `days` filter in `recall_memories()` and `/api/memory/graph` — Qdrant `Range` requires numeric values but `date` is stored as a `YYYY-MM-DD` string. Removed from Qdrant filter; applied post-retrieval via Python string comparison (`manager.py:367-474`, `server.py:228-379`)
+- **Benchmark**: LongMemEval runner with 3 ablation modes (dense, hybrid, hybrid+graph). Results: hybrid 97.6% R@5 (beats MemPalace 96.6%), dense ties at 96.6%. Reproducible in `benchmarks/`

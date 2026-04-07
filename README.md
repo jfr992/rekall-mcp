@@ -184,6 +184,29 @@ Stored: "Set api_key to [REDACTED]"
 
 ---
 
+## Benchmark
+
+Tested on [LongMemEval](https://github.com/xiaowu0162/LongMemEval) (500 questions, 6 question types). Reproducible — runner in [`benchmarks/`](benchmarks/).
+
+| Mode | R@5 | What It Tests |
+|------|-----|---------------|
+| Dense (semantic only) | 96.6% | Same as MemPalace raw — identical score |
+| **Hybrid (BM25 + dense)** | **97.6%** | **Memento's default pipeline — beats all published zero-API scores** |
+| Hybrid + graph | 97.6% | Adds knowledge graph expansion |
+| MemPalace (raw, ChromaDB) | 96.6% | Highest previously published zero-API score |
+
+Hybrid search catches entity-specific queries that pure semantic search misses. No LLM required, no API calls, runs entirely local.
+
+```bash
+# Reproduce
+bash benchmarks/download_data.sh
+docker compose up -d
+PYTHONPATH=src:. .venv/bin/python -m benchmarks.longmemeval_runner \
+    benchmarks/data/longmemeval_s_cleaned.json --mode all
+```
+
+---
+
 ## How Search Works
 
 Memories are converted to **embeddings** (vectors that capture meaning) for semantic search:
