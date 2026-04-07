@@ -735,6 +735,963 @@ async def api_kb_topic(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/kb", methods=["GET"])
+async def api_kb(_request):
+    """Knowledge Base UI."""
+    from starlette.responses import HTMLResponse
+
+    html = """<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Memento \u2014 Knowledge Base</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:"Inter","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:#050510;color:#e2e8f0;
+}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(100,120,255,0.15);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:rgba(100,120,255,0.3)}
+
+/* ---- TOP BAR ---- */
+.topbar{
+  position:fixed;top:0;left:0;right:0;z-index:100;
+  display:flex;align-items:center;gap:10px;
+  padding:10px 20px;height:52px;
+  background:rgba(10,14,36,0.92);backdrop-filter:blur(20px);
+  border-bottom:1px solid rgba(100,120,255,0.1);
+}
+.topbar .brand{
+  font-weight:700;font-size:15px;
+  background:linear-gradient(135deg,#818cf8,#38bdf8);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+  white-space:nowrap;cursor:pointer;flex-shrink:0;
+}
+.topbar .search-box{
+  position:relative;flex:0 1 280px;
+}
+.topbar .search-box input{
+  width:100%;
+  background:rgba(15,20,50,0.8);border:1px solid rgba(100,120,255,0.15);
+  color:#e2e8f0;border-radius:8px;padding:6px 12px 6px 30px;font-size:12px;
+  outline:none;transition:border-color 150ms;
+}
+.topbar .search-box input:focus{border-color:rgba(129,140,248,0.4)}
+.topbar .search-box .search-icon{
+  position:absolute;left:10px;top:50%;transform:translateY(-50%);
+  color:#475569;font-size:12px;pointer-events:none;
+}
+.filter-pills{
+  display:flex;gap:4px;flex-wrap:nowrap;overflow-x:auto;flex:1;
+  scrollbar-width:none;-ms-overflow-style:none;
+}
+.filter-pills::-webkit-scrollbar{display:none}
+.pill{
+  padding:3px 10px;border-radius:12px;font-size:10px;font-weight:500;
+  cursor:pointer;white-space:nowrap;transition:all 150ms;
+  background:rgba(15,20,50,0.6);border:1px solid rgba(100,120,255,0.1);color:#64748b;
+}
+.pill:hover{border-color:rgba(100,120,255,0.25);color:#94a3b8}
+.pill.active{background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.35);color:#a5b4fc}
+.mode-toggle{
+  display:flex;border-radius:8px;overflow:hidden;flex-shrink:0;
+  border:1px solid rgba(100,120,255,0.15);
+}
+.mode-toggle button{
+  background:rgba(15,20,50,0.6);border:none;color:#64748b;
+  padding:4px 14px;font-size:11px;font-weight:500;cursor:pointer;
+  transition:all 150ms;
+}
+.mode-toggle button:hover{color:#94a3b8}
+.mode-toggle button.active{background:rgba(99,102,241,0.2);color:#a5b4fc}
+.topbar .nav-link{
+  font-size:11px;color:#475569;text-decoration:none;white-space:nowrap;flex-shrink:0;
+  transition:color 150ms;
+}
+.topbar .nav-link:hover{color:#818cf8}
+
+/* ---- MAIN AREA ---- */
+.main{
+  position:fixed;top:52px;left:0;right:0;bottom:0;
+  overflow-y:auto;overflow-x:hidden;
+  padding:16px 20px 20px;
+}
+
+/* ---- STATS BAR ---- */
+.stats-bar{
+  display:flex;flex-wrap:wrap;gap:12px;align-items:center;
+  padding:10px 16px;margin-bottom:14px;
+  background:rgba(15,20,50,0.5);border:1px solid rgba(100,120,255,0.08);border-radius:10px;
+  font-size:11px;color:#64748b;
+}
+.stats-bar .stat{display:flex;align-items:center;gap:4px}
+.stats-bar .stat-val{font-weight:600;color:#94a3b8}
+.stats-bar .dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.stats-bar .sep{width:1px;height:14px;background:rgba(100,120,255,0.1)}
+
+/* ---- SKILLS ROW ---- */
+.skills-row{
+  display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px;
+}
+.skill-badge{
+  padding:3px 10px;border-radius:10px;font-size:10px;font-weight:500;
+  background:rgba(56,189,248,0.08);border:1px solid rgba(56,189,248,0.15);color:#38bdf8;
+}
+.skill-badge .skill-count{color:#475569;margin-left:3px}
+
+/* ---- TOPIC GRID ---- */
+.topic-grid{
+  display:grid;grid-template-columns:repeat(3,1fr);gap:12px;
+}
+.topic-card{
+  background:rgba(15,20,50,0.6);border:1px solid rgba(100,120,255,0.1);
+  border-radius:12px;padding:14px 16px;cursor:pointer;
+  transition:all 200ms;position:relative;overflow:hidden;
+}
+.topic-card:hover{
+  border-color:rgba(129,140,248,0.3);
+  background:rgba(15,20,50,0.75);
+  transform:translateY(-1px);
+}
+.topic-card .tc-label{
+  font-size:13px;font-weight:600;color:#e2e8f0;margin-bottom:6px;
+  display:flex;align-items:center;gap:6px;
+}
+.topic-card .tc-count{
+  font-size:10px;font-weight:500;color:#475569;
+  background:rgba(100,120,255,0.08);padding:1px 6px;border-radius:8px;
+}
+.topic-card .tc-preview{
+  font-size:11px;color:#64748b;line-height:1.5;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  margin-bottom:8px;
+}
+.topic-card .tc-types{display:flex;gap:4px;flex-wrap:wrap}
+.type-dot{
+  width:6px;height:6px;border-radius:50%;display:inline-block;flex-shrink:0;
+}
+.type-chip{
+  display:inline-flex;align-items:center;gap:3px;
+  font-size:9px;font-weight:500;padding:1px 6px;border-radius:6px;
+  background:rgba(0,0,0,0.2);
+}
+
+/* ---- BREADCRUMB ---- */
+.breadcrumb{
+  display:flex;align-items:center;gap:6px;margin-bottom:14px;
+  font-size:12px;color:#475569;
+}
+.breadcrumb a{color:#818cf8;text-decoration:none;cursor:pointer}
+.breadcrumb a:hover{color:#a5b4fc}
+.breadcrumb .bc-sep{color:#334155}
+
+/* ---- SPLIT VIEW ---- */
+.split-view{display:flex;gap:0;height:calc(100vh - 52px - 16px - 36px);min-height:0}
+.split-list{
+  width:280px;flex-shrink:0;overflow-y:auto;
+  border-right:1px solid rgba(100,120,255,0.08);
+  padding-right:0;
+}
+.split-detail{flex:1;overflow-y:auto;padding:0 0 0 16px;min-width:0}
+
+.mem-row{
+  padding:10px 12px;cursor:pointer;
+  border-left:2px solid transparent;
+  transition:all 150ms;
+}
+.mem-row:hover{background:rgba(99,102,241,0.04)}
+.mem-row.selected{
+  background:rgba(99,102,241,0.08);
+  border-left-color:#818cf8;
+}
+.mem-row .mr-content{
+  font-size:11px;color:#cbd5e1;line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+  margin-bottom:4px;
+}
+.mem-row .mr-meta{
+  display:flex;align-items:center;gap:6px;font-size:9px;color:#475569;
+}
+.mem-row .mr-score{color:#818cf8;font-weight:600}
+
+/* ---- DETAIL PANE ---- */
+.detail-pane{}
+.detail-pane .dp-header{
+  display:flex;align-items:center;gap:8px;margin-bottom:12px;flex-wrap:wrap;
+}
+.detail-pane .type-badge{
+  display:inline-block;padding:2px 10px;border-radius:6px;
+  font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;
+}
+.detail-pane .dp-date{font-size:10px;color:#475569}
+.detail-pane .dp-project{
+  font-size:10px;color:#818cf8;
+  background:rgba(99,102,241,0.1);padding:1px 8px;border-radius:6px;
+}
+.detail-pane .dp-content{
+  font-size:12px;color:#cbd5e1;line-height:1.65;white-space:pre-wrap;word-break:break-word;
+  margin-bottom:16px;
+  padding:14px 16px;
+  background:rgba(15,20,50,0.4);border:1px solid rgba(100,120,255,0.06);border-radius:10px;
+}
+.detail-pane .dp-section-title{
+  font-size:10px;font-weight:600;color:#818cf8;text-transform:uppercase;
+  letter-spacing:0.06em;margin-bottom:8px;
+}
+.detail-pane .dp-connections{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.conn-link{
+  display:flex;align-items:flex-start;gap:8px;
+  padding:8px 12px;border-radius:8px;cursor:pointer;
+  background:rgba(15,20,50,0.4);border:1px solid rgba(100,120,255,0.06);
+  transition:all 150ms;
+}
+.conn-link:hover{border-color:rgba(129,140,248,0.2);background:rgba(15,20,50,0.6)}
+.conn-link .cl-relation{
+  font-size:9px;font-weight:600;padding:2px 6px;border-radius:4px;white-space:nowrap;
+  margin-top:1px;flex-shrink:0;
+}
+.rel-related_to{background:rgba(99,102,241,0.15);color:#a5b4fc}
+.rel-led_to{background:rgba(251,191,36,0.15);color:#fbbf24}
+.rel-depends_on{background:rgba(34,211,238,0.15);color:#22d3ee}
+.rel-supersedes{background:rgba(244,114,182,0.15);color:#f472b6}
+.rel-contradicts{background:rgba(248,113,113,0.15);color:#f87171}
+.rel-part_of{background:rgba(167,139,250,0.15);color:#a78bfa}
+.conn-link .cl-body{flex:1;min-width:0}
+.conn-link .cl-content{font-size:11px;color:#94a3b8;line-height:1.4;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.conn-link .cl-meta{font-size:9px;color:#475569;margin-top:3px}
+.detail-pane .dp-id{
+  font-size:9px;color:#334155;font-family:"SF Mono","Fira Code","JetBrains Mono",monospace;
+  margin-top:8px;
+}
+
+/* ---- FIX MODE ---- */
+.fix-section{margin-bottom:24px}
+.fix-section .fs-title{
+  font-size:12px;font-weight:600;color:#e2e8f0;margin-bottom:10px;
+  display:flex;align-items:center;gap:8px;
+}
+.fix-section .fs-count{
+  font-size:10px;color:#475569;
+  background:rgba(100,120,255,0.08);padding:1px 8px;border-radius:8px;
+}
+.fix-card{
+  background:rgba(15,20,50,0.6);border:1px solid rgba(100,120,255,0.1);
+  border-radius:12px;padding:14px 16px;margin-bottom:10px;
+  transition:opacity 300ms;
+}
+.fix-card.dismissed{opacity:0;height:0;padding:0;margin:0;overflow:hidden}
+.fix-card .fc-score{
+  font-size:9px;font-weight:600;padding:2px 8px;border-radius:6px;
+  background:rgba(251,191,36,0.12);color:#fbbf24;margin-bottom:10px;display:inline-block;
+}
+.fix-card .fc-pair{
+  display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:10px;
+}
+.fix-card .fc-side{
+  padding:10px 12px;border-radius:8px;
+  background:rgba(10,14,36,0.5);border:1px solid rgba(100,120,255,0.06);
+}
+.fix-card .fc-side-label{
+  font-size:9px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;
+  margin-bottom:6px;
+}
+.fc-side-label.newer{color:#34d399}
+.fc-side-label.older{color:#f87171}
+.fc-side-label.side-a{color:#818cf8}
+.fc-side-label.side-b{color:#f472b6}
+.fix-card .fc-content{
+  font-size:11px;color:#94a3b8;line-height:1.5;
+  display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden;
+}
+.fix-card .fc-meta{font-size:9px;color:#475569;margin-top:4px}
+.fix-card .fc-actions{display:flex;gap:6px;justify-content:flex-end}
+.fix-card .fc-actions button{
+  background:rgba(99,102,241,0.1);border:1px solid rgba(99,102,241,0.2);
+  color:#a5b4fc;border-radius:6px;padding:4px 12px;font-size:11px;cursor:pointer;
+  transition:all 150ms;
+}
+.fix-card .fc-actions button:hover{background:rgba(99,102,241,0.25);color:#fff}
+.fix-card .fc-actions button.danger{
+  background:rgba(239,68,68,0.1);border-color:rgba(239,68,68,0.25);color:#f87171;
+}
+.fix-card .fc-actions button.danger:hover{background:rgba(239,68,68,0.25);color:#fff}
+.empty-state{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:60px 20px;color:#334155;
+}
+.empty-state .es-icon{
+  width:48px;height:48px;border-radius:50%;margin-bottom:12px;
+  background:rgba(52,211,153,0.08);border:1px solid rgba(52,211,153,0.15);
+  display:flex;align-items:center;justify-content:center;
+  color:#34d399;font-size:20px;
+}
+.empty-state .es-text{font-size:13px;color:#475569}
+
+/* ---- LOADING ---- */
+.loading{
+  display:flex;align-items:center;justify-content:center;
+  padding:40px;color:#475569;font-size:12px;
+}
+.loading .spinner{
+  width:16px;height:16px;border:2px solid rgba(100,120,255,0.15);
+  border-top-color:#818cf8;border-radius:50%;margin-right:8px;
+  animation:spin 0.8s linear infinite;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* ---- RESPONSIVE ---- */
+@media(max-width:1024px){
+  .topic-grid{grid-template-columns:repeat(2,1fr)}
+  .split-list{width:220px}
+}
+@media(max-width:768px){
+  .topbar{flex-wrap:wrap;height:auto;padding:8px 12px;gap:6px}
+  .topbar .search-box{flex:1 1 100%;order:10}
+  .filter-pills{order:11;flex:1 1 100%}
+  .topic-grid{grid-template-columns:1fr}
+  .split-view{flex-direction:column;height:auto}
+  .split-list{width:100%;border-right:none;border-bottom:1px solid rgba(100,120,255,0.08);
+    max-height:35vh;padding-right:0}
+  .split-detail{padding:12px 0 0 0}
+  .fix-card .fc-pair{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <span class="brand" onclick="navigate('home')">MEMENTO KB</span>
+  <div class="search-box">
+    <span class="search-icon">\u26b2</span>
+    <input id="searchInput" type="text" placeholder="Search memories\u2026" autocomplete="off"/>
+  </div>
+  <div class="filter-pills" id="filterPills"></div>
+  <div class="mode-toggle">
+    <button id="modeKB" class="active" onclick="navigate('home')">KB</button>
+    <button id="modeFix" onclick="navigate('fix')">Fix</button>
+  </div>
+  <a class="nav-link" href="/dashboard">Brain \u2192</a>
+</div>
+
+<!-- MAIN CONTENT -->
+<div class="main" id="main"></div>
+
+<script>
+var COLORS={fact:"#38bdf8",decision:"#fbbf24",learning:"#34d399",
+  preference:"#f472b6",requirement:"#22d3ee",session:"#a78bfa",note:"#94a3b8"};
+
+var state={
+  view:"home",topicLabel:null,searchQuery:null,
+  stats:null,skills:[],topics:[],projects:[],
+  activeProject:null,activeType:null,
+  selectedMemId:null,
+  topicDetail:null,searchResults:null,
+  consolidation:null
+};
+
+var searchTimer=null;
+
+/* ---- UTIL ---- */
+function esc(s){
+  if(!s)return"";
+  var d=document.createElement("div");d.appendChild(document.createTextNode(s));return d.innerHTML;
+}
+function truncate(s,n){
+  if(!s)return"";
+  return s.length>n?s.substring(0,n)+"\u2026":s;
+}
+function typeColor(t){return COLORS[t]||"#64748b"}
+function typeBadgeStyle(t){
+  var c=typeColor(t);
+  return"background:"+c+"18;color:"+c+";border:1px solid "+c+"30";
+}
+function relClass(r){return"rel-"+(r||"related_to")}
+function fmtDate(d){
+  if(!d)return"";
+  return d.length>10?d.substring(0,10):d;
+}
+
+/* ---- FETCH HELPERS ---- */
+function fetchJSON(url,opts){
+  return fetch(url,opts).then(function(r){
+    if(!r.ok)throw new Error("HTTP "+r.status);
+    return r.json();
+  });
+}
+
+/* ---- DATA LOADING ---- */
+function loadHome(){
+  var main=document.getElementById("main");
+  main.innerHTML='<div class="loading"><div class="spinner"></div>Loading knowledge base\u2026</div>';
+
+  Promise.all([
+    fetchJSON("/api/memory/stats"),
+    fetchJSON("/api/memory/context/skills?max_skills=10"),
+    fetchJSON("/api/memory/context/hierarchy?format=json&limit=200&max_topics=12"
+      +(state.activeProject?"&project="+encodeURIComponent(state.activeProject):""))
+  ]).then(function(results){
+    state.stats=results[0];
+    parseSkills(results[1].summary||"");
+    parseTopics(results[2]);
+    renderHome();
+  }).catch(function(e){
+    main.innerHTML='<div class="empty-state"><div class="es-text">Failed to load: '+esc(e.message)+'</div></div>';
+  });
+}
+
+function parseSkills(md){
+  state.skills=[];
+  if(!md)return;
+  var lines=md.split("\\n");
+  for(var i=0;i<lines.length;i++){
+    var m=lines[i].match(/^##\\s+(.+?)\\s*\\((\\d+)\\s+mention/);
+    if(m){state.skills.push({name:m[1],count:parseInt(m[2],10)})}
+  }
+}
+
+function parseTopics(data){
+  state.topics=data.topics||[];
+  var pset={};
+  for(var i=0;i<state.topics.length;i++){
+    var mems=state.topics[i].memories||[];
+    for(var j=0;j<mems.length;j++){
+      if(mems[j].project)pset[mems[j].project]=1;
+    }
+  }
+  state.projects=Object.keys(pset).sort();
+  renderFilterPills();
+}
+
+function loadTopicDetail(label){
+  var main=document.getElementById("main");
+  main.innerHTML='<div class="loading"><div class="spinner"></div>Loading topic\u2026</div>';
+
+  fetchJSON("/api/kb/topic/"+encodeURIComponent(label)
+    +(state.activeProject?"?project="+encodeURIComponent(state.activeProject):""))
+  .then(function(data){
+    state.topicDetail=data;
+    state.selectedMemId=null;
+    renderTopicDetail();
+    if(data.memories&&data.memories.length>0){
+      selectMemory(data.memories[0].memory_id);
+    }
+  }).catch(function(e){
+    main.innerHTML='<div class="empty-state"><div class="es-text">Topic not found: '+esc(e.message)+'</div></div>';
+  });
+}
+
+function doSearch(query){
+  if(!query||query.trim().length<2)return;
+  var main=document.getElementById("main");
+  main.innerHTML='<div class="loading"><div class="spinner"></div>Searching\u2026</div>';
+
+  fetchJSON("/api/memory/recall",{
+    method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({query:query.trim(),limit:20})
+  }).then(function(data){
+    state.searchResults=data.memories||[];
+    state.selectedMemId=null;
+    renderSearch();
+    if(state.searchResults.length>0){
+      selectMemory(state.searchResults[0].memory_id);
+    }
+  }).catch(function(e){
+    main.innerHTML='<div class="empty-state"><div class="es-text">Search failed: '+esc(e.message)+'</div></div>';
+  });
+}
+
+function loadFix(){
+  var main=document.getElementById("main");
+  main.innerHTML='<div class="loading"><div class="spinner"></div>Analyzing memories\u2026</div>';
+
+  fetchJSON("/api/memory/consolidate?format=json"
+    +(state.activeProject?"&project="+encodeURIComponent(state.activeProject):""))
+  .then(function(data){
+    state.consolidation=data;
+    renderFix();
+  }).catch(function(e){
+    main.innerHTML='<div class="empty-state"><div class="es-text">Failed: '+esc(e.message)+'</div></div>';
+  });
+}
+
+function deleteMemory(memId,callback){
+  fetchJSON("/api/memory/"+encodeURIComponent(memId),{method:"DELETE"})
+  .then(function(){if(callback)callback()})
+  .catch(function(e){alert("Delete failed: "+e.message)});
+}
+
+/* ---- RENDER: HOME ---- */
+function renderHome(){
+  var h='';
+
+  /* Stats bar */
+  if(state.stats){
+    var s=state.stats;
+    var bt=s.by_type||{};
+    var kg=s.knowledge_graph||{};
+    h+='<div class="stats-bar">';
+    h+='<div class="stat"><span class="stat-val">'+s.total_memories+'</span> memories</div>';
+    h+='<div class="sep"></div>';
+    var types=["fact","decision","learning","preference","requirement","session","note"];
+    for(var i=0;i<types.length;i++){
+      var t=types[i];
+      if(bt[t]){
+        h+='<div class="stat"><div class="dot" style="background:'+typeColor(t)+'"></div>';
+        h+='<span class="stat-val">'+bt[t]+'</span> '+t+'</div>';
+      }
+    }
+    if(kg.edges){
+      h+='<div class="sep"></div>';
+      h+='<div class="stat"><span class="stat-val">'+kg.edges+'</span> connections</div>';
+    }
+    if(state.skills.length>0){
+      h+='<div class="sep"></div>';
+      h+='<div class="stat"><span class="stat-val">'+state.skills.length+'</span> skills</div>';
+    }
+    h+='</div>';
+  }
+
+  /* Skills row */
+  if(state.skills.length>0){
+    h+='<div class="skills-row">';
+    for(var i=0;i<state.skills.length;i++){
+      var sk=state.skills[i];
+      var sn=encodeURIComponent(sk.name);h+='<div class="skill-badge" style="cursor:pointer" onclick="navigate(\\'search='+sn+'\\')">'+esc(sk.name)+'<span class="skill-count">('+sk.count+')</span></div>';
+    }
+    h+='</div>';
+  }
+
+  /* Topic grid */
+  if(state.topics.length>0){
+    h+='<div class="topic-grid">';
+    for(var i=0;i<state.topics.length;i++){
+      var topic=state.topics[i];
+      var mems=topic.memories||[];
+      /* filter by type if active */
+      var filteredMems=mems;
+      if(state.activeType){
+        filteredMems=[];
+        for(var j=0;j<mems.length;j++){
+          if(mems[j].type===state.activeType)filteredMems.push(mems[j]);
+        }
+        if(filteredMems.length===0)continue;
+      }
+
+      /* Preview: first 2 memories content */
+      var preview="";
+      for(var j=0;j<Math.min(2,filteredMems.length);j++){
+        if(j>0)preview+=" \\u00b7 ";
+        preview+=truncate(filteredMems[j].content,60);
+      }
+
+      /* Type breakdown */
+      var tcounts={};
+      for(var j=0;j<filteredMems.length;j++){
+        var tt=filteredMems[j].type||"note";
+        tcounts[tt]=(tcounts[tt]||0)+1;
+      }
+
+      h+='<div class="topic-card" onclick="navigate(\\'topic\\',\\''+esc(topic.label).replace(/'/g,"\\\\'")+'\\')">';
+      h+='<div class="tc-label">'+esc(topic.label)+'<span class="tc-count">'+filteredMems.length+'</span></div>';
+      h+='<div class="tc-preview">'+esc(preview)+'</div>';
+      h+='<div class="tc-types">';
+      var tkeys=Object.keys(tcounts);
+      for(var j=0;j<tkeys.length;j++){
+        h+='<span class="type-chip"><span class="type-dot" style="background:'+typeColor(tkeys[j])+'"></span>'+tkeys[j]+' '+tcounts[tkeys[j]]+'</span>';
+      }
+      h+='</div></div>';
+    }
+    h+='</div>';
+  }else{
+    h+='<div class="empty-state"><div class="es-text">No topics found</div></div>';
+  }
+
+  document.getElementById("main").innerHTML=h;
+}
+
+/* ---- RENDER: FILTER PILLS ---- */
+function renderFilterPills(){
+  var el=document.getElementById("filterPills");
+  var h='';
+
+  /* Type pills */
+  var types=["fact","decision","learning","preference","requirement","session","note"];
+  for(var i=0;i<types.length;i++){
+    var t=types[i];
+    var cls=state.activeType===t?"pill active":"pill";
+    h+='<span class="'+cls+'" style="border-color:'+typeColor(t)+'30" onclick="toggleType(\\''+t+'\\')">';
+    h+='<span class="type-dot" style="background:'+typeColor(t)+';margin-right:3px;vertical-align:middle;display:inline-block;width:6px;height:6px;border-radius:50%"></span>';
+    h+=t+'</span>';
+  }
+
+  /* Project pills */
+  var allCls=state.activeProject===null?"pill active":"pill";
+  h+='<span class="'+allCls+'" onclick="toggleProject(null)">All</span>';
+  for(var i=0;i<state.projects.length;i++){
+    var p=state.projects[i];
+    var cls=state.activeProject===p?"pill active":"pill";
+    h+='<span class="'+cls+'" onclick="toggleProject(\\''+esc(p).replace(/'/g,"\\\\'")+'\\')">';
+    h+=esc(p)+'</span>';
+  }
+
+  el.innerHTML=h;
+}
+
+function toggleType(t){
+  state.activeType=state.activeType===t?null:t;
+  renderFilterPills();
+  if(state.view==="home")renderHome();
+}
+
+function toggleProject(p){
+  state.activeProject=state.activeProject===p?null:p;
+  renderFilterPills();
+  if(state.view==="home")loadHome();
+  else if(state.view==="fix")loadFix();
+}
+
+/* ---- RENDER: TOPIC DETAIL ---- */
+function renderTopicDetail(){
+  var d=state.topicDetail;
+  if(!d)return;
+
+  var h='<div class="breadcrumb">';
+  h+='<a onclick="navigate(\\'home\\')">Topics</a>';
+  h+='<span class="bc-sep">/</span>';
+  h+='<span style="color:#e2e8f0">'+esc(d.topic||d.label)+'</span>';
+  h+='<span style="margin-left:auto;font-size:10px;color:#475569">'+d.memory_count+' memories</span>';
+  h+='</div>';
+
+  h+='<div class="split-view">';
+
+  /* Left: memory list */
+  h+='<div class="split-list" id="memList">';
+  var mems=d.memories||[];
+  /* Sort newest first */
+  mems.sort(function(a,b){return(b.date||"").localeCompare(a.date||"")});
+  for(var i=0;i<mems.length;i++){
+    var m=mems[i];
+    var sel=state.selectedMemId===m.memory_id?"mem-row selected":"mem-row";
+    var connCount=(m.connections||[]).length;
+    h+='<div class="'+sel+'" data-mid="'+esc(m.memory_id)+'" onclick="selectMemory(\\''+esc(m.memory_id).replace(/'/g,"\\\\'")+'\\')">';
+    h+='<div class="mr-content">'+esc(truncate(m.content,90))+'</div>';
+    h+='<div class="mr-meta">';
+    h+='<span class="type-dot" style="background:'+typeColor(m.type)+'"></span>';
+    h+='<span>'+esc(m.type)+'</span>';
+    h+='<span>'+fmtDate(m.date)+'</span>';
+    if(connCount>0)h+='<span>'+connCount+' conn</span>';
+    h+='</div></div>';
+  }
+  h+='</div>';
+
+  /* Right: detail */
+  h+='<div class="split-detail" id="memDetail">';
+  h+='<div style="color:#475569;font-size:12px;padding:20px">Select a memory</div>';
+  h+='</div>';
+
+  h+='</div>';
+  document.getElementById("main").innerHTML=h;
+}
+
+/* ---- RENDER: SEARCH ---- */
+function renderSearch(){
+  var results=state.searchResults||[];
+  var q=state.searchQuery||"";
+
+  var h='<div class="breadcrumb">';
+  h+='<span style="color:#e2e8f0">Search</span>';
+  h+='<span class="bc-sep">/</span>';
+  h+='<span style="color:#94a3b8">\\u201c'+esc(truncate(q,40))+'\\u201d</span>';
+  h+='<span style="margin-left:auto;font-size:10px;color:#475569">'+results.length+' results</span>';
+  h+='</div>';
+
+  h+='<div class="split-view">';
+
+  /* Left: results list */
+  h+='<div class="split-list" id="memList">';
+  if(results.length===0){
+    h+='<div style="color:#475569;font-size:12px;padding:20px">No results</div>';
+  }
+  for(var i=0;i<results.length;i++){
+    var m=results[i];
+    var sel=state.selectedMemId===m.memory_id?"mem-row selected":"mem-row";
+    h+='<div class="'+sel+'" data-mid="'+esc(m.memory_id)+'" onclick="selectMemory(\\''+esc(m.memory_id).replace(/'/g,"\\\\'")+'\\')">';
+    h+='<div class="mr-content">'+esc(truncate(m.content,90))+'</div>';
+    h+='<div class="mr-meta">';
+    h+='<span class="type-dot" style="background:'+typeColor(m.type)+'"></span>';
+    h+='<span>'+esc(m.type)+'</span>';
+    h+='<span>'+fmtDate(m.date)+'</span>';
+    if(m.score)h+='<span class="mr-score">'+m.score.toFixed(2)+'</span>';
+    h+='</div></div>';
+  }
+  h+='</div>';
+
+  /* Right: detail */
+  h+='<div class="split-detail" id="memDetail">';
+  h+='<div style="color:#475569;font-size:12px;padding:20px">Select a result</div>';
+  h+='</div>';
+
+  h+='</div>';
+  document.getElementById("main").innerHTML=h;
+}
+
+/* ---- SELECT MEMORY (detail pane) ---- */
+function selectMemory(memId){
+  state.selectedMemId=memId;
+
+  /* Update list selection */
+  var rows=document.querySelectorAll(".mem-row");
+  for(var i=0;i<rows.length;i++){
+    rows[i].className=rows[i].getAttribute("data-mid")===memId?"mem-row selected":"mem-row";
+  }
+
+  /* Find memory data */
+  var mem=null;
+  if(state.view==="topic"&&state.topicDetail){
+    var mems=state.topicDetail.memories||[];
+    for(var i=0;i<mems.length;i++){if(mems[i].memory_id===memId){mem=mems[i];break}}
+  }else if(state.view==="search"){
+    var mems=state.searchResults||[];
+    for(var i=0;i<mems.length;i++){if(mems[i].memory_id===memId){mem=mems[i];break}}
+  }
+
+  if(!mem){return}
+
+  var h='<div class="detail-pane">';
+  h+='<div class="dp-header">';
+  h+='<span class="type-badge" style="'+typeBadgeStyle(mem.type)+'">'+esc(mem.type)+'</span>';
+  h+='<span class="dp-date">'+fmtDate(mem.date)+'</span>';
+  if(mem.project)h+='<span class="dp-project">'+esc(mem.project)+'</span>';
+  h+='</div>';
+  h+='<div class="dp-content">'+esc(mem.content)+'</div>';
+
+  /* Connections */
+  var conns=mem.connections||[];
+  if(conns.length>0){
+    h+='<div class="dp-section-title">Connections ('+conns.length+')</div>';
+    h+='<div class="dp-connections">';
+    for(var i=0;i<conns.length;i++){
+      var c=conns[i];
+      h+='<div class="conn-link" onclick="handleConnClick(\\''+esc(c.memory_id).replace(/'/g,"\\\\'")+'\\')">';
+      h+='<span class="cl-relation '+relClass(c.relation)+'">'+esc(c.relation||"related_to")+'</span>';
+      h+='<div class="cl-body">';
+      h+='<div class="cl-content">'+esc(truncate(c.content,120))+'</div>';
+      h+='<div class="cl-meta">';
+      h+='<span class="type-dot" style="background:'+typeColor(c.type)+';display:inline-block;width:5px;height:5px;border-radius:50%;vertical-align:middle;margin-right:3px"></span>';
+      h+=esc(c.type||"")+" \\u00b7 "+fmtDate(c.date);
+      h+='</div></div></div>';
+    }
+    h+='</div>';
+  }
+
+  h+='<div class="dp-id">ID: '+esc(String(mem.memory_id))+'</div>';
+  h+='</div>';
+
+  var detail=document.getElementById("memDetail");
+  if(detail)detail.innerHTML=h;
+}
+
+/* ---- HANDLE CONNECTION CLICK ---- */
+function handleConnClick(memId){
+  /* Check if memory is in current topic */
+  if(state.view==="topic"&&state.topicDetail){
+    var mems=state.topicDetail.memories||[];
+    for(var i=0;i<mems.length;i++){
+      if(String(mems[i].memory_id)===String(memId)){
+        selectMemory(memId);
+        /* Scroll into view */
+        var row=document.querySelector('.mem-row[data-mid="'+memId+'"]');
+        if(row)row.scrollIntoView({behavior:"smooth",block:"nearest"});
+        return;
+      }
+    }
+  }
+  /* Search for it */
+  state.searchQuery="memory:"+memId;
+  document.getElementById("searchInput").value=state.searchQuery;
+  navigate("search",state.searchQuery);
+}
+
+/* ---- RENDER: FIX MODE ---- */
+function renderFix(){
+  var data=state.consolidation;
+  if(!data)return;
+
+  var superseded=data.superseded||[];
+  var conflicts=data.conflicts||[];
+
+  if(superseded.length===0&&conflicts.length===0){
+    document.getElementById("main").innerHTML=
+      '<div class="empty-state">'+
+      '<div class="es-icon">\u2713</div>'+
+      '<div class="es-text">All clean \u2014 no issues found</div></div>';
+    return;
+  }
+
+  var h='';
+
+  /* Superseded */
+  if(superseded.length>0){
+    h+='<div class="fix-section">';
+    h+='<div class="fs-title">Superseded<span class="fs-count">'+superseded.length+'</span></div>';
+    for(var i=0;i<superseded.length;i++){
+      var pair=superseded[i];
+      var n=pair.newer||{};
+      var o=pair.older||{};
+      h+='<div class="fix-card" id="fix-s-'+i+'">';
+      h+='<span class="fc-score">similarity '+((pair.score||0)*100).toFixed(0)+'%</span>';
+      h+='<div class="fc-pair">';
+      h+='<div class="fc-side"><div class="fc-side-label newer">Newer</div>';
+      h+='<div class="fc-content">'+esc(n.content)+'</div>';
+      h+='<div class="fc-meta"><span class="type-dot" style="background:'+typeColor(n.type)+';display:inline-block;width:5px;height:5px;border-radius:50%;vertical-align:middle;margin-right:3px"></span>'+esc(n.type)+" \\u00b7 "+fmtDate(n.date)+'</div></div>';
+      h+='<div class="fc-side"><div class="fc-side-label older">Older</div>';
+      h+='<div class="fc-content">'+esc(o.content)+'</div>';
+      h+='<div class="fc-meta"><span class="type-dot" style="background:'+typeColor(o.type)+';display:inline-block;width:5px;height:5px;border-radius:50%;vertical-align:middle;margin-right:3px"></span>'+esc(o.type)+" \\u00b7 "+fmtDate(o.date)+'</div></div>';
+      h+='</div>';
+      h+='<div class="fc-actions">';
+      h+='<button onclick="dismissFix(this)">Dismiss</button>';
+      h+='<button class="danger" onclick="fixDelete(this,'+JSON.stringify(String(o.memory_id))+')">Delete Old</button>';
+      h+='</div></div>';
+    }
+    h+='</div>';
+  }
+
+  /* Conflicts */
+  if(conflicts.length>0){
+    h+='<div class="fix-section">';
+    h+='<div class="fs-title">Conflicts<span class="fs-count">'+conflicts.length+'</span></div>';
+    for(var i=0;i<conflicts.length;i++){
+      var pair=conflicts[i];
+      var a=pair.a||{};
+      var b=pair.b||{};
+      h+='<div class="fix-card" id="fix-c-'+i+'">';
+      h+='<span class="fc-score">conflict '+((pair.score||0)*100).toFixed(0)+'%</span>';
+      h+='<div class="fc-pair">';
+      h+='<div class="fc-side"><div class="fc-side-label side-a">A</div>';
+      h+='<div class="fc-content">'+esc(a.content)+'</div>';
+      h+='<div class="fc-meta"><span class="type-dot" style="background:'+typeColor(a.type)+';display:inline-block;width:5px;height:5px;border-radius:50%;vertical-align:middle;margin-right:3px"></span>'+esc(a.type)+" \\u00b7 "+fmtDate(a.date)+'</div></div>';
+      h+='<div class="fc-side"><div class="fc-side-label side-b">B</div>';
+      h+='<div class="fc-content">'+esc(b.content)+'</div>';
+      h+='<div class="fc-meta"><span class="type-dot" style="background:'+typeColor(b.type)+';display:inline-block;width:5px;height:5px;border-radius:50%;vertical-align:middle;margin-right:3px"></span>'+esc(b.type)+" \\u00b7 "+fmtDate(b.date)+'</div></div>';
+      h+='</div>';
+      h+='<div class="fc-actions">';
+      h+='<button onclick="dismissFix(this)">Dismiss</button>';
+      h+='<button class="danger" onclick="fixDelete(this,'+JSON.stringify(String(b.memory_id))+')">Keep A</button>';
+      h+='<button class="danger" onclick="fixDelete(this,'+JSON.stringify(String(a.memory_id))+')">Keep B</button>';
+      h+='</div></div>';
+    }
+    h+='</div>';
+  }
+
+  document.getElementById("main").innerHTML=h;
+}
+
+function findFixCard(el){
+  while(el&&!el.classList.contains("fix-card"))el=el.parentElement;
+  return el;
+}
+
+function dismissFix(btn){
+  var card=findFixCard(btn);
+  if(card)card.className="fix-card dismissed";
+}
+
+function fixDelete(btn,memId){
+  var card=findFixCard(btn);
+  deleteMemory(memId,function(){
+    if(card)card.className="fix-card dismissed";
+  });
+}
+
+/* ---- NAVIGATION ---- */
+function navigate(view,param){
+  if(view==="home"){
+    window.location.hash="home";
+  }else if(view==="topic"){
+    window.location.hash="topic="+encodeURIComponent(param);
+  }else if(view==="search"){
+    window.location.hash="search="+encodeURIComponent(param);
+  }else if(view==="fix"){
+    window.location.hash="fix";
+  }
+}
+
+function handleHash(){
+  var hash=window.location.hash.substring(1);
+  if(!hash)hash="home";
+
+  /* Update mode toggle */
+  document.getElementById("modeKB").classList.toggle("active",hash!=="fix");
+  document.getElementById("modeFix").classList.toggle("active",hash==="fix");
+
+  if(hash==="home"){
+    state.view="home";
+    state.topicLabel=null;
+    state.searchQuery=null;
+    loadHome();
+  }else if(hash.indexOf("topic=")===0){
+    var label=decodeURIComponent(hash.substring(6));
+    state.view="topic";
+    state.topicLabel=label;
+    loadTopicDetail(label);
+  }else if(hash.indexOf("search=")===0){
+    var q=decodeURIComponent(hash.substring(7));
+    state.view="search";
+    state.searchQuery=q;
+    document.getElementById("searchInput").value=q;
+    doSearch(q);
+  }else if(hash==="fix"){
+    state.view="fix";
+    loadFix();
+  }else{
+    state.view="home";
+    loadHome();
+  }
+}
+
+/* ---- SEARCH INPUT ---- */
+document.getElementById("searchInput").addEventListener("input",function(e){
+  var q=e.target.value;
+  if(searchTimer)clearTimeout(searchTimer);
+  if(!q||q.trim().length<2){
+    if(state.view==="search")navigate("home");
+    return;
+  }
+  searchTimer=setTimeout(function(){
+    state.searchQuery=q.trim();
+    navigate("search",q.trim());
+  },300);
+});
+document.getElementById("searchInput").addEventListener("keydown",function(e){
+  if(e.key==="Enter"){
+    var q=e.target.value;
+    if(q&&q.trim().length>=2){
+      if(searchTimer)clearTimeout(searchTimer);
+      state.searchQuery=q.trim();
+      navigate("search",q.trim());
+    }
+  }
+});
+
+/* ---- INIT ---- */
+window.addEventListener("hashchange",handleHash);
+handleHash();
+</script>
+</body>
+</html>
+"""
+    return HTMLResponse(html)
+
+
 @mcp.custom_route("/dashboard", methods=["GET"])
 async def api_memory_dashboard(_request):
     """Dashboard UI for visualizing memory embeddings."""
