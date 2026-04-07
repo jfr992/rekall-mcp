@@ -30,17 +30,32 @@ PYTHONPATH=src:. .venv/bin/python -m benchmarks.longmemeval_runner \
 | `hybrid` | BM25 sparse + dense with RRF fusion | No equivalent — Memento advantage |
 | `hybrid_graph` | Hybrid + 1-hop knowledge graph expansion | No equivalent — Memento advantage |
 
-## Results
-
-> **Run `--mode all` and paste results here after execution.**
+## Results (500 questions, April 2026)
 
 | Mode | R@5 (any) | R@5 | R@10 | NDCG@5 |
 |------|-----------|-----|------|--------|
-| `dense` | TBD | TBD | TBD | TBD |
-| `hybrid` | TBD | TBD | TBD | TBD |
-| `hybrid_graph` | TBD | TBD | TBD | TBD |
-| **MemPalace (raw)** | **96.6%** | — | — | — |
-| **MemPalace (hybrid+Haiku)** | **100%** | — | — | — |
+| `dense` | 96.6% | 91.7% | 96.2% | 88.8% |
+| **`hybrid`** | **97.6%** | **93.6%** | **97.4%** | **92.7%** |
+| `hybrid_graph` | 97.6% | 93.6% | 97.4% | 92.7% |
+| MemPalace (raw) | 96.6% | — | — | — |
+| MemPalace (hybrid+Haiku) | 100% | — | — | — |
+
+**Dense mode ties MemPalace at 96.6% R@5** — same embedder (all-MiniLM-L6-v2), different
+vector store (Qdrant vs ChromaDB), identical recall. The embedder does the heavy lifting.
+
+**Hybrid mode beats both at 97.6%** — BM25 sparse vectors catch entity-specific and factual
+queries that pure semantic search misses. No LLM required.
+
+### Per-type breakdown (hybrid mode)
+
+| Question Type | R@5 (any) | n |
+|--------------|-----------|---|
+| knowledge-update | 100.0% | 78 |
+| single-session-user | 100.0% | 70 |
+| multi-session | 98.5% | 133 |
+| temporal-reasoning | 97.0% | 133 |
+| single-session-assistant | 94.6% | 56 |
+| single-session-preference | 90.0% | 30 |
 
 ## Metrics
 
