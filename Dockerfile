@@ -25,6 +25,9 @@ RUN pip install --no-cache-dir uv
 # Copy dependency files first for better layer caching
 COPY pyproject.toml README.md ./
 
+# Install CPU-only PyTorch first (skips ~2.5GB of NVIDIA CUDA packages)
+RUN uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu
+
 # Install dependencies (includes sentence-transformers for embeddings)
 RUN uv pip install --system -e ".[dev]"
 
