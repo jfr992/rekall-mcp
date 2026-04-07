@@ -394,7 +394,26 @@ async def api_get_hierarchical_context(request):
         if max_topics < 1:
             max_topics = 1
 
+        fmt = query.get("format", "markdown")
         manager = _get_memory_manager()
+
+        if fmt == "json":
+            from memory.topics import topics_to_json
+
+            clusters = manager.get_topic_clusters(
+                project=project,
+                limit=limit,
+                max_topics=max_topics,
+                similarity_threshold=similarity_threshold,
+            )
+            result = topics_to_json(clusters, project=project)
+            result["params"] = {
+                "limit": limit,
+                "max_topics": max_topics,
+                "similarity_threshold": similarity_threshold,
+            }
+            return JSONResponse(result)
+
         context = manager.get_hierarchical_project_context(
             project=project,
             limit=limit,
@@ -404,7 +423,7 @@ async def api_get_hierarchical_context(request):
 
         return JSONResponse(
             {
-                "project": project or "general",
+                "project": project or "all",
                 "context": context,
                 "params": {
                     "limit": limit,

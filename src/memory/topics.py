@@ -346,6 +346,36 @@ def build_topic_clusters(
     return clusters
 
 
+def topics_to_json(
+    topics: list[TopicCluster],
+    *,
+    project: str | None = None,
+    max_items_per_topic: int | None = None,
+) -> dict:
+    """Convert topic clusters to structured JSON dict."""
+    return {
+        "project": project or "all",
+        "topics": [
+            {
+                "topic_id": topic.topic_id,
+                "label": topic.label,
+                "memory_count": len(topic.memories),
+                "memories": [
+                    {
+                        "memory_id": m.get("memory_id", ""),
+                        "content": m.get("content", ""),
+                        "type": m.get("type", "note"),
+                        "date": m.get("date", ""),
+                        "project": m.get("project", "general"),
+                    }
+                    for m in (topic.memories[:max_items_per_topic] if max_items_per_topic else topic.memories)
+                ],
+            }
+            for topic in topics
+        ],
+    }
+
+
 def render_hierarchical_context(
     topics: list[TopicCluster],
     *,

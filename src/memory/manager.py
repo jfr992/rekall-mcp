@@ -801,22 +801,40 @@ class MemoryManager:
             Topic-grouped markdown context.
         """
         with self._telemetry.track("memory.get_hierarchical_project_context"):
+            topics = self.get_topic_clusters(
+                project=project,
+                limit=limit,
+                max_topics=max_topics,
+                similarity_threshold=similarity_threshold,
+            )
+            if not topics:
+                return ""
+            from memory.topics import render_hierarchical_context
+
+            return render_hierarchical_context(topics, project=project)
+
+    def get_topic_clusters(
+        self,
+        project: str | None = None,
+        limit: int = 120,
+        max_topics: int = 8,
+        similarity_threshold: float = 0.72,
+    ) -> list:
+        """Return raw TopicCluster objects (for JSON serialization)."""
+        with self._telemetry.track("memory.get_topic_clusters"):
+            from memory.topics import build_topic_clusters
+
             filters = {}
             if project:
                 filters["project"] = project
-
             points = self.store.scroll(filters=filters if filters else None, limit=limit, with_vectors=True)
             if not points:
-                return ""
-
-            from memory.topics import build_topic_clusters, render_hierarchical_context
-
-            topics = build_topic_clusters(
+                return []
+            return build_topic_clusters(
                 points,
                 similarity_threshold=similarity_threshold,
                 max_topics=max_topics,
             )
-            return render_hierarchical_context(topics, project=project)
 
     # -------------------------------------------------------------------------
     # SKILL CONTEXT: Inferred capabilities
