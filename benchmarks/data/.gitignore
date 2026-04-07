@@ -1,0 +1,4 @@
+# LongMemEval datasets are large — download locally, don't commit
+*.json
+!.gitkeep
+!.gitignore
