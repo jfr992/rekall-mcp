@@ -98,3 +98,127 @@ class TestManagerGetTopicClusters:
         assert len(clusters) >= 1
         assert hasattr(clusters[0], "label")
         assert hasattr(clusters[0], "memories")
+
+
+class TestConsolidateJson:
+    @pytest.fixture
+    def manager(self, tmp_path):
+        with patch("memory.manager.VectorStore") as mock_vs:
+            store = MagicMock()
+            mock_vs.return_value = store
+            store.count.return_value = 0
+
+            from memory.manager import MemoryManager
+
+            mgr = MemoryManager(
+                memory_dir=str(tmp_path / "memory"),
+                qdrant_url="http://localhost:6333",
+            )
+            mgr._store = store
+            yield mgr
+
+    def test_returns_structured_dict(self, manager):
+        manager._store.scroll.return_value = []
+        result = manager.consolidate_memories_json(project=None, limit=10)
+
+        assert isinstance(result, dict)
+        assert "superseded" in result
+        assert "conflicts" in result
+        assert isinstance(result["superseded"], list)
+        assert isinstance(result["conflicts"], list)
+
+    def test_returns_project_field(self, manager):
+        manager._store.scroll.return_value = []
+        result = manager.consolidate_memories_json(project="my-proj", limit=10)
+
+        assert result["project"] == "my-proj"
+
+    def test_project_all_when_none(self, manager):
+        manager._store.scroll.return_value = []
+        result = manager.consolidate_memories_json(project=None, limit=10)
+
+        assert result["project"] == "all"
+
+    def test_superseded_entry_shape(self, manager):
+        """Superseded entries have newer/older/score keys with memory summaries."""
+        from unittest.mock import MagicMock
+
+        # Set up two points in the scroll result
+        manager._store.scroll.return_value = [
+            {
+                "memory_id": "2026-01-02_decision_bbb",
+                "content": "New decision",
+                "type": "decision",
+                "date": "2026-01-02",
+                "project": "test",
+            },
+            {
+                "memory_id": "2026-01-01_decision_aaa",
+                "content": "Old decision",
+                "type": "decision",
+                "date": "2026-01-01",
+                "project": "test",
+            },
+        ]
+
+        # Inject a fake edge: bbb supersedes aaa
+        mock_edge = MagicMock()
+        mock_edge.source = "2026-01-02_decision_bbb"
+        mock_edge.target = "2026-01-01_decision_aaa"
+        mock_edge.relation = "supersedes"
+        mock_edge.weight = 0.9
+
+        manager.knowledge_graph.get_edges = MagicMock(
+            side_effect=lambda mid, direction: [mock_edge] if mid == "2026-01-02_decision_bbb" else []
+        )
+
+        result = manager.consolidate_memories_json(project=None, limit=10)
+
+        assert len(result["superseded"]) == 1
+        entry = result["superseded"][0]
+        assert "newer" in entry
+        assert "older" in entry
+        assert "score" in entry
+        assert entry["score"] == 0.9
+        assert entry["newer"]["memory_id"] == "2026-01-02_decision_bbb"
+        assert entry["older"]["memory_id"] == "2026-01-01_decision_aaa"
+
+    def test_conflicts_entry_shape(self, manager):
+        """Conflict entries have a/b/score keys."""
+        from unittest.mock import MagicMock
+
+        manager._store.scroll.return_value = [
+            {
+                "memory_id": "2026-01-01_fact_aaa",
+                "content": "Fact A",
+                "type": "fact",
+                "date": "2026-01-01",
+                "project": "test",
+            },
+            {
+                "memory_id": "2026-01-02_fact_bbb",
+                "content": "Fact B",
+                "type": "fact",
+                "date": "2026-01-02",
+                "project": "test",
+            },
+        ]
+
+        mock_edge = MagicMock()
+        mock_edge.source = "2026-01-01_fact_aaa"
+        mock_edge.target = "2026-01-02_fact_bbb"
+        mock_edge.relation = "contradicts"
+        mock_edge.weight = 0.75
+
+        manager.knowledge_graph.get_edges = MagicMock(
+            side_effect=lambda mid, direction: [mock_edge] if mid == "2026-01-01_fact_aaa" else []
+        )
+
+        result = manager.consolidate_memories_json(project=None, limit=10)
+
+        assert len(result["conflicts"]) == 1
+        entry = result["conflicts"][0]
+        assert "a" in entry
+        assert "b" in entry
+        assert "score" in entry
+        assert entry["score"] == 0.75

@@ -570,7 +570,13 @@ async def api_consolidate_memories(request):
         if limit < 1:
             limit = 1
 
+        fmt = query.get("format", "markdown")
         manager = _get_memory_manager()
+
+        if fmt == "json":
+            result = manager.consolidate_memories_json(project=project, limit=limit)
+            return JSONResponse(result)
+
         summary = manager.consolidate_memories(
             project=project,
             limit=limit,

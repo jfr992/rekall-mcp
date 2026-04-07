@@ -962,6 +962,91 @@ class MemoryManager:
 
             return result
 
+    def consolidate_memories_json(
+        self,
+        project: str | None = None,
+        limit: int = 240,
+    ) -> dict:
+        """Return consolidation results as structured JSON."""
+        filters: dict[str, Any] = {}
+        if project:
+            filters["project"] = project
+
+        points = self.store.scroll(filters=filters if filters else None, limit=limit)
+        points_by_id: dict[str, Any] = {}
+        if points:
+            points_by_id = {p.get("memory_id", ""): p for p in points if p.get("memory_id")}
+
+        memory_ids = set(points_by_id.keys())
+        graph = self.knowledge_graph
+
+        superseded: list[tuple[str, str, float]] = []
+        contradictions: list[tuple[str, str, float]] = []
+        for source_id in memory_ids:
+            for edge in graph.get_edges(source_id, direction="out"):
+                if edge.target not in memory_ids:
+                    continue
+                if edge.relation == "supersedes":
+                    superseded.append((edge.source, edge.target, edge.weight))
+                elif edge.relation == "contradicts":
+                    contradictions.append((edge.source, edge.target, edge.weight))
+
+        seen_supersedes: dict[tuple[str, str], float] = {}
+        for source_id, target_id, weight in superseded:
+            key = (min(source_id, target_id), max(source_id, target_id))
+            seen_supersedes[key] = max(seen_supersedes.get(key, 0.0), weight)
+
+        seen_conflicts: dict[tuple[str, str], float] = {}
+        for source_id, target_id, weight in contradictions:
+            key = (min(source_id, target_id), max(source_id, target_id))
+            seen_conflicts[key] = max(seen_conflicts.get(key, 0.0), weight)
+
+        def _mem_summary(mid: str) -> dict:
+            p = points_by_id.get(mid, {})
+            return {
+                "memory_id": mid,
+                "content": (p.get("content") or "")[:200],
+                "type": p.get("type", "note"),
+                "date": p.get("date", ""),
+                "project": p.get("project", "general"),
+            }
+
+        # For superseded pairs: the "newer" is the source (superseder), "older" is the target.
+        # key is (min, max) so we need to track direction separately.
+        superseded_entries = []
+        for (id_a, id_b), weight in sorted(seen_supersedes.items(), key=lambda x: -x[1]):
+            # Find the original directed edge to determine newer/older
+            # source supersedes target, so source=newer, target=older
+            # We stored (source, target) before normalizing; recover from original list.
+            # Re-derive: whichever was the source in the original edges
+            newer_id = id_b  # default fallback
+            older_id = id_a
+            for src, tgt, _ in superseded:
+                if (min(src, tgt), max(src, tgt)) == (id_a, id_b):
+                    newer_id = src
+                    older_id = tgt
+                    break
+            superseded_entries.append({
+                "newer": _mem_summary(newer_id),
+                "older": _mem_summary(older_id),
+                "score": round(weight, 3),
+            })
+
+        conflict_entries = [
+            {
+                "a": _mem_summary(id_a),
+                "b": _mem_summary(id_b),
+                "score": round(weight, 3),
+            }
+            for (id_a, id_b), weight in sorted(seen_conflicts.items(), key=lambda x: -x[1])
+        ]
+
+        return {
+            "project": project or "all",
+            "superseded": superseded_entries,
+            "conflicts": conflict_entries,
+        }
+
     def get_proactive_context_summary(
         self,
         project: str | None = None,
