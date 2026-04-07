@@ -1,6 +1,6 @@
 [project]
 name = "memento-mcp"
-version = "0.1.0"
+version = "1.4.0"
 description = "Persistent memory for AI assistants via MCP"
 readme = "README.md"
 requires-python = ">=3.11"
