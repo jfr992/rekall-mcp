@@ -433,6 +433,50 @@ async def api_memory_stats(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/{memory_id}", methods=["DELETE"])
+async def api_delete_memory(request):
+    """REST API: Delete a single memory by ID."""
+    from starlette.responses import JSONResponse
+
+    try:
+        memory_id = request.path_params["memory_id"]
+        if not memory_id:
+            return JSONResponse({"error": "memory_id is required"}, status_code=400)
+
+        manager = _get_memory_manager()
+        deleted = manager.delete(memory_id)
+
+        if not deleted:
+            return JSONResponse(
+                {"deleted": False, "memory_id": memory_id, "error": "not found"},
+                status_code=404,
+            )
+
+        return JSONResponse({"deleted": True, "memory_id": memory_id})
+    except Exception as e:
+        logger.error(f"Error deleting memory: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/cleanup", methods=["POST"])
+async def api_cleanup_memories(request):
+    """REST API: Batch cleanup stale and redundant memories."""
+    from starlette.responses import JSONResponse
+
+    try:
+        body = await request.json()
+        result = _get_memory_manager().cleanup(
+            max_age_days_facts=body.get("max_age_days_facts"),
+            prune_superseded=body.get("prune_superseded", False),
+            dry_run=body.get("dry_run", False),
+        )
+
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error(f"Error during cleanup: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/api/memory/graph", methods=["GET"])
 async def api_memory_graph(request):
     """REST API: Build graph data for memory visualization."""
