@@ -676,404 +676,440 @@ async def api_memory_dashboard(_request):
 
     html = """<!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Memento Memory Brain</title>
-    <style>
-      :root {
-        --bg-1: #0b1020;
-        --bg-2: #121935;
-        --line: rgba(255, 255, 255, 0.15);
-        --accent: #9f7aea;
-        --accent-2: #63b3ed;
-        --text: #eaf0ff;
-      }
-      html, body {
-        margin: 0;
-        height: 100%;
-      }
-      body {
-        font-family: "Space Grotesk", "Manrope", "Fira Sans", sans-serif;
-        color: var(--text);
-        background:
-          radial-gradient(circle at 15% 10%, #202b58 0%, transparent 40%),
-          radial-gradient(circle at 85% 90%, #13263e 0%, transparent 45%),
-          linear-gradient(140deg, var(--bg-1), var(--bg-2));
-      }
-      .shell {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 18px;
-        box-sizing: border-box;
-      }
-      h1 { margin: 0 0 12px; }
-      .panel {
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: rgba(12, 19, 42, 0.5);
-        backdrop-filter: blur(10px);
-      }
-      .controls {
-        padding: 12px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-      .controls input,
-      .controls select,
-      .controls button {
-        background: rgba(16, 23, 52, 0.7);
-        border: 1px solid var(--line);
-        color: var(--text);
-        border-radius: 8px;
-        padding: 8px 10px;
-      }
-      .controls button {
-        cursor: pointer;
-      }
-      .controls button:hover { color: #fff; border-color: var(--accent); }
-      .grid {
-        display: grid;
-        grid-template-columns: 1.2fr 1fr;
-        gap: 12px;
-      }
-      .card {
-        padding: 12px;
-      }
-      .legend { font-size: 12px; color: #d1d8ff; }
-      .legend span { display: inline-block; margin-right: 10px; }
-      #brain {
-        width: 100%;
-        aspect-ratio: 16 / 10;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background:
-          radial-gradient(circle at 50% 50%, rgba(99, 179, 237, 0.08), transparent 45%);
-      }
-      #info {
-        white-space: pre-wrap;
-        max-height: 540px;
-        overflow: auto;
-        font-size: 13px;
-      }
-      .muted { color: #8f98bf; }
-      @media (max-width: 960px) {
-        .grid { grid-template-columns: 1fr; }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="shell">
-      <h1>Memento Memory Brain</h1>
-      <div class="panel">
-        <div class="controls">
-          <label>Project: <input id="project" placeholder="general" /></label>
-          <label>Type:
-            <select id="memoryType">
-              <option value="">all</option>
-              <option value="requirement">requirement</option>
-              <option value="fact">fact</option>
-              <option value="decision">decision</option>
-              <option value="preference">preference</option>
-              <option value="learning">learning</option>
-              <option value="session">session</option>
-              <option value="note">note</option>
-            </select>
-          </label>
-          <label>Limit: <input id="limit" type="number" value="160" min="20" max="400" /></label>
-          <label>Neighbors: <input id="neighbors" type="number" value="4" min="1" max="12" /></label>
-          <label>Min Score: <input id="similarity" type="number" step="0.01" value="0.35" min="0" max="1" /></label>
-          <label>Days:
-            <select id="days">
-              <option value="">all</option>
-              <option value="7">7</option>
-              <option value="30">30</option>
-              <option value="90">90</option>
-            </select>
-          </label>
-          <button id="refresh">Refresh</button>
-          <button id="clear">Clear</button>
-        </div>
-      </div>
-      <div style="height: 10px;"></div>
-      <div class="grid">
-        <div class="panel card">
-          <canvas id="brain" width="900" height="560"></canvas>
-          <div class="legend">
-            <span>🔵 fact</span>
-            <span>🟣 preference</span>
-            <span>🟠 decision</span>
-            <span>🔴 requirement</span>
-            <span>🟢 learning</span>
-            <span>⚪ note</span>
-            <span>⚪ session</span>
-          </div>
-          <p class="muted" id="status">Loading graph…</p>
-        </div>
-        <div class="panel card">
-          <h3>Memory</h3>
-          <div id="info" class="muted">Click a node to inspect memory details.</div>
-        </div>
-      </div>
-    </div>
-    <script>
-      const colorByType = {
-        requirement: "#f56565",
-        fact: "#63b3ed",
-        decision: "#ed8936",
-        preference: "#9f7aea",
-        learning: "#48bb78",
-        session: "#a0aec0",
-        note: "#CBD5E0"
-      };
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Memento — Neural Memory</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%;overflow:hidden}
+body{
+  font-family:"Inter","SF Pro Display",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  background:#050510;color:#e2e8f0;
+}
+canvas#brain{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0}
+.toolbar{
+  position:fixed;top:16px;left:50%;transform:translateX(-50%);z-index:10;
+  display:flex;gap:8px;align-items:center;
+  padding:8px 16px;
+  background:rgba(10,14,36,0.85);backdrop-filter:blur(20px);
+  border:1px solid rgba(100,120,255,0.12);border-radius:14px;font-size:13px;
+}
+.toolbar .brand{
+  font-weight:700;font-size:15px;
+  background:linear-gradient(135deg,#818cf8,#38bdf8);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+  background-clip:text;
+  margin-right:8px;white-space:nowrap;
+}
+.toolbar label{display:flex;align-items:center;gap:4px;color:#94a3b8;font-size:12px;white-space:nowrap}
+.toolbar input,.toolbar select{
+  background:rgba(15,20,50,0.8);border:1px solid rgba(100,120,255,0.15);
+  color:#e2e8f0;border-radius:6px;padding:4px 8px;font-size:12px;width:56px;
+}
+.toolbar select{width:auto}
+.toolbar button{
+  background:rgba(99,102,241,0.15);border:1px solid rgba(99,102,241,0.3);
+  color:#a5b4fc;border-radius:6px;padding:4px 12px;font-size:12px;cursor:pointer;
+  transition:all 150ms;
+}
+.toolbar button:hover{background:rgba(99,102,241,0.3);color:#fff}
+.detail-panel{
+  position:fixed;top:70px;right:16px;width:320px;max-height:calc(100vh - 100px);
+  z-index:10;
+  background:rgba(10,14,36,0.88);backdrop-filter:blur(20px);
+  border:1px solid rgba(100,120,255,0.1);border-radius:14px;
+  padding:16px;overflow-y:auto;font-size:13px;
+}
+.detail-panel h3{
+  font-size:12px;font-weight:600;color:#818cf8;
+  text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px;
+}
+.detail-panel .stats{color:#64748b;font-size:12px;line-height:1.8;margin-bottom:12px}
+.detail-panel .stats span{font-weight:500}
+.detail-panel .memory-content{
+  color:#cbd5e1;line-height:1.6;white-space:pre-wrap;word-break:break-word;
+  font-family:"SF Mono","Fira Code","JetBrains Mono",monospace;font-size:11px;
+}
+.detail-panel .type-badge{
+  display:inline-block;padding:2px 8px;border-radius:4px;
+  font-size:11px;font-weight:500;margin-bottom:10px;
+}
+.legend{
+  position:fixed;bottom:16px;left:16px;z-index:10;
+  display:flex;gap:14px;padding:8px 14px;
+  background:rgba(10,14,36,0.8);backdrop-filter:blur(16px);
+  border:1px solid rgba(100,120,255,0.08);border-radius:10px;
+  font-size:11px;color:#64748b;
+}
+.legend .item{display:flex;align-items:center;gap:5px}
+.legend .dot{width:8px;height:8px;border-radius:50%}
+.status-bar{
+  position:fixed;bottom:16px;right:16px;z-index:10;
+  padding:6px 12px;
+  background:rgba(10,14,36,0.8);backdrop-filter:blur(16px);
+  border:1px solid rgba(100,120,255,0.08);border-radius:8px;
+  font-size:11px;color:#475569;
+}
+#tooltip{
+  display:none;position:fixed;z-index:20;
+  background:rgba(10,14,36,0.95);backdrop-filter:blur(12px);
+  border:1px solid rgba(100,120,255,0.2);border-radius:8px;
+  padding:6px 10px;font-size:11px;color:#cbd5e1;
+  max-width:300px;pointer-events:none;
+}
+#tooltip .tt-type{font-weight:600;margin-bottom:2px;font-size:10px;text-transform:uppercase;letter-spacing:0.05em}
+#tooltip .tt-text{color:#94a3b8;line-height:1.4}
+@media(max-width:900px){
+  .toolbar{flex-wrap:wrap;top:8px;left:8px;right:8px;transform:none;width:auto}
+  .detail-panel{width:calc(100% - 32px);right:16px;top:auto;bottom:56px;max-height:35vh}
+  .legend{bottom:8px;left:8px;flex-wrap:wrap;gap:8px}
+}
+</style>
+</head>
+<body>
+<canvas id="brain"></canvas>
+<div class="toolbar">
+  <span class="brand">MEMENTO</span>
+  <label>Project <input id="project" placeholder="all"/></label>
+  <label>Type
+    <select id="memoryType">
+      <option value="">all</option>
+      <option value="fact">fact</option>
+      <option value="decision">decision</option>
+      <option value="learning">learning</option>
+      <option value="preference">preference</option>
+      <option value="requirement">requirement</option>
+      <option value="session">session</option>
+      <option value="note">note</option>
+    </select>
+  </label>
+  <label>Limit <input id="limit" type="number" value="160" min="20" max="400"/></label>
+  <label>Neighbors <input id="neighbors" type="number" value="5" min="1" max="12"/></label>
+  <label>Score <input id="similarity" type="number" step="0.01" value="0.30" min="0" max="1"/></label>
+  <label>Days
+    <select id="days">
+      <option value="">all</option>
+      <option value="7">7d</option>
+      <option value="30">30d</option>
+      <option value="90">90d</option>
+    </select>
+  </label>
+  <button id="refresh">Refresh</button>
+  <button id="clear">Reset</button>
+</div>
+<div class="detail-panel" id="detailPanel">
+  <h3>Neural Memory</h3>
+  <div class="stats" id="stats">Loading neural network...</div>
+  <div id="memoryDetail"><div style="color:#475569;font-size:12px">Click a neuron to inspect</div></div>
+</div>
+<div class="legend">
+  <div class="item"><div class="dot" style="background:#38bdf8"></div>fact</div>
+  <div class="item"><div class="dot" style="background:#fbbf24"></div>decision</div>
+  <div class="item"><div class="dot" style="background:#34d399"></div>learning</div>
+  <div class="item"><div class="dot" style="background:#f472b6"></div>preference</div>
+  <div class="item"><div class="dot" style="background:#22d3ee"></div>requirement</div>
+  <div class="item"><div class="dot" style="background:#a78bfa"></div>session</div>
+  <div class="item"><div class="dot" style="background:#94a3b8"></div>note</div>
+</div>
+<div class="status-bar" id="statusBar">Initializing...</div>
+<div id="tooltip"><div class="tt-type"></div><div class="tt-text"></div></div>
+<script>
+var COLORS={fact:"#38bdf8",decision:"#fbbf24",learning:"#34d399",
+  preference:"#f472b6",requirement:"#22d3ee",session:"#a78bfa",note:"#94a3b8"};
+var REGIONS={
+  decision:{x:.22,y:.25,label:"Frontal"},
+  requirement:{x:.16,y:.40,label:"Prefrontal"},
+  fact:{x:.38,y:.58,label:"Temporal"},
+  learning:{x:.56,y:.18,label:"Parietal"},
+  preference:{x:.42,y:.38,label:"Limbic"},
+  session:{x:.83,y:.34,label:"Occipital"},
+  note:{x:.76,y:.55,label:"Cerebellum"}
+};
+var state={nodes:[],links:[],selected:null,w:0,h:0,pulses:[],time:0};
+var nodeMap=new Map();
+var hoveredNode=null;
+var canvas=document.getElementById("brain");
+var ctx=canvas.getContext("2d");
+var tooltipEl=document.getElementById("tooltip");
 
-      const state = {
-        width: 0,
-        height: 0,
-        nodes: [],
-        links: [],
-        selected: null,
-      };
-
-      const canvas = document.getElementById("brain");
-      const ctx = canvas.getContext("2d");
-      const statusEl = document.getElementById("status");
-      const infoEl = document.getElementById("info");
-
-      function typeCount(nodes) {
-        const byType = {};
-        for (const node of nodes) {
-          byType[node.type] = (byType[node.type] || 0) + 1;
-        }
-        return byType;
-      }
-
-      function resizeCanvas() {
-        const rect = canvas.getBoundingClientRect();
-        const scale = window.devicePixelRatio || 1;
-        canvas.width = rect.width * scale;
-        canvas.height = rect.height * scale;
-        ctx.setTransform(scale, 0, 0, scale, 0, 0);
-        state.width = rect.width;
-        state.height = rect.height;
-      }
-
-      function buildQuery() {
-        const project = document.getElementById("project").value.trim();
-        const memoryType = document.getElementById("memoryType").value;
-        const limit = Number(document.getElementById("limit").value || 160);
-        const neighbors = Number(document.getElementById("neighbors").value || 4);
-        const similarity = Number(document.getElementById("similarity").value || 0.35);
-        const days = document.getElementById("days").value;
-        const q = new URLSearchParams({
-          limit: String(limit),
-          neighbor_count: String(neighbors),
-          min_similarity: String(similarity),
-        });
-        if (project) q.set("project", project);
-        if (memoryType) q.set("type", memoryType);
-        if (days) q.set("days", days);
-        return q.toString();
-      }
-
-      function normalizeNodes(dataNodes) {
-        return dataNodes.map((n) => {
-          const velocity = {x: (Math.random() - 0.5) * 0.5, y: (Math.random() - 0.5) * 0.5};
-          const x = (n.position.x + 1) * 0.5 * (state.width - 80) + 40;
-          const y = (n.position.y + 1) * 0.5 * (state.height - 80) + 40;
-          return {...n, x, y, vx: velocity.x, vy: velocity.y, fx: x, fy: y};
-        });
-      }
-
-      function loadGraph() {
-        statusEl.textContent = "Loading graph…";
-        fetch("/api/memory/graph?" + buildQuery())
-          .then((res) => res.json())
-          .then((payload) => {
-            const graph = payload.graph || {};
-            const rawNodes = graph.nodes || [];
-            const rawLinks = graph.links || [];
-            state.nodes = normalizeNodes(rawNodes);
-            state.links = rawLinks;
-            state.selected = null;
-            statusEl.textContent = `Nodes: ${state.nodes.length}, Links: ${state.links.length}`;
-            renderInfo();
-          })
-          .catch((err) => {
-            statusEl.textContent = `Failed to load graph: ${err.message}`;
-          });
-      }
-
-      function renderInfo() {
-        if (!state.nodes.length) {
-          infoEl.textContent = "No nodes loaded. Try increasing limit or loosening filters.";
-          return;
-        }
-        const total = state.nodes.length;
-        const types = typeCount(state.nodes);
-        const selected = state.selected
-          ? `${state.selected.type} · ${state.selected.date}\n\n${state.selected.content}`
-          : "Click a node to inspect memory details.";
-        infoEl.textContent =
-          `Total nodes: ${total}\n` +
-          `Requirements: ${types.requirement || 0}\n` +
-          `Facts: ${types.fact || 0}\n` +
-          `Decisions: ${types.decision || 0}\n` +
-          `Preferences: ${types.preference || 0}\n` +
-          `Learnings: ${types.learning || 0}\n\n` +
-          selected;
-      }
-
-      function stepPhysics() {
-        if (!state.nodes.length) {
-          requestAnimationFrame(stepPhysics);
-          return;
-        }
-
-        const linkStrength = 0.0025;
-        const damping = 0.85;
-        const repulsion = 9000;
-
-        for (let i = 0; i < state.nodes.length; i++) {
-          state.nodes[i].vx *= damping;
-          state.nodes[i].vy *= damping;
-        }
-
-        for (let i = 0; i < state.nodes.length; i++) {
-          for (let j = i + 1; j < state.nodes.length; j++) {
-            const a = state.nodes[i];
-            const b = state.nodes[j];
-            const dx = a.x - b.x;
-            const dy = a.y - b.y;
-            const dist2 = Math.max(80, dx * dx + dy * dy);
-            const force = repulsion / dist2;
-            const invDist = 1 / Math.sqrt(dist2);
-            const fx = force * dx * invDist;
-            const fy = force * dy * invDist;
-            a.vx += fx * 0.001;
-            a.vy += fy * 0.001;
-            b.vx -= fx * 0.001;
-            b.vy -= fy * 0.001;
-          }
-        }
-
-        for (const link of state.links) {
-          const source = state.nodes.find((n) => n.id === link.source);
-          const target = state.nodes.find((n) => n.id === link.target);
-          if (!source || !target) continue;
-
-          const dx = target.x - source.x;
-          const dy = target.y - source.y;
-          const dist = Math.max(20, Math.sqrt(dx * dx + dy * dy));
-          const rest = 120 * (1 - link.weight);
-          const force = (dist - rest) * linkStrength;
-          const nx = dx / dist;
-          const ny = dy / dist;
-          const fx = force * nx;
-          const fy = force * ny;
-          source.vx += fx;
-          source.vy += fy;
-          target.vx -= fx;
-          target.vy -= fy;
-        }
-
-        for (const node of state.nodes) {
-          node.x += node.vx;
-          node.y += node.vy;
-          node.x = Math.min(state.width - 20, Math.max(20, node.x));
-          node.y = Math.min(state.height - 20, Math.max(20, node.y));
-        }
-      }
-
-      function render() {
-        resizeCanvas();
-        ctx.clearRect(0, 0, state.width, state.height);
-        ctx.save();
-        ctx.fillStyle = "rgba(0, 0, 0, 0)";
-        ctx.fillRect(0, 0, state.width, state.height);
-
-        for (const link of state.links) {
-          const source = state.nodes.find((n) => n.id === link.source);
-          const target = state.nodes.find((n) => n.id === link.target);
-          if (!source || !target) continue;
-          const alpha = Math.min(0.85, Math.max(0.1, link.weight));
-          ctx.strokeStyle = `rgba(156, 163, 175, ${alpha})`;
-          ctx.lineWidth = 1 + alpha * 2;
-          ctx.beginPath();
-          ctx.moveTo(source.x, source.y);
-          ctx.lineTo(target.x, target.y);
-          ctx.stroke();
-        }
-
-        for (const node of state.nodes) {
-          const selected = state.selected && state.selected.id === node.id;
-          const radius = Math.max(3.5, 3 + Math.min(6, Math.sqrt((node.degree || 0) + 1)));
-          const color = colorByType[node.type] || "#a0aec0";
-          ctx.beginPath();
-          ctx.fillStyle = color;
-          ctx.globalAlpha = selected ? 1 : 0.85;
-          ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-          ctx.fill();
-
-          if (selected) {
-            ctx.strokeStyle = "#fff";
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-          }
-          ctx.globalAlpha = 1;
-        }
-
-        ctx.restore();
-      }
-
-      function loop() {
-        stepPhysics();
-        render();
-        requestAnimationFrame(loop);
-      }
-
-      function pickNode(evt) {
-        const bounds = canvas.getBoundingClientRect();
-        const x = evt.clientX - bounds.left;
-        const y = evt.clientY - bounds.top;
-        let closest = null;
-        let closestDist = 100000;
-        for (const node of state.nodes) {
-          const dx = node.x - x;
-          const dy = node.y - y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < closestDist && dist < 20) {
-            closestDist = dist;
-            closest = node;
-          }
-        }
-        if (closest) {
-          state.selected = closest;
-          renderInfo();
-        }
-      }
-
-      document.getElementById("refresh").addEventListener("click", () => {
-        loadGraph();
-      });
-      document.getElementById("clear").addEventListener("click", () => {
-        document.getElementById("project").value = "";
-        document.getElementById("memoryType").value = "";
-        document.getElementById("limit").value = "160";
-        document.getElementById("neighbors").value = "4";
-        document.getElementById("similarity").value = "0.35";
-        document.getElementById("days").value = "";
-        loadGraph();
-      });
-      canvas.addEventListener("click", pickNode);
-      window.addEventListener("resize", resizeCanvas);
-
-      resizeCanvas();
-      loadGraph();
-      loop();
-    </script>
-  </body>
+function brainBounds(){
+  var s=Math.min(state.w*.72,state.h*.82);
+  var bw=s*1.28,bh=s;
+  var bx=(state.w-bw)*.46,by=(state.h-bh)*.5;
+  return{bx:bx,by:by,bw:bw,bh:bh};
+}
+function brainPath(c){
+  var b=brainBounds(),x=function(p){return b.bx+b.bw*p},y=function(p){return b.by+b.bh*p};
+  c.beginPath();
+  c.moveTo(x(.10),y(.52));
+  c.bezierCurveTo(x(.06),y(.42),x(.04),y(.30),x(.07),y(.20));
+  c.bezierCurveTo(x(.10),y(.10),x(.20),y(.04),x(.32),y(.03));
+  c.bezierCurveTo(x(.42),y(.01),x(.52),y(.02),x(.62),y(.06));
+  c.bezierCurveTo(x(.72),y(.10),x(.80),y(.18),x(.86),y(.28));
+  c.bezierCurveTo(x(.92),y(.36),x(.93),y(.44),x(.90),y(.50));
+  c.bezierCurveTo(x(.88),y(.54),x(.84),y(.56),x(.82),y(.54));
+  c.bezierCurveTo(x(.80),y(.58),x(.84),y(.62),x(.86),y(.67));
+  c.bezierCurveTo(x(.88),y(.74),x(.82),y(.80),x(.74),y(.78));
+  c.bezierCurveTo(x(.68),y(.80),x(.64),y(.85),x(.58),y(.82));
+  c.bezierCurveTo(x(.48),y(.76),x(.36),y(.70),x(.26),y(.64));
+  c.bezierCurveTo(x(.18),y(.60),x(.12),y(.56),x(.10),y(.52));
+  c.closePath();
+}
+function drawSulci(c){
+  var b=brainBounds(),x=function(p){return b.bx+b.bw*p},y=function(p){return b.by+b.bh*p};
+  c.strokeStyle="rgba(100,140,255,0.06)";c.lineWidth=1.5;
+  c.beginPath();c.moveTo(x(.42),y(.04));c.quadraticCurveTo(x(.40),y(.20),x(.37),y(.38));c.stroke();
+  c.beginPath();c.moveTo(x(.20),y(.48));c.quadraticCurveTo(x(.35),y(.42),x(.55),y(.38));c.stroke();
+  c.beginPath();c.moveTo(x(.32),y(.06));c.quadraticCurveTo(x(.30),y(.20),x(.28),y(.35));c.stroke();
+  c.beginPath();c.moveTo(x(.24),y(.56));c.quadraticCurveTo(x(.37),y(.52),x(.50),y(.50));c.stroke();
+  c.beginPath();c.moveTo(x(.68),y(.10));c.quadraticCurveTo(x(.70),y(.24),x(.72),y(.40));c.stroke();
+  c.beginPath();c.moveTo(x(.14),y(.14));c.quadraticCurveTo(x(.16),y(.22),x(.14),y(.32));c.stroke();
+}
+function toCanvas(nx,ny){var b=brainBounds();return{x:b.bx+b.bw*nx,y:b.by+b.bh*ny}}
+function resize(){
+  var dpr=devicePixelRatio||1;
+  state.w=innerWidth;state.h=innerHeight;
+  canvas.width=state.w*dpr;canvas.height=state.h*dpr;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+function buildQuery(){
+  var q=new URLSearchParams({
+    limit:document.getElementById("limit").value||"160",
+    neighbor_count:document.getElementById("neighbors").value||"5",
+    min_similarity:document.getElementById("similarity").value||"0.30"
+  });
+  var p=document.getElementById("project").value.trim();
+  var t=document.getElementById("memoryType").value;
+  var d=document.getElementById("days").value;
+  if(p)q.set("project",p);if(t)q.set("type",t);if(d)q.set("days",d);
+  return q;
+}
+function initNodes(raw){
+  var b=brainBounds();
+  var cx=b.bx+b.bw*.45,cy=b.by+b.bh*.40;
+  return raw.map(function(n){
+    var jx=(Math.random()-.5)*b.bw*.12;
+    var jy=(Math.random()-.5)*b.bh*.12;
+    return Object.assign({},n,{x:cx+jx,y:cy+jy,vx:0,vy:0,
+      radius:Math.max(3,2.5+Math.min(5,Math.sqrt((n.degree||0)+1)))});
+  });
+}
+function loadGraph(){
+  document.getElementById("statusBar").textContent="Syncing neural network...";
+  fetch("/api/memory/graph?"+buildQuery())
+    .then(function(r){return r.json()}).then(function(data){
+      var g=data.graph||{};
+      state.nodes=initNodes(g.nodes||[]);
+      state.links=g.links||[];
+      state.selected=null;state.pulses=[];
+      nodeMap.clear();state.nodes.forEach(function(n){nodeMap.set(n.id,n)});
+      document.getElementById("statusBar").textContent=
+        state.nodes.length+" neurons \u00b7 "+state.links.length+" synapses";
+      updatePanel();
+    }).catch(function(e){
+      document.getElementById("statusBar").textContent="Error: "+e.message;
+    });
+}
+function updatePanel(){
+  var el=document.getElementById("stats");
+  var det=document.getElementById("memoryDetail");
+  if(!state.nodes.length){el.textContent="No neurons loaded.";det.innerHTML="";return}
+  var byType={};state.nodes.forEach(function(n){byType[n.type]=(byType[n.type]||0)+1});
+  el.innerHTML=Object.entries(byType)
+    .map(function(e){return'<span style="color:'+(COLORS[e[0]]||"#94a3b8")+'">'+e[1]+"</span> "+e[0]}).join(" \u00b7 ");
+  if(state.selected){
+    var s=state.selected,col=COLORS[s.type]||"#94a3b8";
+    det.innerHTML='<div class="type-badge" style="background:'+col+'22;color:'+col+'">'+
+      esc(s.type)+" \u00b7 "+esc(s.date)+"</div>"+
+      '<div class="memory-content">'+esc(s.content)+"</div>";
+  }else{
+    det.innerHTML='<div style="color:#475569;font-size:12px">Click a neuron to inspect</div>';
+  }
+}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}
+function physics(){
+  if(!state.nodes.length)return;
+  var b=brainBounds();
+  var damp=.88,repulse=6000,linkS=.004,regS=.008;
+  var i,j,a,n,lk,s,t,dx,dy,d2,f,inv,dist,rest,nx,ny,reg,tx,ty,pad=25;
+  for(i=0;i<state.nodes.length;i++){state.nodes[i].vx*=damp;state.nodes[i].vy*=damp}
+  for(i=0;i<state.nodes.length;i++){
+    for(j=i+1;j<state.nodes.length;j++){
+      a=state.nodes[i];n=state.nodes[j];
+      dx=a.x-n.x;dy=a.y-n.y;
+      d2=Math.max(100,dx*dx+dy*dy);
+      f=repulse/d2;inv=1/Math.sqrt(d2);
+      a.vx+=f*dx*inv*.001;a.vy+=f*dy*inv*.001;
+      n.vx-=f*dx*inv*.001;n.vy-=f*dy*inv*.001;
+    }
+  }
+  for(i=0;i<state.links.length;i++){
+    lk=state.links[i];s=nodeMap.get(lk.source);t=nodeMap.get(lk.target);
+    if(!s||!t)continue;
+    dx=t.x-s.x;dy=t.y-s.y;
+    dist=Math.max(10,Math.sqrt(dx*dx+dy*dy));
+    rest=100*(1-(lk.weight||.5));
+    f=(dist-rest)*linkS;nx=dx/dist;ny=dy/dist;
+    s.vx+=f*nx;s.vy+=f*ny;t.vx-=f*nx;t.vy-=f*ny;
+  }
+  for(i=0;i<state.nodes.length;i++){
+    n=state.nodes[i];reg=REGIONS[n.type];if(!reg)continue;
+    tx=b.bx+b.bw*reg.x;ty=b.by+b.bh*reg.y;
+    n.vx+=(tx-n.x)*regS;n.vy+=(ty-n.y)*regS;
+  }
+  for(i=0;i<state.nodes.length;i++){
+    n=state.nodes[i];
+    n.x+=n.vx;n.y+=n.vy;
+    n.x=Math.max(b.bx+pad,Math.min(b.bx+b.bw-pad,n.x));
+    n.y=Math.max(b.by+pad,Math.min(b.by+b.bh-pad,n.y));
+  }
+}
+function updatePulses(){
+  if(state.pulses.length<14&&state.links.length>0&&Math.random()<.06){
+    var lk=state.links[Math.floor(Math.random()*state.links.length)];
+    var s=nodeMap.get(lk.source),t=nodeMap.get(lk.target);
+    if(s&&t)state.pulses.push({sx:s.x,sy:s.y,tx:t.x,ty:t.y,p:0,
+      spd:.012+Math.random()*.018,col:COLORS[s.type]||"#818cf8"});
+  }
+  for(var i=0;i<state.pulses.length;i++)state.pulses[i].p+=state.pulses[i].spd;
+  state.pulses=state.pulses.filter(function(p){return p.p<1});
+}
+function render(){
+  resize();state.time+=.016;
+  var W=state.w,H=state.h;
+  ctx.fillStyle="#050510";ctx.fillRect(0,0,W,H);
+  var b=brainBounds();
+  var pulse=.6+.15*Math.sin(state.time*.8);
+  var grd=ctx.createRadialGradient(b.bx+b.bw*.45,b.by+b.bh*.4,b.bw*.1,b.bx+b.bw*.45,b.by+b.bh*.4,b.bw*.55);
+  grd.addColorStop(0,"rgba(99,102,241,"+(0.07*pulse)+")");
+  grd.addColorStop(.5,"rgba(56,189,248,"+(0.03*pulse)+")");
+  grd.addColorStop(1,"transparent");
+  ctx.fillStyle=grd;ctx.fillRect(0,0,W,H);
+  brainPath(ctx);
+  ctx.fillStyle="rgba(15,20,50,"+(0.45*pulse)+")";ctx.fill();
+  ctx.save();
+  ctx.shadowColor="rgba(99,102,241,"+(0.4*pulse)+")";ctx.shadowBlur=28;
+  brainPath(ctx);
+  ctx.strokeStyle="rgba(99,102,241,"+(0.18*pulse)+")";ctx.lineWidth=1.5;ctx.stroke();
+  ctx.restore();
+  drawSulci(ctx);
+  var i,lk,s,t,w,dx,dy,d,off,cx,cy;
+  for(i=0;i<state.links.length;i++){
+    lk=state.links[i];s=nodeMap.get(lk.source);t=nodeMap.get(lk.target);
+    if(!s||!t)continue;
+    w=lk.weight||.5;
+    dx=t.x-s.x;dy=t.y-s.y;d=Math.sqrt(dx*dx+dy*dy+1);
+    off=Math.min(28,d*.14);
+    cx=(s.x+t.x)/2-dy/d*off;cy=(s.y+t.y)/2+dx/d*off;
+    ctx.beginPath();ctx.moveTo(s.x,s.y);ctx.quadraticCurveTo(cx,cy,t.x,t.y);
+    ctx.strokeStyle="rgba(140,160,255,"+Math.max(.03,w*.22)+")";
+    ctx.lineWidth=.5+w*.8;ctx.stroke();
+  }
+  if(state.selected){
+    var sel=state.selected;
+    for(i=0;i<state.links.length;i++){
+      lk=state.links[i];
+      if(lk.source!==sel.id&&lk.target!==sel.id)continue;
+      s=nodeMap.get(lk.source);t=nodeMap.get(lk.target);
+      if(!s||!t)continue;
+      dx=t.x-s.x;dy=t.y-s.y;d=Math.sqrt(dx*dx+dy*dy+1);
+      off=Math.min(28,d*.14);
+      ctx.save();ctx.shadowColor=COLORS[sel.type]||"#818cf8";ctx.shadowBlur=10;
+      ctx.beginPath();ctx.moveTo(s.x,s.y);
+      ctx.quadraticCurveTo((s.x+t.x)/2-dy/d*off,(s.y+t.y)/2+dx/d*off,t.x,t.y);
+      ctx.strokeStyle=COLORS[sel.type]||"#818cf8";ctx.lineWidth=1.8;
+      ctx.globalAlpha=.55;ctx.stroke();ctx.restore();ctx.globalAlpha=1;
+    }
+  }
+  var p,px,py,pa;
+  for(i=0;i<state.pulses.length;i++){
+    p=state.pulses[i];
+    px=p.sx+(p.tx-p.sx)*p.p;py=p.sy+(p.ty-p.sy)*p.p;
+    pa=Math.sin(p.p*Math.PI);
+    ctx.save();ctx.shadowColor=p.col;ctx.shadowBlur=12;
+    ctx.beginPath();ctx.arc(px,py,2.5,0,Math.PI*2);
+    ctx.fillStyle=p.col;ctx.globalAlpha=pa*.85;ctx.fill();
+    ctx.restore();ctx.globalAlpha=1;
+  }
+  var n,isSel,isHov,col,r,breathe;
+  for(i=0;i<state.nodes.length;i++){
+    n=state.nodes[i];
+    isSel=state.selected&&state.selected.id===n.id;
+    isHov=hoveredNode&&hoveredNode.id===n.id;
+    col=COLORS[n.type]||"#94a3b8";
+    breathe=1+.07*Math.sin(state.time*1.5+n.x*.01);
+    r=n.radius*(isSel?1.6:isHov?1.3:1)*breathe;
+    ctx.save();ctx.shadowColor=col;ctx.shadowBlur=isSel?22:isHov?14:7;
+    ctx.beginPath();ctx.arc(n.x,n.y,r,0,Math.PI*2);
+    ctx.fillStyle=col;ctx.globalAlpha=isSel?1:isHov?.95:.82;ctx.fill();
+    ctx.restore();
+    ctx.beginPath();ctx.arc(n.x,n.y,r*.45,0,Math.PI*2);
+    ctx.fillStyle="#fff";ctx.globalAlpha=isSel?.85:isHov?.5:.25;ctx.fill();
+    ctx.globalAlpha=1;
+    if(isSel){
+      ctx.beginPath();ctx.arc(n.x,n.y,r+4,0,Math.PI*2);
+      ctx.strokeStyle="rgba(255,255,255,.45)";ctx.lineWidth=1;ctx.stroke();
+    }
+  }
+  ctx.save();ctx.font="600 10px Inter,sans-serif";ctx.textAlign="center";
+  var shown=new Set();
+  var entries=Object.entries(REGIONS);
+  for(i=0;i<entries.length;i++){
+    var type=entries[i][0],reg=entries[i][1];
+    if(shown.has(reg.label))continue;shown.add(reg.label);
+    var pos=toCanvas(reg.x,reg.y-.09);
+    ctx.fillStyle=COLORS[type]||"#64748b";ctx.globalAlpha=.18;
+    ctx.fillText(reg.label.toUpperCase(),pos.x,pos.y);
+  }
+  ctx.restore();
+}
+canvas.addEventListener("click",function(e){
+  var r=canvas.getBoundingClientRect();
+  var mx=e.clientX-r.left,my=e.clientY-r.top;
+  var best=null,bestD=25;
+  for(var i=0;i<state.nodes.length;i++){
+    var n=state.nodes[i];
+    var d=Math.hypot(n.x-mx,n.y-my);
+    if(d<bestD){bestD=d;best=n}
+  }
+  state.selected=best;updatePanel();
+});
+canvas.addEventListener("mousemove",function(e){
+  var r=canvas.getBoundingClientRect();
+  var mx=e.clientX-r.left,my=e.clientY-r.top;
+  var best=null,bestD=20;
+  for(var i=0;i<state.nodes.length;i++){
+    var n=state.nodes[i];
+    var d=Math.hypot(n.x-mx,n.y-my);
+    if(d<bestD){bestD=d;best=n}
+  }
+  hoveredNode=best;
+  canvas.style.cursor=best?"pointer":"default";
+  if(best){
+    tooltipEl.style.display="block";
+    tooltipEl.style.left=(e.clientX+14)+"px";
+    tooltipEl.style.top=(e.clientY-10)+"px";
+    tooltipEl.querySelector(".tt-type").textContent=best.type;
+    tooltipEl.querySelector(".tt-type").style.color=COLORS[best.type]||"#94a3b8";
+    var txt=best.content.length>120?best.content.substring(0,120)+"...":best.content;
+    tooltipEl.querySelector(".tt-text").textContent=txt;
+  }else{tooltipEl.style.display="none"}
+});
+document.getElementById("refresh").addEventListener("click",loadGraph);
+document.getElementById("clear").addEventListener("click",function(){
+  document.getElementById("project").value="";
+  document.getElementById("memoryType").value="";
+  document.getElementById("limit").value="160";
+  document.getElementById("neighbors").value="5";
+  document.getElementById("similarity").value="0.30";
+  document.getElementById("days").value="";
+  loadGraph();
+});
+function loop(){physics();updatePulses();render();requestAnimationFrame(loop)}
+resize();loadGraph();loop();
+</script>
+</body>
 </html>
 """
     return HTMLResponse(html)
