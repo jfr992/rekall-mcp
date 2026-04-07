@@ -694,6 +694,47 @@ async def api_compact_memories(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/kb/topic/{label}", methods=["GET"])
+async def api_kb_topic(request):
+    """Get a single topic's memories with graph connections."""
+    from starlette.responses import JSONResponse
+
+    try:
+        label = request.path_params["label"]
+        params = dict(request.query_params)
+        project = params.get("project")
+        limit = int(params.get("limit", "200"))
+        max_topics = int(params.get("max_topics", "20"))
+        similarity_threshold = float(params.get("similarity_threshold", "0.72"))
+
+        manager = _get_memory_manager()
+        clusters = manager.get_topic_clusters(
+            project=project,
+            limit=limit,
+            max_topics=max_topics,
+            similarity_threshold=similarity_threshold,
+        )
+
+        # Find matching cluster by label (case-insensitive)
+        cluster = None
+        for c in clusters:
+            if c.label.lower() == label.lower():
+                cluster = c
+                break
+
+        if not cluster:
+            return JSONResponse(
+                {"error": f"Topic '{label}' not found", "available": [c.label for c in clusters]},
+                status_code=404,
+            )
+
+        result = manager.get_topic_detail(cluster)
+        return JSONResponse(result)
+    except Exception as e:
+        logger.error(f"Error fetching kb topic: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/dashboard", methods=["GET"])
 async def api_memory_dashboard(_request):
     """Dashboard UI for visualizing memory embeddings."""

@@ -222,3 +222,106 @@ class TestConsolidateJson:
         assert "b" in entry
         assert "score" in entry
         assert entry["score"] == 0.75
+
+
+class TestKbTopicEndpoint:
+    @pytest.fixture
+    def manager(self, tmp_path):
+        with patch("memory.manager.VectorStore") as mock_vs:
+            store = MagicMock()
+            mock_vs.return_value = store
+            store.count.return_value = 0
+
+            from memory.manager import MemoryManager
+
+            mgr = MemoryManager(
+                memory_dir=str(tmp_path / "memory"),
+                qdrant_url="http://localhost:6333",
+            )
+            mgr._store = store
+            yield mgr
+
+    def test_get_topic_detail_returns_structure(self, manager):
+        from memory.topics import TopicCluster
+
+        cluster = TopicCluster(
+            topic_id="topic_0",
+            label="Database",
+            memories=[
+                {
+                    "memory_id": "2026-01-01_decision_aaa",
+                    "content": "Chose PostgreSQL",
+                    "type": "decision",
+                    "date": "2026-01-01",
+                    "project": "test",
+                },
+                {
+                    "memory_id": "2026-01-02_fact_bbb",
+                    "content": "PostgreSQL on port 5432",
+                    "type": "fact",
+                    "date": "2026-01-02",
+                    "project": "test",
+                },
+            ],
+        )
+        result = manager.get_topic_detail(cluster)
+
+        assert result["topic"] == "Database"
+        assert result["memory_count"] == 2
+        assert len(result["memories"]) == 2
+        assert "connections" in result["memories"][0]
+        assert isinstance(result["memories"][0]["connections"], list)
+        assert result["memories"][0]["memory_id"] == "2026-01-01_decision_aaa"
+        assert result["memories"][0]["content"] == "Chose PostgreSQL"
+
+    def test_get_topic_detail_with_connections(self, manager):
+        from memory.topics import TopicCluster
+        from unittest.mock import MagicMock
+        from types import SimpleNamespace
+
+        cluster = TopicCluster(
+            topic_id="topic_0",
+            label="Database",
+            memories=[
+                {
+                    "memory_id": "mem_aaa",
+                    "content": "Chose PostgreSQL",
+                    "type": "decision",
+                    "date": "2026-01-01",
+                    "project": "test",
+                },
+            ],
+        )
+
+        # Mock knowledge graph with an edge
+        mock_graph = MagicMock()
+        edge = SimpleNamespace(
+            source="mem_aaa",
+            target="mem_bbb",
+            relation="led_to",
+            weight=0.85,
+        )
+        mock_graph.get_edges.return_value = [edge]
+        manager._knowledge_graph = mock_graph
+
+        # Mock store to return the neighbor
+        manager._store.scroll.return_value = [
+            {
+                "memory_id": "mem_bbb",
+                "content": "PostgreSQL JSONB indexing is fast",
+                "type": "learning",
+                "date": "2026-01-05",
+                "project": "test",
+            }
+        ]
+
+        result = manager.get_topic_detail(cluster)
+
+        assert len(result["memories"]) == 1
+        conns = result["memories"][0]["connections"]
+        assert len(conns) == 1
+        assert conns[0]["memory_id"] == "mem_bbb"
+        assert conns[0]["relation"] == "led_to"
+        assert conns[0]["weight"] == 0.85
+        assert conns[0]["type"] == "learning"
+        assert "PostgreSQL JSONB" in conns[0]["content"]

@@ -40,6 +40,7 @@ from memory.skills import extract_skills, render_skill_context
 
 if TYPE_CHECKING:
     from memory.knowledge_graph import KnowledgeGraph
+    from memory.topics import TopicCluster
 
 logger = logging.getLogger(__name__)
 
@@ -835,6 +836,50 @@ class MemoryManager:
                 similarity_threshold=similarity_threshold,
                 max_topics=max_topics,
             )
+
+    def get_topic_detail(self, cluster: TopicCluster) -> dict:
+        """Return a topic's memories with inline graph connections."""
+        points_by_id = {m["memory_id"]: m for m in cluster.memories if "memory_id" in m}
+
+        memories = []
+        for m in cluster.memories:
+            mid = m.get("memory_id", "")
+            connections = []
+
+            if hasattr(self, "knowledge_graph") and self.knowledge_graph:
+                edges = self.knowledge_graph.get_edges(mid)
+                for edge in edges:
+                    neighbor_id = edge.target if edge.source == mid else edge.source
+                    neighbor = points_by_id.get(neighbor_id)
+                    if not neighbor:
+                        hits = self.store.scroll(
+                            filters={"memory_id": neighbor_id}, limit=1, with_vectors=False
+                        )
+                        neighbor = hits[0] if hits else None
+                    if neighbor:
+                        connections.append({
+                            "memory_id": neighbor_id,
+                            "content": neighbor.get("content", "")[:150],
+                            "relation": edge.relation,
+                            "weight": round(edge.weight, 3),
+                            "type": neighbor.get("type", "note"),
+                            "date": neighbor.get("date", ""),
+                        })
+
+            memories.append({
+                "memory_id": mid,
+                "content": m.get("content", ""),
+                "type": m.get("type", "note"),
+                "date": m.get("date", ""),
+                "project": m.get("project", "general"),
+                "connections": connections,
+            })
+
+        return {
+            "topic": cluster.label,
+            "memory_count": len(memories),
+            "memories": memories,
+        }
 
     # -------------------------------------------------------------------------
     # SKILL CONTEXT: Inferred capabilities
