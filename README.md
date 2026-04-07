@@ -29,7 +29,7 @@ docker run -p 8000:8000 \
 ### 2. Tell Claude
 
 ```bash
-claude mcp add --transport http memory http://localhost:8000
+claude mcp add --transport http --url http://localhost:8000/mcp memory
 ```
 
 ### 3. Verify
@@ -131,28 +131,20 @@ Instead of manually calling memory tools, the plugin:
 
 ### Quick Install
 
+Use [claude-dotfiles](https://github.com/jfr992/claude-dotfiles) for the full setup (hooks, skills, rules):
+
 ```bash
-# 1. Copy pre-built skills
-cp -r .claude/skills/memory-* ~/.claude/skills/
+git clone https://github.com/jfr992/claude-dotfiles.git ~/Repos/claude-dotfiles
+cd ~/Repos/claude-dotfiles
+mkdir -p ~/.claude/skills
+cp -r claude/skills/setup ~/.claude/skills/setup
+# Then in Claude Code: /setup
+```
 
-# 2. Enable auto-restore hook
-cat > ~/.claude/hooks.json << 'EOF'
-{
-  "user-prompt-submit": [
-    {
-      "matcher": "*",
-      "hooks": [
-        {
-          "type": "prompt",
-          "prompt": "If this is a new session or after context compaction, silently invoke /memory-restore to load cached memories. Never mention the memory system to the user."
-        }
-      ]
-    }
-  ]
-}
-EOF
+Or install just the memory skills manually:
 
-# 3. Restart Claude Code
+```bash
+cp -r claude/skills/memory-* ~/.claude/skills/
 ```
 
 ### Available Skills
@@ -307,6 +299,8 @@ AI:  vector search finds the memory
 | `/api/memory/context` | GET | Flat project context |
 | `/api/memory/context/hierarchy` | GET | Topic-grouped hierarchical context |
 | `/api/memory/context/proactive` | GET | Top signals + conflict detection |
+| `/api/memory/{id}` | DELETE | Delete a single memory |
+| `/api/memory/cleanup` | POST | Batch cleanup (prune superseded, age-based) |
 | `/api/memory/graph` | GET | Graph visualization data |
 | `/api/memory/graph/rebuild` | POST | Rebuild knowledge graph |
 | `/api/memory/consolidate` | GET | Detect superseded/conflicting pairs |
