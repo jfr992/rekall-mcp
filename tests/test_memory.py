@@ -364,6 +364,37 @@ class TestRecall:
 
         assert results == []
 
+    def test_recall_passes_date_epoch_range_filter_to_store(self, memory_manager, mock_store):
+        """When days_back is set, recall should pass a date_epoch Range filter to the store."""
+        mock_store.search.return_value = []
+
+        memory_manager.recall("test query", days_back=7)
+
+        call_args = mock_store.search.call_args
+        filters = call_args.kwargs.get("filters") or call_args[1].get("filters")
+
+        assert "date_epoch" in filters
+        assert isinstance(filters["date_epoch"], dict)
+        assert "gte" in filters["date_epoch"]
+        assert isinstance(filters["date_epoch"]["gte"], int)
+
+        # Cutoff should be roughly 7 days ago
+        import time
+        expected_cutoff = int(time.time()) - (7 * 86400)
+        actual_cutoff = filters["date_epoch"]["gte"]
+        assert abs(actual_cutoff - expected_cutoff) < 120  # within 2 minutes
+
+    def test_recall_no_date_filter_without_days_back(self, memory_manager, mock_store):
+        """When days_back is not set, no date_epoch filter should be passed."""
+        mock_store.search.return_value = []
+
+        memory_manager.recall("test query")
+
+        call_args = mock_store.search.call_args
+        filters = call_args.kwargs.get("filters") or call_args[1].get("filters")
+
+        assert filters is None or "date_epoch" not in (filters or {})
+
 
 # =============================================================================
 # SESSION SUMMARY TESTS

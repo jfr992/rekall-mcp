@@ -533,13 +533,10 @@ class MemoryManager:
                 filters["project"] = project
             if type:
                 filters["type"] = type
-            # Note: date filtering is done post-retrieval (dates stored as strings,
-            # Qdrant Range filter requires numeric values)
-            cutoff_date = (
-                (datetime.now() - timedelta(days=days_back)).strftime("%Y-%m-%d")
-                if days_back
-                else None
-            )
+            # Date filtering: use Qdrant Range pre-filter on date_epoch
+            if days_back:
+                cutoff_epoch = int((datetime.now() - timedelta(days=days_back)).timestamp())
+                filters["date_epoch"] = {"gte": cutoff_epoch}
 
             # Phase 1: SEED — standard vector search
             query_vector = self.embedder.encode(query)
@@ -638,10 +635,6 @@ class MemoryManager:
                 )
 
             scored.sort(key=lambda item: item["score"], reverse=True)
-
-            # Post-filter by date (string comparison works since format is YYYY-MM-DD)
-            if cutoff_date:
-                scored = [r for r in scored if (r.get("date") or "") >= cutoff_date]
 
             return scored[:limit]
 
