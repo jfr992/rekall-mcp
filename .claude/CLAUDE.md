@@ -8,6 +8,17 @@ Memento MCP is a persistent memory system for AI assistants with a **knowledge g
 - Knowledge graph (`~/.claude/memory/_graph.json`) for typed relationships (networkx)
 - Sentence-transformers embeddings (local, free)
 
+## Setup on a New Machine
+
+All skills, hooks, and setup instructions live in `claude/` at the repo root. When a user asks to install or set up Memento, follow `claude/SETUP.md` step by step. The short version:
+
+```bash
+docker compose up -d                                           # 1. Start services
+claude mcp add --transport http memory http://localhost:8000/mcp  # 2. Register MCP
+cp -r claude/skills/memory-* ~/.claude/skills/                 # 3. Install skills
+cp claude/hooks.json <project>/.claude/hooks.json              # 4. Install hooks (per-project)
+```
+
 ## Running the Server
 
 ```bash

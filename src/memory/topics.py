@@ -141,75 +141,11 @@ def _coerce_vector(value: Any) -> list[float]:
     return []
 
 
-def _cosine_similarity(left: list[float], right: list[float]) -> float:
-    """Calculate cosine similarity for two vectors."""
-    if not left or not right or len(left) != len(right):
-        return 0.0
-
-    dot = 0.0
-    left_norm = 0.0
-    right_norm = 0.0
-
-    for left_value, right_value in zip(left, right, strict=True):
-        dot += left_value * right_value
-        left_norm += left_value * left_value
-        right_norm += right_value * right_value
-
-    if left_norm == 0.0 or right_norm == 0.0:
-        return 0.0
-
-    return dot / ((left_norm ** 0.5) * (right_norm ** 0.5))
-
-
 def _extract_terms(content: str, max_terms: int = 4) -> list[str]:
     """Return normalized terms from content."""
     terms = re.findall(r"[a-zA-Z][a-zA-Z0-9_-]*", content.lower())
     terms = [t for t in terms if t not in STOP_WORDS and len(t) > 2]
     return terms[:max_terms]
-
-
-def _cluster_similarity(
-    left_indices: set[int],
-    right_indices: set[int],
-    vectors: list[list[float]],
-) -> float:
-    """Average cosine similarity between two clusters."""
-    total = 0.0
-    count = 0
-
-    for left_idx in left_indices:
-        left = vectors[left_idx]
-        if not left:
-            continue
-        for right_idx in right_indices:
-            right = vectors[right_idx]
-            if not right:
-                continue
-            total += _cosine_similarity(left, right)
-            count += 1
-
-    return total / count if count else 0.0
-
-
-def _find_cluster_pairs(
-    clusters: list[set[int]],
-    vectors: list[list[float]],
-) -> tuple[int, int, float] | None:
-    """Find pair of clusters with highest similarity."""
-    if len(clusters) < 2:
-        return None
-
-    best: tuple[int, int, float] = (0, 1, -1.0)
-    for i in range(len(clusters)):
-        for j in range(i + 1, len(clusters)):
-            score = _cluster_similarity(clusters[i], clusters[j], vectors)
-            if score > best[2]:
-                best = (i, j, score)
-
-    if best[2] < 0.0:
-        return None
-
-    return best
 
 
 def _cluster_label(points: list[dict[str, Any]], members: list[int]) -> str:
@@ -234,29 +170,40 @@ def _cluster_from_vectors(
     similarity_threshold: float,
     max_topics: int | None,
 ) -> list[list[int]]:
-    vectors = [point["vector"] for point in points]
-    clusters: list[set[int]] = [{idx} for idx in range(len(points))]
+    """Cluster points by vector similarity using scipy average-linkage."""
+    import numpy as np
+    from scipy.cluster.hierarchy import fcluster, linkage
 
-    while len(clusters) > 1:
-        best = _find_cluster_pairs(clusters, vectors)
-        if best is None:
-            break
+    valid_idx = [i for i, p in enumerate(points) if p.get("vector")]
+    invalid_idx = [i for i in range(len(points)) if i not in set(valid_idx)]
 
-        i, j, score = best
-        should_merge = score >= similarity_threshold
-        if not should_merge and max_topics is not None:
-            should_merge = len(clusters) > max_topics
+    if len(valid_idx) < 2:
+        return [[i] for i in range(len(points))]
 
-        if not should_merge:
-            break
+    mat = np.array([points[i]["vector"] for i in valid_idx], dtype=np.float32)
+    norms = np.linalg.norm(mat, axis=1, keepdims=True)
+    norms[norms == 0] = 1.0
+    mat /= norms
 
-        merged = clusters[i] | clusters[j]
-        for index in sorted((i, j), reverse=True):
-            clusters.pop(index)
-        clusters.append(merged)
+    # Average-linkage matches original algorithm's _cluster_similarity semantics
+    Z = linkage(mat, method="average", metric="cosine")
+    dist_t = max(0.0, 1.0 - similarity_threshold)
+    labels = fcluster(Z, t=dist_t, criterion="distance")
 
-    # Sort members for deterministic ordering
-    return [sorted(cluster) for cluster in clusters]
+    if max_topics is not None and len(set(labels)) > max_topics:
+        labels = fcluster(Z, t=max_topics, criterion="maxclust")
+
+    clusters: dict[int, list[int]] = defaultdict(list)
+    for local_i, lbl in enumerate(labels):
+        clusters[lbl].append(valid_idx[local_i])
+
+    result = [sorted(v) for v in clusters.values()]
+    # Absorb invalid-vector memories into the largest cluster rather than
+    # creating singletons that blow past the max_topics cap.
+    if invalid_idx:
+        result[0].extend(invalid_idx)
+        result[0] = sorted(result[0])
+    return result
 
 
 def _cluster_lexical(points: list[dict[str, Any]], max_topics: int | None) -> list[list[int]]:
