@@ -496,6 +496,55 @@ class MemoryManager:
 
         return stats
 
+    def backfill_date_epoch(self) -> int:
+        """Add date_epoch field to all existing Qdrant points missing it.
+
+        One-time migration. Safe to run multiple times — skips points
+        that already have date_epoch.
+
+        Returns:
+            Number of points updated
+        """
+        from core import stable_hash_id
+
+        points = self.store.scroll(limit=10000)
+        updated = 0
+
+        for point in points:
+            # Skip if already has date_epoch
+            if point.get("date_epoch"):
+                continue
+
+            date_str = point.get("date")
+            if not date_str:
+                continue
+
+            memory_id = point.get("memory_id")
+            if not memory_id:
+                continue
+
+            try:
+                date_epoch = int(datetime.strptime(date_str, "%Y-%m-%d").timestamp())
+            except ValueError:
+                continue
+
+            point_id = stable_hash_id(memory_id)
+            self.store.client.set_payload(
+                collection_name=self.store.collection,
+                payload={"date_epoch": date_epoch},
+                points=[point_id],
+            )
+            updated += 1
+
+        # Create integer index if it doesn't exist (idempotent)
+        try:
+            self.store.create_index("date_epoch", field_type="integer")
+        except Exception:
+            pass  # Index may already exist
+
+        logger.info(f"Backfilled date_epoch on {updated} points")
+        return updated
+
     # -------------------------------------------------------------------------
     # RECALL: Find relevant memories
     # -------------------------------------------------------------------------

@@ -581,7 +581,8 @@ async def api_rebuild_memory_graph(_request):
             store=manager.store,
             embedder=manager.embedder,
         )
-        return JSONResponse({"status": "rebuilt", **stats})
+        backfill_count = manager.backfill_date_epoch()
+        return JSONResponse({"status": "rebuilt", **stats, "backfill_count": backfill_count})
     except Exception as e:
         logger.error(f"Error rebuilding memory graph: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)

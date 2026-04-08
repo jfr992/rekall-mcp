@@ -160,6 +160,7 @@ async def test_api_rebuild_graph_endpoint(monkeypatch):
         "edges": 3,
         "duration_ms": 42,
     }
+    manager.backfill_date_epoch.return_value = 5
     monkeypatch.setattr("server._get_memory_manager", lambda: manager)
 
     request = SimpleNamespace()
@@ -172,4 +173,5 @@ async def test_api_rebuild_graph_endpoint(monkeypatch):
         "nodes": 10,
         "edges": 3,
         "duration_ms": 42,
+        "backfill_count": 5,
     }

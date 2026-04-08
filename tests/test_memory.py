@@ -942,3 +942,47 @@ class TestIntegration:
 
         # Cleanup
         real_memory_manager.clear_project("integration-test")
+
+
+class TestBackfillDateEpoch:
+    """Tests for the date_epoch backfill migration."""
+
+    def test_backfill_adds_date_epoch_to_points(self, memory_manager, mock_store):
+        """Backfill should set date_epoch on all points missing it."""
+        mock_store.scroll.return_value = [
+            {"memory_id": "2026-04-01_fact_abc", "date": "2026-04-01", "content": "old memory"},
+            {"memory_id": "2026-04-08_fact_def", "date": "2026-04-08", "content": "new memory"},
+        ]
+
+        count = memory_manager.backfill_date_epoch()
+
+        assert count == 2
+        assert mock_store.client.set_payload.call_count == 2
+
+        # Verify first call payload
+        first_call = mock_store.client.set_payload.call_args_list[0]
+        payload = first_call.kwargs.get("payload") or first_call[1].get("payload")
+        assert "date_epoch" in payload
+        assert isinstance(payload["date_epoch"], int)
+
+    def test_backfill_skips_points_with_date_epoch(self, memory_manager, mock_store):
+        """Backfill should skip points that already have date_epoch."""
+        mock_store.scroll.return_value = [
+            {"memory_id": "2026-04-01_fact_abc", "date": "2026-04-01", "date_epoch": 1743465600},
+        ]
+
+        count = memory_manager.backfill_date_epoch()
+
+        assert count == 0
+        mock_store.client.set_payload.assert_not_called()
+
+    def test_backfill_handles_missing_date_field(self, memory_manager, mock_store):
+        """Backfill should skip points with no date field."""
+        mock_store.scroll.return_value = [
+            {"memory_id": "unknown_fact_abc", "content": "no date"},
+        ]
+
+        count = memory_manager.backfill_date_epoch()
+
+        assert count == 0
+        mock_store.client.set_payload.assert_not_called()
