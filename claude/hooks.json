@@ -28,6 +28,26 @@
       ]
     }
   ],
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash ~/.claude/hooks/stop-verify.sh",
+          "timeout": 5
+        }
+      ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash ~/.claude/hooks/session-debrief.sh",
+          "timeout": 30
+        }
+      ]
+    }
+  ],
   "user-prompt-submit": [
     {
       "matcher": "*",

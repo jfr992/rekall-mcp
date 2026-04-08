@@ -55,9 +55,11 @@ Copy the memento hook scripts to the global Claude Code hooks directory:
 
 ```bash
 mkdir -p ~/.claude/hooks
-cp <repo-root>/claude/hooks/session-start-memory.sh ~/.claude/hooks/
-cp <repo-root>/claude/hooks/memory-cleanup.sh ~/.claude/hooks/
-chmod +x ~/.claude/hooks/session-start-memory.sh ~/.claude/hooks/memory-cleanup.sh
+cp <repo-root>/claude/hooks/*.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/session-start-memory.sh \
+         ~/.claude/hooks/memory-cleanup.sh \
+         ~/.claude/hooks/session-debrief.sh \
+         ~/.claude/hooks/stop-verify.sh
 ```
 
 ### 5. Install hooks config
@@ -66,6 +68,7 @@ The hooks config (`claude/hooks.json`) tells Claude Code when to run the memory 
 
 - **SessionStart** — restore memory context + background cleanup
 - **PostToolUse (Agent)** — prompt to save notable agent results to memory
+- **Stop** — session debrief (Haiku reviews commits vs saved memories, fills gaps) + git safety check
 - **user-prompt-submit** — invoke `/memory-restore` skill on new sessions
 
 **Option A: Per-project** (recommended for targeted use)
@@ -107,7 +110,8 @@ claude mcp remove memory
 rm -rf ~/.claude/skills/memory-{restore,observe,recall,stats,rebuild,consolidate,skills}
 
 # Remove hook scripts
-rm -f ~/.claude/hooks/session-start-memory.sh ~/.claude/hooks/memory-cleanup.sh
+rm -f ~/.claude/hooks/session-start-memory.sh ~/.claude/hooks/memory-cleanup.sh \
+      ~/.claude/hooks/session-debrief.sh ~/.claude/hooks/stop-verify.sh
 
 # Remove hooks config (per-project, only if memento is the only hook)
 rm <project-dir>/.claude/hooks.json
