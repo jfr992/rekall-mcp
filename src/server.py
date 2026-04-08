@@ -296,12 +296,19 @@ async def api_recall_memories(request):
         limit = body.get("limit", 5)
         project = body.get("project")
         mem_type = body.get("type")
+        days = body.get("days")
 
         if not query:
             return JSONResponse({"error": "query is required"}, status_code=400)
 
         manager = _get_memory_manager()
-        results = manager.recall(query, limit=limit, project=project, type=mem_type)
+        results = manager.recall(
+            query,
+            limit=limit,
+            project=project,
+            type=mem_type,
+            days_back=int(days) if days else None,
+        )
 
         return JSONResponse({"query": query, "count": len(results), "memories": results})
     except Exception as e:
