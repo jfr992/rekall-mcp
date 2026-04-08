@@ -1,4 +1,33 @@
 {
+  "SessionStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash ~/.claude/hooks/session-start-memory.sh"
+        }
+      ]
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": "bash ~/.claude/hooks/memory-cleanup.sh"
+        }
+      ]
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "Agent",
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "MEMORY CHECK: If this agent's result reveals a decision, learning, bug root cause, architecture choice, benchmark result, or significant outcome — call mcp__memory__observe() now with a 1-sentence summary. Skip if routine."
+        }
+      ]
+    }
+  ],
   "user-prompt-submit": [
     {
       "matcher": "*",

@@ -49,18 +49,39 @@ ls ~/.claude/skills/ | grep memory
 
 Expected: 7 directories (memory-restore, memory-observe, memory-recall, memory-stats, memory-rebuild, memory-consolidate, memory-skills).
 
-### 4. Install hooks (per-project)
+### 4. Install hook scripts
 
-For any project where you want automatic memory restoration on session start, copy the hooks config into that project's `.claude/` directory:
+Copy the memento hook scripts to the global Claude Code hooks directory:
+
+```bash
+mkdir -p ~/.claude/hooks
+cp <repo-root>/claude/hooks/session-start-memory.sh ~/.claude/hooks/
+cp <repo-root>/claude/hooks/memory-cleanup.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/session-start-memory.sh ~/.claude/hooks/memory-cleanup.sh
+```
+
+### 5. Install hooks config
+
+The hooks config (`claude/hooks.json`) tells Claude Code when to run the memory hooks. It includes:
+
+- **SessionStart** — restore memory context + background cleanup
+- **PostToolUse (Agent)** — prompt to save notable agent results to memory
+- **user-prompt-submit** — invoke `/memory-restore` skill on new sessions
+
+**Option A: Per-project** (recommended for targeted use)
 
 ```bash
 mkdir -p <project-dir>/.claude
 cp <repo-root>/claude/hooks.json <project-dir>/.claude/hooks.json
 ```
 
-If the project already has a `.claude/hooks.json`, merge the `user-prompt-submit` entry manually rather than overwriting.
+**Option B: Global** (all projects get memory hooks)
 
-### 5. Verify end-to-end
+Merge the contents of `claude/hooks.json` into `~/.claude/settings.json` under the `"hooks"` key.
+
+If the project already has a `.claude/hooks.json`, merge the entries manually rather than overwriting.
+
+### 6. Verify end-to-end
 
 ```bash
 # Server health
@@ -85,7 +106,10 @@ claude mcp remove memory
 # Remove skills
 rm -rf ~/.claude/skills/memory-{restore,observe,recall,stats,rebuild,consolidate,skills}
 
-# Remove hooks (per-project, only if memento is the only hook)
+# Remove hook scripts
+rm -f ~/.claude/hooks/session-start-memory.sh ~/.claude/hooks/memory-cleanup.sh
+
+# Remove hooks config (per-project, only if memento is the only hook)
 rm <project-dir>/.claude/hooks.json
 ```
 
