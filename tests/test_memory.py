@@ -266,6 +266,20 @@ class TestSaveMemory:
             data = yaml.safe_load(f)
         assert f"{memory_type}s" in data
 
+    def test_save_includes_date_epoch_in_payload(self, memory_manager, mock_store):
+        """Saved memories should include date_epoch as unix timestamp integer."""
+        memory_manager.save("Test content", type="fact")
+
+        call_args = mock_store.save.call_args
+        payload = call_args.kwargs.get("payload") or call_args[1].get("payload")
+
+        assert "date_epoch" in payload
+        assert isinstance(payload["date_epoch"], int)
+        # date_epoch should be within last minute (not some arbitrary value)
+        import time
+        now = int(time.time())
+        assert now - 86400 < payload["date_epoch"] <= now
+
 
 # =============================================================================
 # RECALL TESTS

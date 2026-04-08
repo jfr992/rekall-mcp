@@ -248,10 +248,12 @@ class MemoryManager:
             memory_id = f"{date}_{type}_{content_hash}"
 
             # Build payload
+            date_epoch = int(datetime.strptime(date, "%Y-%m-%d").timestamp())
             payload = {
                 "memory_id": memory_id,
                 "content": content,
                 "date": date,
+                "date_epoch": date_epoch,
                 "timestamp": timestamp,
                 "type": type,
                 "project": project or "general",
