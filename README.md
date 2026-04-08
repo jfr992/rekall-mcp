@@ -117,6 +117,10 @@ This finds memories that are *structurally related*, not just textually similar.
 
 Browse the knowledge graph at `http://localhost:8000/dashboard`. Nodes are memories, edges show typed relationships with labels.
 
+### Knowledge Base
+
+Browse memories by topic at `http://localhost:8000/kb`. Search, filter by type/project, and explore topic clusters with their graph connections.
+
 ---
 
 ## Memory Plugin (Auto-Triggering Skills)
@@ -131,21 +135,18 @@ Instead of manually calling memory tools, the plugin:
 
 ### Quick Install
 
-Use [claude-dotfiles](https://github.com/jfr992/claude-dotfiles) for the full setup (hooks, skills, rules):
+Skills and hooks are bundled in the repo's `claude/` directory:
 
 ```bash
-git clone https://github.com/jfr992/claude-dotfiles.git ~/Repos/claude-dotfiles
-cd ~/Repos/claude-dotfiles
-mkdir -p ~/.claude/skills
-cp -r claude/skills/setup ~/.claude/skills/setup
-# Then in Claude Code: /setup
-```
-
-Or install just the memory skills manually:
-
-```bash
+# Install skills (run from repo root)
 cp -r claude/skills/memory-* ~/.claude/skills/
+
+# Install session-start hook (per-project)
+mkdir -p <your-project>/.claude
+cp claude/hooks.json <your-project>/.claude/hooks.json
 ```
+
+See [`claude/SETUP.md`](claude/SETUP.md) for the full walkthrough (Claude can follow it too).
 
 ### Available Skills
 
@@ -327,6 +328,14 @@ AI:  vector search finds the memory
 | `/api/memory/graph` | GET | Graph visualization data |
 | `/api/memory/graph/rebuild` | POST | Rebuild knowledge graph |
 | `/api/memory/consolidate` | GET | Detect superseded/conflicting pairs |
+| `/api/memory/context/smart` | GET | Token-capped smart context for session injection |
+| `/api/memory/context/skills` | GET | Extracted skills from memory clusters |
+| `/api/memory/context/proactive` | GET | Top signals + conflict detection |
+| `/api/memory/recall/quick` | GET | Fast high-threshold recall (< 100ms, max 3) |
+| `/api/memory/compact` | POST | LLM-summarize old memories (dry-run default) |
+| `/api/memory/observe` | POST | Auto-classify and save |
+| `/kb` | GET | Knowledge Base UI (topic browser) |
+| `/api/kb/topic/{label}` | GET | Single topic's memories with graph connections |
 
 </details>
 

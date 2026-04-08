@@ -36,12 +36,12 @@ This starts:
 ### Step 2: Tell Claude About It
 
 ```bash
-claude mcp add --transport http memory http://localhost:8000
+claude mcp add --transport http --url http://localhost:8000/mcp memory
 ```
 
 Verify:
 ```bash
-claude mcp list  # Should show: memory (http) - http://localhost:8000
+claude mcp list  # Should show: memory (http) - http://localhost:8000/mcp
 ```
 
 ### Step 3: Verify It's Working
@@ -53,8 +53,9 @@ docker compose ps
 # Check health
 curl http://localhost:8000/health
 
-# Check dashboard
+# Check dashboard and knowledge base
 curl http://localhost:8000/dashboard
+curl http://localhost:8000/kb
 ```
 
 ### Step 4: Build the Knowledge Graph
@@ -166,6 +167,7 @@ Or manually edit `~/.claude/claude_code_config.json`:
 ```bash
 curl http://localhost:8000/health
 curl http://localhost:8000/api/memory/stats
+curl http://localhost:8000/kb
 ```
 
 ---

@@ -176,11 +176,11 @@ LRU cache (512 entries) prevents redundant encodings.
 
 Wrapper around Qdrant for vector operations. Supports save, search (with filters), scroll, delete.
 
-**Filter note:** The `date` field is stored as a `YYYY-MM-DD` string. Qdrant's `Range` filter requires numeric values, so date/`days` filtering is applied post-retrieval in Python (lexicographic comparison of ISO date strings is correct). The `project` and `type` fields use exact-match filters in Qdrant as normal.
+**Date filtering:** Memories store a `date_epoch` integer field (days since Unix epoch) alongside the `YYYY-MM-DD` string. Qdrant `Range` pre-filters use `date_epoch` for efficient date/`days` queries. The `project` and `type` fields use exact-match filters as normal.
 
 ### 6. Topic Clustering (`memory/topics.py`)
 
-Agglomerative clustering discovers topics from memory vectors. Topic labels are derived from the most frequent terms in each cluster. Falls back to lexical extraction when clustering fails.
+Uses scipy average-linkage agglomerative clustering (cosine distance) to discover topics from memory vectors. Topic labels are derived from the most frequent terms in each cluster. Falls back to lexical extraction when vectors are missing or clustering fails.
 
 ### 7. Skill Extraction (`memory/skills.py`)
 
@@ -287,7 +287,7 @@ YAML files are the source of truth. Qdrant and the graph can be rebuilt from YAM
 ```
 Collection: agent_memory
 Vectors: 384 dimensions (cosine distance)
-Indexes: date, project, type (for filtering)
+Indexes: date, date_epoch (integer), project, type (for filtering)
 ```
 
 ---

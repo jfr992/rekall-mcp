@@ -84,6 +84,16 @@ Current compose defaults:
 - `GET /api/memory/context/proactive?limit=120&project=...`
   - Top memories ranked by importance × recency, plus conflict detection
 
+### Knowledge Base
+- `GET /kb` — browseable topic-grouped memory explorer
+- `GET /api/kb/topic/{label}` — single topic's memories with graph connections
+- Search, filter by type/project, explore topic clusters
+
+### Additional endpoints
+- `GET /api/memory/context/smart?project=&limit=30&max_tokens=2000` — token-capped smart context
+- `GET /api/memory/recall/quick?q=&limit=2&threshold=0.7` — fast high-threshold recall (< 100ms)
+- `POST /api/memory/compact` — LLM-summarize old memories (dry_run default true)
+
 ### Dashboard controls (query surface from UI)
 - `project` text field
 - `type` dropdown (`note`, `fact`, `preference`, `decision`, `learning`, `session`, `requirement`)
@@ -123,6 +133,7 @@ Current compose defaults:
 - No dedupe guard on `save/observe`; repeated saves create duplicates (use `consolidate` to find them).
 - `get_project_context()` requires valid project; `general` is catch-all when unset.
 - Knowledge graph `_graph.json` can grow large with many memories; `rebuild()` takes ~60s for ~1300 memories.
+- `date_epoch` integer field enables Qdrant Range pre-filtering for date/days queries (replaces earlier post-retrieval string comparison). Backfill via `POST /api/memory/graph/rebuild`.
 
 ## 5) Claude-safe adjustment checklist
 
