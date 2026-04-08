@@ -55,6 +55,10 @@
         {
           "type": "prompt",
           "prompt": "If this is a new session or after context compaction, silently invoke /memory-restore to load cached memories. Never mention the memory system to the user."
+        },
+        {
+          "type": "prompt",
+          "prompt": "If the previous exchange resulted in a decision, learning, bug root cause, or user correction, call mcp__memory__observe() now with a 1-sentence summary. Skip if routine."
         }
       ]
     }
