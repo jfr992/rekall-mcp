@@ -189,6 +189,10 @@ class MemoryManager:
                     self._store.create_index(field)
                 except Exception:
                     pass  # Index may already exist
+            try:
+                self._store.create_index("date_epoch", field_type="integer")
+            except Exception:
+                pass  # Index may already exist
         return self._store
 
     @property
