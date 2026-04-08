@@ -20,20 +20,23 @@ class QueryParams:
 
 
 def test_parse_graph_filters_includes_expected_fields():
-    """Graph filters should include project/type and date cutoff."""
+    """Graph filters should include project/type and date_epoch range."""
     from server import _parse_graph_filters
 
-    now = datetime.now().strftime("%Y-%m-%d")
     query = QueryParams({"project": "api", "type": "decision", "days": "7"})
 
     filters = _parse_graph_filters(query)
 
-    expected_cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
-
     assert filters["project"] == "api"
     assert filters["type"] == "decision"
-    assert filters["date"]["gte"] == expected_cutoff
-    assert filters["date"]["gte"] <= now
+    assert "date_epoch" in filters
+    assert isinstance(filters["date_epoch"], dict)
+    assert "gte" in filters["date_epoch"]
+    assert isinstance(filters["date_epoch"]["gte"], int)
+
+    import time
+    expected_cutoff = int(time.time()) - (7 * 86400)
+    assert abs(filters["date_epoch"]["gte"] - expected_cutoff) < 120
 
 
 def test_parse_graph_filters_without_days_has_no_date_filter():
@@ -43,7 +46,8 @@ def test_parse_graph_filters_without_days_has_no_date_filter():
     filters = _parse_graph_filters(QueryParams({"project": "api"}))
 
     assert filters["project"] == "api"
-    assert "date" not in filters
+    assert "date_epoch" not in filters
+    assert "_cutoff_date" not in filters
 
 
 @pytest.mark.asyncio

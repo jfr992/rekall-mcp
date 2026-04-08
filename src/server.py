@@ -14,13 +14,16 @@ Usage:
     MCP_CONFIG=tools.yaml python -m server
 """
 
+import hashlib
 import logging
 import os
 import sys
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
@@ -34,6 +37,32 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 logger = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Simple in-process TTL cache for expensive computed endpoints
+# ---------------------------------------------------------------------------
+_CACHE_TTL = 90.0  # seconds
+_response_cache: dict[str, tuple[float, object]] = {}
+
+
+def _cache_key(*parts: str) -> str:
+    return hashlib.md5("|".join(parts).encode()).hexdigest()
+
+
+def _cache_get(key: str) -> object | None:
+    entry = _response_cache.get(key)
+    if entry and (time.monotonic() - entry[0]) < _CACHE_TTL:
+        return entry[1]
+    return None
+
+
+def _cache_set(key: str, value: object) -> None:
+    _response_cache[key] = (time.monotonic(), value)
+
+
+def _cache_clear() -> None:
+    """Invalidate all cached responses (call after any memory write)."""
+    _response_cache.clear()
 
 
 def get_config() -> ToolConfig:
@@ -213,8 +242,8 @@ def _read_float(query_params, key: str, default: float) -> float:
     return float(value)
 
 
-def _parse_graph_filters(query_params) -> dict[str, str | dict[str, str]]:
-    filters: dict[str, str | dict[str, str]] = {}
+def _parse_graph_filters(query_params) -> dict[str, Any]:
+    filters: dict[str, Any] = {}
 
     project = query_params.get("project")
     if project:
@@ -224,12 +253,10 @@ def _parse_graph_filters(query_params) -> dict[str, str | dict[str, str]]:
     if mem_type:
         filters["type"] = mem_type
 
-    # Note: date is stored as a string (YYYY-MM-DD) in Qdrant; Range filter requires
-    # numeric fields. Date cutoff is returned separately for post-retrieval filtering.
     days = query_params.get("days")
-    filters["_cutoff_date"] = (
-        (datetime.now() - timedelta(days=int(days))).strftime("%Y-%m-%d") if days else None
-    )
+    if days:
+        cutoff_epoch = int((datetime.now() - timedelta(days=int(days))).timestamp())
+        filters["date_epoch"] = {"gte": cutoff_epoch}
 
     return filters
 
@@ -250,6 +277,7 @@ async def api_save_memory(request):
 
         manager = _get_memory_manager()
         memory_id = manager.save(content, type=mem_type, project=project)
+        _cache_clear()
 
         return JSONResponse({"memory_id": memory_id, "status": "saved", "type": mem_type})
     except Exception as e:
@@ -384,7 +412,7 @@ async def api_get_hierarchical_context(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
+        project = query.get("project") or ""
         limit = _read_int(query, "limit", 120)
         max_topics = _read_int(query, "max_topics", 8)
         similarity_threshold = _read_float(query, "similarity_threshold", 0.72)
@@ -395,43 +423,50 @@ async def api_get_hierarchical_context(request):
             max_topics = 1
 
         fmt = query.get("format", "markdown")
+
+        ck = _cache_key("hierarchy", fmt, project, str(limit), str(max_topics), str(similarity_threshold))
+        cached = _cache_get(ck)
+        if cached is not None:
+            return JSONResponse(cached)
+
         manager = _get_memory_manager()
 
         if fmt == "json":
             from memory.topics import topics_to_json
 
             clusters = manager.get_topic_clusters(
-                project=project,
+                project=project or None,
                 limit=limit,
                 max_topics=max_topics,
                 similarity_threshold=similarity_threshold,
             )
-            result = topics_to_json(clusters, project=project)
+            result = topics_to_json(clusters, project=project or None)
             result["params"] = {
                 "limit": limit,
                 "max_topics": max_topics,
                 "similarity_threshold": similarity_threshold,
             }
+            _cache_set(ck, result)
             return JSONResponse(result)
 
         context = manager.get_hierarchical_project_context(
-            project=project,
+            project=project or None,
             limit=limit,
             max_topics=max_topics,
             similarity_threshold=similarity_threshold,
         )
 
-        return JSONResponse(
-            {
-                "project": project or "all",
-                "context": context,
-                "params": {
-                    "limit": limit,
-                    "max_topics": max_topics,
-                    "similarity_threshold": similarity_threshold,
-                },
-            }
-        )
+        payload = {
+            "project": project or "all",
+            "context": context,
+            "params": {
+                "limit": limit,
+                "max_topics": max_topics,
+                "similarity_threshold": similarity_threshold,
+            },
+        }
+        _cache_set(ck, payload)
+        return JSONResponse(payload)
     except Exception as e:
         logger.error(f"Error getting hierarchical context: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -513,12 +548,9 @@ async def api_memory_graph(request):
             neighbor_count = 1
 
         filters = _parse_graph_filters(query_params)
-        cutoff_date = filters.pop("_cutoff_date", None)
 
         manager = _get_memory_manager()
         points = manager.store.scroll(filters=filters if filters else None, limit=limit, with_vectors=True)
-        if cutoff_date:
-            points = [p for p in points if (p.get("date") or "") >= cutoff_date]
 
         # Local import keeps route tests easy and avoids import-time coupling.
         from memory.graph import build_memory_graph
@@ -602,24 +634,29 @@ async def api_skill_context(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
+        project = query.get("project") or ""
         min_mentions = _read_int(query, "min_mentions", 2)
         max_skills = _read_int(query, "max_skills", 8)
 
+        ck = _cache_key("skills", project, str(min_mentions), str(max_skills))
+        cached = _cache_get(ck)
+        if cached is not None:
+            return JSONResponse(cached)
+
         manager = _get_memory_manager()
         summary = manager.get_skill_context(
-            project=project,
+            project=project or None,
             min_mentions=min_mentions,
             max_skills=max_skills,
         )
-        return JSONResponse(
-            {
-                "project": project or "all",
-                "min_mentions": min_mentions,
-                "max_skills": max_skills,
-                "summary": summary,
-            }
-        )
+        payload = {
+            "project": project or "all",
+            "min_mentions": min_mentions,
+            "max_skills": max_skills,
+            "summary": summary,
+        }
+        _cache_set(ck, payload)
+        return JSONResponse(payload)
     except Exception as e:
         logger.error(f"Error building skill context: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -702,31 +739,45 @@ async def api_kb_topic(request):
     try:
         label = request.path_params["label"]
         params = dict(request.query_params)
-        project = params.get("project")
+        project = params.get("project") or ""
+        # Match the same defaults as the home view so label lookup is consistent
         limit = int(params.get("limit", "200"))
-        max_topics = int(params.get("max_topics", "20"))
+        max_topics = int(params.get("max_topics", "12"))
         similarity_threshold = float(params.get("similarity_threshold", "0.72"))
 
-        manager = _get_memory_manager()
-        clusters = manager.get_topic_clusters(
-            project=project,
-            limit=limit,
-            max_topics=max_topics,
-            similarity_threshold=similarity_threshold,
-        )
+        # Reuse cached hierarchy clusters when available (same params as home)
+        ck = _cache_key("hierarchy", "json", project, str(limit), str(max_topics), str(similarity_threshold))
+        cached = _cache_get(ck)
+        if cached is not None:
+            from memory.topics import TopicCluster
+            raw_topics = cached.get("topics", [])
+            clusters = [
+                TopicCluster(
+                    topic_id=t["topic_id"],
+                    label=t["label"],
+                    memories=t["memories"],
+                )
+                for t in raw_topics
+            ]
+        else:
+            manager = _get_memory_manager()
+            clusters = manager.get_topic_clusters(
+                project=project or None,
+                limit=limit,
+                max_topics=max_topics,
+                similarity_threshold=similarity_threshold,
+            )
 
         # Find matching cluster by label (case-insensitive)
-        cluster = None
-        for c in clusters:
-            if c.label.lower() == label.lower():
-                cluster = c
-                break
+        cluster = next((c for c in clusters if c.label.lower() == label.lower()), None)
 
         if not cluster:
             return JSONResponse(
                 {"error": f"Topic '{label}' not found", "available": [c.label for c in clusters]},
                 status_code=404,
             )
+
+        manager = _get_memory_manager()
 
         result = manager.get_topic_detail(cluster)
         return JSONResponse(result)
@@ -2171,6 +2222,7 @@ async def api_observe(request):
             content = f"{summary}\n\nContext: {context}"
 
         memory_id = manager.save(content, type=mem_type)
+        _cache_clear()
 
         return JSONResponse(
             {"memory_id": memory_id, "status": "observed", "classified_type": mem_type}
