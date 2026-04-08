@@ -516,7 +516,7 @@ class MemoryManager:
 
         for point in points:
             # Skip if already has date_epoch
-            if point.get("date_epoch"):
+            if point.get("date_epoch") is not None:
                 continue
 
             date_str = point.get("date")
