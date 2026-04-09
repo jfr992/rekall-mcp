@@ -59,7 +59,8 @@ cp <repo-root>/claude/hooks/*.sh ~/.claude/hooks/
 chmod +x ~/.claude/hooks/session-start-memory.sh \
          ~/.claude/hooks/memory-cleanup.sh \
          ~/.claude/hooks/session-debrief.sh \
-         ~/.claude/hooks/stop-verify.sh
+         ~/.claude/hooks/stop-verify.sh \
+         ~/.claude/hooks/user-prompt-observe.sh
 ```
 
 ### 5. Install hooks config
@@ -67,22 +68,14 @@ chmod +x ~/.claude/hooks/session-start-memory.sh \
 The hooks config (`claude/hooks.json`) tells Claude Code when to run the memory hooks. It includes:
 
 - **SessionStart** — restore memory context + background cleanup
+- **UserPromptSubmit** — per-turn observation nudge via command hook (injects `additionalContext`, never blocks)
 - **PostToolUse (Agent)** — prompt to save notable agent results to memory
 - **Stop** — session debrief (Haiku reviews commits vs saved memories, fills gaps) + git safety check
-- **user-prompt-submit** — invoke `/memory-restore` skill on new sessions
 
-**Option A: Per-project** (recommended for targeted use)
+> **Important**: Hook event names are PascalCase (`UserPromptSubmit`, not `user-prompt-submit`).
+> Use **command hooks** (not prompt hooks) on `UserPromptSubmit` — prompt hooks act as yes/no gates and will block user input.
 
-```bash
-mkdir -p <project-dir>/.claude
-cp <repo-root>/claude/hooks.json <project-dir>/.claude/hooks.json
-```
-
-**Option B: Global** (all projects get memory hooks)
-
-Merge the contents of `claude/hooks.json` into `~/.claude/settings.json` under the `"hooks"` key.
-
-If the project already has a `.claude/hooks.json`, merge the entries manually rather than overwriting.
+Merge the contents of `claude/hooks.json` into `~/.claude/settings.json` under the `"hooks"` key. Do **not** use a project-level `.claude/hooks.json` — hooks belong in global settings so they work across all projects.
 
 ### 6. Verify end-to-end
 
