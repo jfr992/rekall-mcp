@@ -41,6 +41,7 @@ from memory.observe import ObservationCandidate, ObservationEngine
 from memory.resume import build_resume_packet
 from memory.scope import MemoryScope, ScopeDetector
 from memory.skills import extract_skills, render_skill_context
+from memory.startup import build_agent_startup
 
 if TYPE_CHECKING:
     from memory.knowledge_graph import KnowledgeGraph
@@ -1169,6 +1170,15 @@ class MemoryManager:
         """Return a continuity-oriented startup packet for an agent session."""
         scope = scope or ScopeDetector.detect(project=project)
         return build_resume_packet(self, scope=scope, limit=limit)
+
+    def get_agent_startup(
+        self,
+        project: str | None = None,
+        agent: str | None = None,
+        limit: int = 12,
+    ) -> dict[str, Any]:
+        """Return a single startup payload for agent clients."""
+        return build_agent_startup(self, project=project, agent=agent, limit=limit)
 
     def get_stats(self) -> dict[str, Any]:
         """Get memory system statistics."""

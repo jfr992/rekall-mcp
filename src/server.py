@@ -600,6 +600,25 @@ async def api_skill_context(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/context/startup", methods=["GET"])
+async def api_agent_startup(request):
+    """REST API: Unified startup payload for Claude Code / Codex clients."""
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        agent = query.get("agent")
+        limit = _read_int(query, "limit", 12)
+
+        manager = _get_memory_manager()
+        payload = manager.get_agent_startup(project=project, agent=agent, limit=limit)
+        return JSONResponse(payload)
+    except Exception as e:
+        logger.error(f"Error building agent startup payload: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/api/memory/context/resume", methods=["GET"])
 async def api_resume_packet(request):
     """REST API: Continuity-oriented resume packet for session start."""
