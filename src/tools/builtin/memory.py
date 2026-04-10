@@ -280,6 +280,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 description="Explain memory tiers and retention behavior for the current project",
                 handler=None,
             ),
+            ToolDefinition(
+                name="handoff_summary",
+                description="Get a startup handoff summary with next steps and recent momentum",
+                handler=None,
+            ),
         ]
 
     def _get_current_scope(self, project: str | None = None):
@@ -540,6 +545,15 @@ class OptimizedMemoryTools(BaseToolProvider):
             return "\n".join(lines)
 
         registered.append("memory_lifecycle")
+
+        @mcp.tool(structured_output=False)
+        async def handoff_summary(project: str | None = None, limit: int = 12) -> str:
+            """Return a momentum-oriented handoff summary for session startup."""
+            scope = self._get_current_scope(project=project)
+            packet = self.manager.get_resume_packet(project=scope.project, scope=scope, limit=limit)
+            return packet.get("handoff", packet["summary"])
+
+        registered.append("handoff_summary")
 
         @mcp.tool(structured_output=False)
         async def rebuild_knowledge_graph() -> str:
