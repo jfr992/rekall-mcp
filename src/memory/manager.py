@@ -36,6 +36,8 @@ import yaml
 
 from core import Embedder, Telemetry, VectorStore
 from memory.linker import auto_link
+from memory.observe import ObservationCandidate, ObservationEngine
+from memory.scope import MemoryScope, ScopeDetector
 from memory.skills import extract_skills, render_skill_context
 
 if TYPE_CHECKING:
@@ -157,6 +159,7 @@ class MemoryManager:
 
         # Telemetry
         self._telemetry = Telemetry.get()
+        self._observer = ObservationEngine()
 
     # -------------------------------------------------------------------------
     # LAZY INITIALIZATION: Load on first use
@@ -215,6 +218,7 @@ class MemoryManager:
         content: str,
         type: str = "note",
         project: str | None = None,
+        scope: MemoryScope | None = None,
         **metadata: Any,
     ) -> str:
         """Save a memory.
@@ -233,27 +237,33 @@ class MemoryManager:
             memory.save("Chose hybrid architecture", type="decision", project="my-app")
         """
         with self._telemetry.track("memory.save"):
-            # Sanitize
             content = Sanitizer.sanitize(content)
+            scope = scope or ScopeDetector.detect(project=project)
+            project_name = project or scope.project or "general"
 
-            # Generate ID and timestamps
+            existing_memory_id = self._find_duplicate_memory_id(
+                content=content,
+                project=project_name,
+                memory_type=type,
+            )
+            if existing_memory_id:
+                logger.info(f"Duplicate memory skipped: {existing_memory_id}")
+                return existing_memory_id
+
             date = datetime.now().strftime("%Y-%m-%d")
             timestamp = datetime.now().isoformat()
-            # Use SHA256 for stable, collision-resistant IDs across processes
-            # Include timestamp in hash to prevent collisions for identical content
-            # 8 hex chars = 32 bits = ~4 billion unique values (collision-resistant)
             unique_string = f"{content}|{timestamp}"
             content_hash = hashlib.sha256(unique_string.encode()).hexdigest()[:8]
             memory_id = f"{date}_{type}_{content_hash}"
 
-            # Build payload
             payload = {
                 "memory_id": memory_id,
                 "content": content,
                 "date": date,
                 "timestamp": timestamp,
                 "type": type,
-                "project": project or "general",
+                "project": project_name,
+                **scope.to_metadata(),
                 **metadata,
             }
 
@@ -267,7 +277,7 @@ class MemoryManager:
             # Build/refresh graph node for this memory
             self.knowledge_graph.add_node(
                 memory_id,
-                topic=project or "general",
+                topic=project_name,
                 memory_type=type,
             )
 
@@ -278,7 +288,7 @@ class MemoryManager:
                     memory_id=memory_id,
                     content=content,
                     memory_type=type,
-                    project=project or "general",
+                    project=project_name,
                     embedder=self.embedder,
                     store=self.store,
                 )
@@ -290,6 +300,59 @@ class MemoryManager:
 
             logger.info(f"Saved memory: {memory_id}")
             return memory_id
+
+    def observe(
+        self,
+        summary: str,
+        type: str = "auto",
+        project: str | None = None,
+        scope: MemoryScope | None = None,
+        context: str | None = None,
+        **metadata: Any,
+    ) -> ObservationCandidate | str:
+        """Evaluate and persist a memory-worthy observation.
+
+        Returns the saved memory ID when persisted, otherwise the candidate verdict.
+        """
+        candidate = self._observer.evaluate(summary, memory_type=type)
+        if not candidate.should_save:
+            return candidate
+
+        content = candidate.content if not context else f"{candidate.content}\n\nContext: {context}"
+        return self.save(
+            content=content,
+            type=candidate.memory_type,
+            project=project,
+            scope=scope,
+            salience=candidate.salience,
+            **metadata,
+        )
+
+    def _find_duplicate_memory_id(
+        self,
+        *,
+        content: str,
+        project: str,
+        memory_type: str,
+    ) -> str | None:
+        """Return existing memory id for near-identical memories in same project/type."""
+        try:
+            matches = self.store.search(
+                vector=self.embedder.encode(content),
+                limit=3,
+                filters={"project": project, "type": memory_type},
+                score_threshold=0.97,
+                query_text=content,
+            )
+        except Exception:
+            return None
+
+        normalized = " ".join(content.split()).strip().lower()
+        for match in matches:
+            existing = " ".join((match.get("content") or "").split()).strip().lower()
+            if existing == normalized:
+                return match.get("memory_id")
+        return None
 
     def _save_to_file(
         self,
