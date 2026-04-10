@@ -275,6 +275,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 description="Get a continuity-oriented resume packet for Claude Code or Codex session start",
                 handler=None,
             ),
+            ToolDefinition(
+                name="memory_lifecycle",
+                description="Explain memory tiers and retention behavior for the current project",
+                handler=None,
+            ),
         ]
 
     def _get_current_scope(self, project: str | None = None):
@@ -516,6 +521,25 @@ class OptimizedMemoryTools(BaseToolProvider):
             return packet["summary"]
 
         registered.append("resume_packet")
+
+        @mcp.tool(structured_output=False)
+        async def memory_lifecycle(project: str | None = None, limit: int = 20) -> str:
+            """Summarize tiering and retention for recent project memories."""
+            scope = self._get_current_scope(project=project)
+            points = self.manager.store.scroll(filters={"project": scope.project}, limit=limit)
+            if not points:
+                return "No memories found."
+
+            lines = [f"# Memory Lifecycle: {scope.project}", ""]
+            for point in points:
+                tier = point.get("tier", "working")
+                retention = point.get("retention_days", "?")
+                lines.append(
+                    f"- [{tier}] [{point.get('type', 'note')}] {point.get('content', '')[:120]} (retention={retention}d)"
+                )
+            return "\n".join(lines)
+
+        registered.append("memory_lifecycle")
 
         @mcp.tool(structured_output=False)
         async def rebuild_knowledge_graph() -> str:

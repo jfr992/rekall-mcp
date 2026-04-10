@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from core import Embedder, Telemetry, VectorStore
+from memory.lifecycle import summarize_lifecycle
 from memory.linker import auto_link
 from memory.observe import ObservationCandidate, ObservationEngine
 from memory.resume import build_resume_packet
@@ -267,6 +268,7 @@ class MemoryManager:
                 **scope.to_metadata(),
                 **metadata,
             }
+            payload.update(summarize_lifecycle(payload))
 
             # Save to file (durability)
             self._save_to_file(memory_id, content, payload, type, date)
@@ -668,6 +670,7 @@ class MemoryManager:
                 importance = graph.get_importance(memory_id) if memory_id else 0.5
                 is_expanded = bool(result.get("_graph_expanded"))
                 graph_proximity = 0.7 if is_expanded else 1.0
+                tier = result.get("tier", "working")
 
                 days_old = 0
                 if result.get("date"):
@@ -679,11 +682,19 @@ class MemoryManager:
 
                 recency = max(0.0, 1.0 - days_old / 365)
 
+                tier_bonus = {
+                    "identity": 0.15,
+                    "semantic": 0.10,
+                    "episodic": 0.05,
+                    "working": 0.0,
+                }.get(tier, 0.0)
+
                 final_score = (
-                    vector_score * 0.50
+                    vector_score * 0.45
                     + importance * 0.20
-                    + recency * 0.15
+                    + recency * 0.10
                     + graph_proximity * 0.15
+                    + tier_bonus * 0.10
                 )
 
                 scored.append(
@@ -695,6 +706,7 @@ class MemoryManager:
                         "type": result.get("type"),
                         "project": result.get("project"),
                         "memory_id": memory_id,
+                        "tier": tier,
                     }
                 )
 

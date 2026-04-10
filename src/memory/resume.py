@@ -45,6 +45,7 @@ def build_resume_packet(
             "date": date,
             "content": content,
             "importance": round(float(importance), 4),
+            "tier": point.get("tier", "working"),
         }
 
         if date >= recent_cutoff:
@@ -94,13 +95,13 @@ def render_resume_packet(*, scope: MemoryScope, recent: list[dict[str, Any]], im
     if important:
         lines.append("## Important Context")
         for item in important:
-            lines.append(f"- [{item['type']}] {item['content'][:160]}")
+            lines.append(f"- [{item['tier']}/{item['type']}] {item['content'][:160]}")
         lines.append("")
 
     if recent:
         lines.append("## Recent Changes")
         for item in recent:
-            lines.append(f"- [{item['date']}] [{item['type']}] {item['content'][:160]}")
+            lines.append(f"- [{item['date']}] [{item['tier']}/{item['type']}] {item['content'][:160]}")
         lines.append("")
 
     if unresolved:
