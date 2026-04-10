@@ -42,4 +42,5 @@ def test_build_resume_packet_groups_recent_important_and_conflicts(tmp_path):
     assert packet["scope"]["project"] == "brain"
     assert len(packet["important"]) >= 1
     assert len(packet["unresolved"]) == 1
+    assert "promotion" in packet
     assert "Resume Packet" in packet["summary"]
