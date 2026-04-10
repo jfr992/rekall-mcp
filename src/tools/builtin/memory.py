@@ -290,6 +290,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 description="Inspect memory pressure and cleanup candidates for the current project",
                 handler=None,
             ),
+            ToolDefinition(
+                name="agent_startup",
+                description="Get a single startup payload for Claude Code or Codex sessions",
+                handler=None,
+            ),
         ]
 
     def _get_current_scope(self, project: str | None = None):
@@ -571,6 +576,14 @@ class OptimizedMemoryTools(BaseToolProvider):
             return render_pressure_report(pressure)
 
         registered.append("memory_pressure")
+
+        @mcp.tool(structured_output=False)
+        async def agent_startup(project: str | None = None, agent: str | None = None, limit: int = 12) -> str:
+            """Get one startup summary for agent clients."""
+            payload = self.manager.get_agent_startup(project=project, agent=agent, limit=limit)
+            return payload["startup_summary"]
+
+        registered.append("agent_startup")
 
         @mcp.tool(structured_output=False)
         async def rebuild_knowledge_graph() -> str:
