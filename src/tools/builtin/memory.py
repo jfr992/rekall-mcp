@@ -9,9 +9,9 @@ Based on best practices from:
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import TYPE_CHECKING
+
+from memory.scope import ScopeDetector
 
 from ..base import BaseToolProvider, ToolDefinition
 
@@ -272,15 +272,9 @@ class OptimizedMemoryTools(BaseToolProvider):
             ),
         ]
 
-    def _get_current_project(self) -> str:
-        """Extract project from working directory.
-
-        Best practice from Semantic Kernel: Auto-detect context.
-        """
-        try:
-            return Path(os.getcwd()).name
-        except Exception:
-            return "general"
+    def _get_current_scope(self, project: str | None = None):
+        """Detect full scope, not just cwd basename."""
+        return ScopeDetector.detect(project=project)
 
     def register(self, mcp: FastMCP) -> list[str]:
         """Register optimized memory tools."""
@@ -316,22 +310,23 @@ class OptimizedMemoryTools(BaseToolProvider):
                 type: Memory type or "auto" for automatic classification
                 context: Optional: Why this matters or what prompted it
             """
-            # Get current project (Semantic Kernel pattern)
-            project = self._get_current_project()
+            scope = self._get_current_scope()
 
-            # Classify type (Qdrant + embedding best practice)
             if type == "auto":
                 type = _classify_smart(summary, self.manager.embedder)
 
-            # Build full content
-            full_content = summary
-            if context:
-                full_content = f"{summary}\n\nContext: {context}"
+            result = self.manager.observe(
+                summary=summary,
+                type=type,
+                project=scope.project,
+                scope=scope,
+                context=context,
+            )
 
-            # Save (creates keyword indexes automatically)
-            memory_id = self.manager.save(content=full_content, type=type, project=project)
+            if isinstance(result, str):
+                return f"✓ Observed as {type}: {result}\n\nAvailable for recall in future sessions."
 
-            return f"✓ Observed as {type}: {memory_id}\n\nAvailable for recall in future sessions."
+            return f"Skipped memory save ({result.reason}, salience={result.salience:.2f})"
 
         registered.append("observe")
 
@@ -383,7 +378,8 @@ class OptimizedMemoryTools(BaseToolProvider):
                 memory_type: Type (decision, learning, preference, requirement, fact, note)
                 project: Optional project to associate with
             """
-            memory_id = self.manager.save(content=content, type=memory_type, project=project)
+            scope = self._get_current_scope(project=project)
+            memory_id = self.manager.save(content=content, type=memory_type, project=scope.project, scope=scope)
             return f"Saved memory: {memory_id}"
 
         registered.append("save_memory")
