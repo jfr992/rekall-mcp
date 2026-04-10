@@ -285,6 +285,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 description="Get a startup handoff summary with next steps and recent momentum",
                 handler=None,
             ),
+            ToolDefinition(
+                name="memory_pressure",
+                description="Inspect memory pressure and cleanup candidates for the current project",
+                handler=None,
+            ),
         ]
 
     def _get_current_scope(self, project: str | None = None):
@@ -554,6 +559,18 @@ class OptimizedMemoryTools(BaseToolProvider):
             return packet.get("handoff", packet["summary"])
 
         registered.append("handoff_summary")
+
+        @mcp.tool(structured_output=False)
+        async def memory_pressure(project: str | None = None, limit: int = 40) -> str:
+            """Inspect memory pressure for the current project."""
+            from memory.pressure import identify_pressure, render_pressure_report
+
+            scope = self._get_current_scope(project=project)
+            points = self.manager.store.scroll(filters={"project": scope.project}, limit=limit)
+            pressure = identify_pressure(points)
+            return render_pressure_report(pressure)
+
+        registered.append("memory_pressure")
 
         @mcp.tool(structured_output=False)
         async def rebuild_knowledge_graph() -> str:
