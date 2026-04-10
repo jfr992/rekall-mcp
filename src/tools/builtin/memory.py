@@ -270,6 +270,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 description="Generate a proactive memory summary ordered by signal strength",
                 handler=None,
             ),
+            ToolDefinition(
+                name="resume_packet",
+                description="Get a continuity-oriented resume packet for Claude Code or Codex session start",
+                handler=None,
+            ),
         ]
 
     def _get_current_scope(self, project: str | None = None):
@@ -502,6 +507,15 @@ class OptimizedMemoryTools(BaseToolProvider):
             )
 
         registered.append("proactive_context_summary")
+
+        @mcp.tool(structured_output=False)
+        async def resume_packet(project: str | None = None, limit: int = 12) -> str:
+            """Return a session-start continuity packet for the current agent scope."""
+            scope = self._get_current_scope(project=project)
+            packet = self.manager.get_resume_packet(project=scope.project, scope=scope, limit=limit)
+            return packet["summary"]
+
+        registered.append("resume_packet")
 
         @mcp.tool(structured_output=False)
         async def rebuild_knowledge_graph() -> str:
