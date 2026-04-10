@@ -295,6 +295,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 description="Get a single startup payload for Claude Code or Codex sessions",
                 handler=None,
             ),
+            ToolDefinition(
+                name="prune_candidates",
+                description="Plan safe memory pruning from pressure signals",
+                handler=None,
+            ),
         ]
 
     def _get_current_scope(self, project: str | None = None):
@@ -584,6 +589,35 @@ class OptimizedMemoryTools(BaseToolProvider):
             return payload["startup_summary"]
 
         registered.append("agent_startup")
+
+        @mcp.tool(structured_output=False)
+        async def prune_candidates(
+            project: str | None = None,
+            limit: int = 40,
+            aggressive: bool = False,
+            apply: bool = False,
+        ) -> str:
+            """Plan or apply safe pruning for low-value working memories."""
+            from memory.prune import apply_prune_plan, plan_prune
+
+            scope = self._get_current_scope(project=project)
+            points = self.manager.store.scroll(filters={"project": scope.project}, limit=limit)
+            plan = plan_prune(points, aggressive=aggressive)
+            result = apply_prune_plan(self.manager, plan, dry_run=not apply)
+
+            lines = [f"# Prune Candidates: {scope.project}", ""]
+            lines.append(f"- aggressive: {aggressive}")
+            lines.append(f"- apply: {apply}")
+            lines.append(f"- selected_count: {result['selected_count']}")
+            lines.append(f"- deleted_count: {result['deleted_count']}")
+            if result["memory_ids"]:
+                lines.append("")
+                lines.append("## Memory IDs")
+                for memory_id in result["memory_ids"]:
+                    lines.append(f"- {memory_id}")
+            return "\n".join(lines)
+
+        registered.append("prune_candidates")
 
         @mcp.tool(structured_output=False)
         async def rebuild_knowledge_graph() -> str:
