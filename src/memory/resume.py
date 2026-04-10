@@ -8,6 +8,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import Any
 
+from memory.continuity import extract_next_steps, format_handoff_summary
 from memory.intelligence import apply_memory_promotion, changed_since_last_session
 from memory.scope import MemoryScope
 
@@ -72,11 +73,20 @@ def build_resume_packet(
     dedup_important = _dedupe_by_id(sorted(promoted_memories, key=lambda x: (-x["importance"], x["date"])))[:limit]
     dedup_unresolved = _dedupe_conflicts(unresolved)[:6]
 
+    next_steps = extract_next_steps(dedup_recent + dedup_important)
+    handoff = format_handoff_summary(
+        recent=dedup_recent,
+        important=dedup_important,
+        next_steps=next_steps,
+    )
+
     return {
         "scope": scope.to_metadata(),
         "recent": dedup_recent,
         "important": dedup_important,
         "unresolved": dedup_unresolved,
+        "next_steps": next_steps,
+        "handoff": handoff,
         "promotion": {"promoted": promotion["promoted"]},
         "summary": render_resume_packet(
             scope=scope,
