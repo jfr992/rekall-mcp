@@ -10,6 +10,7 @@ from typing import Any
 
 from memory.continuity import extract_next_steps, format_handoff_summary
 from memory.intelligence import apply_memory_promotion, changed_since_last_session
+from memory.pressure import identify_pressure, render_pressure_report
 from memory.scope import MemoryScope
 
 
@@ -80,6 +81,8 @@ def build_resume_packet(
         next_steps=next_steps,
     )
 
+    pressure = identify_pressure(points)
+
     return {
         "scope": scope.to_metadata(),
         "recent": dedup_recent,
@@ -87,6 +90,8 @@ def build_resume_packet(
         "unresolved": dedup_unresolved,
         "next_steps": next_steps,
         "handoff": handoff,
+        "pressure": pressure,
+        "pressure_report": render_pressure_report(pressure),
         "promotion": {"promoted": promotion["promoted"]},
         "summary": render_resume_packet(
             scope=scope,
