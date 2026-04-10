@@ -37,6 +37,7 @@ import yaml
 from core import Embedder, Telemetry, VectorStore
 from memory.linker import auto_link
 from memory.observe import ObservationCandidate, ObservationEngine
+from memory.resume import build_resume_packet
 from memory.scope import MemoryScope, ScopeDetector
 from memory.skills import extract_skills, render_skill_context
 
@@ -1146,6 +1147,16 @@ class MemoryManager:
     # -------------------------------------------------------------------------
     # STATS: System information
     # -------------------------------------------------------------------------
+
+    def get_resume_packet(
+        self,
+        project: str | None = None,
+        scope: MemoryScope | None = None,
+        limit: int = 12,
+    ) -> dict[str, Any]:
+        """Return a continuity-oriented startup packet for an agent session."""
+        scope = scope or ScopeDetector.detect(project=project)
+        return build_resume_packet(self, scope=scope, limit=limit)
 
     def get_stats(self) -> dict[str, Any]:
         """Get memory system statistics."""

@@ -600,6 +600,24 @@ async def api_skill_context(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/context/resume", methods=["GET"])
+async def api_resume_packet(request):
+    """REST API: Continuity-oriented resume packet for session start."""
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        limit = _read_int(query, "limit", 12)
+
+        manager = _get_memory_manager()
+        packet = manager.get_resume_packet(project=project, limit=limit)
+        return JSONResponse(packet)
+    except Exception as e:
+        logger.error(f"Error building resume packet: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/api/memory/context/proactive", methods=["GET"])
 async def api_proactive_context_summary(request):
     """REST API: Get proactive context summary by relevance."""
