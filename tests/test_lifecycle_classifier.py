@@ -89,3 +89,16 @@ def test_lifecycle_reason_is_human_readable():
     ))
     assert result.reason
     assert "reinforce" in result.reason.lower() or "promoted" in result.reason.lower()
+
+
+def test_summarize_lifecycle_honors_identity_but_not_other_persisted_tiers():
+    from memory.lifecycle import summarize_lifecycle
+
+    # identity persists — explicit_tier="identity" flows through classify unchanged
+    out = summarize_lifecycle({"type": "preference", "tier": "identity", "salience": 0.3})
+    assert out["tier"] == "identity"
+
+    # non-identity persisted tier is recomputed fresh from signals
+    out = summarize_lifecycle({"type": "note", "tier": "semantic", "salience": 0.3})
+    # Fresh compute: note type, no reinforcement, age=0 -> working
+    assert out["tier"] == "working"

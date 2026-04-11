@@ -6,20 +6,23 @@ from memory.lifecycle import (
 )
 
 
-def test_determine_tier_preference_becomes_identity():
-    assert determine_tier("preference", "JR prefers direct answers", 0.6) == "identity"
+def test_determine_tier_preference_defaults_to_semantic():
+    # identity is explicit-only; preference type defaults to semantic without explicit_tier
+    assert determine_tier("preference", "JR prefers direct answers", 0.6) == "semantic"
 
 
-def test_determine_tier_high_salience_learning_becomes_semantic():
-    assert determine_tier("learning", "Critical root cause discovered", 0.9) == "semantic"
+def test_determine_tier_learning_defaults_to_episodic():
+    # high salience alone does not auto-promote; reinforcement+age is required
+    assert determine_tier("learning", "Critical root cause discovered", 0.9) == "episodic"
 
 
 def test_promote_working_to_episodic_for_learning():
     assert promote_memory("working", "learning", access_count=3, salience=0.5) == "episodic"
 
 
-def test_promote_preference_to_identity():
-    assert promote_memory("episodic", "preference", access_count=2, salience=0.4) == "identity"
+def test_promote_preference_stays_semantic_not_identity():
+    # identity requires explicit opt-in; promotion by access_count alone is insufficient
+    assert promote_memory("episodic", "preference", access_count=2, salience=0.4) == "semantic"
 
 
 def test_compute_retention_identity_longest():
