@@ -724,6 +724,22 @@ async def api_compact_memories(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/lifecycle/backfill", methods=["POST"])
+async def api_lifecycle_backfill(request):
+    """REST API: Backfill tier/durability on existing memories."""
+    try:
+        body = await request.json()
+        dry_run = bool(body.get("dry_run", True))
+        project = body.get("project")
+
+        manager = _get_memory_manager()
+        report = manager.backfill_lifecycle(dry_run=dry_run, project=project)
+        return _ok(report)
+    except Exception as e:
+        logger.error(f"Error during lifecycle backfill: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/prune/apply", methods=["POST"])
 async def api_memory_prune_apply(request):
     """REST API: Apply a previously-built prune plan. REST ONLY — no MCP tool.
