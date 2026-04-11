@@ -305,6 +305,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 description="Fetch a single memory by id with its 1-hop graph neighbors",
                 handler=None,
             ),
+            ToolDefinition(
+                name="memory_kb",
+                description="Typed semantic slices of the knowledge base: decisions, requirements, preferences, learnings",
+                handler=None,
+            ),
         ]
 
     def _get_current_scope(self, project: str | None = None):
@@ -647,6 +652,31 @@ class OptimizedMemoryTools(BaseToolProvider):
             )
 
         registered.append("rebuild_knowledge_graph")
+
+        @mcp.tool(structured_output=False)
+        async def memory_kb(project: str | None = None) -> str:
+            """Return typed KB slices: decisions, requirements, preferences, learnings.
+
+            Args:
+                project: Optional project filter
+            """
+            scope = self._get_current_scope(project=project)
+            filters = {"project": scope.project} if scope.project else None
+            points = self.manager.store.scroll(filters=filters, limit=2000)
+            slices = {
+                "decisions": [p for p in points if p.get("type") == "decision"],
+                "requirements": [p for p in points if p.get("type") == "requirement"],
+                "preferences": [p for p in points if p.get("type") == "preference"],
+                "learnings": [p for p in points if p.get("type") == "learning"],
+            }
+            lines = [f"# KB: {scope.project}"]
+            for name, items in slices.items():
+                lines.append(f"\n## {name.title()} ({len(items)})")
+                for item in items[:10]:
+                    lines.append(f"- [{item.get('tier', 'working')}] {item.get('content', '')[:140]}")
+            return "\n".join(lines)
+
+        registered.append("memory_kb")
 
         @mcp.tool(structured_output=False)
         async def memory_detail(memory_id: str) -> str:
