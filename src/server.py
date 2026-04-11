@@ -724,6 +724,51 @@ async def api_compact_memories(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/kb", methods=["GET"])
+async def api_memory_kb(request):
+    """REST API: Typed semantic slices of the KB.
+
+    Returns four lists: decisions, requirements, preferences, learnings.
+    Each item is a summary (no raw content unless ?full=true).
+    """
+    try:
+        query = request.query_params
+        project = query.get("project")
+        full = query.get("full", "false").lower() == "true"
+
+        manager = _get_memory_manager()
+        filters = {"project": project} if project else None
+        points = manager.store.scroll(filters=filters, limit=2000)
+
+        def _summarize(m: dict) -> dict:
+            out = {
+                "memory_id": m.get("memory_id"),
+                "type": m.get("type"),
+                "tier": m.get("tier"),
+                "date": m.get("date"),
+                "summary": (m.get("content", "") or "")[:160],
+            }
+            if full:
+                out["content"] = m.get("content")
+            return out
+
+        decisions = [_summarize(m) for m in points if m.get("type") == "decision"]
+        requirements = [_summarize(m) for m in points if m.get("type") == "requirement"]
+        preferences = [_summarize(m) for m in points if m.get("type") == "preference"]
+        learnings = [_summarize(m) for m in points if m.get("type") == "learning"]
+
+        return _ok({
+            "project": project or "all",
+            "decisions": decisions,
+            "requirements": requirements,
+            "preferences": preferences,
+            "learnings": learnings,
+        })
+    except Exception as e:
+        logger.error(f"Error fetching kb: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/detail/{memory_id}", methods=["GET"])
 async def api_memory_detail(request):
     """REST API: Get a single memory with its 1-hop graph neighbors."""
