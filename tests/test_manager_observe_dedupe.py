@@ -82,5 +82,39 @@ def test_new_save_computes_tier_immediately(manager_with_fake_store):
     assert "tier" in payload
     assert "durability" in payload
     assert payload["tier"] == "working"
-    # New saves should also have reinforcement_count = 0 (or key may be absent)
-    assert payload.get("reinforcement_count", 0) == 0
+    # New saves must always initialize reinforcement_count to 0
+    assert "reinforcement_count" in payload
+    assert payload["reinforcement_count"] == 0
+    assert "durability" in payload
+    assert "retention_days" in payload
+
+
+def test_reinforce_failure_does_not_raise(manager_with_fake_store):
+    """If reinforce_and_reclassify raises, the save must still return the existing id cleanly."""
+    mgr = manager_with_fake_store
+    store = mgr._store
+
+    store.search.return_value = [
+        {"memory_id": "existing_id", "score": 0.99, "content": "test", "type": "note"}
+    ]
+    # Return a malformed payload that will cause reinforce_and_reclassify to raise
+    # (missing memory_id and date, which are handled, but we can force a raise by
+    # monkey-patching the inner function)
+    store.get_by_id.return_value = {
+        "memory_id": "existing_id",
+        "type": "note",
+        "date": "2026-01-01",
+        "reinforcement_count": 5,
+        "tier": "working",
+        "salience": 0.3,
+    }
+
+    # Since manager imports it inside _reinforce_existing_memory, patch via memory.intelligence
+    from unittest.mock import patch
+    with patch("memory.intelligence.reinforce_and_reclassify", side_effect=RuntimeError("boom")):
+        # This MUST NOT raise
+        memory_id = mgr.save(content="test", type="note", project="test")
+        assert memory_id == "existing_id"
+
+    # update_payload must NOT have been called because reinforce failed
+    assert not store.update_payload.called
