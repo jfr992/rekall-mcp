@@ -38,3 +38,19 @@ def test_kb_returns_four_slices(client):
     assert set(body.keys()) >= {"decisions", "requirements", "preferences", "learnings"}
     for slice_name in ("decisions", "requirements", "preferences", "learnings"):
         assert isinstance(body[slice_name], list)
+
+
+# ---------- Task 18: GET /api/memory/pressure ----------
+
+
+def test_pressure_returns_structured_json(client):
+    response = client.get("/api/memory/pressure?project=general")
+    assert response.status_code == 200
+    body = response.json()
+    assert "flagged" in body
+    assert "candidates" in body
+    assert isinstance(body["flagged"], dict)
+    assert "stale_working_count" in body["flagged"]
+    assert "low_value_count" in body["flagged"]
+    assert "load_score" in body
+    assert "capacity" in body
