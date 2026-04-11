@@ -296,8 +296,8 @@ class OptimizedMemoryTools(BaseToolProvider):
                 handler=None,
             ),
             ToolDefinition(
-                name="prune_candidates",
-                description="Plan safe memory pruning from pressure signals",
+                name="prune_plan",
+                description="Build a safe prune plan (does not delete). Apply is REST-only.",
                 handler=None,
             ),
             ToolDefinition(
@@ -616,33 +616,26 @@ class OptimizedMemoryTools(BaseToolProvider):
         registered.append("agent_startup")
 
         @mcp.tool(structured_output=False)
-        async def prune_candidates(
-            project: str | None = None,
-            limit: int = 40,
-            aggressive: bool = False,
-            apply: bool = False,
-        ) -> str:
-            """Plan or apply safe pruning for low-value working memories."""
-            from memory.prune import apply_prune_plan, plan_prune
+        async def prune_plan(project: str | None = None, limit: int = 200) -> str:
+            """Build a safe prune plan. Identity tier and memories without explicit
+            salience are never selected. Returns a plan_id that the UI (NOT an agent)
+            can later apply via the REST endpoint.
 
+            Args:
+                project: Project to plan prune for (defaults to current scope)
+                limit: Max candidates (default 200)
+            """
             scope = self._get_current_scope(project=project)
-            points = self.manager.store.scroll(filters={"project": scope.project}, limit=limit)
-            plan = plan_prune(points, aggressive=aggressive)
-            result = apply_prune_plan(self.manager, plan, dry_run=not apply)
+            from memory.prune import build_plan
 
-            lines = [f"# Prune Candidates: {scope.project}", ""]
-            lines.append(f"- aggressive: {aggressive}")
-            lines.append(f"- apply: {apply}")
-            lines.append(f"- selected_count: {result['selected_count']}")
-            lines.append(f"- deleted_count: {result['deleted_count']}")
-            if result["memory_ids"]:
-                lines.append("")
-                lines.append("## Memory IDs")
-                for memory_id in result["memory_ids"]:
-                    lines.append(f"- {memory_id}")
-            return "\n".join(lines)
+            plan = build_plan(self.manager, project=scope.project, limit=limit)
+            return (
+                f"Plan {plan.plan_id} — {len(plan.candidates)} candidates "
+                f"(expires {plan.expires_at.isoformat()})\n"
+                f"(Apply via REST only: POST /api/memory/prune/apply)"
+            )
 
-        registered.append("prune_candidates")
+        registered.append("prune_plan")
 
         @mcp.tool(structured_output=False)
         async def rebuild_knowledge_graph() -> str:
