@@ -234,6 +234,24 @@ def _parse_graph_filters(query_params) -> dict[str, str | dict[str, str]]:
     return filters
 
 
+# Shared JSON response helpers for the memory-os endpoint family.
+
+
+def _ok(data: dict):
+    from starlette.responses import JSONResponse
+    return JSONResponse(data)
+
+
+def _bad_request(message: str):
+    from starlette.responses import JSONResponse
+    return JSONResponse({"error": message}, status_code=400)
+
+
+def _server_error(message: str):
+    from starlette.responses import JSONResponse
+    return JSONResponse({"error": message}, status_code=500)
+
+
 @mcp.custom_route("/api/memory/save", methods=["POST"])
 async def api_save_memory(request):
     """REST API: Save a memory."""
