@@ -1,0 +1,12 @@
+{
+  "scope": { "project": "test", "agent": "claude-code" },
+  "recent": [],
+  "important": [],
+  "unresolved": [],
+  "next_steps": [],
+  "handoff": "## Test project\n- Recent: 0\n- Important: 0\n",
+  "pressure": { "low_value_count": 0, "stale_working_count": 0, "candidates": [] },
+  "pressure_report": "# Memory Pressure Report\n\n- low_value_count: 0\n- stale_working_count: 0\n\nNo cleanup pressure detected.\n",
+  "truncated": false,
+  "summary": "Test project resume"
+}

@@ -1,0 +1,31 @@
+{
+  "memory": {
+    "memory_id": "2026-04-01_decision_abc12345",
+    "content": "Use Go over Rust for the backend rewrite because team familiarity",
+    "type": "decision",
+    "tier": "semantic",
+    "durability": 0.85,
+    "reinforcement_count": 3,
+    "date": "2026-04-01",
+    "project": "test",
+    "salience": 0.8
+  },
+  "neighbors": [
+    {
+      "relation": "related_to",
+      "memory": {
+        "memory_id": "2026-04-02_note_def67890",
+        "content": "Go tooling is more mature",
+        "type": "note",
+        "tier": "working",
+        "date": "2026-04-02",
+        "project": "test"
+      }
+    }
+  ],
+  "scope": {
+    "project": "test",
+    "agent": "claude-code",
+    "repo_name": "memento-mcp"
+  }
+}
