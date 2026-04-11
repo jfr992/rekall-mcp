@@ -101,3 +101,15 @@ def test_lifecycle_backfill_dry_run(client):
     assert "updated_by_tier" in body
     assert "total" in body
     assert body["dry_run"] is True
+
+
+# ---------- Task 22: GET /api/memory/resume ----------
+
+
+def test_resume_endpoint_returns_truncated_field(client):
+    response = client.get("/api/memory/resume?project=general")
+    assert response.status_code == 200
+    body = response.json()
+    assert "recent" in body
+    assert "important" in body
+    assert "truncated" in body
