@@ -9,6 +9,7 @@ Turns raw agent observations into high-signal persisted memories by:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from typing import Callable
 
@@ -21,16 +22,38 @@ TYPE_HINTS: dict[str, tuple[str, ...]] = {
     "fact": ("runs on", "located", "uses", "endpoint", "port"),
 }
 
-LOW_SIGNAL_PATTERNS = (
+LOW_SIGNAL_PHRASES = (
+    "just exploring",
+    "not sure",
+    "maybe later",
+    "i think",
+    "kinda",
     "working on",
     "opened file",
     "ran command",
-    "trying",
-    "exploring",
-    "maybe",
-    "possibly",
     "temporary",
 )
+
+_HEDGE_WORD_RE = re.compile(r"\b(maybe|possibly|probably|might)\b", re.IGNORECASE)
+
+
+def _is_low_signal(text: str) -> bool:
+    """Return True for low-signal observations.
+
+    Rules:
+    - Any known phrase like "just exploring" or "maybe later" → low signal.
+    - Short (< 20 tokens) text with ≥ 2 hedge words → low signal.
+    - A single hedge word inside a longer substantive observation is NOT low signal
+      (avoids rejecting "User is trying to migrate from Postgres" etc.).
+    """
+    lowered = text.lower()
+    if any(phrase in lowered for phrase in LOW_SIGNAL_PHRASES):
+        return True
+    tokens = re.findall(r"\b\w+\b", lowered)
+    if not tokens:
+        return True
+    hedge_count = sum(1 for t in tokens if _HEDGE_WORD_RE.fullmatch(t))
+    return hedge_count >= 2 and len(tokens) < 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -53,9 +76,9 @@ class ObservationEngine:
         if not normalized:
             return ObservationCandidate("", "learning", 0.0, False, "empty")
 
-        lowered = normalized.lower()
-        if any(pattern in lowered for pattern in LOW_SIGNAL_PATTERNS):
+        if _is_low_signal(normalized):
             return ObservationCandidate(normalized, "learning", 0.15, False, "low-signal")
+        lowered = normalized.lower()
 
         inferred = memory_type if memory_type != "auto" else self._infer_type(normalized)
         salience = self._score(normalized, inferred)
