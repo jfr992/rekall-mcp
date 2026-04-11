@@ -80,6 +80,22 @@ def test_reinforce_does_not_promote_identity_away():
     assert updated["tier"] == "identity"
 
 
+def test_reinforce_sets_retention_days():
+    from memory.lifecycle import compute_retention_days
+
+    graph = _FakeGraph()
+    memory = {
+        "memory_id": "m4",
+        "type": "note",
+        "salience": 0.3,
+        "reinforcement_count": 0,
+        "date": datetime.now().strftime("%Y-%m-%d"),
+    }
+    updated = reinforce_and_reclassify(memory, graph=graph, now=datetime.now())
+    assert "retention_days" in updated
+    assert updated["retention_days"] == compute_retention_days("note", updated["tier"])
+
+
 def test_reinforce_demotes_contradicted_memory():
     graph = _FakeGraph(contradicts={"m3": 3})
     memory = {
