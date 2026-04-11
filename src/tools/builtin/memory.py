@@ -394,7 +394,10 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         @mcp.tool(structured_output=False)
         async def save_memory(
-            content: str, memory_type: str = "note", project: str | None = None
+            content: str,
+            memory_type: str = "note",
+            project: str | None = None,
+            context: str | None = None,
         ) -> str:
             """Save a memory explicitly (manual mode).
 
@@ -407,9 +410,16 @@ class OptimizedMemoryTools(BaseToolProvider):
                 content: What to remember
                 memory_type: Type (decision, learning, preference, requirement, fact, note)
                 project: Optional project to associate with
+                context: Optional: why this matters, appended to content as "Context: ..."
             """
             scope = self._get_current_scope(project=project)
-            memory_id = self.manager.save(content=content, type=memory_type, project=scope.project, scope=scope)
+            full_content = content if not context else f"{content}\n\nContext: {context}"
+            memory_id = self.manager.save(
+                content=full_content,
+                type=memory_type,
+                project=scope.project,
+                scope=scope,
+            )
             return f"Saved memory: {memory_id}"
 
         registered.append("save_memory")
