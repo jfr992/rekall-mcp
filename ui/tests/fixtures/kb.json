@@ -1,0 +1,15 @@
+{
+  "project": "test",
+  "decisions": [
+    { "memory_id": "d1", "type": "decision", "tier": "semantic", "date": "2026-04-01", "summary": "Use behavioral tiering, not type lookup" }
+  ],
+  "requirements": [
+    { "memory_id": "r1", "type": "requirement", "tier": "semantic", "date": "2026-04-02", "summary": "Prune apply must be REST only" }
+  ],
+  "preferences": [
+    { "memory_id": "p1", "type": "preference", "tier": "semantic", "date": "2026-04-03", "summary": "JR prefers terse responses" }
+  ],
+  "learnings": [
+    { "memory_id": "l1", "type": "learning", "tier": "episodic", "date": "2026-04-04", "summary": "Dedupe threshold 0.97 is stable" }
+  ]
+}
