@@ -1,10 +1,14 @@
 "use client";
 
 import { useRef, useMemo } from "react";
+import dynamic from "next/dynamic";
 import { typeColor, tierColor } from "@/lib/theme";
 import type { GraphNode, GraphLink } from "@/lib/schemas";
 
-import ForceGraph2D from "react-force-graph-2d";
+// react-force-graph-2d touches `window` at module load — defer to client only.
+const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
+  ssr: false,
+}) as unknown as React.ComponentType<Record<string, unknown>>;
 
 type Props = {
   nodes: GraphNode[];
