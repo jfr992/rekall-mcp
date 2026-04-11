@@ -1,0 +1,30 @@
+export class ApiError extends Error {
+  constructor(public status: number, message: string, public body?: unknown) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+export async function fetchJson<T>(
+  path: string,
+  init?: RequestInit,
+  parse?: (data: unknown) => T
+): Promise<T> {
+  const url = path.startsWith("http") ? path : path; // Proxied via next.config rewrites
+  const res = await fetch(url, {
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+    ...init,
+  });
+  if (!res.ok) {
+    let body: unknown;
+    try {
+      body = await res.json();
+    } catch {
+      body = await res.text();
+    }
+    throw new ApiError(res.status, `Request failed: ${res.status}`, body);
+  }
+  const data = await res.json();
+  return parse ? parse(data) : (data as T);
+}
