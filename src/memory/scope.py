@@ -1,17 +1,30 @@
 """Memory scope and agent identity helpers.
 
 Defines a richer identity model than plain cwd-name project detection.
-This is the foundation for Claude Code + Codex sharing one memory fabric
-without contaminating unrelated repos or trust boundaries.
+Trust boundaries are resolved via ~/.claude/memory/trust.yaml (optional).
 """
 
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
+
+from memory.trust import DEFAULT_BOUNDARY, TrustResolver, load_trust_rules
+
+
+_CRED_RE = re.compile(r"(https?://)[^@/]+@")
+
+
+def _strip_creds(url: str | None) -> str:
+    """Remove user:token@ from HTTPS remote URLs. Leaves SSH/git URLs alone."""
+    if not url:
+        return ""
+    return _CRED_RE.sub(r"\1", url)
 
 
 @dataclass(frozen=True, slots=True)
@@ -25,7 +38,7 @@ class MemoryScope:
     repo_name: str = ""
     repo_remote: str = ""
     branch: str = ""
-    trust_boundary: str = "personal"
+    trust_boundary: str = DEFAULT_BOUNDARY
     session_id: str = ""
 
     def to_metadata(self) -> dict[str, Any]:
@@ -33,11 +46,49 @@ class MemoryScope:
         return {k: v for k, v in data.items() if v not in {"", None}}
 
 
+@lru_cache(maxsize=32)
+def _git_info(cwd: str) -> tuple[str, str, str]:
+    """Cached (repo_root, branch, repo_remote) for a cwd."""
+    return (
+        _git(cwd, ["rev-parse", "--show-toplevel"]),
+        _git(cwd, ["branch", "--show-current"]),
+        _git(cwd, ["remote", "get-url", "origin"]),
+    )
+
+
+def _git(cwd: str, args: list[str]) -> str:
+    try:
+        result = subprocess.run(
+            ["git", *args],
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
+
 class ScopeDetector:
     """Detect memory scope from environment and git context."""
 
-    @staticmethod
+    _resolver: TrustResolver | None = None
+
+    @classmethod
+    def _trust_resolver(cls) -> TrustResolver:
+        if cls._resolver is None:
+            cls._resolver = TrustResolver(load_trust_rules())
+        return cls._resolver
+
+    @classmethod
+    def reset_trust_cache(cls) -> None:
+        cls._resolver = None
+        _git_info.cache_clear()
+
+    @classmethod
     def detect(
+        cls,
         *,
         project: str | None = None,
         cwd: str | Path | None = None,
@@ -48,14 +99,17 @@ class ScopeDetector:
         current = Path(cwd or os.getcwd()).resolve()
         workspace_root = str(current)
 
-        repo_root = ScopeDetector._git(current, ["rev-parse", "--show-toplevel"])
+        repo_root, branch, raw_remote = _git_info(str(current))
         repo_name = Path(repo_root).name if repo_root else current.name
-        branch = ScopeDetector._git(current, ["branch", "--show-current"])
-        repo_remote = ScopeDetector._git(current, ["remote", "get-url", "origin"])
+        repo_remote = _strip_creds(raw_remote)
 
         detected_project = project or repo_name or current.name or "general"
-        detected_agent = agent or os.environ.get("MEMENTO_AGENT") or ScopeDetector._detect_agent()
-        detected_trust = trust_boundary or os.environ.get("MEMENTO_TRUST_BOUNDARY") or ScopeDetector._detect_trust_boundary(repo_remote, repo_name)
+        detected_agent = agent or os.environ.get("MEMENTO_AGENT") or cls._detect_agent()
+        detected_trust = (
+            trust_boundary
+            or os.environ.get("MEMENTO_TRUST_BOUNDARY")
+            or cls._trust_resolver().resolve(remote=repo_remote, name=repo_name)
+        )
         detected_session = session_id or os.environ.get("MEMENTO_SESSION_ID", "")
 
         return MemoryScope(
@@ -77,25 +131,3 @@ class ScopeDetector:
         if os.environ.get("CODEX_SANDBOX") or os.environ.get("CODEX_ENV"):
             return "codex"
         return "unknown"
-
-    @staticmethod
-    def _detect_trust_boundary(repo_remote: str, repo_name: str) -> str:
-        remote = (repo_remote or "").lower()
-        name = (repo_name or "").lower()
-        if any(token in remote or token in name for token in ["yum", "audacy"]):
-            return name if name in {"yum", "audacy"} else "client"
-        return "personal"
-
-    @staticmethod
-    def _git(cwd: Path, args: list[str]) -> str:
-        try:
-            result = subprocess.run(
-                ["git", *args],
-                cwd=str(cwd),
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            return result.stdout.strip()
-        except Exception:
-            return ""
