@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
-from memory.lifecycle import LifecycleSignals, classify, promote_memory
+from memory.lifecycle import LifecycleSignals, classify, compute_retention_days, promote_memory
 
 
 def apply_memory_promotion(graph, memories: list[dict[str, Any]]) -> dict[str, Any]:
@@ -74,6 +74,7 @@ def reinforce_and_reclassify(
     new_memory["tier"] = result.tier
     new_memory["durability"] = result.durability
     new_memory["lifecycle_reason"] = result.reason
+    new_memory["retention_days"] = compute_retention_days(new_memory.get("type", "note"), result.tier)
     return new_memory
 
 
