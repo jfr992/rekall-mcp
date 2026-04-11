@@ -72,3 +72,20 @@ def test_prune_plan_returns_plan_id(client):
 def test_prune_plan_requires_project(client):
     response = client.post("/api/memory/prune/plan", json={})
     assert response.status_code == 400
+
+
+# ---------- Task 20: POST /api/memory/prune/apply ----------
+
+
+def test_prune_apply_requires_plan_id_confirmation(client):
+    plan_resp = client.post("/api/memory/prune/plan", json={"project": "general"})
+    assert plan_resp.status_code == 200
+    plan_id = plan_resp.json()["plan_id"]
+
+    bad = client.post("/api/memory/prune/apply", json={"plan_id": plan_id, "confirm": "wrong"})
+    assert bad.status_code == 400
+
+
+def test_prune_apply_rejects_unknown_plan(client):
+    response = client.post("/api/memory/prune/apply", json={"plan_id": "nope", "confirm": "nope"})
+    assert response.status_code == 400
