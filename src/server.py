@@ -724,6 +724,22 @@ async def api_compact_memories(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/resume", methods=["GET"])
+async def api_memory_resume(request):
+    """REST API: Continuity-oriented resume packet, propagating truncated flag."""
+    try:
+        query = request.query_params
+        project = query.get("project")
+        limit = _read_int(query, "limit", 12)
+
+        manager = _get_memory_manager()
+        packet = manager.get_resume_packet(project=project, limit=limit)
+        return _ok(packet)
+    except Exception as e:
+        logger.error(f"Error building resume packet: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/lifecycle/backfill", methods=["POST"])
 async def api_lifecycle_backfill(request):
     """REST API: Backfill tier/durability on existing memories."""
