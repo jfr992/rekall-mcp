@@ -714,19 +714,19 @@ class MemoryManager:
 
                 recency = max(0.0, 1.0 - days_old / 365)
 
-                tier_bonus = {
-                    "identity": 0.15,
-                    "semantic": 0.10,
-                    "episodic": 0.05,
+                tier_norm = {
+                    "identity": 1.0,
+                    "semantic": 0.66,
+                    "episodic": 0.33,
                     "working": 0.0,
                 }.get(tier, 0.0)
 
                 final_score = (
-                    vector_score * 0.45
+                    vector_score * 0.40
                     + importance * 0.20
                     + recency * 0.10
                     + graph_proximity * 0.15
-                    + tier_bonus * 0.10
+                    + tier_norm * 0.15
                 )
 
                 scored.append(
