@@ -1,0 +1,11 @@
+{
+  "plan_id": "b3a9e7d1c2f845e60b84c3d2a1f9e8b7",
+  "project": "test",
+  "generated_at": "2026-04-10T12:00:00",
+  "expires_at": "2026-04-10T12:15:00",
+  "summary": "2 candidates (max 200)",
+  "candidates": [
+    { "memory_id": "w1", "tier": "working", "reason": "tier=working salience=0.10 age=30d", "age_days": 30, "salience": 0.1 },
+    { "memory_id": "w2", "tier": "working", "reason": "tier=working salience=0.15 age=22d", "age_days": 22, "salience": 0.15 }
+  ]
+}
