@@ -315,6 +315,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 description="Structured memory pressure snapshot (load_score, capacity, flagged, candidates)",
                 handler=None,
             ),
+            ToolDefinition(
+                name="backfill_lifecycle",
+                description="One-shot backfill: compute tier/durability for existing memories (dry_run by default)",
+                handler=None,
+            ),
         ]
 
     def _get_current_scope(self, project: str | None = None):
@@ -650,6 +655,22 @@ class OptimizedMemoryTools(BaseToolProvider):
             )
 
         registered.append("rebuild_knowledge_graph")
+
+        @mcp.tool(structured_output=False)
+        async def backfill_lifecycle(dry_run: bool = True, project: str | None = None) -> str:
+            """Backfill tier/durability on existing memories.
+
+            Args:
+                dry_run: If True, report what would change without writing (default True)
+                project: Optional project filter
+            """
+            report = self.manager.backfill_lifecycle(dry_run=dry_run, project=project)
+            return (
+                f"Backfill (dry_run={dry_run}) — total {report['total']}: "
+                + ", ".join(f"{k}={v}" for k, v in report["updated_by_tier"].items())
+            )
+
+        registered.append("backfill_lifecycle")
 
         @mcp.tool(structured_output=False)
         async def memory_pressure_snapshot(project: str | None = None) -> str:
