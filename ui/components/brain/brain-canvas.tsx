@@ -4,7 +4,6 @@ import { useRef, useMemo } from "react";
 import { typeColor, tierColor } from "@/lib/theme";
 import type { GraphNode, GraphLink } from "@/lib/schemas";
 
-// @ts-expect-error - react-force-graph-2d types are loose
 import ForceGraph2D from "react-force-graph-2d";
 
 type Props = {
