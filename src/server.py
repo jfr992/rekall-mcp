@@ -724,6 +724,37 @@ async def api_compact_memories(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/prune/apply", methods=["POST"])
+async def api_memory_prune_apply(request):
+    """REST API: Apply a previously-built prune plan. REST ONLY — no MCP tool.
+
+    Requires the body to echo the plan_id as `confirm`.
+    """
+    from memory.prune import PlanExpired, PlanIdMismatch, PlanNotFound, apply_plan
+
+    try:
+        body = await request.json()
+        plan_id = body.get("plan_id")
+        confirm = body.get("confirm")
+        if not plan_id or not confirm:
+            return _bad_request("plan_id and confirm are both required")
+
+        manager = _get_memory_manager()
+        try:
+            result = apply_plan(manager, plan_id=plan_id, confirm_plan_id=confirm)
+        except PlanNotFound:
+            return _bad_request("plan not found (may have expired or been consumed)")
+        except PlanIdMismatch:
+            return _bad_request("confirm does not match plan_id")
+        except PlanExpired:
+            return _bad_request("plan expired")
+
+        return _ok(result)
+    except Exception as e:
+        logger.error(f"Error applying prune plan: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/prune/plan", methods=["POST"])
 async def api_memory_prune_plan(request):
     """REST API: Build a prune plan. Does not delete anything."""
