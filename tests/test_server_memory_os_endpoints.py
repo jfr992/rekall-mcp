@@ -89,3 +89,15 @@ def test_prune_apply_requires_plan_id_confirmation(client):
 def test_prune_apply_rejects_unknown_plan(client):
     response = client.post("/api/memory/prune/apply", json={"plan_id": "nope", "confirm": "nope"})
     assert response.status_code == 400
+
+
+# ---------- Task 21: POST /api/memory/lifecycle/backfill ----------
+
+
+def test_lifecycle_backfill_dry_run(client):
+    response = client.post("/api/memory/lifecycle/backfill", json={"dry_run": True})
+    assert response.status_code == 200
+    body = response.json()
+    assert "updated_by_tier" in body
+    assert "total" in body
+    assert body["dry_run"] is True
