@@ -724,6 +724,42 @@ async def api_compact_memories(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/detail/{memory_id}", methods=["GET"])
+async def api_memory_detail(request):
+    """REST API: Get a single memory with its 1-hop graph neighbors."""
+    try:
+        memory_id = request.path_params["memory_id"]
+        manager = _get_memory_manager()
+
+        memory = manager.store.get_by_id(memory_id)
+        if not memory:
+            return _ok({"memory": None, "neighbors": [], "scope": None})
+
+        graph = manager.knowledge_graph
+        neighbors: list[dict] = []
+        if graph.stats()["nodes"] > 0:
+            for edge in graph.get_edges(memory_id, direction="out"):
+                neighbor_payload = manager.store.get_by_id(edge.target)
+                if neighbor_payload:
+                    neighbors.append({
+                        "relation": edge.relation,
+                        "memory": neighbor_payload,
+                    })
+
+        return _ok({
+            "memory": memory,
+            "neighbors": neighbors,
+            "scope": {
+                "project": memory.get("project"),
+                "agent": memory.get("agent"),
+                "repo_name": memory.get("repo_name"),
+            },
+        })
+    except Exception as e:
+        logger.error(f"Error fetching memory detail: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/dashboard", methods=["GET"])
 async def api_memory_dashboard(_request):
     """Dashboard UI for visualizing memory embeddings."""

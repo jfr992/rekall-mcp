@@ -300,6 +300,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 description="Plan safe memory pruning from pressure signals",
                 handler=None,
             ),
+            ToolDefinition(
+                name="memory_detail",
+                description="Fetch a single memory by id with its 1-hop graph neighbors",
+                handler=None,
+            ),
         ]
 
     def _get_current_scope(self, project: str | None = None):
@@ -642,5 +647,19 @@ class OptimizedMemoryTools(BaseToolProvider):
             )
 
         registered.append("rebuild_knowledge_graph")
+
+        @mcp.tool(structured_output=False)
+        async def memory_detail(memory_id: str) -> str:
+            """Fetch a single memory by id with its 1-hop graph neighbors.
+
+            Args:
+                memory_id: The memory id to fetch
+            """
+            memory = self.manager.store.get_by_id(memory_id)
+            if not memory:
+                return f"Memory not found: {memory_id}"
+            return str(memory)
+
+        registered.append("memory_detail")
 
         return registered
