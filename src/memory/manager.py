@@ -267,6 +267,7 @@ class MemoryManager:
                 "timestamp": timestamp,
                 "type": type,
                 "project": project_name,
+                "reinforcement_count": 0,
                 **scope.to_metadata(),
                 **metadata,
             }
@@ -373,11 +374,16 @@ class MemoryManager:
         if not existing:
             return
 
-        updated = reinforce_and_reclassify(
-            existing,
-            graph=self.knowledge_graph,
-            now=_dt.now(),
-        )
+        try:
+            updated = reinforce_and_reclassify(
+                existing,
+                graph=self.knowledge_graph,
+                now=_dt.now(),
+            )
+        except Exception:
+            logger.warning(f"Reinforce/reclassify failed for {memory_id}", exc_info=True)
+            return
+
         try:
             self.store.update_payload(memory_id, updated)
         except Exception:
