@@ -250,7 +250,8 @@ class MemoryManager:
                 memory_type=type,
             )
             if existing_memory_id:
-                logger.info(f"Duplicate memory skipped: {existing_memory_id}")
+                self._reinforce_existing_memory(existing_memory_id)
+                logger.info(f"Duplicate memory reinforced: {existing_memory_id}")
                 return existing_memory_id
 
             date = datetime.now().strftime("%Y-%m-%d")
@@ -357,6 +358,30 @@ class MemoryManager:
             if existing == normalized:
                 return match.get("memory_id")
         return None
+
+    def _reinforce_existing_memory(self, memory_id: str) -> None:
+        """Load, reinforce, reclassify, and persist the updated payload."""
+        from datetime import datetime as _dt
+
+        from memory.intelligence import reinforce_and_reclassify
+
+        try:
+            existing = self.store.get_by_id(memory_id)
+        except Exception:
+            logger.warning(f"Could not load memory for reinforcement: {memory_id}", exc_info=True)
+            return
+        if not existing:
+            return
+
+        updated = reinforce_and_reclassify(
+            existing,
+            graph=self.knowledge_graph,
+            now=_dt.now(),
+        )
+        try:
+            self.store.update_payload(memory_id, updated)
+        except Exception:
+            logger.warning(f"Could not persist reinforcement for {memory_id}", exc_info=True)
 
     def _save_to_file(
         self,
