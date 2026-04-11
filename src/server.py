@@ -724,6 +724,50 @@ async def api_compact_memories(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/pressure", methods=["GET"])
+async def api_memory_pressure(request):
+    """REST API: Structured memory pressure snapshot."""
+    from memory.pressure import identify_pressure
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+
+        manager = _get_memory_manager()
+        filters = {"project": project} if project else None
+        memories = manager.store.scroll(filters=filters, limit=2000)
+        pressure = identify_pressure(memories)
+
+        total = max(len(memories), 1)
+        load_score = round(
+            (pressure.get("low_value_count", 0) + pressure.get("stale_working_count", 0)) / total,
+            4,
+        )
+
+        graph_has_nodes = manager.knowledge_graph.stats()["nodes"] > 0
+        contradiction_count = 0
+        if graph_has_nodes:
+            for m in memories:
+                mid = m.get("memory_id", "")
+                if mid and manager.knowledge_graph.count_contradicts(mid) > 0:
+                    contradiction_count += 1
+
+        return _ok({
+            "project": project or "all",
+            "load_score": load_score,
+            "capacity": total,
+            "flagged": {
+                "stale_working_count": pressure.get("stale_working_count", 0),
+                "low_value_count": pressure.get("low_value_count", 0),
+                "contradiction_count": contradiction_count,
+            },
+            "candidates": pressure.get("candidates", [])[:50],
+        })
+    except Exception as e:
+        logger.error(f"Error fetching pressure: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/kb", methods=["GET"])
 async def api_memory_kb(request):
     """REST API: Typed semantic slices of the KB.
