@@ -310,6 +310,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 description="Typed semantic slices of the knowledge base: decisions, requirements, preferences, learnings",
                 handler=None,
             ),
+            ToolDefinition(
+                name="memory_pressure_snapshot",
+                description="Structured memory pressure snapshot (load_score, capacity, flagged, candidates)",
+                handler=None,
+            ),
         ]
 
     def _get_current_scope(self, project: str | None = None):
@@ -652,6 +657,23 @@ class OptimizedMemoryTools(BaseToolProvider):
             )
 
         registered.append("rebuild_knowledge_graph")
+
+        @mcp.tool(structured_output=False)
+        async def memory_pressure_snapshot(project: str | None = None) -> str:
+            """Return structured memory pressure for the current project.
+
+            Args:
+                project: Optional project filter
+            """
+            from memory.pressure import identify_pressure, render_pressure_report
+
+            scope = self._get_current_scope(project=project)
+            filters = {"project": scope.project} if scope.project else None
+            memories = self.manager.store.scroll(filters=filters, limit=2000)
+            pressure = identify_pressure(memories)
+            return render_pressure_report(pressure)
+
+        registered.append("memory_pressure_snapshot")
 
         @mcp.tool(structured_output=False)
         async def memory_kb(project: str | None = None) -> str:
