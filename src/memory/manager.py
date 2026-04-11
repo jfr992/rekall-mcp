@@ -389,6 +389,90 @@ class MemoryManager:
         except Exception:
             logger.warning(f"Could not persist reinforcement for {memory_id}", exc_info=True)
 
+    def backfill_lifecycle(
+        self,
+        *,
+        dry_run: bool = True,
+        project: str | None = None,
+        batch_size: int = 500,
+    ) -> dict[str, Any]:
+        """Backfill tier/durability/lifecycle_reason on existing memories.
+
+        Scrolls all points (optionally filtered by project), computes
+        LifecycleSignals + classify() for each, and (unless dry_run) writes the
+        updated payload back to the store.
+
+        Returns a report with counts by tier, skipped ids, and errors.
+        """
+        from datetime import datetime as _dt
+
+        from memory.lifecycle import LifecycleSignals, classify, compute_retention_days
+
+        filters = {"project": project} if project else None
+        now = _dt.now()
+
+        updated_by_tier: dict[str, int] = {"working": 0, "episodic": 0, "semantic": 0, "identity": 0}
+        skipped: list[str] = []
+        errors: list[dict[str, str]] = []
+
+        points = self.store.scroll(filters=filters, limit=batch_size)
+        graph_has_nodes = self.knowledge_graph.stats()["nodes"] > 0
+
+        for point in points:
+            memory_id = point.get("memory_id", "")
+            if not memory_id:
+                skipped.append("<missing_id>")
+                continue
+
+            date_str = point.get("date") or now.strftime("%Y-%m-%d")
+            try:
+                mem_date = _dt.strptime(date_str, "%Y-%m-%d")
+                age_days = max(0, (now - mem_date).days)
+            except ValueError:
+                age_days = 0
+
+            contradicts_count = (
+                self.knowledge_graph.count_contradicts(memory_id) if graph_has_nodes else 0
+            )
+
+            existing_tier = point.get("tier")
+            explicit = existing_tier if existing_tier == "identity" else None
+
+            signals = LifecycleSignals(
+                memory_type=point.get("type", "note"),
+                salience=float(point.get("salience") or 0.0),
+                age_days=age_days,
+                reinforcement_count=int(point.get("reinforcement_count") or 0),
+                contradicts_count=contradicts_count,
+                explicit_tier=explicit,
+            )
+            result = classify(signals)
+
+            updated_by_tier[result.tier] += 1
+            if dry_run:
+                continue
+
+            new_payload = dict(point)
+            new_payload.update({
+                "tier": result.tier,
+                "durability": result.durability,
+                "lifecycle_reason": result.reason,
+                "retention_days": compute_retention_days(signals.memory_type, result.tier),
+            })
+            try:
+                self.store.update_payload(memory_id, new_payload)
+            except Exception as e:  # noqa: BLE001
+                errors.append({"memory_id": memory_id, "error": str(e)})
+
+        return {
+            "dry_run": dry_run,
+            "project": project,
+            "updated_by_tier": updated_by_tier,
+            "skipped": skipped,
+            "errors": errors,
+            "total": sum(updated_by_tier.values()),
+        }
+
     def _save_to_file(
         self,
         memory_id: str,
