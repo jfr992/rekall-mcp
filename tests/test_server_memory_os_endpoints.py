@@ -54,3 +54,21 @@ def test_pressure_returns_structured_json(client):
     assert "low_value_count" in body["flagged"]
     assert "load_score" in body
     assert "capacity" in body
+
+
+# ---------- Task 19: POST /api/memory/prune/plan ----------
+
+
+def test_prune_plan_returns_plan_id(client):
+    response = client.post("/api/memory/prune/plan", json={"project": "general"})
+    assert response.status_code == 200
+    body = response.json()
+    assert "plan_id" in body
+    assert "candidates" in body
+    assert "expires_at" in body
+    assert isinstance(body["candidates"], list)
+
+
+def test_prune_plan_requires_project(client):
+    response = client.post("/api/memory/prune/plan", json={})
+    assert response.status_code == 400

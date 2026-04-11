@@ -724,6 +724,26 @@ async def api_compact_memories(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/prune/plan", methods=["POST"])
+async def api_memory_prune_plan(request):
+    """REST API: Build a prune plan. Does not delete anything."""
+    from memory.prune import build_plan
+
+    try:
+        body = await request.json()
+        project = body.get("project")
+        if not project:
+            return _bad_request("project is required")
+        limit = int(body.get("limit", 200))
+
+        manager = _get_memory_manager()
+        plan = build_plan(manager, project=project, limit=limit)
+        return _ok(plan.to_dict())
+    except Exception as e:
+        logger.error(f"Error building prune plan: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/pressure", methods=["GET"])
 async def api_memory_pressure(request):
     """REST API: Structured memory pressure snapshot."""
