@@ -128,13 +128,18 @@ def summarize_lifecycle(memory: dict[str, Any]) -> dict[str, Any]:
     Existing callers in `manager.save` continue to invoke this and get
     tier + durability + retention_days + lifecycle_reason in one dict.
     """
+    # Only honor explicit tier if it equals "identity" — non-identity tiers
+    # should be recomputed fresh so behavioral signals can flow.
+    persisted_tier = memory.get("tier")
+    explicit = persisted_tier if persisted_tier == "identity" else None
+
     signals = LifecycleSignals(
         memory_type=memory.get("type", "note"),
         salience=float(memory.get("salience") or 0.0),
         age_days=int(memory.get("age_days") or 0),
         reinforcement_count=int(memory.get("reinforcement_count") or 0),
         contradicts_count=int(memory.get("contradicts_count") or 0),
-        explicit_tier=memory.get("tier"),
+        explicit_tier=explicit,
     )
     result = classify(signals)
     return {
@@ -146,13 +151,16 @@ def summarize_lifecycle(memory: dict[str, Any]) -> dict[str, Any]:
 
 
 # ---------------------------------------------------------------------------
-# Temporary stubs — Task 2 will replace these with proper compat shims.
-# They exist here solely to keep the import chain alive until then.
+# Backward-compat shims — legacy callers still use these function signatures.
+# Both delegate to classify() so all tier logic stays in one place.
 # ---------------------------------------------------------------------------
 
 
 def determine_tier(memory_type: str, content: str = "", salience: float = 0.0) -> str:
-    """Stub: delegates to classify(). Task 2 will formalize this shim."""
+    """Legacy: type-based tier lookup.
+
+    Note: content arg ignored — identity is now explicit-only via classify().
+    """
     signals = LifecycleSignals(
         memory_type=memory_type,
         salience=salience,
@@ -165,11 +173,15 @@ def determine_tier(memory_type: str, content: str = "", salience: float = 0.0) -
 
 
 def promote_memory(current_tier: str, memory_type: str, access_count: int, salience: float) -> str:
-    """Stub: delegates to classify(). Task 2 will formalize this shim."""
+    """Legacy promotion path. Kept so callers of apply_memory_promotion still work.
+
+    Maps legacy access_count to reinforcement_count, and inflates age_days when
+    access_count crosses the promotion threshold so Rule 2 can fire.
+    """
     signals = LifecycleSignals(
         memory_type=memory_type,
         salience=salience,
-        age_days=0,
+        age_days=365 if access_count >= 3 else 0,
         reinforcement_count=access_count,
         contradicts_count=0,
         explicit_tier=current_tier if current_tier == "identity" else None,
