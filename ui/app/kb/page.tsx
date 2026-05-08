@@ -12,12 +12,12 @@ export default function KbPage() {
   const { data, isLoading, isError } = useKb(project);
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 p-6">
+    <div className="mx-auto flex h-[calc(100vh-3.5rem)] max-w-7xl flex-col gap-6 p-6">
       <SerifHeading eyebrow="CURATED BY TYPE · LIVE" title={`Knowledge Base · ${project}`} />
       {isLoading ? (
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-96 w-full" />
+            <Skeleton key={i} className="h-full w-full" />
           ))}
         </div>
       ) : isError || !data ? (
