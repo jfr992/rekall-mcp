@@ -127,7 +127,6 @@ Auto-triggers memory restoration on every new message:
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/health` | GET | Health check |
-| `/dashboard` | GET | Graph visualization UI |
 | `/api/memory/save` | POST | Save a memory |
 | `/api/memory/recall` | POST | Graph-enhanced semantic search |
 | `/api/memory/observe` | POST | Auto-classify and save |

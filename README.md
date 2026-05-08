@@ -16,7 +16,7 @@ cd memento-mcp
 docker compose up -d
 ```
 ```bash
-# Optional: plain Docker run (HTTP + dashboard enabled)
+# Optional: plain Docker run
 docker run -p 8000:8000 \
   -e QDRANT_URL=http://host.docker.internal:6333 \
   -e MCP_TRANSPORT=streamable-http \
@@ -36,7 +36,6 @@ claude mcp add --transport http --url http://localhost:8000/mcp memory
 
 ```bash
 curl http://localhost:8000/health
-curl http://localhost:8000/dashboard
 ```
 
 **Done.** Claude now remembers things between sessions.
@@ -113,9 +112,14 @@ Recall uses a 3-phase pipeline instead of flat cosine search:
 
 This finds memories that are *structurally related*, not just textually similar. Falls back to pure vector search when the graph is empty.
 
-### Dashboard
+### Cockpit UI
 
-Browse the knowledge graph at `http://localhost:8000/dashboard`. Nodes are memories, edges show typed relationships with labels.
+Browse the knowledge graph at `http://localhost:3333/brain` (Next.js cockpit, run with `cd ui && npm run dev -- -p 3333`). Surfaces:
+
+- `/brain` — force-directed graph view, nodes are memories, edges show typed relationships
+- `/kb` — typed columns (decisions, requirements, preferences, learnings)
+- `/continuity` — resume packets and handoff summaries
+- `/hygiene` — pressure metrics, prune flow, lifecycle backfill
 
 ---
 
@@ -188,12 +192,14 @@ Stored: "Set api_key to [REDACTED]"
 
 Tested on [LongMemEval](https://github.com/xiaowu0162/LongMemEval) (500 questions, 6 question types). Reproducible — runner in [`benchmarks/`](benchmarks/).
 
-| Mode | R@5 | What It Tests |
-|------|-----|---------------|
-| Dense (semantic only) | 96.6% | Same as MemPalace raw — identical score |
-| **Hybrid (BM25 + dense)** | **97.6%** | **Memento's default pipeline — beats all published zero-API scores** |
-| Hybrid + graph | 97.6% | Adds knowledge graph expansion |
-| MemPalace (raw, ChromaDB) | 96.6% | Highest previously published zero-API score |
+`main` ships with **dense-only** retrieval (96.6% R@5 — matches MemPalace raw). Hybrid BM25 + dense retrieval and the +graph variant live on the `feat/hybrid-search-bm25` branch and reproduce the higher scores in the table below.
+
+| Mode | R@5 | Branch | What It Tests |
+|------|-----|--------|---------------|
+| Dense (semantic only) | 96.6% | `main` (default) | Same as MemPalace raw — identical score |
+| Hybrid (BM25 + dense) | 97.6% | `feat/hybrid-search-bm25` | Beats all published zero-API scores |
+| Hybrid + graph | 97.6% | `feat/hybrid-search-bm25` | Adds knowledge graph expansion |
+| MemPalace (raw, ChromaDB) | 96.6% | (external) | Highest previously published zero-API score |
 
 Hybrid search catches entity-specific queries that pure semantic search misses. No LLM required, no API calls, runs entirely local.
 
@@ -230,9 +236,10 @@ When you ask "what database?", Claude searches by meaning, not keywords. The kno
 
 **"Connection refused"** - Make sure Docker is running: `docker compose ps`
 
-**"No dashboard UI"** - Verify transport is HTTP:
+**"Cockpit UI not loading"** - Backend transport must be HTTP and the cockpit must be running:
 ```bash
-docker compose exec mcp env | rg 'MCP_TRANSPORT|HOST'
+docker compose exec mcp env | rg 'MCP_TRANSPORT|HOST'   # backend
+cd ui && npm run dev -- -p 3333                          # cockpit
 ```
 
 **"Claude forgets"** - Install the memory plugin (skills + hook) or add to `~/.claude/CLAUDE.md`:
@@ -314,7 +321,6 @@ AI:  vector search finds the memory
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/health` | GET | Health check |
-| `/dashboard` | GET | Graph visualization UI |
 | `/api/memory/save` | POST | Save a memory |
 | `/api/memory/recall` | POST | Graph-enhanced search |
 | `/api/memory/observe` | POST | Auto-classify and save |
@@ -386,7 +392,7 @@ docker compose --profile test down
 
 ```
 src/
-├── server.py               # MCP server with REST API + dashboard
+├── server.py               # MCP server + REST API endpoints
 ├── core/                   # Embedder, VectorStore, Telemetry, utils
 │   └── utils.py            # stable_hash_id() for string->int64 hashing
 ├── memory/
