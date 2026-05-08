@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { BrainScene } from "@/components/brain/brain-scene";
 import { BrainCanvas } from "@/components/brain/brain-canvas";
 import { NodeDrawer } from "@/components/brain/node-drawer";
@@ -20,7 +20,38 @@ export default function BrainPage() {
   const detail = useMemoryDetail(selectedId);
 
   const nodes = (data?.graph?.nodes ?? []) as GraphNode[];
-  const links = (data?.graph?.links ?? []) as GraphLink[];
+  const rawLinks = (data?.graph?.links ?? []) as GraphLink[];
+
+  // Sparsify links — at scale (100+ nodes), showing every edge creates a hairball.
+  // Keep only the strongest connections: top N per node + all contradicts.
+  const links = useMemo(() => {
+    if (rawLinks.length < 300) return rawLinks; // small graphs are fine
+
+    const MAX_LINKS_PER_NODE = 2;
+    const kept = new Set<number>();
+
+    // Contradicts edges only show on hover — skip them in the default view
+
+    // For each node, keep top N strongest links by weight
+    const nodeIds = new Set(nodes.map((n) => n.id));
+    for (const nid of nodeIds) {
+      const nodeLinks = rawLinks
+        .map((l, i) => ({ l, i }))
+        .filter(({ l }) => {
+          const src = typeof l.source === "object" ? (l.source as any)?.id : l.source;
+          const tgt = typeof l.target === "object" ? (l.target as any)?.id : l.target;
+          return src === nid || tgt === nid;
+        })
+        .sort((a, b) => (b.l.weight ?? 0) - (a.l.weight ?? 0));
+
+      for (let j = 0; j < Math.min(MAX_LINKS_PER_NODE, nodeLinks.length); j++) {
+        kept.add(nodeLinks[j].i);
+      }
+    }
+
+    return rawLinks.filter((_, i) => kept.has(i));
+  }, [rawLinks, nodes]);
+
   const refreshedAt = dataUpdatedAt
     ? new Date(dataUpdatedAt).toLocaleTimeString()
     : "…";
