@@ -77,7 +77,7 @@ Once the MCP server is running, add instructions to your project:
 
 ### Option A: Project-level (recommended)
 
-Create `.claude/CLAUDE.md` in your project:
+Create `CLAUDE.md` at your project root (or `.claude/CLAUDE.md` if you prefer the dotfile layout — Claude Code reads either):
 
 ```markdown
 ## Memory System
