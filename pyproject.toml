@@ -1,6 +1,6 @@
 [project]
 name = "memento-mcp"
-version = "1.4.0"
+version = "1.5.0"
 description = "Persistent memory for AI assistants via MCP"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -54,6 +54,9 @@ packages = ["src/memory", "src/core", "src/tools"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-v"
+markers = [
+    "integration: real Qdrant on :6334 required",
+]
 
 [tool.ruff]
 target-version = "py311"

@@ -234,6 +234,24 @@ def _parse_graph_filters(query_params) -> dict[str, str | dict[str, str]]:
     return filters
 
 
+# Shared JSON response helpers for the memory-os endpoint family.
+
+
+def _ok(data: dict):
+    from starlette.responses import JSONResponse
+    return JSONResponse(data)
+
+
+def _bad_request(message: str):
+    from starlette.responses import JSONResponse
+    return JSONResponse({"error": message}, status_code=400)
+
+
+def _server_error(message: str):
+    from starlette.responses import JSONResponse
+    return JSONResponse({"error": message}, status_code=500)
+
+
 @mcp.custom_route("/api/memory/save", methods=["POST"])
 async def api_save_memory(request):
     """REST API: Save a memory."""
@@ -600,6 +618,43 @@ async def api_skill_context(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/context/startup", methods=["GET"])
+async def api_agent_startup(request):
+    """REST API: Unified startup payload for Claude Code / Codex clients."""
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        agent = query.get("agent")
+        limit = _read_int(query, "limit", 12)
+
+        manager = _get_memory_manager()
+        payload = manager.get_agent_startup(project=project, agent=agent, limit=limit)
+        return JSONResponse(payload)
+    except Exception as e:
+        logger.error(f"Error building agent startup payload: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/context/resume", methods=["GET"])
+async def api_resume_packet(request):
+    """REST API: Continuity-oriented resume packet for session start."""
+    from starlette.responses import JSONResponse
+
+    try:
+        query = request.query_params
+        project = query.get("project")
+        limit = _read_int(query, "limit", 12)
+
+        manager = _get_memory_manager()
+        packet = manager.get_resume_packet(project=project, limit=limit)
+        return JSONResponse(packet)
+    except Exception as e:
+        logger.error(f"Error building resume packet: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
+
+
 @mcp.custom_route("/api/memory/context/proactive", methods=["GET"])
 async def api_proactive_context_summary(request):
     """REST API: Get proactive context summary by relevance."""
@@ -669,414 +724,233 @@ async def api_compact_memories(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
-@mcp.custom_route("/dashboard", methods=["GET"])
-async def api_memory_dashboard(_request):
-    """Dashboard UI for visualizing memory embeddings."""
-    from starlette.responses import HTMLResponse
+@mcp.custom_route("/api/memory/resume", methods=["GET"])
+async def api_memory_resume(request):
+    """REST API: Continuity-oriented resume packet, propagating truncated flag."""
+    try:
+        query = request.query_params
+        project = query.get("project")
+        limit = _read_int(query, "limit", 12)
 
-    html = """<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Memento Memory Brain</title>
-    <style>
-      :root {
-        --bg-1: #0b1020;
-        --bg-2: #121935;
-        --line: rgba(255, 255, 255, 0.15);
-        --accent: #9f7aea;
-        --accent-2: #63b3ed;
-        --text: #eaf0ff;
-      }
-      html, body {
-        margin: 0;
-        height: 100%;
-      }
-      body {
-        font-family: "Space Grotesk", "Manrope", "Fira Sans", sans-serif;
-        color: var(--text);
-        background:
-          radial-gradient(circle at 15% 10%, #202b58 0%, transparent 40%),
-          radial-gradient(circle at 85% 90%, #13263e 0%, transparent 45%),
-          linear-gradient(140deg, var(--bg-1), var(--bg-2));
-      }
-      .shell {
-        max-width: 1200px;
-        margin: 0 auto;
-        padding: 18px;
-        box-sizing: border-box;
-      }
-      h1 { margin: 0 0 12px; }
-      .panel {
-        border: 1px solid var(--line);
-        border-radius: 12px;
-        background: rgba(12, 19, 42, 0.5);
-        backdrop-filter: blur(10px);
-      }
-      .controls {
-        padding: 12px;
-        display: flex;
-        flex-wrap: wrap;
-        gap: 10px;
-      }
-      .controls input,
-      .controls select,
-      .controls button {
-        background: rgba(16, 23, 52, 0.7);
-        border: 1px solid var(--line);
-        color: var(--text);
-        border-radius: 8px;
-        padding: 8px 10px;
-      }
-      .controls button {
-        cursor: pointer;
-      }
-      .controls button:hover { color: #fff; border-color: var(--accent); }
-      .grid {
-        display: grid;
-        grid-template-columns: 1.2fr 1fr;
-        gap: 12px;
-      }
-      .card {
-        padding: 12px;
-      }
-      .legend { font-size: 12px; color: #d1d8ff; }
-      .legend span { display: inline-block; margin-right: 10px; }
-      #brain {
-        width: 100%;
-        aspect-ratio: 16 / 10;
-        border: 1px solid var(--line);
-        border-radius: 10px;
-        background:
-          radial-gradient(circle at 50% 50%, rgba(99, 179, 237, 0.08), transparent 45%);
-      }
-      #info {
-        white-space: pre-wrap;
-        max-height: 540px;
-        overflow: auto;
-        font-size: 13px;
-      }
-      .muted { color: #8f98bf; }
-      @media (max-width: 960px) {
-        .grid { grid-template-columns: 1fr; }
-      }
-    </style>
-  </head>
-  <body>
-    <div class="shell">
-      <h1>Memento Memory Brain</h1>
-      <div class="panel">
-        <div class="controls">
-          <label>Project: <input id="project" placeholder="general" /></label>
-          <label>Type:
-            <select id="memoryType">
-              <option value="">all</option>
-              <option value="requirement">requirement</option>
-              <option value="fact">fact</option>
-              <option value="decision">decision</option>
-              <option value="preference">preference</option>
-              <option value="learning">learning</option>
-              <option value="session">session</option>
-              <option value="note">note</option>
-            </select>
-          </label>
-          <label>Limit: <input id="limit" type="number" value="160" min="20" max="400" /></label>
-          <label>Neighbors: <input id="neighbors" type="number" value="4" min="1" max="12" /></label>
-          <label>Min Score: <input id="similarity" type="number" step="0.01" value="0.35" min="0" max="1" /></label>
-          <label>Days:
-            <select id="days">
-              <option value="">all</option>
-              <option value="7">7</option>
-              <option value="30">30</option>
-              <option value="90">90</option>
-            </select>
-          </label>
-          <button id="refresh">Refresh</button>
-          <button id="clear">Clear</button>
-        </div>
-      </div>
-      <div style="height: 10px;"></div>
-      <div class="grid">
-        <div class="panel card">
-          <canvas id="brain" width="900" height="560"></canvas>
-          <div class="legend">
-            <span>🔵 fact</span>
-            <span>🟣 preference</span>
-            <span>🟠 decision</span>
-            <span>🔴 requirement</span>
-            <span>🟢 learning</span>
-            <span>⚪ note</span>
-            <span>⚪ session</span>
-          </div>
-          <p class="muted" id="status">Loading graph…</p>
-        </div>
-        <div class="panel card">
-          <h3>Memory</h3>
-          <div id="info" class="muted">Click a node to inspect memory details.</div>
-        </div>
-      </div>
-    </div>
-    <script>
-      const colorByType = {
-        requirement: "#f56565",
-        fact: "#63b3ed",
-        decision: "#ed8936",
-        preference: "#9f7aea",
-        learning: "#48bb78",
-        session: "#a0aec0",
-        note: "#CBD5E0"
-      };
+        manager = _get_memory_manager()
+        packet = manager.get_resume_packet(project=project, limit=limit)
+        return _ok(packet)
+    except Exception as e:
+        logger.error(f"Error building resume packet: {e}")
+        return _server_error(str(e))
 
-      const state = {
-        width: 0,
-        height: 0,
-        nodes: [],
-        links: [],
-        selected: null,
-      };
 
-      const canvas = document.getElementById("brain");
-      const ctx = canvas.getContext("2d");
-      const statusEl = document.getElementById("status");
-      const infoEl = document.getElementById("info");
+@mcp.custom_route("/api/memory/lifecycle/backfill", methods=["POST"])
+async def api_lifecycle_backfill(request):
+    """REST API: Backfill tier/durability on existing memories."""
+    try:
+        body = await request.json()
+        dry_run = bool(body.get("dry_run", True))
+        project = body.get("project")
 
-      function typeCount(nodes) {
-        const byType = {};
-        for (const node of nodes) {
-          byType[node.type] = (byType[node.type] || 0) + 1;
-        }
-        return byType;
-      }
+        manager = _get_memory_manager()
+        report = manager.backfill_lifecycle(dry_run=dry_run, project=project)
+        return _ok(report)
+    except Exception as e:
+        logger.error(f"Error during lifecycle backfill: {e}")
+        return _server_error(str(e))
 
-      function resizeCanvas() {
-        const rect = canvas.getBoundingClientRect();
-        const scale = window.devicePixelRatio || 1;
-        canvas.width = rect.width * scale;
-        canvas.height = rect.height * scale;
-        ctx.setTransform(scale, 0, 0, scale, 0, 0);
-        state.width = rect.width;
-        state.height = rect.height;
-      }
 
-      function buildQuery() {
-        const project = document.getElementById("project").value.trim();
-        const memoryType = document.getElementById("memoryType").value;
-        const limit = Number(document.getElementById("limit").value || 160);
-        const neighbors = Number(document.getElementById("neighbors").value || 4);
-        const similarity = Number(document.getElementById("similarity").value || 0.35);
-        const days = document.getElementById("days").value;
-        const q = new URLSearchParams({
-          limit: String(limit),
-          neighbor_count: String(neighbors),
-          min_similarity: String(similarity),
-        });
-        if (project) q.set("project", project);
-        if (memoryType) q.set("type", memoryType);
-        if (days) q.set("days", days);
-        return q.toString();
-      }
+@mcp.custom_route("/api/memory/prune/apply", methods=["POST"])
+async def api_memory_prune_apply(request):
+    """REST API: Apply a previously-built prune plan. REST ONLY — no MCP tool.
 
-      function normalizeNodes(dataNodes) {
-        return dataNodes.map((n) => {
-          const velocity = {x: (Math.random() - 0.5) * 0.5, y: (Math.random() - 0.5) * 0.5};
-          const x = (n.position.x + 1) * 0.5 * (state.width - 80) + 40;
-          const y = (n.position.y + 1) * 0.5 * (state.height - 80) + 40;
-          return {...n, x, y, vx: velocity.x, vy: velocity.y, fx: x, fy: y};
-        });
-      }
+    Requires the body to echo the plan_id as `confirm`.
+    """
+    from memory.prune import PlanExpired, PlanIdMismatch, PlanNotFound, apply_plan
 
-      function loadGraph() {
-        statusEl.textContent = "Loading graph…";
-        fetch("/api/memory/graph?" + buildQuery())
-          .then((res) => res.json())
-          .then((payload) => {
-            const graph = payload.graph || {};
-            const rawNodes = graph.nodes || [];
-            const rawLinks = graph.links || [];
-            state.nodes = normalizeNodes(rawNodes);
-            state.links = rawLinks;
-            state.selected = null;
-            statusEl.textContent = `Nodes: ${state.nodes.length}, Links: ${state.links.length}`;
-            renderInfo();
-          })
-          .catch((err) => {
-            statusEl.textContent = `Failed to load graph: ${err.message}`;
-          });
-      }
+    try:
+        body = await request.json()
+        plan_id = body.get("plan_id")
+        confirm = body.get("confirm")
+        if not plan_id or not confirm:
+            return _bad_request("plan_id and confirm are both required")
 
-      function renderInfo() {
-        if (!state.nodes.length) {
-          infoEl.textContent = "No nodes loaded. Try increasing limit or loosening filters.";
-          return;
-        }
-        const total = state.nodes.length;
-        const types = typeCount(state.nodes);
-        const selected = state.selected
-          ? `${state.selected.type} · ${state.selected.date}\n\n${state.selected.content}`
-          : "Click a node to inspect memory details.";
-        infoEl.textContent =
-          `Total nodes: ${total}\n` +
-          `Requirements: ${types.requirement || 0}\n` +
-          `Facts: ${types.fact || 0}\n` +
-          `Decisions: ${types.decision || 0}\n` +
-          `Preferences: ${types.preference || 0}\n` +
-          `Learnings: ${types.learning || 0}\n\n` +
-          selected;
-      }
+        manager = _get_memory_manager()
+        try:
+            result = apply_plan(manager, plan_id=plan_id, confirm_plan_id=confirm)
+        except PlanNotFound:
+            return _bad_request("plan not found (may have expired or been consumed)")
+        except PlanIdMismatch:
+            return _bad_request("confirm does not match plan_id")
+        except PlanExpired:
+            return _bad_request("plan expired")
 
-      function stepPhysics() {
-        if (!state.nodes.length) {
-          requestAnimationFrame(stepPhysics);
-          return;
-        }
+        return _ok(result)
+    except Exception as e:
+        logger.error(f"Error applying prune plan: {e}")
+        return _server_error(str(e))
 
-        const linkStrength = 0.0025;
-        const damping = 0.85;
-        const repulsion = 9000;
 
-        for (let i = 0; i < state.nodes.length; i++) {
-          state.nodes[i].vx *= damping;
-          state.nodes[i].vy *= damping;
-        }
+@mcp.custom_route("/api/memory/prune/plan", methods=["POST"])
+async def api_memory_prune_plan(request):
+    """REST API: Build a prune plan. Does not delete anything."""
+    from memory.prune import build_plan
 
-        for (let i = 0; i < state.nodes.length; i++) {
-          for (let j = i + 1; j < state.nodes.length; j++) {
-            const a = state.nodes[i];
-            const b = state.nodes[j];
-            const dx = a.x - b.x;
-            const dy = a.y - b.y;
-            const dist2 = Math.max(80, dx * dx + dy * dy);
-            const force = repulsion / dist2;
-            const invDist = 1 / Math.sqrt(dist2);
-            const fx = force * dx * invDist;
-            const fy = force * dy * invDist;
-            a.vx += fx * 0.001;
-            a.vy += fy * 0.001;
-            b.vx -= fx * 0.001;
-            b.vy -= fy * 0.001;
-          }
-        }
+    try:
+        body = await request.json()
+        project = body.get("project")
+        if not project:
+            return _bad_request("project is required")
+        limit = int(body.get("limit", 200))
 
-        for (const link of state.links) {
-          const source = state.nodes.find((n) => n.id === link.source);
-          const target = state.nodes.find((n) => n.id === link.target);
-          if (!source || !target) continue;
+        manager = _get_memory_manager()
+        plan = build_plan(manager, project=project, limit=limit)
+        return _ok(plan.to_dict())
+    except Exception as e:
+        logger.error(f"Error building prune plan: {e}")
+        return _server_error(str(e))
 
-          const dx = target.x - source.x;
-          const dy = target.y - source.y;
-          const dist = Math.max(20, Math.sqrt(dx * dx + dy * dy));
-          const rest = 120 * (1 - link.weight);
-          const force = (dist - rest) * linkStrength;
-          const nx = dx / dist;
-          const ny = dy / dist;
-          const fx = force * nx;
-          const fy = force * ny;
-          source.vx += fx;
-          source.vy += fy;
-          target.vx -= fx;
-          target.vy -= fy;
-        }
 
-        for (const node of state.nodes) {
-          node.x += node.vx;
-          node.y += node.vy;
-          node.x = Math.min(state.width - 20, Math.max(20, node.x));
-          node.y = Math.min(state.height - 20, Math.max(20, node.y));
-        }
-      }
+@mcp.custom_route("/api/memory/projects", methods=["GET"])
+async def api_memory_projects(_request):
+    """REST API: Distinct projects with their memory counts, sorted desc."""
+    try:
+        manager = _get_memory_manager()
+        points = manager.store.scroll(limit=5000)
+        counts: dict[str, int] = {}
+        for p in points:
+            project = p.get("project") or "unknown"
+            counts[project] = counts.get(project, 0) + 1
+        sorted_projects = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        return _ok({
+            "total": len(points),
+            "projects": [{"name": name, "count": n} for name, n in sorted_projects],
+        })
+    except Exception as e:
+        logger.error(f"Error listing projects: {e}")
+        return _server_error(str(e))
 
-      function render() {
-        resizeCanvas();
-        ctx.clearRect(0, 0, state.width, state.height);
-        ctx.save();
-        ctx.fillStyle = "rgba(0, 0, 0, 0)";
-        ctx.fillRect(0, 0, state.width, state.height);
 
-        for (const link of state.links) {
-          const source = state.nodes.find((n) => n.id === link.source);
-          const target = state.nodes.find((n) => n.id === link.target);
-          if (!source || !target) continue;
-          const alpha = Math.min(0.85, Math.max(0.1, link.weight));
-          ctx.strokeStyle = `rgba(156, 163, 175, ${alpha})`;
-          ctx.lineWidth = 1 + alpha * 2;
-          ctx.beginPath();
-          ctx.moveTo(source.x, source.y);
-          ctx.lineTo(target.x, target.y);
-          ctx.stroke();
-        }
+@mcp.custom_route("/api/memory/pressure", methods=["GET"])
+async def api_memory_pressure(request):
+    """REST API: Structured memory pressure snapshot."""
+    from memory.pressure import identify_pressure
 
-        for (const node of state.nodes) {
-          const selected = state.selected && state.selected.id === node.id;
-          const radius = Math.max(3.5, 3 + Math.min(6, Math.sqrt((node.degree || 0) + 1)));
-          const color = colorByType[node.type] || "#a0aec0";
-          ctx.beginPath();
-          ctx.fillStyle = color;
-          ctx.globalAlpha = selected ? 1 : 0.85;
-          ctx.arc(node.x, node.y, radius, 0, Math.PI * 2);
-          ctx.fill();
+    try:
+        query = request.query_params
+        project = query.get("project")
 
-          if (selected) {
-            ctx.strokeStyle = "#fff";
-            ctx.lineWidth = 1.5;
-            ctx.stroke();
-          }
-          ctx.globalAlpha = 1;
-        }
+        manager = _get_memory_manager()
+        filters = {"project": project} if project else None
+        memories = manager.store.scroll(filters=filters, limit=2000)
+        pressure = identify_pressure(memories)
 
-        ctx.restore();
-      }
+        total = max(len(memories), 1)
+        load_score = round(
+            (pressure.get("low_value_count", 0) + pressure.get("stale_working_count", 0)) / total,
+            4,
+        )
 
-      function loop() {
-        stepPhysics();
-        render();
-        requestAnimationFrame(loop);
-      }
+        graph_has_nodes = manager.knowledge_graph.stats()["nodes"] > 0
+        contradiction_count = 0
+        if graph_has_nodes:
+            for m in memories:
+                mid = m.get("memory_id", "")
+                if mid and manager.knowledge_graph.count_contradicts(mid) > 0:
+                    contradiction_count += 1
 
-      function pickNode(evt) {
-        const bounds = canvas.getBoundingClientRect();
-        const x = evt.clientX - bounds.left;
-        const y = evt.clientY - bounds.top;
-        let closest = null;
-        let closestDist = 100000;
-        for (const node of state.nodes) {
-          const dx = node.x - x;
-          const dy = node.y - y;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          if (dist < closestDist && dist < 20) {
-            closestDist = dist;
-            closest = node;
-          }
-        }
-        if (closest) {
-          state.selected = closest;
-          renderInfo();
-        }
-      }
+        return _ok({
+            "project": project or "all",
+            "load_score": load_score,
+            "capacity": total,
+            "flagged": {
+                "stale_working_count": pressure.get("stale_working_count", 0),
+                "low_value_count": pressure.get("low_value_count", 0),
+                "contradiction_count": contradiction_count,
+            },
+            "candidates": pressure.get("candidates", [])[:50],
+        })
+    except Exception as e:
+        logger.error(f"Error fetching pressure: {e}")
+        return _server_error(str(e))
 
-      document.getElementById("refresh").addEventListener("click", () => {
-        loadGraph();
-      });
-      document.getElementById("clear").addEventListener("click", () => {
-        document.getElementById("project").value = "";
-        document.getElementById("memoryType").value = "";
-        document.getElementById("limit").value = "160";
-        document.getElementById("neighbors").value = "4";
-        document.getElementById("similarity").value = "0.35";
-        document.getElementById("days").value = "";
-        loadGraph();
-      });
-      canvas.addEventListener("click", pickNode);
-      window.addEventListener("resize", resizeCanvas);
 
-      resizeCanvas();
-      loadGraph();
-      loop();
-    </script>
-  </body>
-</html>
-"""
-    return HTMLResponse(html)
+@mcp.custom_route("/api/memory/kb", methods=["GET"])
+async def api_memory_kb(request):
+    """REST API: Typed semantic slices of the KB.
+
+    Returns four lists: decisions, requirements, preferences, learnings.
+    Each item is a summary (no raw content unless ?full=true).
+    """
+    try:
+        query = request.query_params
+        project = query.get("project")
+        full = query.get("full", "false").lower() == "true"
+
+        manager = _get_memory_manager()
+        filters = {"project": project} if project else None
+        points = manager.store.scroll(filters=filters, limit=2000)
+
+        def _summarize(m: dict) -> dict:
+            out = {
+                "memory_id": m.get("memory_id"),
+                "type": m.get("type"),
+                "tier": m.get("tier"),
+                "date": m.get("date"),
+                "summary": (m.get("content", "") or "")[:160],
+            }
+            if full:
+                out["content"] = m.get("content")
+            return out
+
+        decisions = [_summarize(m) for m in points if m.get("type") == "decision"]
+        requirements = [_summarize(m) for m in points if m.get("type") == "requirement"]
+        preferences = [_summarize(m) for m in points if m.get("type") == "preference"]
+        learnings = [_summarize(m) for m in points if m.get("type") == "learning"]
+
+        return _ok({
+            "project": project or "all",
+            "decisions": decisions,
+            "requirements": requirements,
+            "preferences": preferences,
+            "learnings": learnings,
+        })
+    except Exception as e:
+        logger.error(f"Error fetching kb: {e}")
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/memory/detail/{memory_id}", methods=["GET"])
+async def api_memory_detail(request):
+    """REST API: Get a single memory with its 1-hop graph neighbors."""
+    try:
+        memory_id = request.path_params["memory_id"]
+        manager = _get_memory_manager()
+
+        memory = manager.store.get_by_id(memory_id)
+        if not memory:
+            return _ok({"memory": None, "neighbors": [], "scope": None})
+
+        graph = manager.knowledge_graph
+        neighbors: list[dict] = []
+        if graph.stats()["nodes"] > 0:
+            for edge in graph.get_edges(memory_id, direction="out"):
+                neighbor_payload = manager.store.get_by_id(edge.target)
+                if neighbor_payload:
+                    neighbors.append({
+                        "relation": edge.relation,
+                        "memory": neighbor_payload,
+                    })
+
+        return _ok({
+            "memory": memory,
+            "neighbors": neighbors,
+            "scope": {
+                "project": memory.get("project"),
+                "agent": memory.get("agent"),
+                "repo_name": memory.get("repo_name"),
+            },
+        })
+    except Exception as e:
+        logger.error(f"Error fetching memory detail: {e}")
+        return _server_error(str(e))
+
 
 
 @mcp.custom_route("/api/memory/observe", methods=["POST"])
@@ -1089,13 +963,14 @@ async def api_observe(request):
         summary = body.get("summary")
         mem_type = body.get("type", "auto")
         context = body.get("context")
+        caller_cwd = body.get("cwd") or body.get("workspace_root")
+        caller_project = body.get("project")
 
         if not summary:
             return JSONResponse({"error": "summary is required"}, status_code=400)
 
         manager = _get_memory_manager()
 
-        # Auto-classify if type is "auto"
         if mem_type == "auto":
             from core import Embedder
             from tools.builtin.memory import _classify_by_embedding, _classify_by_keywords
@@ -1106,15 +981,25 @@ async def api_observe(request):
             except Exception:
                 mem_type = _classify_by_keywords(summary)
 
-        # Build content with context if provided
         content = summary
         if context:
             content = f"{summary}\n\nContext: {context}"
 
-        memory_id = manager.save(content, type=mem_type)
+        # Resolve scope from CALLER'S cwd, not the backend's. Without this,
+        # every observation from every Claude session lands under the backend's
+        # own repo name (memento-mcp).
+        from memory.scope import ScopeDetector
+
+        scope = ScopeDetector.detect(project=caller_project, cwd=caller_cwd)
+        memory_id = manager.save(content, type=mem_type, scope=scope)
 
         return JSONResponse(
-            {"memory_id": memory_id, "status": "observed", "classified_type": mem_type}
+            {
+                "memory_id": memory_id,
+                "status": "observed",
+                "classified_type": mem_type,
+                "project": scope.project,
+            }
         )
     except Exception as e:
         logger.error(f"Error observing: {e}")

@@ -219,6 +219,16 @@ class KnowledgeGraph:
 
         return edges
 
+    def count_contradicts(self, memory_id: str) -> int:
+        """Count contradicts-edges incident on memory_id (in + out)."""
+        if memory_id not in self._graph:
+            return 0
+        count = 0
+        for edge in self.get_edges(memory_id, direction="both"):
+            if edge.relation == "contradicts":
+                count += 1
+        return count
+
     # ------------------------------------------------------------------
     # Traversal
     # ------------------------------------------------------------------
