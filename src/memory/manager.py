@@ -620,10 +620,13 @@ class MemoryManager:
                 # Deduplicate expanded items and ignore seed IDs.
                 new_ids = expanded_ids - seed_ids
                 for expanded_id in list(new_ids):
+                    expand_filters: dict[str, Any] = {"memory_id": expanded_id}
+                    if filters and "date_epoch" in filters:
+                        expand_filters["date_epoch"] = filters["date_epoch"]
                     expanded_results = self.store.search(
                         vector=query_vector,
                         limit=1,
-                        filters={"memory_id": expanded_id},
+                        filters=expand_filters,
                         score_threshold=0.0,
                     )
 
@@ -837,6 +840,7 @@ class MemoryManager:
         limit: int = 120,
         max_topics: int = 8,
         similarity_threshold: float = 0.72,
+        days_back: int | None = None,
     ) -> str:
         """Get project context grouped into topics.
 
@@ -845,6 +849,7 @@ class MemoryManager:
             limit: Max memories to analyze.
             max_topics: Maximum number of topics to return.
             similarity_threshold: Similarity cutoff for agglomerative clustering.
+            days_back: Only include memories from the last N days.
 
         Returns:
             Topic-grouped markdown context.
@@ -855,6 +860,7 @@ class MemoryManager:
                 limit=limit,
                 max_topics=max_topics,
                 similarity_threshold=similarity_threshold,
+                days_back=days_back,
             )
             if not topics:
                 return ""
@@ -868,14 +874,18 @@ class MemoryManager:
         limit: int = 120,
         max_topics: int = 8,
         similarity_threshold: float = 0.72,
+        days_back: int | None = None,
     ) -> list:
         """Return raw TopicCluster objects (for JSON serialization)."""
         with self._telemetry.track("memory.get_topic_clusters"):
             from memory.topics import build_topic_clusters
 
-            filters = {}
+            filters: dict[str, Any] = {}
             if project:
                 filters["project"] = project
+            if days_back:
+                cutoff_epoch = int((datetime.now() - timedelta(days=days_back)).timestamp())
+                filters["date_epoch"] = {"gte": cutoff_epoch}
             points = self.store.scroll(filters=filters if filters else None, limit=limit, with_vectors=True)
             if not points:
                 return []

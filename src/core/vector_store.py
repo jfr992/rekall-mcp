@@ -328,6 +328,7 @@ class VectorStore:
                             ),
                         ],
                         query=FusionQuery(fusion=Fusion.RRF),
+                        query_filter=query_filter,
                         limit=limit,
                     ).points
 

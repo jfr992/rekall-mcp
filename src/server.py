@@ -118,6 +118,18 @@ async def app_lifespan(_server: FastMCP) -> AsyncIterator[dict]:
 
     registry = _initialize_tools()
 
+    # Backfill date_epoch on any Qdrant points that predate the field.
+    # Safe to run every startup — skips points that already have it.
+    try:
+        from memory.manager import MemoryManager
+
+        _mgr = MemoryManager()
+        backfilled = _mgr.backfill_date_epoch()
+        if backfilled:
+            logger.info(f"Startup backfill: added date_epoch to {backfilled} Qdrant points")
+    except Exception:
+        logger.warning("Startup backfill failed (Qdrant may not be ready yet)", exc_info=True)
+
     yield {"telemetry": telemetry, "registry": registry}
 
     logger.info("Shutting down MCP server")
@@ -423,6 +435,15 @@ async def api_get_hierarchical_context(request):
         limit = _read_int(query, "limit", 120)
         max_topics = _read_int(query, "max_topics", 8)
         similarity_threshold = _read_float(query, "similarity_threshold", 0.72)
+        days_raw = query.get("days")
+        days_back: int | None = None
+        if days_raw:
+            try:
+                parsed = int(days_raw)
+                if parsed > 0:
+                    days_back = parsed
+            except ValueError:
+                days_back = None
 
         if limit < 1:
             limit = 1
@@ -431,7 +452,10 @@ async def api_get_hierarchical_context(request):
 
         fmt = query.get("format", "markdown")
 
-        ck = _cache_key("hierarchy", fmt, project, str(limit), str(max_topics), str(similarity_threshold))
+        ck = _cache_key(
+            "hierarchy", fmt, project, str(limit), str(max_topics),
+            str(similarity_threshold), str(days_back or ""),
+        )
         cached = _cache_get(ck)
         if cached is not None:
             return JSONResponse(cached)
@@ -446,12 +470,14 @@ async def api_get_hierarchical_context(request):
                 limit=limit,
                 max_topics=max_topics,
                 similarity_threshold=similarity_threshold,
+                days_back=days_back,
             )
             result = topics_to_json(clusters, project=project or None)
             result["params"] = {
                 "limit": limit,
                 "max_topics": max_topics,
                 "similarity_threshold": similarity_threshold,
+                "days": days_back,
             }
             _cache_set(ck, result)
             return JSONResponse(result)
@@ -461,6 +487,7 @@ async def api_get_hierarchical_context(request):
             limit=limit,
             max_topics=max_topics,
             similarity_threshold=similarity_threshold,
+            days_back=days_back,
         )
 
         payload = {
@@ -470,6 +497,7 @@ async def api_get_hierarchical_context(request):
                 "limit": limit,
                 "max_topics": max_topics,
                 "similarity_threshold": similarity_threshold,
+                "days": days_back,
             },
         }
         _cache_set(ck, payload)
@@ -858,6 +886,7 @@ body{
 }
 .pill:hover{border-color:rgba(100,120,255,0.25);color:#94a3b8}
 .pill.active{background:rgba(99,102,241,0.15);border-color:rgba(99,102,241,0.35);color:#a5b4fc}
+.pill-sep{width:1px;height:14px;background:rgba(100,120,255,0.12);margin:0 4px;align-self:center;flex-shrink:0}
 .mode-toggle{
   display:flex;border-radius:8px;overflow:hidden;flex-shrink:0;
   border:1px solid rgba(100,120,255,0.15);
@@ -1150,7 +1179,7 @@ var COLORS={fact:"#38bdf8",decision:"#fbbf24",learning:"#34d399",
 var state={
   view:"home",topicLabel:null,searchQuery:null,
   stats:null,skills:[],topics:[],projects:[],
-  activeProject:null,activeType:null,
+  activeProject:null,activeType:null,activeDate:null,
   selectedMemId:null,
   topicDetail:null,searchResults:null,
   consolidation:null
@@ -1189,13 +1218,19 @@ function fetchJSON(url,opts){
 /* ---- DATA LOADING ---- */
 function loadHome(){
   var main=document.getElementById("main");
-  main.innerHTML='<div class="loading"><div class="spinner"></div>Loading knowledge base\u2026</div>';
+  /* Only show spinner on first load — subsequent filter changes update in place */
+  if(!state.topics||state.topics.length===0){
+    main.innerHTML='<div class="loading"><div class="spinner"></div>Loading knowledge base\u2026</div>';
+  }
+
+  var url="/api/memory/context/hierarchy?format=json&limit=500&max_topics=16";
+  if(state.activeProject)url+="&project="+encodeURIComponent(state.activeProject);
+  if(state.activeDate)url+="&days="+state.activeDate;
 
   Promise.all([
     fetchJSON("/api/memory/stats"),
     fetchJSON("/api/memory/context/skills?max_skills=10"),
-    fetchJSON("/api/memory/context/hierarchy?format=json&limit=200&max_topics=12"
-      +(state.activeProject?"&project="+encodeURIComponent(state.activeProject):""))
+    fetchJSON(url)
   ]).then(function(results){
     state.stats=results[0];
     parseSkills(results[1].summary||"");
@@ -1392,7 +1427,17 @@ function renderFilterPills(){
     h+=t+'</span>';
   }
 
+  /* Date pills */
+  h+='<span class="pill-sep"></span>';
+  var dates=[{v:null,l:"All"},{v:7,l:"7d"},{v:30,l:"30d"},{v:90,l:"90d"}];
+  for(var i=0;i<dates.length;i++){
+    var d=dates[i];
+    var cls=state.activeDate===d.v?"pill active":"pill";
+    h+='<span class="'+cls+'" onclick="toggleDate('+(d.v===null?'null':d.v)+')">'+d.l+'</span>';
+  }
+
   /* Project pills */
+  h+='<span class="pill-sep"></span>';
   var allCls=state.activeProject===null?"pill active":"pill";
   h+='<span class="'+allCls+'" onclick="toggleProject(null)">All</span>';
   for(var i=0;i<state.projects.length;i++){
@@ -1416,6 +1461,12 @@ function toggleProject(p){
   renderFilterPills();
   if(state.view==="home")loadHome();
   else if(state.view==="fix")loadFix();
+}
+
+function toggleDate(d){
+  state.activeDate=state.activeDate===d?null:d;
+  renderFilterPills();
+  if(state.view==="home")loadHome();
 }
 
 /* ---- RENDER: TOPIC DETAIL ---- */
@@ -1877,7 +1928,6 @@ canvas#brain{position:fixed;top:0;left:0;width:100vw;height:100vh;z-index:0}
       <option value="90">90d</option>
     </select>
   </label>
-  <button id="refresh">Refresh</button>
   <button id="clear">Reset</button>
 </div>
 <div class="detail-panel" id="detailPanel">
@@ -2178,7 +2228,18 @@ canvas.addEventListener("mousemove",function(e){
     tooltipEl.querySelector(".tt-text").textContent=txt;
   }else{tooltipEl.style.display="none"}
 });
-document.getElementById("refresh").addEventListener("click",loadGraph);
+/* Auto-apply on any filter change — no manual refresh needed */
+var _reloadTimer=null;
+function scheduleReload(){
+  clearTimeout(_reloadTimer);
+  _reloadTimer=setTimeout(loadGraph,180);
+}
+["project","memoryType","limit","neighbors","similarity","days"].forEach(function(id){
+  var el=document.getElementById(id);
+  if(!el)return;
+  el.addEventListener("change",scheduleReload);
+  el.addEventListener("input",scheduleReload);
+});
 document.getElementById("clear").addEventListener("click",function(){
   document.getElementById("project").value="";
   document.getElementById("memoryType").value="";
