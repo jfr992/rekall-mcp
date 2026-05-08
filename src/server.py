@@ -807,6 +807,26 @@ async def api_memory_prune_plan(request):
         return _server_error(str(e))
 
 
+@mcp.custom_route("/api/memory/projects", methods=["GET"])
+async def api_memory_projects(_request):
+    """REST API: Distinct projects with their memory counts, sorted desc."""
+    try:
+        manager = _get_memory_manager()
+        points = manager.store.scroll(limit=5000)
+        counts: dict[str, int] = {}
+        for p in points:
+            project = p.get("project") or "unknown"
+            counts[project] = counts.get(project, 0) + 1
+        sorted_projects = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+        return _ok({
+            "total": len(points),
+            "projects": [{"name": name, "count": n} for name, n in sorted_projects],
+        })
+    except Exception as e:
+        logger.error(f"Error listing projects: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/pressure", methods=["GET"])
 async def api_memory_pressure(request):
     """REST API: Structured memory pressure snapshot."""
@@ -1352,13 +1372,14 @@ async def api_observe(request):
         summary = body.get("summary")
         mem_type = body.get("type", "auto")
         context = body.get("context")
+        caller_cwd = body.get("cwd") or body.get("workspace_root")
+        caller_project = body.get("project")
 
         if not summary:
             return JSONResponse({"error": "summary is required"}, status_code=400)
 
         manager = _get_memory_manager()
 
-        # Auto-classify if type is "auto"
         if mem_type == "auto":
             from core import Embedder
             from tools.builtin.memory import _classify_by_embedding, _classify_by_keywords
@@ -1369,15 +1390,25 @@ async def api_observe(request):
             except Exception:
                 mem_type = _classify_by_keywords(summary)
 
-        # Build content with context if provided
         content = summary
         if context:
             content = f"{summary}\n\nContext: {context}"
 
-        memory_id = manager.save(content, type=mem_type)
+        # Resolve scope from CALLER'S cwd, not the backend's. Without this,
+        # every observation from every Claude session lands under the backend's
+        # own repo name (memento-mcp).
+        from memory.scope import ScopeDetector
+
+        scope = ScopeDetector.detect(project=caller_project, cwd=caller_cwd)
+        memory_id = manager.save(content, type=mem_type, scope=scope)
 
         return JSONResponse(
-            {"memory_id": memory_id, "status": "observed", "classified_type": mem_type}
+            {
+                "memory_id": memory_id,
+                "status": "observed",
+                "classified_type": mem_type,
+                "project": scope.project,
+            }
         )
     except Exception as e:
         logger.error(f"Error observing: {e}")
