@@ -138,7 +138,7 @@ class MemoryManager:
             embedding_model: Model for embeddings (default: EMBEDDING_MODEL or all-MiniLM-L6-v2)
         """
         # Read from environment with sensible defaults
-        memory_dir = memory_dir or os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory")
+        memory_dir = memory_dir or os.environ.get("MEMORY_STORAGE_PATH", "~/clawd/memory")
         qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "http://localhost:6333")
         embedding_model = embedding_model or os.environ.get("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
@@ -481,8 +481,11 @@ class MemoryManager:
         memory_type: str,
         date: str,
     ) -> None:
-        """Save memory to human-readable YAML file."""
-        yaml_file = self.memory_dir / f"{date}.yaml"
+        """Save memory to human-readable YAML file, organized by project."""
+        project = metadata.get("project", "general")
+        project_dir = self.memory_dir / project
+        project_dir.mkdir(parents=True, exist_ok=True)
+        yaml_file = project_dir / f"{date}.yaml"
 
         # Load existing data for this date
         if yaml_file.exists():
@@ -512,7 +515,7 @@ class MemoryManager:
         data[type_key].append(memory_entry)
 
         # Atomic write: write to temp file, then os.replace() (POSIX atomic)
-        fd, tmp_path = tempfile.mkstemp(dir=self.memory_dir, suffix=".yaml.tmp")
+        fd, tmp_path = tempfile.mkstemp(dir=project_dir, suffix=".yaml.tmp")
         try:
             with os.fdopen(fd, "w") as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
@@ -543,9 +546,25 @@ class MemoryManager:
         if not date or len(date) != 10 or date[4] != "-" or date[7] != "-":
             return False
 
-        yaml_file = self.memory_dir / f"{date}.yaml"
-        if not yaml_file.exists():
-            return False
+        # Search across all project subdirs for the YAML file
+        yaml_file = None
+        for candidate in self.memory_dir.rglob(f"{date}.yaml"):
+            with open(candidate) as f:
+                check = yaml.safe_load(f) or {}
+            for type_key in check:
+                if isinstance(check[type_key], list):
+                    if any(m.get("id") == memory_id for m in check[type_key]):
+                        yaml_file = candidate
+                        break
+            if yaml_file:
+                break
+        if not yaml_file:
+            # Also try flat (legacy) path
+            flat = self.memory_dir / f"{date}.yaml"
+            if flat.exists():
+                yaml_file = flat
+            else:
+                return False
 
         with open(yaml_file) as f:
             data = yaml.safe_load(f) or {}
