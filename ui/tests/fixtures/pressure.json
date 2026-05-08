@@ -1,0 +1,11 @@
+{
+  "project": "test",
+  "load_score": 0.12,
+  "capacity": 147,
+  "flagged": {
+    "stale_working_count": 8,
+    "low_value_count": 10,
+    "contradiction_count": 1
+  },
+  "candidates": []
+}

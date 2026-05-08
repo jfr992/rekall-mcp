@@ -328,6 +328,7 @@ class VectorStore:
                             ),
                         ],
                         query=FusionQuery(fusion=Fusion.RRF),
+                        query_filter=query_filter,
                         limit=limit,
                     ).points
 
@@ -393,6 +394,28 @@ class VectorStore:
                 merged.append(payload)
 
             return merged
+
+    def get_by_id(self, memory_id: str) -> dict[str, Any] | None:
+        """Fetch a single payload by memory_id.
+
+        Returns None if not found.
+        """
+        with self._telemetry.track("vector_store.get_by_id"):
+            results = self.scroll(filters={"memory_id": memory_id}, limit=1)
+            return results[0] if results else None
+
+    def update_payload(self, memory_id: str, payload: dict[str, Any]) -> None:
+        """Upsert the payload for an existing point (match by memory_id).
+
+        If the memory_id does not exist in the collection, this is a no-op.
+        """
+        with self._telemetry.track("vector_store.update_payload"):
+            query_filter = self._build_filter({"memory_id": memory_id})
+            self.client.set_payload(
+                collection_name=self.collection,
+                payload=payload,
+                points=query_filter,
+            )
 
     def _build_filter(self, filters: dict[str, Any]) -> Filter:
         """Convert dict filters to Qdrant Filter."""

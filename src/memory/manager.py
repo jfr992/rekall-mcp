@@ -35,8 +35,13 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from core import Embedder, Telemetry, VectorStore
+from memory.lifecycle import summarize_lifecycle
 from memory.linker import auto_link
+from memory.observe import ObservationCandidate, ObservationEngine
+from memory.resume import build_resume_packet
+from memory.scope import MemoryScope, ScopeDetector
 from memory.skills import extract_skills, render_skill_context
+from memory.startup import build_agent_startup
 
 if TYPE_CHECKING:
     from memory.knowledge_graph import KnowledgeGraph
@@ -133,7 +138,7 @@ class MemoryManager:
             embedding_model: Model for embeddings (default: EMBEDDING_MODEL or all-MiniLM-L6-v2)
         """
         # Read from environment with sensible defaults
-        memory_dir = memory_dir or os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory")
+        memory_dir = memory_dir or os.environ.get("MEMORY_STORAGE_PATH", "~/clawd/memory")
         qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "http://localhost:6333")
         embedding_model = embedding_model or os.environ.get("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
@@ -157,6 +162,7 @@ class MemoryManager:
 
         # Telemetry
         self._telemetry = Telemetry.get()
+        self._observer = ObservationEngine()
 
     # -------------------------------------------------------------------------
     # LAZY INITIALIZATION: Load on first use
@@ -215,6 +221,7 @@ class MemoryManager:
         content: str,
         type: str = "note",
         project: str | None = None,
+        scope: MemoryScope | None = None,
         **metadata: Any,
     ) -> str:
         """Save a memory.
@@ -233,29 +240,38 @@ class MemoryManager:
             memory.save("Chose hybrid architecture", type="decision", project="my-app")
         """
         with self._telemetry.track("memory.save"):
-            # Sanitize
             content = Sanitizer.sanitize(content)
+            scope = scope or ScopeDetector.detect(project=project)
+            project_name = project or scope.project or "general"
 
-            # Generate ID and timestamps
+            existing_memory_id = self._find_duplicate_memory_id(
+                content=content,
+                project=project_name,
+                memory_type=type,
+            )
+            if existing_memory_id:
+                self._reinforce_existing_memory(existing_memory_id)
+                logger.info(f"Duplicate memory reinforced: {existing_memory_id}")
+                return existing_memory_id
+
             date = datetime.now().strftime("%Y-%m-%d")
             timestamp = datetime.now().isoformat()
-            # Use SHA256 for stable, collision-resistant IDs across processes
-            # Include timestamp in hash to prevent collisions for identical content
-            # 8 hex chars = 32 bits = ~4 billion unique values (collision-resistant)
             unique_string = f"{content}|{timestamp}"
             content_hash = hashlib.sha256(unique_string.encode()).hexdigest()[:8]
             memory_id = f"{date}_{type}_{content_hash}"
 
-            # Build payload
             payload = {
                 "memory_id": memory_id,
                 "content": content,
                 "date": date,
                 "timestamp": timestamp,
                 "type": type,
-                "project": project or "general",
+                "project": project_name,
+                "reinforcement_count": 0,
+                **scope.to_metadata(),
                 **metadata,
             }
+            payload.update(summarize_lifecycle(payload))
 
             # Save to file (durability)
             self._save_to_file(memory_id, content, payload, type, date)
@@ -267,7 +283,7 @@ class MemoryManager:
             # Build/refresh graph node for this memory
             self.knowledge_graph.add_node(
                 memory_id,
-                topic=project or "general",
+                topic=project_name,
                 memory_type=type,
             )
 
@@ -278,7 +294,7 @@ class MemoryManager:
                     memory_id=memory_id,
                     content=content,
                     memory_type=type,
-                    project=project or "general",
+                    project=project_name,
                     embedder=self.embedder,
                     store=self.store,
                 )
@@ -291,6 +307,172 @@ class MemoryManager:
             logger.info(f"Saved memory: {memory_id}")
             return memory_id
 
+    def observe(
+        self,
+        summary: str,
+        type: str = "auto",
+        project: str | None = None,
+        scope: MemoryScope | None = None,
+        context: str | None = None,
+        **metadata: Any,
+    ) -> ObservationCandidate | str:
+        """Evaluate and persist a memory-worthy observation.
+
+        Returns the saved memory ID when persisted, otherwise the candidate verdict.
+        """
+        candidate = self._observer.evaluate(summary, memory_type=type)
+        if not candidate.should_save:
+            return candidate
+
+        content = candidate.content if not context else f"{candidate.content}\n\nContext: {context}"
+        return self.save(
+            content=content,
+            type=candidate.memory_type,
+            project=project,
+            scope=scope,
+            salience=candidate.salience,
+            **metadata,
+        )
+
+    def _find_duplicate_memory_id(
+        self,
+        *,
+        content: str,
+        project: str,
+        memory_type: str,
+    ) -> str | None:
+        """Return existing memory id for near-identical memories in same project/type."""
+        try:
+            matches = self.store.search(
+                vector=self.embedder.encode(content),
+                limit=3,
+                filters={"project": project, "type": memory_type},
+                score_threshold=0.97,
+                query_text=content,
+            )
+        except Exception:
+            return None
+
+        normalized = " ".join(content.split()).strip().lower()
+        for match in matches:
+            existing = " ".join((match.get("content") or "").split()).strip().lower()
+            if existing == normalized:
+                return match.get("memory_id")
+        return None
+
+    def _reinforce_existing_memory(self, memory_id: str) -> None:
+        """Load, reinforce, reclassify, and persist the updated payload."""
+        from datetime import datetime as _dt
+
+        from memory.intelligence import reinforce_and_reclassify
+
+        try:
+            existing = self.store.get_by_id(memory_id)
+        except Exception:
+            logger.warning(f"Could not load memory for reinforcement: {memory_id}", exc_info=True)
+            return
+        if not existing:
+            return
+
+        try:
+            updated = reinforce_and_reclassify(
+                existing,
+                graph=self.knowledge_graph,
+                now=_dt.now(),
+            )
+        except Exception:
+            logger.warning(f"Reinforce/reclassify failed for {memory_id}", exc_info=True)
+            return
+
+        try:
+            self.store.update_payload(memory_id, updated)
+        except Exception:
+            logger.warning(f"Could not persist reinforcement for {memory_id}", exc_info=True)
+
+    def backfill_lifecycle(
+        self,
+        *,
+        dry_run: bool = True,
+        project: str | None = None,
+        batch_size: int = 500,
+    ) -> dict[str, Any]:
+        """Backfill tier/durability/lifecycle_reason on existing memories.
+
+        Scrolls all points (optionally filtered by project), computes
+        LifecycleSignals + classify() for each, and (unless dry_run) writes the
+        updated payload back to the store.
+
+        Returns a report with counts by tier, skipped ids, and errors.
+        """
+        from datetime import datetime as _dt
+
+        from memory.lifecycle import LifecycleSignals, classify, compute_retention_days
+
+        filters = {"project": project} if project else None
+        now = _dt.now()
+
+        updated_by_tier: dict[str, int] = {"working": 0, "episodic": 0, "semantic": 0, "identity": 0}
+        skipped: list[str] = []
+        errors: list[dict[str, str]] = []
+
+        points = self.store.scroll(filters=filters, limit=batch_size)
+        graph_has_nodes = self.knowledge_graph.stats()["nodes"] > 0
+
+        for point in points:
+            memory_id = point.get("memory_id", "")
+            if not memory_id:
+                skipped.append("<missing_id>")
+                continue
+
+            date_str = point.get("date") or now.strftime("%Y-%m-%d")
+            try:
+                mem_date = _dt.strptime(date_str, "%Y-%m-%d")
+                age_days = max(0, (now - mem_date).days)
+            except ValueError:
+                age_days = 0
+
+            contradicts_count = (
+                self.knowledge_graph.count_contradicts(memory_id) if graph_has_nodes else 0
+            )
+
+            existing_tier = point.get("tier")
+            explicit = existing_tier if existing_tier == "identity" else None
+
+            signals = LifecycleSignals(
+                memory_type=point.get("type", "note"),
+                salience=float(point.get("salience") or 0.0),
+                age_days=age_days,
+                reinforcement_count=int(point.get("reinforcement_count") or 0),
+                contradicts_count=contradicts_count,
+                explicit_tier=explicit,
+            )
+            result = classify(signals)
+
+            updated_by_tier[result.tier] += 1
+            if dry_run:
+                continue
+
+            new_payload = dict(point)
+            new_payload.update({
+                "tier": result.tier,
+                "durability": result.durability,
+                "lifecycle_reason": result.reason,
+                "retention_days": compute_retention_days(signals.memory_type, result.tier),
+            })
+            try:
+                self.store.update_payload(memory_id, new_payload)
+            except Exception as e:  # noqa: BLE001
+                errors.append({"memory_id": memory_id, "error": str(e)})
+
+        return {
+            "dry_run": dry_run,
+            "project": project,
+            "updated_by_tier": updated_by_tier,
+            "skipped": skipped,
+            "errors": errors,
+            "total": sum(updated_by_tier.values()),
+        }
+
     def _save_to_file(
         self,
         memory_id: str,
@@ -299,8 +481,11 @@ class MemoryManager:
         memory_type: str,
         date: str,
     ) -> None:
-        """Save memory to human-readable YAML file."""
-        yaml_file = self.memory_dir / f"{date}.yaml"
+        """Save memory to human-readable YAML file, organized by project."""
+        project = metadata.get("project", "general")
+        project_dir = self.memory_dir / project
+        project_dir.mkdir(parents=True, exist_ok=True)
+        yaml_file = project_dir / f"{date}.yaml"
 
         # Load existing data for this date
         if yaml_file.exists():
@@ -330,7 +515,7 @@ class MemoryManager:
         data[type_key].append(memory_entry)
 
         # Atomic write: write to temp file, then os.replace() (POSIX atomic)
-        fd, tmp_path = tempfile.mkstemp(dir=self.memory_dir, suffix=".yaml.tmp")
+        fd, tmp_path = tempfile.mkstemp(dir=project_dir, suffix=".yaml.tmp")
         try:
             with os.fdopen(fd, "w") as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
@@ -361,9 +546,25 @@ class MemoryManager:
         if not date or len(date) != 10 or date[4] != "-" or date[7] != "-":
             return False
 
-        yaml_file = self.memory_dir / f"{date}.yaml"
-        if not yaml_file.exists():
-            return False
+        # Search across all project subdirs for the YAML file
+        yaml_file = None
+        for candidate in self.memory_dir.rglob(f"{date}.yaml"):
+            with open(candidate) as f:
+                check = yaml.safe_load(f) or {}
+            for type_key in check:
+                if isinstance(check[type_key], list):
+                    if any(m.get("id") == memory_id for m in check[type_key]):
+                        yaml_file = candidate
+                        break
+            if yaml_file:
+                break
+        if not yaml_file:
+            # Also try flat (legacy) path
+            flat = self.memory_dir / f"{date}.yaml"
+            if flat.exists():
+                yaml_file = flat
+            else:
+                return False
 
         with open(yaml_file) as f:
             data = yaml.safe_load(f) or {}
@@ -604,6 +805,7 @@ class MemoryManager:
                 importance = graph.get_importance(memory_id) if memory_id else 0.5
                 is_expanded = bool(result.get("_graph_expanded"))
                 graph_proximity = 0.7 if is_expanded else 1.0
+                tier = result.get("tier", "working")
 
                 days_old = 0
                 if result.get("date"):
@@ -615,11 +817,19 @@ class MemoryManager:
 
                 recency = max(0.0, 1.0 - days_old / 365)
 
+                tier_norm = {
+                    "identity": 1.0,
+                    "semantic": 0.66,
+                    "episodic": 0.33,
+                    "working": 0.0,
+                }.get(tier, 0.0)
+
                 final_score = (
-                    vector_score * 0.50
+                    vector_score * 0.40
                     + importance * 0.20
-                    + recency * 0.15
+                    + recency * 0.10
                     + graph_proximity * 0.15
+                    + tier_norm * 0.15
                 )
 
                 scored.append(
@@ -631,6 +841,7 @@ class MemoryManager:
                         "type": result.get("type"),
                         "project": result.get("project"),
                         "memory_id": memory_id,
+                        "tier": tier,
                     }
                 )
 
@@ -1083,6 +1294,25 @@ class MemoryManager:
     # -------------------------------------------------------------------------
     # STATS: System information
     # -------------------------------------------------------------------------
+
+    def get_resume_packet(
+        self,
+        project: str | None = None,
+        scope: MemoryScope | None = None,
+        limit: int = 12,
+    ) -> dict[str, Any]:
+        """Return a continuity-oriented startup packet for an agent session."""
+        scope = scope or ScopeDetector.detect(project=project)
+        return build_resume_packet(self, scope=scope, limit=limit)
+
+    def get_agent_startup(
+        self,
+        project: str | None = None,
+        agent: str | None = None,
+        limit: int = 12,
+    ) -> dict[str, Any]:
+        """Return a single startup payload for agent clients."""
+        return build_agent_startup(self, project=project, agent=agent, limit=limit)
 
     def get_stats(self) -> dict[str, Any]:
         """Get memory system statistics."""

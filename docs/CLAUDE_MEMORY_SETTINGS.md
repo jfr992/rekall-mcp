@@ -39,14 +39,14 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 
 ### Failsafe
 - If memory seems stale, call `memory_stats()` and check graph node/edge counts.
-- Dashboard at `http://localhost:8000/dashboard` for visual graph exploration.
+- Cockpit UI at `http://localhost:3333/brain` for visual graph exploration (Next.js app, run with `cd ui && npm run dev -- -p 3333`).
 ```
 
 ## 2) Runtime knobs available today
 
 ### Docker / server controls
 
-- `MCP_TRANSPORT` controls protocol (`streamable-http` required for dashboard + browser API access).
+- `MCP_TRANSPORT` controls protocol (`streamable-http` required for browser API access from the cockpit).
 - `HOST`, `PORT` control listening address.
 - `MEMORY_STORAGE_PATH` is where YAML memory files are persisted.
 - `QDRANT_URL` controls vector DB endpoint.
@@ -58,7 +58,7 @@ Current compose defaults:
 - service: `memento-mcp` on port `8000`
 - transport: `streamable-http`
 - project storage: `/data/memory` in container (`~/.claude/memory` on host)
-- dashboard: `http://localhost:8000/dashboard`
+- cockpit: `http://localhost:3333/brain` (Next.js, separate from backend)
 
 ### API defaults to remember
 
@@ -128,13 +128,13 @@ Current compose defaults:
 
 When behavior drifts:
 
-1. Verify transport/UI: `curl http://localhost:8000/health`, then `curl http://localhost:8000/dashboard`.
+1. Verify backend: `curl http://localhost:8000/health`. For the cockpit, `curl http://localhost:3333/brain`.
 2. Confirm container and env: `docker compose ps` and `docker compose exec mcp env | rg MCP_TRANSPORT|HOST|QDRANT_URL`.
 3. Check knowledge graph: `curl http://localhost:8000/api/memory/stats` — verify node/edge counts.
 4. If graph has 0 edges: `curl -X POST http://localhost:8000/api/memory/graph/rebuild`.
 5. Narrow scope by adding explicit `project` to all recall/context calls.
 6. Reduce noise by tightening `observe` triggers in CLAUDE.md policy.
-7. Use dashboard filters to validate clustering (`/api/memory/graph?project=...`).
+7. Use cockpit `/brain` scope filter to validate clustering (`/api/memory/graph?project=...`).
 8. Check for drift: `curl http://localhost:8000/api/memory/consolidate` — review supersedes/contradicts.
 9. If needed, perform controlled cleanup:
    - inspect `~/.claude/memory/*.yaml`
