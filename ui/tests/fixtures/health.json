@@ -1,0 +1,5 @@
+{
+  "status": "healthy",
+  "transport": "streamable-http",
+  "tools_enabled": ["memory"]
+}

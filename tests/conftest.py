@@ -80,6 +80,22 @@ def tool_registry():
     return capture_tool, registered_tools
 
 
+@pytest.fixture(autouse=True)
+def _reset_scope_trust_cache():
+    """Reset the scope detector's trust cache between tests so env var changes take effect."""
+    try:
+        from memory.scope import ScopeDetector
+        ScopeDetector.reset_trust_cache()
+    except (ImportError, AttributeError):
+        pass
+    yield
+    try:
+        from memory.scope import ScopeDetector
+        ScopeDetector.reset_trust_cache()
+    except (ImportError, AttributeError):
+        pass
+
+
 @pytest.fixture
 def mock_embedder():
     """Mock embedder for testing without loading actual models."""

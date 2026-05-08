@@ -1,0 +1,11 @@
+{
+  "graph": {
+    "nodes": [
+      { "id": "2026-04-01_decision_abc12345", "type": "decision", "content": "Use Go over Rust", "tier": "semantic", "durability": 0.85, "degree": 3 },
+      { "id": "2026-04-02_note_def67890", "type": "note", "content": "Observed dedupe fires on 0.97 threshold", "tier": "working", "durability": 0.25, "degree": 1 }
+    ],
+    "links": [
+      { "source": "2026-04-01_decision_abc12345", "target": "2026-04-02_note_def67890", "weight": 0.6, "relation": "related_to" }
+    ]
+  }
+}
