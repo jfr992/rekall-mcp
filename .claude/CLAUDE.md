@@ -63,7 +63,7 @@ curl http://localhost:8000/health
 
 ```
 src/
-├── server.py               # MCP server with REST API endpoints + dashboard
+├── server.py               # MCP server + REST API endpoints
 ├── core/                   # Embedder, VectorStore, Telemetry, utils
 │   └── utils.py            # stable_hash_id() — single source for string→int64 hashing
 ├── memory/
@@ -113,7 +113,7 @@ Falls back to pure vector search when graph is empty.
 - **Rebuild graph**: `POST /api/memory/graph/rebuild` or MCP tool `rebuild_knowledge_graph()`
 - **Check health**: `GET /api/memory/stats` includes graph node/edge counts
 - **Clean duplicates**: `GET /api/memory/consolidate` shows superseded pairs
-- **Dashboard**: `http://localhost:8000/dashboard` — force-directed graph visualization
+- **Cockpit UI**: `http://localhost:3333` — Next.js app with `/brain` (force-directed graph), `/kb` (typed memory columns), `/continuity`, `/hygiene`. Run with `cd ui && npm run dev -- -p 3333`.
 
 ## Memory System
 
