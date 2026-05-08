@@ -6,6 +6,6 @@ type ProjectStore = {
 };
 
 export const useProjectStore = create<ProjectStore>((set) => ({
-  project: "general",
+  project: "",  // empty = all memories (user-scoped, not project-scoped)
   setProject: (project) => set({ project }),
 }));

@@ -8,6 +8,18 @@ export const HealthSchema = z.object({
   tools_enabled: z.array(z.string()).optional(),
 });
 
+// ----- Projects ------------------------------------------------------------
+
+export const ProjectInfoSchema = z.object({
+  name: z.string(),
+  count: z.number(),
+});
+
+export const ProjectsResponseSchema = z.object({
+  total: z.number(),
+  projects: z.array(ProjectInfoSchema),
+});
+
 // ----- Memory core ---------------------------------------------------------
 
 export const MemorySchema = z.object({
@@ -155,6 +167,8 @@ export const ResumeResponseSchema = z.object({
 
 // Types
 export type Health = z.infer<typeof HealthSchema>;
+export type ProjectInfo = z.infer<typeof ProjectInfoSchema>;
+export type ProjectsResponse = z.infer<typeof ProjectsResponseSchema>;
 export type Memory = z.infer<typeof MemorySchema>;
 export type GraphNode = z.infer<typeof GraphNodeSchema>;
 export type GraphLink = z.infer<typeof GraphLinkSchema>;
