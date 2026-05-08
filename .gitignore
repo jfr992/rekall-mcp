@@ -55,3 +55,12 @@ config.yaml
 data/
 *.jsonl
 .superpowers/
+
+# Audit/debug screenshots — never commit
+brain-*.png
+
+# Playwright MCP session artifacts
+.playwright-mcp/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
