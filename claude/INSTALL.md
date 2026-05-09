@@ -116,4 +116,4 @@ rm ~/.claude/hooks/memento-*.sh
 # Then remove the matching entries from ~/.claude/settings.json
 ```
 
-The backend (`docker compose down`) and the YAML data at `~/clawd/memory/` are unaffected.
+The backend (`docker compose down`) and the YAML data at `$MEMORY_STORAGE_PATH` (default `~/.claude/memory/`) are unaffected.

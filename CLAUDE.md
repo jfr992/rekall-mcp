@@ -15,7 +15,7 @@ If you're about to do anything destructive (migration, prune, schema change), ta
 
 ```bash
 TS=$(date +%Y%m%d-%H%M%S)
-tar czf ~/backups/pre-$TS-memory.tar.gz -C ~ clawd/memory
+tar czf ~/backups/pre-$TS-memory.tar.gz -C ~ .claude/memory
 docker compose stop qdrant
 tar czf ~/backups/pre-$TS-qdrant.tar.gz -C ~/.claude qdrant
 docker compose start qdrant
@@ -88,7 +88,7 @@ A memory record has:
 
 ## Storage discipline
 
-- Production YAML lives at `MEMORY_STORAGE_PATH` (env var). Default: `~/.claude/memory` (legacy flat). Recommended: `~/clawd/memory` (nested per-project: `<project>/<date>.yaml`).
+- Production YAML lives at `MEMORY_STORAGE_PATH` (env var). Default: `~/.claude/memory`. v1.5.0+ writes nested per-project: `<project>/<date>.yaml`. Override `MEMORY_STORAGE_PATH` to relocate.
 - The nested layout is what the v1.5.0 scope-aware observe writes. Don't add code that assumes flat — use `Path.rglob("*.yaml")`, not `glob("*.yaml")`.
 - Knowledge graph at `~/.claude/memory/_graph.json` (always there, even when YAML moves).
 - Production Qdrant at `localhost:6333` → `~/.claude/qdrant`. **Read-only from tests.**

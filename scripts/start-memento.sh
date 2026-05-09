@@ -28,7 +28,6 @@ else
     HOST=0.0.0.0 \
     PORT=8000 \
     QDRANT_URL=http://localhost:6333 \
-    MEMORY_STORAGE_PATH="$HOME/clawd/memory" \
     uv run python -m server \
     > /tmp/memento-backend.log 2>&1 &
   until curl -sfo /dev/null http://localhost:8000/health; do
