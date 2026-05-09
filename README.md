@@ -305,9 +305,19 @@ AI:  vector search finds the memory
 
 | Tool | Purpose |
 |------|---------|
-| `observe(summary)` | Auto-classify and save |
+| `observe(summary)` | Auto-classify and save (accepts caller `cwd` for project scope) |
 | `recall_memories(query)` | Graph-enhanced semantic search |
 | `save_memory(content, type)` | Manual save with explicit type |
+| `memory_detail(memory_id)` | Single memory + neighbors + scope |
+| `memory_kb(project)` | Typed slices (decisions / requirements / preferences / learnings) |
+| `memory_pressure(project)` | Pressure metrics + flagged candidates |
+| `memory_pressure_snapshot()` | Detailed pressure snapshot |
+| `prune_plan(project, limit)` | Build prune plan (apply via REST only) |
+| `backfill_lifecycle(project, dry_run)` | Tier metadata backfill on existing memories |
+| `resume_packet(project)` | Continuity resume |
+| `handoff_summary(project)` | Continuity summary |
+| `agent_startup(project)` | Unified startup payload |
+| `memory_lifecycle()` | Behavioral classifier output |
 | `get_cached_context(project)` | Flat context (prompt-cache optimized) |
 | `get_hierarchical_context(project)` | Topic-grouped context tree |
 | `skill_context()` | Extracted skills from memory clusters |
@@ -323,11 +333,19 @@ AI:  vector search finds the memory
 | `/health` | GET | Health check |
 | `/api/memory/save` | POST | Save a memory |
 | `/api/memory/recall` | POST | Graph-enhanced search |
-| `/api/memory/observe` | POST | Auto-classify and save |
+| `/api/memory/observe` | POST | Auto-classify and save (accepts `cwd` for scope) |
 | `/api/memory/stats` | GET | Statistics + graph metrics |
+| `/api/memory/projects` | GET | List of projects + memory counts |
 | `/api/memory/context` | GET | Flat project context |
-| `/api/memory/context/hierarchy` | GET | Topic-grouped hierarchical context |
+| `/api/memory/context/hierarchy` | GET | Topic-grouped (`?days=N` for date filter) |
 | `/api/memory/context/proactive` | GET | Top signals + conflict detection |
+| `/api/memory/detail/{id}` | GET | Full memory + neighbors + scope |
+| `/api/memory/kb` | GET | Typed slices |
+| `/api/memory/pressure` | GET | Pressure metrics + flagged candidates |
+| `/api/memory/resume` | GET | Resume packet for continuity |
+| `/api/memory/prune/plan` | POST | Build prune plan (plan-id, 15-min TTL, 200-deletion cap) |
+| `/api/memory/prune/apply` | POST | Apply plan with typed-id confirmation (REST-only) |
+| `/api/memory/lifecycle/backfill` | POST | Backfill tier metadata (dry-run + execute) |
 | `/api/memory/{id}` | DELETE | Delete a single memory |
 | `/api/memory/cleanup` | POST | Batch cleanup (prune superseded, age-based) |
 | `/api/memory/graph` | GET | Graph visualization data |
