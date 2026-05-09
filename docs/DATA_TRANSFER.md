@@ -52,8 +52,9 @@ echo "Snapshot: $SNAP"
 docker cp "memento-qdrant:/qdrant/storage/snapshots/agent_memory/$SNAP" "$HOME/Desktop/$SNAP"
 
 # 4. Tarball the YAML directory (human-editable source of truth)
-tar czf "$HOME/Desktop/old-memento-yaml.tar.gz" -C "$HOME" \
-    "$( [ -d $HOME/clawd/memory ] && echo clawd/memory || echo .claude/memory )"
+#    MEMORY_DIR resolves to whatever MEMORY_STORAGE_PATH points to (default ~/.claude/memory).
+MEMORY_DIR="${MEMORY_STORAGE_PATH:-$HOME/.claude/memory}"
+tar czf "$HOME/Desktop/old-memento-yaml.tar.gz" -C "$(dirname "$MEMORY_DIR")" "$(basename "$MEMORY_DIR")"
 ```
 
 You now have two files on the source's `~/Desktop/`. Transfer both to the destination machine (AirDrop / scp / iCloud).
@@ -72,8 +73,9 @@ tar czf "$BACKUP_DIR/qdrant-current.tar.gz" -C ~/.claude qdrant
 docker compose start qdrant
 sleep 4
 
-tar czf "$BACKUP_DIR/clawd-memory-current.tar.gz" -C ~ clawd/memory 2>/dev/null || \
-    tar czf "$BACKUP_DIR/dotclaude-memory-current.tar.gz" -C ~ .claude/memory
+MEMORY_DIR="${MEMORY_STORAGE_PATH:-$HOME/.claude/memory}"
+tar czf "$BACKUP_DIR/memory-current.tar.gz" \
+    -C "$(dirname "$MEMORY_DIR")" "$(basename "$MEMORY_DIR")"
 
 # Save the BEFORE count for verification
 curl -s http://localhost:8000/api/memory/stats > "$BACKUP_DIR/stats-before.json"
@@ -86,11 +88,14 @@ echo "Backup at: $BACKUP_DIR"
 mkdir -p /tmp/old-memento-extract
 tar xzf ~/Desktop/old-memento-yaml.tar.gz -C /tmp/old-memento-extract
 
-mkdir -p ~/clawd/memory/imported-old
-rsync -a /tmp/old-memento-extract/{clawd/memory,.claude/memory}/ ~/clawd/memory/imported-old/ 2>/dev/null || \
-    cp -r /tmp/old-memento-extract/*/memory/* ~/clawd/memory/imported-old/
+MEMORY_DIR="${MEMORY_STORAGE_PATH:-$HOME/.claude/memory}"
+mkdir -p "$MEMORY_DIR/imported-old"
+# The tarball contains whatever directory the source had — rsync from any layout:
+rsync -a --prune-empty-dirs \
+    --include='*/' --include='*.yaml' --exclude='*' \
+    /tmp/old-memento-extract/ "$MEMORY_DIR/imported-old/"
 
-ls ~/clawd/memory/imported-old/ | wc -l
+find "$MEMORY_DIR/imported-old" -name '*.yaml' | wc -l
 ```
 
 #### 3. Restore the Qdrant snapshot
@@ -203,8 +208,9 @@ curl -sX POST http://localhost:8000/api/memory/graph/rebuild
 Only useful if you want the YAML history but plan to start with empty embeddings. Skip unless you know why.
 
 ```bash
-mkdir -p ~/clawd/memory/imported-old
-cp /tmp/old-memento-extract/memory/*.yaml ~/clawd/memory/imported-old/
+MEMORY_DIR="${MEMORY_STORAGE_PATH:-$HOME/.claude/memory}"
+mkdir -p "$MEMORY_DIR/imported-old"
+cp /tmp/old-memento-extract/memory/*.yaml "$MEMORY_DIR/imported-old/"
 # Memories are on disk but not searchable until something writes them to Qdrant.
 # Use Path B's loop, or just re-save each memory via observe.
 ```
@@ -222,8 +228,9 @@ pkill -f "uv run python -m server" || true
 
 # Restore from the pre-transfer backup
 tar xzf ~/backups/pre-transfer-<TS>/qdrant-current.tar.gz -C ~/.claude/
-rm -rf ~/clawd/memory
-tar xzf ~/backups/pre-transfer-<TS>/clawd-memory-current.tar.gz -C ~
+MEMORY_DIR="${MEMORY_STORAGE_PATH:-$HOME/.claude/memory}"
+rm -rf "$MEMORY_DIR"
+tar xzf ~/backups/pre-transfer-<TS>/memory-current.tar.gz -C "$(dirname "$MEMORY_DIR")"
 
 # Restart
 docker compose start qdrant
