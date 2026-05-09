@@ -123,47 +123,26 @@ Browse the knowledge graph at `http://localhost:3333/brain` (Next.js cockpit, ru
 
 ---
 
-## Memory Plugin (Auto-Triggering Skills)
+## Slash command shortcuts (optional, manual)
 
-Make memory completely automatic with the Memory Plugin.
-
-Instead of manually calling memory tools, the plugin:
-- **Auto-restores** context at session start (silently)
-- **Auto-saves** decisions when detected
-- **Auto-recalls** memories when you ask questions
-- **Works invisibly** - feels like Claude naturally "remembers"
-
-### Quick Install
-
-Use [claude-dotfiles](https://github.com/jfr992/claude-dotfiles) for the full setup (hooks, skills, rules):
+`claude/skills/` ships seven user-invocable slash commands. They are NOT auto-triggering — type the slash command to invoke. Install once globally:
 
 ```bash
-git clone https://github.com/jfr992/claude-dotfiles.git ~/Repos/claude-dotfiles
-cd ~/Repos/claude-dotfiles
 mkdir -p ~/.claude/skills
-cp -r claude/skills/setup ~/.claude/skills/setup
-# Then in Claude Code: /setup
+cp -r claude/skills/* ~/.claude/skills/
 ```
 
-Or install just the memory skills manually:
-
-```bash
-cp -r claude/skills/memory-* ~/.claude/skills/
-```
-
-### Available Skills
-
-| Skill | Purpose |
-|-------|---------|
-| `/memory-restore` | Load context at session start (hierarchical + flat) |
-| `/memory-observe <note>` | Save an observation manually |
+| Slash command | What it does |
+|---------------|--------------|
+| `/memory-observe <note>` | Manual save with auto-classification |
 | `/memory-recall <query>` | Graph-enhanced semantic search |
-| `/memory-stats` | Health check with graph metrics |
-| `/memory-rebuild` | Rebuild knowledge graph from all memories |
+| `/memory-restore` | Manual context restore (importance-ranked) |
+| `/memory-stats` | Health check + graph metrics |
+| `/memory-rebuild` | Rebuild the knowledge graph |
 | `/memory-consolidate` | Detect duplicate and contradictory memories |
 | `/memory-skills` | Show extracted skills from memory clusters |
 
-See **[Memory Plugin](docs/MEMORY_PLUGIN.md)** for architecture and technical details.
+The auto-save mechanism is the **Stop hook** at `claude/hooks/memento-observe.sh` (a Haiku judge gated by signal detection — keywords, new commits, or session length), not the slash commands. See [`claude/INSTALL.md`](claude/INSTALL.md) for hook setup.
 
 ---
 

@@ -8,15 +8,13 @@ This folder is a **portable Claude Code config bundle** that ships with Memento.
 claude/
 ├── INSTALL.md              ← this file
 ├── settings.example.json   ← drop-in snippet for ~/.claude/settings.json
-├── MEMORY_PLUGIN.md        ← user-facing description of the memory plugin
 ├── hooks/
 │   ├── memento-restore.sh       UserPromptSubmit — once-per-session "Memento ready" status line
-│   ├── memento-observe.sh       Stop — gated Haiku judge that auto-saves durable observations
-│   └── memento-post-tool.sh     PostToolUse — captures git commit SHAs after Bash commits
+│   └── memento-observe.sh       Stop — gated Haiku judge that auto-saves durable observations
 └── skills/
     ├── memory-observe/SKILL.md      /memory-observe <text>     — manual save shortcut
     ├── memory-recall/SKILL.md       /memory-recall <query>     — graph-enhanced recall
-    ├── memory-restore/SKILL.md      /memory-restore            — load proactive context
+    ├── memory-restore/SKILL.md      /memory-restore            — load proactive context (manual)
     ├── memory-stats/SKILL.md        /memory-stats              — health + counts
     ├── memory-skills/SKILL.md       /memory-skills             — extracted skill clusters
     ├── memory-rebuild/SKILL.md      /memory-rebuild            — rebuild knowledge graph
@@ -93,13 +91,9 @@ When Haiku does fire, it returns strict JSON `{observe, type, content}` and POST
 
 Kill switch: `MEMENTO_AUTOSAVE=0`. Re-entrancy guard: `MEMENTO_JUDGE_INFLIGHT=1`.
 
-### `memento-post-tool.sh` — PostToolUse (Bash matcher)
-
-Captures git commit SHAs from Bash tool output and feeds them to the auto-memory subsystem. Fully passive.
-
 ## Settings example
 
-See `claude/settings.example.json` for a copy-pastable JSON snippet wiring all three hooks. Bash `PreToolUse` and `PostToolUse` need a matcher; `UserPromptSubmit` and `Stop` don't.
+See `claude/settings.example.json` for a copy-pastable JSON snippet wiring both hooks. `Stop` and `UserPromptSubmit` don't need a matcher.
 
 ## Uninstall
 

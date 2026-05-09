@@ -1,17 +1,6 @@
 {
   "_comment": "Copy the hooks block into ~/.claude/settings.json. Replace ~ with /Users/<you>/ — JSON does not expand the tilde. If you already have a settings.json, MERGE entries into the matching event arrays rather than overwriting.",
   "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/.claude/hooks/memento-post-tool.sh"
-          }
-        ]
-      }
-    ],
     "UserPromptSubmit": [
       {
         "matcher": "",
