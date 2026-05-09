@@ -138,7 +138,7 @@ class MemoryManager:
             embedding_model: Model for embeddings (default: EMBEDDING_MODEL or all-MiniLM-L6-v2)
         """
         # Read from environment with sensible defaults
-        memory_dir = memory_dir or os.environ.get("MEMORY_STORAGE_PATH", "~/clawd/memory")
+        memory_dir = memory_dir or os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory")
         qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "http://localhost:6333")
         embedding_model = embedding_model or os.environ.get("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 

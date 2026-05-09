@@ -13,16 +13,11 @@ Memento MCP is a persistent memory system with a **knowledge graph** layer. It s
 ```bash
 git clone https://github.com/jfr992/memento-mcp.git
 cd memento-mcp
-docker compose up -d
+docker compose up -d                # starts Qdrant on :6333
+bash scripts/start-memento.sh       # starts the MCP backend on :8000 (and the cockpit on :3333)
 ```
-```bash
-# Optional: plain Docker run
-docker run -p 8000:8000 \
-  -e QDRANT_URL=http://host.docker.internal:6333 \
-  -e MCP_TRANSPORT=streamable-http \
-  -e HOST=0.0.0.0 \
-  memento-mcp
-```
+
+`start-memento.sh` is idempotent — re-run it any time. Memories live at `$MEMORY_STORAGE_PATH` (default `~/.claude/memory`); set the env var before running the script if you want a different location.
 
 > **Need Docker?** Get it free at [docker.com/get-started](https://www.docker.com/get-started/)
 
