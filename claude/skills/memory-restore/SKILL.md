@@ -1,6 +1,6 @@
 ---
 name: memory-restore
-description: Restore cached memories from previous sessions automatically at session start or when resuming work. Use when you need historical project knowledge, past decisions, or learnings.
+description: Manually restore proactive context (importance-ranked) into the current session. User-invocable only — no auto-trigger. Use when you want to surface historical project knowledge, past decisions, or learnings.
 user-invocable: true
 allowed-tools: Bash(*)
 ---
