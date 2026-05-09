@@ -8,10 +8,13 @@ This folder is a **portable Claude Code config bundle** that ships with Memento.
 claude/
 ├── INSTALL.md              ← this file
 ├── settings.example.json   ← drop-in snippet for ~/.claude/settings.json
+├── setup/
+│   └── install.sh          ← one-shot installer (idempotent, with backup)
 ├── hooks/
 │   ├── memento-restore.sh       UserPromptSubmit — once-per-session "Memento ready" status line
 │   └── memento-observe.sh       Stop — gated Haiku judge that auto-saves durable observations
 └── skills/
+    ├── memento-setup/SKILL.md       /memento-setup             — re-run installer from inside Claude Code
     ├── memory-observe/SKILL.md      /memory-observe <text>     — manual save shortcut
     ├── memory-recall/SKILL.md       /memory-recall <query>     — graph-enhanced recall
     ├── memory-restore/SKILL.md      /memory-restore            — load proactive context (manual)
@@ -21,34 +24,45 @@ claude/
     └── memory-consolidate/SKILL.md  /memory-consolidate        — find duplicates + conflicts
 ```
 
-## Install (3 steps)
-
-### 1. Copy the hooks
+## Install — one command (recommended)
 
 ```bash
+bash claude/setup/install.sh
+```
+
+What it does (all idempotent):
+- Preflight: checks `docker`, `jq`, `curl`, `python3`
+- Starts Qdrant + backend if not already running
+- Copies the 2 hooks to `~/.claude/hooks/`
+- Backs up `~/.claude/settings.json` then merges in `UserPromptSubmit` + `Stop` entries (deduped — won't duplicate if already wired)
+- Copies all 8 slash commands to `~/.claude/skills/`
+- Verifies backend health + reports memory count
+
+**Restart your Claude Code session** after install for slash commands to load.
+
+Flags:
+- `--skip-backend` — only do Layer 1 wiring (skip docker + python startup)
+- `--skills-only` — only copy slash commands
+- `--hooks-only` — only install hooks + patch settings.json
+
+After install, you can re-run from inside Claude Code via `/memento-setup`.
+
+## Install — manual (if you prefer to see every step)
+
+```bash
+# 1. Hooks
 mkdir -p ~/.claude/hooks
 cp claude/hooks/*.sh ~/.claude/hooks/
 chmod +x ~/.claude/hooks/*.sh
-```
 
-### 2. Wire them into `~/.claude/settings.json`
-
-Open `~/.claude/settings.json` and merge the `hooks` block from `claude/settings.example.json`. If you already have hooks, append the new entries to the matching event arrays (`PreToolUse` Bash matcher, `PostToolUse` Bash matcher, `UserPromptSubmit`, `Stop`).
-
-If you don't have a `~/.claude/settings.json` yet, just copy the example:
-
-```bash
+# 2. Settings — see claude/settings.example.json for the snippet to merge into
+#    ~/.claude/settings.json (or copy it directly if you have no existing settings)
 cp claude/settings.example.json ~/.claude/settings.json
-```
 
-### 3. (Optional) Install the slash command skills
-
-```bash
+# 3. Slash commands (optional)
 mkdir -p ~/.claude/skills
 cp -r claude/skills/* ~/.claude/skills/
 ```
-
-After this, `/memory-observe`, `/memory-recall`, `/memory-restore`, etc. are available in any Claude Code session.
 
 ## Required runtime
 
