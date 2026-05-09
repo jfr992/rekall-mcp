@@ -14,6 +14,7 @@ set -euo pipefail
 SKIP_BACKEND=0
 SKILLS_ONLY=0
 HOOKS_ONLY=0
+BACKUP=""  # set by the settings.json patch path; referenced unconditionally in the final report
 for arg in "$@"; do
     case "$arg" in
         --skip-backend) SKIP_BACKEND=1 ;;
@@ -217,15 +218,13 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     [[ -f "$HOME/.claude/hooks/memento-observe.sh" ]] && ok "memento-observe.sh in place" || warn "memento-observe.sh missing"
 fi
 
-cat <<EOF
-
-✓ Memento setup complete.
-
-Next steps:
-  • Restart your Claude Code session for the new hooks/skills to load.
-  • Type /memento-stats in a new session to verify slash commands work.
-  • If something's off, restore your settings: cp $BACKUP $SETTINGS
-
-Kill switches (env vars):
-  MEMENTO_AUTOSAVE=0   disables both restore status line and Stop-hook auto-save
-EOF
+echo
+echo "✓ Memento setup complete."
+echo
+echo "Next steps:"
+echo "  • Restart your Claude Code session for the new hooks/skills to load."
+echo "  • Type /memento-stats in a new session to verify slash commands work."
+[[ -n "$BACKUP" ]] && echo "  • If something's off, restore your settings: cp '$BACKUP' '$HOME/.claude/settings.json'"
+echo
+echo "Kill switches (env vars):"
+echo "  MEMENTO_AUTOSAVE=0   disables both restore status line and Stop-hook auto-save"
