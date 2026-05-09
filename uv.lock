@@ -1033,7 +1033,7 @@ wheels = [
 
 [[package]]
 name = "memento-mcp"
-version = "1.5.0"
+version = "1.5.2"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
