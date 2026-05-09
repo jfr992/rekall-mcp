@@ -121,7 +121,8 @@ if [ "$fire_haiku" = "false" ]; then
     if [ "$TURN_COUNT" -ge 5 ]; then
         TODAY=$(date +%Y-%m-%d)
         YAML_PROJECT=$(basename "$caller_cwd")
-        YAML_FILE="$HOME/clawd/memory/$YAML_PROJECT/$TODAY.yaml"
+        MEMORY_DIR="${MEMORY_STORAGE_PATH:-$HOME/.claude/memory}"
+        YAML_FILE="$MEMORY_DIR/$YAML_PROJECT/$TODAY.yaml"
         if [ -f "$YAML_FILE" ]; then
             TODAY_SAVES=$(grep -c '^- id:' "$YAML_FILE" 2>/dev/null || echo 0)
         else
