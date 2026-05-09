@@ -2,6 +2,8 @@
 
 This release replaces the legacy embedded HTML dashboard at `:8000/dashboard` with a standalone Next.js cockpit at `:3333`, adds new REST endpoints + MCP tools for memory hygiene and continuity, and tightens scope resolution on `/api/memory/observe`.
 
+> **Moving memories between machines or from an older install on another machine?** See [`docs/DATA_TRANSFER.md`](DATA_TRANSFER.md) for the Qdrant-snapshot and YAML-reingestion paths.
+
 ## Breaking changes
 
 ### `/dashboard` route removed
