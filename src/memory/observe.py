@@ -10,9 +10,8 @@ Turns raw agent observations into high-signal persisted memories by:
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable
-
 
 TYPE_HINTS: dict[str, tuple[str, ...]] = {
     "decision": ("decided", "chose", "going with", "opted for", "selected"),
@@ -78,7 +77,6 @@ class ObservationEngine:
 
         if _is_low_signal(normalized):
             return ObservationCandidate(normalized, "learning", 0.15, False, "low-signal")
-        lowered = normalized.lower()
 
         inferred = memory_type if memory_type != "auto" else self._infer_type(normalized)
         salience = self._score(normalized, inferred)

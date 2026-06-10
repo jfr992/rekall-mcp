@@ -1,7 +1,6 @@
 import json
-import pytest
-from pathlib import Path
 
+import pytest
 
 SAMPLE_ENTRY = {
     "question_id": "q001",

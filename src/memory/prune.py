@@ -21,7 +21,6 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
-
 MAX_DELETIONS_PER_APPLY = 200
 PLAN_TTL = timedelta(minutes=15)
 

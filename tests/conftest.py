@@ -9,7 +9,6 @@ import yaml
 
 from memory import MemoryManager
 
-
 TEST_QDRANT_URL = "http://localhost:6334"
 
 

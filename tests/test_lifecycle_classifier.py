@@ -5,14 +5,14 @@ from memory.lifecycle import LifecycleSignals, classify
 
 
 def _signals(**overrides):
-    defaults = dict(
-        memory_type="note",
-        salience=0.0,
-        age_days=0,
-        reinforcement_count=0,
-        contradicts_count=0,
-        explicit_tier=None,
-    )
+    defaults = {
+        "memory_type": "note",
+        "salience": 0.0,
+        "age_days": 0,
+        "reinforcement_count": 0,
+        "contradicts_count": 0,
+        "explicit_tier": None,
+    }
     defaults.update(overrides)
     return LifecycleSignals(**defaults)
 

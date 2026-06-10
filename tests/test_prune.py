@@ -3,7 +3,7 @@
 Behavioral tests live in test_prune_safety.py.
 """
 
-from memory.prune import plan_prune, apply_prune_plan
+from memory.prune import apply_prune_plan, plan_prune
 
 
 def test_legacy_aliases_importable():

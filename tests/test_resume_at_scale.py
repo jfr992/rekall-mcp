@@ -1,10 +1,7 @@
 """Fix C2 — resume must sort by date, not by Qdrant point-id order."""
 
 import random
-from datetime import datetime
 from unittest.mock import MagicMock
-
-import pytest
 
 from memory.resume import build_resume_packet
 from memory.scope import MemoryScope

@@ -6,6 +6,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from memory.prune import (
+    _PLAN_STORE,
     MAX_DELETIONS_PER_APPLY,
     PLAN_TTL,
     PlanExpired,
@@ -13,7 +14,6 @@ from memory.prune import (
     PlanNotFound,
     apply_plan,
     build_plan,
-    _PLAN_STORE,
 )
 
 

@@ -7,7 +7,6 @@ independent. Requires a real Qdrant on :6334 (integration marker).
 import pytest
 from starlette.testclient import TestClient
 
-
 pytestmark = pytest.mark.integration  # exercises live endpoints against a real Qdrant (:6334)
 
 

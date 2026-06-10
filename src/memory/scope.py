@@ -16,7 +16,6 @@ from typing import Any
 
 from memory.trust import DEFAULT_BOUNDARY, TrustResolver, load_trust_rules
 
-
 _CRED_RE = re.compile(r"(https?://)[^@/]+@")
 
 
