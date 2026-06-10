@@ -1367,8 +1367,30 @@ class MemoryManager:
     # CLEANUP: Remove memories
     # -------------------------------------------------------------------------
 
-    def clear_project(self, project: str) -> None:
-        """Delete all memories for a project."""
+    def clear_project(self, project: str) -> dict[str, int]:
+        """Delete all memories for a project from YAML, vector store, AND knowledge graph."""
         with self._telemetry.track("memory.clear_project"):
+            points = self.store.scroll(filters={"project": project}, limit=10000)
+            ids = [p["memory_id"] for p in points if p.get("memory_id")]
+            deleted = sum(1 for memory_id in ids if self.delete(memory_id))
+
+            # Vector points whose YAML was already gone aren't reachable via delete().
             self.store.delete(filters={"project": project})
-            logger.info(f"Cleared memories for project: {project}")
+
+            # YAML entries that never reached the vector store.
+            strays = 0
+            project_dir = self.memory_dir / project
+            if project_dir.is_dir():
+                for yaml_file in list(project_dir.rglob("*.yaml")):
+                    data = yaml.safe_load(yaml_file.read_text()) or {}
+                    for value in data.values():
+                        if isinstance(value, list):
+                            for entry in value:
+                                if entry.get("id"):
+                                    self.knowledge_graph.remove_node(entry["id"])
+                                    strays += 1
+                    yaml_file.unlink()
+                self.knowledge_graph.save()
+
+            logger.info(f"Cleared project {project}: {deleted} deleted, {strays} stray YAML entries")
+            return {"deleted": deleted, "strays_removed": strays}
