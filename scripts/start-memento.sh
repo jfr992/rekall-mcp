@@ -25,7 +25,7 @@ else
   echo "→ Starting backend on :8000…"
   nohup env \
     MCP_TRANSPORT=streamable-http \
-    HOST=0.0.0.0 \
+    HOST="${MEMENTO_HOST:-127.0.0.1}" \
     PORT=8000 \
     QDRANT_URL=http://localhost:6333 \
     uv run python -m server \

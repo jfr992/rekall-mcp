@@ -97,15 +97,26 @@ async def app_lifespan(_server: FastMCP) -> AsyncIterator[dict]:
     logger.info(f"Total operations processed: {total_ops}")
 
 
+def _resolve_host() -> str:
+    """Default to loopback. Memento has no auth — non-loopback binds are opt-in and loud."""
+    host = os.getenv("HOST", "127.0.0.1")
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        logger.warning(
+            f"Binding to {host}: Memento has no authentication — "
+            "anyone who can reach this interface can read and delete memories."
+        )
+    return host
+
+
 # Create the MCP server
-# Set host to 0.0.0.0 for Docker container access
+# Host defaults to loopback; Docker sets HOST=0.0.0.0 explicitly (compose line 48).
 # stateless_http must be True for Claude Code compatibility.
 # Claude Code sends each request independently without session tracking.
 mcp = FastMCP(
     "AI Memory & Tools Server",
     lifespan=app_lifespan,
-    host="0.0.0.0",
-    port=8000,
+    host=_resolve_host(),
+    port=int(os.getenv("PORT", "8000")),
     stateless_http=True,
 )
 
@@ -1009,7 +1020,7 @@ async def api_observe(request):
 def main() -> None:
     """Main entry point."""
     transport = os.getenv("MCP_TRANSPORT", "stdio")
-    host = os.getenv("HOST", "127.0.0.1")
+    host = _resolve_host()
     port = int(os.getenv("PORT", "8000"))
 
     logger.info(f"Starting MCP server with {transport} transport")
