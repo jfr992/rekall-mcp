@@ -602,8 +602,9 @@ class MemoryManager:
 
         # Best-effort: delete from vector store
         try:
-            from core import stable_hash_id
             from qdrant_client.models import PointIdsList
+
+            from core import stable_hash_id
 
             self.store.client.delete(
                 collection_name=self.store.collection,

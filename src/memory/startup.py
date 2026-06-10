@@ -10,7 +10,6 @@ from typing import Any
 
 from memory.scope import MemoryScope, ScopeDetector
 
-
 SYSTEM_HINTS = {
     "claude-code": [
         "Load resume_packet or handoff_summary at session start.",
