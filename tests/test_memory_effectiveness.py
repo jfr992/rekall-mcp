@@ -17,6 +17,7 @@ import yaml
 from memory import MemoryManager
 
 
+@pytest.mark.integration
 class TestMemoryEffectiveness:
     """Test the real-world effectiveness of the memory system."""
 

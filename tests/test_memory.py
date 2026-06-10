@@ -876,7 +876,7 @@ class TestIntegration:
             qdrant_url="http://localhost:6333",
         )
 
-    @pytest.mark.skip(reason="Requires running Qdrant server")
+    @pytest.mark.integration
     def test_full_save_and_recall_cycle(self, real_memory_manager):
         """Test complete save -> recall cycle."""
         # Save

@@ -416,6 +416,7 @@ class TestMemoryManagerCleanup:
 # =============================================================================
 
 
+@pytest.mark.integration
 class TestCleanupIntegration:
     """Integration: save -> supersede -> cleanup -> verify gone."""
 

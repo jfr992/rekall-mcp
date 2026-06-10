@@ -155,6 +155,7 @@ class TestDocumentChunker:
 # =============================================================================
 
 
+@pytest.mark.integration
 class TestQdrantIndexer:
     """Tests for the Qdrant indexer."""
 

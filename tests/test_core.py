@@ -219,6 +219,7 @@ class TestEmbedder:
 # =============================================================================
 
 
+@pytest.mark.integration
 class TestVectorStore:
     """VectorStore saves and searches vectors in Qdrant."""
 
