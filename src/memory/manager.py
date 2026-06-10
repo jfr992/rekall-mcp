@@ -244,6 +244,9 @@ class MemoryManager:
             scope = scope or ScopeDetector.detect(project=project)
             project_name = project or scope.project or "general"
 
+            if "/" in project_name or "\\" in project_name or ".." in project_name:
+                raise ValueError(f"Invalid project name: {project_name!r}")
+
             existing_memory_id = self._find_duplicate_memory_id(
                 content=content,
                 project=project_name,
