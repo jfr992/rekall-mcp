@@ -94,6 +94,7 @@ class TestObserveClassification:
         assert result == "learning"
 
 
+@pytest.mark.integration
 class TestEndToEndWorkflow:
     """Test the complete observe → save → recall workflow."""
 
