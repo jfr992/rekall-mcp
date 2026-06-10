@@ -183,8 +183,11 @@ def clear(ctx, project: str):
         memory clear old-project
     """
     mgr: MemoryManager = ctx.obj["manager"]
-    mgr.clear_project(project)
-    click.echo(f"✓ Cleared memories for: {project}")
+    result = mgr.clear_project(project)
+    click.echo(
+        f"✓ Cleared {result['deleted']} memories for: {project}"
+        f" ({result['strays_removed']} stray YAML entries removed)"
+    )
 
 
 def main():

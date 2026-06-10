@@ -490,6 +490,43 @@ class TestCleanupIntegration:
         assert not (project_dir / "2020-01-01.yaml").exists()
 
 
+class TestClearProject:
+    """clear_project() must remove YAML, vectors, and graph nodes — not just vectors."""
+
+    def test_clear_project_removes_yaml_vectors_and_graph(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        from memory.manager import MemoryManager
+
+        manager = MemoryManager(memory_dir=tmp_path)
+        project_dir = tmp_path / "my-app"
+        project_dir.mkdir()
+        data = {
+            "date": "2026-04-01",
+            "facts": [
+                {
+                    "id": "2026-04-01_fact_aaa",
+                    "content": "x",
+                    "project": "my-app",
+                    "timestamp": "2026-04-01T10:00:00",
+                }
+            ],
+        }
+        (project_dir / "2026-04-01.yaml").write_text(yaml.dump(data))
+        manager.knowledge_graph.add_node("2026-04-01_fact_aaa", topic="my-app")
+
+        mock_store = MagicMock()
+        mock_store.scroll.return_value = [{"memory_id": "2026-04-01_fact_aaa"}]
+        manager._store = mock_store
+
+        result = manager.clear_project("my-app")
+
+        assert result["deleted"] == 1
+        assert not (project_dir / "2026-04-01.yaml").exists()
+        assert "2026-04-01_fact_aaa" not in manager.knowledge_graph._graph
+        mock_store.delete.assert_called_with(filters={"project": "my-app"})
+
+
 class TestProjectNameGuard:
     """save() must refuse path-separator project names regardless of caller."""
 
