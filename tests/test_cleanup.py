@@ -458,3 +458,15 @@ class TestCleanupIntegration:
         preference_ids = [p["id"] for p in remaining.get("preferences", [])]
         assert new_id in preference_ids
         assert old_id not in preference_ids
+
+
+class TestProjectNameGuard:
+    """save() must refuse path-separator project names regardless of caller."""
+
+    def test_save_rejects_traversal_project(self, tmp_path):
+        from memory.manager import MemoryManager
+
+        manager = MemoryManager(memory_dir=tmp_path)
+        with pytest.raises(ValueError, match="Invalid project name"):
+            manager.save("content", project="../evil")
+        assert not (tmp_path.parent / "evil").exists()

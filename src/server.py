@@ -16,6 +16,7 @@ Usage:
 
 import logging
 import os
+import re
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -210,18 +211,63 @@ def _get_memory_manager():
     return _memory_manager_instance
 
 
-def _read_int(query_params, key: str, default: int) -> int:
-    value = query_params.get(key)
-    if value is None:
-        return default
-    return int(value)
+class RequestValidationError(ValueError):
+    """Invalid request parameter — mapped to HTTP 400."""
 
 
-def _read_float(query_params, key: str, default: float) -> float:
-    value = query_params.get(key)
-    if value is None:
+_PROJECT_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+VALID_MEMORY_TYPES = frozenset(
+    {"decision", "learning", "preference", "requirement", "fact", "note", "session", "summary"}
+)
+
+
+def _safe_project(value) -> str | None:
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str) or not _PROJECT_RE.match(value):
+        raise RequestValidationError(
+            "project must be 1-64 characters of letters, digits, dot, dash, underscore"
+        )
+    return value
+
+
+def _safe_type(value: str, *, allow_auto: bool = False) -> str:
+    if allow_auto and value == "auto":
+        return value
+    if value not in VALID_MEMORY_TYPES:
+        raise RequestValidationError(f"type must be one of {sorted(VALID_MEMORY_TYPES)}")
+    return value
+
+
+def _read_int(query_params, key: str, default: int, lo: int = 1, hi: int = 10000) -> int:
+    raw = query_params.get(key)
+    if raw is None:
         return default
-    return float(value)
+    try:
+        value = int(raw)
+    except ValueError as e:
+        raise RequestValidationError(f"{key} must be an integer") from e
+    return max(lo, min(value, hi))
+
+
+def _read_float(query_params, key: str, default: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    raw = query_params.get(key)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError as e:
+        raise RequestValidationError(f"{key} must be a number") from e
+    return max(lo, min(value, hi))
+
+
+def _body_int(body: dict, key: str, default: int, lo: int = 0, hi: int = 10000) -> int:
+    try:
+        value = int(body.get(key, default))
+    except (TypeError, ValueError) as e:
+        raise RequestValidationError(f"{key} must be an integer") from e
+    return max(lo, min(value, hi))
 
 
 def _parse_graph_filters(query_params) -> dict[str, str | dict[str, str]]:
@@ -229,7 +275,7 @@ def _parse_graph_filters(query_params) -> dict[str, str | dict[str, str]]:
 
     project = query_params.get("project")
     if project:
-        filters["project"] = project
+        filters["project"] = _safe_project(project)
 
     mem_type = query_params.get("type")
     if mem_type:
@@ -271,8 +317,8 @@ async def api_save_memory(request):
     try:
         body = await request.json()
         content = body.get("content")
-        mem_type = body.get("type", "note")
-        project = body.get("project")
+        mem_type = _safe_type(body.get("type", "note"))
+        project = _safe_project(body.get("project"))
 
         if not content:
             return JSONResponse({"error": "content is required"}, status_code=400)
@@ -281,6 +327,8 @@ async def api_save_memory(request):
         memory_id = manager.save(content, type=mem_type, project=project)
 
         return JSONResponse({"memory_id": memory_id, "status": "saved", "type": mem_type})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error saving memory: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -294,9 +342,11 @@ async def api_recall_memories(request):
     try:
         body = await request.json()
         query = body.get("query")
-        limit = body.get("limit", 5)
-        project = body.get("project")
+        limit = _body_int(body, "limit", 5, lo=1, hi=100)
+        project = _safe_project(body.get("project"))
         mem_type = body.get("type")
+        if mem_type:
+            mem_type = _safe_type(mem_type)
 
         if not query:
             return JSONResponse({"error": "query is required"}, status_code=400)
@@ -305,6 +355,8 @@ async def api_recall_memories(request):
         results = manager.recall(query, limit=limit, project=project, type=mem_type)
 
         return JSONResponse({"query": query, "count": len(results), "memories": results})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error recalling memories: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -316,12 +368,14 @@ async def api_get_context(request):
     from starlette.responses import JSONResponse
 
     try:
-        project = request.query_params.get("project") or "general"
+        project = _safe_project(request.query_params.get("project")) or "general"
 
         manager = _get_memory_manager()
         context = manager.get_project_context(project)
 
         return JSONResponse({"project": project, "context": context})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error getting context: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -340,14 +394,9 @@ async def api_smart_context(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
-        limit = _read_int(query, "limit", 30)
-        max_tokens = _read_int(query, "max_tokens", 2000)
-
-        if limit < 1:
-            limit = 1
-        if max_tokens < 100:
-            max_tokens = 100
+        project = _safe_project(query.get("project"))
+        limit = _read_int(query, "limit", 30, lo=1, hi=1000)
+        max_tokens = _read_int(query, "max_tokens", 2000, lo=100, hi=20000)
 
         from memory.smart_context import get_smart_context
 
@@ -355,6 +404,8 @@ async def api_smart_context(request):
         result = get_smart_context(manager, project=project, limit=limit, max_tokens=max_tokens)
 
         return JSONResponse(result)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building smart context: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -413,15 +464,10 @@ async def api_get_hierarchical_context(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
-        limit = _read_int(query, "limit", 120)
-        max_topics = _read_int(query, "max_topics", 8)
+        project = _safe_project(query.get("project"))
+        limit = _read_int(query, "limit", 120, lo=1, hi=10000)
+        max_topics = _read_int(query, "max_topics", 8, lo=1, hi=100)
         similarity_threshold = _read_float(query, "similarity_threshold", 0.72)
-
-        if limit < 1:
-            limit = 1
-        if max_topics < 1:
-            max_topics = 1
 
         manager = _get_memory_manager()
         context = manager.get_hierarchical_project_context(
@@ -442,6 +488,8 @@ async def api_get_hierarchical_context(request):
                 },
             }
         )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error getting hierarchical context: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -494,13 +542,19 @@ async def api_cleanup_memories(request):
 
     try:
         body = await request.json()
+        max_age = (
+            None if body.get("max_age_days_facts") is None
+            else _body_int(body, "max_age_days_facts", 0, lo=0, hi=36500)
+        )
         result = _get_memory_manager().cleanup(
-            max_age_days_facts=body.get("max_age_days_facts"),
+            max_age_days_facts=max_age,
             prune_superseded=body.get("prune_superseded", False),
             dry_run=body.get("dry_run", False),
         )
 
         return JSONResponse(result)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error during cleanup: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -572,13 +626,10 @@ async def api_consolidate_memories(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
-        limit = _read_int(query, "limit", 240)
+        project = _safe_project(query.get("project"))
+        limit = _read_int(query, "limit", 240, lo=1, hi=10000)
         save_summary_raw = query.get("save_summary", "").lower()
         save_summary = save_summary_raw in {"1", "true", "yes", "on"}
-
-        if limit < 1:
-            limit = 1
 
         manager = _get_memory_manager()
         summary = manager.consolidate_memories(
@@ -594,6 +645,8 @@ async def api_consolidate_memories(request):
                 "summary": summary,
             }
         )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error consolidating memories: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -606,7 +659,7 @@ async def api_skill_context(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
+        project = _safe_project(query.get("project"))
         min_mentions = _read_int(query, "min_mentions", 2)
         max_skills = _read_int(query, "max_skills", 8)
 
@@ -624,6 +677,8 @@ async def api_skill_context(request):
                 "summary": summary,
             }
         )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building skill context: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -636,13 +691,15 @@ async def api_agent_startup(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
+        project = _safe_project(query.get("project"))
         agent = query.get("agent")
         limit = _read_int(query, "limit", 12)
 
         manager = _get_memory_manager()
         payload = manager.get_agent_startup(project=project, agent=agent, limit=limit)
         return JSONResponse(payload)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building agent startup payload: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -655,12 +712,14 @@ async def api_resume_packet(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
+        project = _safe_project(query.get("project"))
         limit = _read_int(query, "limit", 12)
 
         manager = _get_memory_manager()
         packet = manager.get_resume_packet(project=project, limit=limit)
         return JSONResponse(packet)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building resume packet: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -673,11 +732,8 @@ async def api_proactive_context_summary(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
-        limit = _read_int(query, "limit", 120)
-
-        if limit < 1:
-            limit = 1
+        project = _safe_project(query.get("project"))
+        limit = _read_int(query, "limit", 120, lo=1, hi=10000)
 
         manager = _get_memory_manager()
         summary = manager.get_proactive_context_summary(project=project, limit=limit)
@@ -688,6 +744,8 @@ async def api_proactive_context_summary(request):
                 "summary": summary,
             }
         )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building proactive context summary: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -707,10 +765,12 @@ async def api_compact_memories(request):
 
     try:
         body = await request.json()
-        older_than_days = int(body.get("older_than_days", 30))
+        older_than_days = _body_int(body, "older_than_days", 30, lo=1, hi=36500)
         dry_run = bool(body.get("dry_run", True))
-        project = body.get("project")
+        project = _safe_project(body.get("project"))
         llm_provider = body.get("llm_provider", "anthropic")
+        if llm_provider not in {"anthropic", "openai"}:
+            raise RequestValidationError("llm_provider must be anthropic or openai")
 
         manager = _get_memory_manager()
 
@@ -730,6 +790,8 @@ async def api_compact_memories(request):
         )
 
         return JSONResponse(result)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error compacting memories: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -740,12 +802,14 @@ async def api_memory_resume(request):
     """REST API: Continuity-oriented resume packet, propagating truncated flag."""
     try:
         query = request.query_params
-        project = query.get("project")
+        project = _safe_project(query.get("project"))
         limit = _read_int(query, "limit", 12)
 
         manager = _get_memory_manager()
         packet = manager.get_resume_packet(project=project, limit=limit)
         return _ok(packet)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building resume packet: {e}")
         return _server_error(str(e))
@@ -757,11 +821,13 @@ async def api_lifecycle_backfill(request):
     try:
         body = await request.json()
         dry_run = bool(body.get("dry_run", True))
-        project = body.get("project")
+        project = _safe_project(body.get("project"))
 
         manager = _get_memory_manager()
         report = manager.backfill_lifecycle(dry_run=dry_run, project=project)
         return _ok(report)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error during lifecycle backfill: {e}")
         return _server_error(str(e))
@@ -805,14 +871,16 @@ async def api_memory_prune_plan(request):
 
     try:
         body = await request.json()
-        project = body.get("project")
+        project = _safe_project(body.get("project"))
         if not project:
             return _bad_request("project is required")
-        limit = int(body.get("limit", 200))
+        limit = _body_int(body, "limit", 200, lo=1, hi=1000)
 
         manager = _get_memory_manager()
         plan = build_plan(manager, project=project, limit=limit)
         return _ok(plan.to_dict())
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building prune plan: {e}")
         return _server_error(str(e))
@@ -845,7 +913,7 @@ async def api_memory_pressure(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
+        project = _safe_project(query.get("project"))
 
         manager = _get_memory_manager()
         filters = {"project": project} if project else None
@@ -877,6 +945,8 @@ async def api_memory_pressure(request):
             },
             "candidates": pressure.get("candidates", [])[:50],
         })
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error fetching pressure: {e}")
         return _server_error(str(e))
@@ -891,7 +961,7 @@ async def api_memory_kb(request):
     """
     try:
         query = request.query_params
-        project = query.get("project")
+        project = _safe_project(query.get("project"))
         full = query.get("full", "false").lower() == "true"
 
         manager = _get_memory_manager()
@@ -922,6 +992,8 @@ async def api_memory_kb(request):
             "preferences": preferences,
             "learnings": learnings,
         })
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error fetching kb: {e}")
         return _server_error(str(e))
@@ -972,10 +1044,10 @@ async def api_observe(request):
     try:
         body = await request.json()
         summary = body.get("summary")
-        mem_type = body.get("type", "auto")
+        mem_type = _safe_type(body.get("type", "auto"), allow_auto=True)
         context = body.get("context")
         caller_cwd = body.get("cwd") or body.get("workspace_root")
-        caller_project = body.get("project")
+        caller_project = _safe_project(body.get("project"))
 
         if not summary:
             return JSONResponse({"error": "summary is required"}, status_code=400)
@@ -983,12 +1055,10 @@ async def api_observe(request):
         manager = _get_memory_manager()
 
         if mem_type == "auto":
-            from core import Embedder
             from tools.builtin.memory import _classify_by_embedding, _classify_by_keywords
 
             try:
-                embedder = Embedder()
-                mem_type = _classify_by_embedding(summary, embedder)
+                mem_type = _classify_by_embedding(summary, manager.embedder)
             except Exception:
                 mem_type = _classify_by_keywords(summary)
 
@@ -1012,6 +1082,8 @@ async def api_observe(request):
                 "project": scope.project,
             }
         )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error observing: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
