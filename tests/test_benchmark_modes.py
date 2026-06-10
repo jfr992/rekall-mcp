@@ -3,7 +3,6 @@
 Requires Qdrant on port 6334 (test instance).
 Run: docker compose up qdrant-test -d
 """
-import json
 import pytest
 
 qdrant = pytest.importorskip("qdrant_client")

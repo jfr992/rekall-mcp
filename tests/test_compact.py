@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import pytest
-import yaml
 from datetime import datetime, timedelta
-from pathlib import Path
+
+import yaml
 
 
 class TestGroupMemoriesForCompaction:

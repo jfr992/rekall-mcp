@@ -139,7 +139,7 @@ def format_smart_context(
     if not memories:
         return ""
 
-    cutoff_recent = (
+    (
         datetime.now()
         .__class__
         .now()
@@ -191,7 +191,7 @@ def format_smart_context(
 
 
 def get_smart_context(
-    manager: "MemoryManager",
+    manager: MemoryManager,
     project: str | None = None,
     limit: int = 10,
     max_tokens: int = 2000,
