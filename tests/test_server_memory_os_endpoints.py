@@ -1,12 +1,14 @@
 """Integration tests for the new memory OS REST endpoints.
 
 Uses Starlette TestClient against the live FastMCP app. Each test is
-independent; the production Qdrant at :6333 is used for read paths
-(tests do not modify state).
+independent. Requires a real Qdrant on :6334 (integration marker).
 """
 
 import pytest
 from starlette.testclient import TestClient
+
+
+pytestmark = pytest.mark.integration  # exercises live endpoints against a real Qdrant (:6334)
 
 
 @pytest.fixture
