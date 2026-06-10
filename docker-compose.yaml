@@ -17,7 +17,7 @@ services:
   # QDRANT - Vector Database (required)
   # =========================================================================
   qdrant:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.13.4
     container_name: memento-qdrant
     ports:
       - "6333:6333"
@@ -103,7 +103,7 @@ services:
   # QDRANT TEST - Isolated test database
   # =========================================================================
   qdrant-test:
-    image: qdrant/qdrant:latest
+    image: qdrant/qdrant:v1.13.4
     container_name: memento-qdrant-test
     ports:
       - "6334:6333"
