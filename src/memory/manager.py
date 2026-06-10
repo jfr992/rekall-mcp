@@ -654,7 +654,7 @@ class MemoryManager:
         if max_age_days_facts is not None:
             cutoff = (datetime.now() - timedelta(days=max_age_days_facts)).strftime("%Y-%m-%d")
 
-            for yaml_file in sorted(self.memory_dir.glob("*.yaml")):
+            for yaml_file in sorted(self.memory_dir.rglob("*.yaml")):
                 file_date = yaml_file.stem
                 if file_date.startswith("_") or file_date >= cutoff:
                     continue

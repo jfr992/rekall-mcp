@@ -451,13 +451,43 @@ class TestCleanupIntegration:
         assert result["superseded_pruned"] >= 1  # auto-linker may create extra edges
         assert not (tmp_path / f"{old_date}.yaml").exists()
 
-        # New preference should survive, old one deleted
+        # New preference should survive, old one deleted.
+        # v1.5.0+ writes nested: <project>/<date>.yaml
         today = datetime.now().strftime("%Y-%m-%d")
-        with open(tmp_path / f"{today}.yaml") as f:
-            remaining = yaml.safe_load(f)
-        preference_ids = [p["id"] for p in remaining.get("preferences", [])]
-        assert new_id in preference_ids
-        assert old_id not in preference_ids
+        candidates = list(tmp_path.rglob(f"{today}.yaml"))
+        assert len(candidates) >= 1, f"No surviving YAML found under {tmp_path}"
+        all_preference_ids: list[str] = []
+        for yaml_file in candidates:
+            data = yaml.safe_load(yaml_file.read_text()) or {}
+            all_preference_ids.extend(p["id"] for p in data.get("preferences", []))
+        assert new_id in all_preference_ids
+        assert old_id not in all_preference_ids
+
+
+    def test_cleanup_prunes_old_facts_in_nested_project_layout(self, tmp_path):
+        """v1.5.0+ writes <project>/<date>.yaml — cleanup must find those too."""
+        project_dir = tmp_path / "my-app"
+        project_dir.mkdir()
+        old = {
+            "date": "2020-01-01",
+            "facts": [
+                {
+                    "id": "2020-01-01_fact_aaa",
+                    "content": "ancient fact",
+                    "project": "my-app",
+                    "timestamp": "2020-01-01T10:00:00",
+                }
+            ],
+        }
+        (project_dir / "2020-01-01.yaml").write_text(yaml.dump(old))
+
+        from memory.manager import MemoryManager
+
+        manager = MemoryManager(memory_dir=tmp_path)
+        stats = manager.cleanup(max_age_days_facts=30)
+
+        assert stats["facts_pruned"] == 1
+        assert not (project_dir / "2020-01-01.yaml").exists()
 
 
 class TestProjectNameGuard:
