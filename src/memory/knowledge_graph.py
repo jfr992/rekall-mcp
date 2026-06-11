@@ -61,18 +61,6 @@ class KnowledgeGraph:
 
     def __init__(self, graph_path: Path | str) -> None:
         self._path = Path(graph_path)
-        if (
-            self._path.suffix == ".json"
-            and self._path.name == "_graph.json"
-            and self._path.parent.name == "_graph.json"
-            and not self._path.exists()
-        ):
-            # Compatibility for callers that pass an already-appended
-            # graph path (e.g. _tmp_graph(tmp_path / "_graph.json")).
-            fallback_path = self._path.parent.parent / "_graph.json"
-            if fallback_path.exists():
-                self._path = fallback_path
-
         self._graph = nx.DiGraph()
         self._dirty = False
         self._load()
@@ -162,6 +150,7 @@ class KnowledgeGraph:
         # Refresh access metadata when existing node is referenced again.
         self._graph.nodes[memory_id]["last_accessed"] = date.today().isoformat()
         self._graph.nodes[memory_id]["topic"] = topic
+        self._dirty = True
 
     def record_access(self, memory_id: str) -> None:
         if memory_id not in self._graph:
@@ -397,11 +386,16 @@ class KnowledgeGraph:
                 store=store,
             )
 
+        # Apply idle-based importance decay as part of maintenance so the
+        # advertised decay actually runs (previously dead code).
+        decayed = self.decay_importance()
+
         self.save()
         duration_ms = int((time.monotonic() - start) * 1000)
 
         return {
             "nodes": self._graph.number_of_nodes(),
             "edges": self._graph.number_of_edges(),
+            "decayed": decayed,
             "duration_ms": duration_ms,
         }
