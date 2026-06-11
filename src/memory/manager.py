@@ -189,7 +189,7 @@ class MemoryManager:
                 sparse_encoder=self.sparse_encoder,
             )
             # Create indexes for filtering
-            for field in ["date", "project", "type"]:
+            for field in ["date", "project", "type", "memory_id"]:
                 try:
                     self._store.create_index(field)
                 except Exception:
@@ -769,23 +769,20 @@ class MemoryManager:
                     neighbors = graph.get_neighbors(memory_id, hops=1)
                     expanded_ids.update(neighbors)
 
-                # Deduplicate expanded items and ignore seed IDs.
-                new_ids = expanded_ids - seed_ids
-                for expanded_id in list(new_ids):
-                    expanded_results = self.store.search(
-                        vector=query_vector,
-                        limit=1,
-                        filters={"memory_id": expanded_id},
-                        score_threshold=0.0,
-                    )
+                # Batch-fetch all expanded neighbors in ONE retrieve call
+                # (was N+1: one vector search per neighbor). Graph-expanded
+                # items are ranked by the composite scorer via graph_proximity,
+                # not vector similarity, so their vector score is 0.
+                new_ids = [mid for mid in (expanded_ids - seed_ids) if isinstance(mid, str)]
+                for result in self.store.get_many(new_ids):
+                    memory_id = result.get("memory_id")
+                    if memory_id and memory_id not in seed_ids:
+                        seed_results.append({**result, "score": 0.0, "_graph_expanded": True})
+                        seed_ids.add(memory_id)
 
-                    for result in expanded_results:
-                        memory_id = result.get("memory_id")
-                        if memory_id not in seed_ids:
-                            seed_results.append({**result, "_graph_expanded": True})
-                            seed_ids.add(memory_id)
-
-                graph.save()
+                # record_access() mutates in-memory and marks the graph dirty;
+                # the next save()/delete() flushes it. Recall stays read-only on
+                # disk — no fsync-per-query write amplification, no read/read race.
 
             # Phase 3: RANK — combined scoring
             scored: list[dict[str, float]] = []
