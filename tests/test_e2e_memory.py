@@ -115,9 +115,9 @@ class TestEndToEndWorkflow:
             content="Decided to use PostgreSQL", type="decision", project="test-project"
         )
 
-        # Should create YAML file for today
+        # Should create YAML file for today (v1.5+ nests under <project>/)
         today = datetime.now().strftime("%Y-%m-%d")
-        yaml_file = temp_memory_dir / f"{today}.yaml"
+        yaml_file = temp_memory_dir / "test-project" / f"{today}.yaml"
 
         assert yaml_file.exists(), f"Expected YAML file at {yaml_file}"
 
@@ -131,9 +131,9 @@ class TestEndToEndWorkflow:
         manager.save("Decided to use PostgreSQL", type="decision", project="test")
         manager.save("User prefers Terraform", type="preference", project="test")
 
-        # Load YAML
+        # Load YAML (v1.5+ nests under <project>/)
         today = datetime.now().strftime("%Y-%m-%d")
-        yaml_file = temp_memory_dir / f"{today}.yaml"
+        yaml_file = temp_memory_dir / "test" / f"{today}.yaml"
 
         with open(yaml_file) as f:
             data = yaml.safe_load(f)
@@ -157,9 +157,9 @@ class TestEndToEndWorkflow:
         manager = MemoryManager(memory_dir=temp_memory_dir)
         manager.save("Original content", type="note", project="test")
 
-        # Get YAML file
+        # Get YAML file (v1.5+ nests under <project>/)
         today = datetime.now().strftime("%Y-%m-%d")
-        yaml_file = temp_memory_dir / f"{today}.yaml"
+        yaml_file = temp_memory_dir / "test" / f"{today}.yaml"
 
         # Manually edit it
         with open(yaml_file) as f:

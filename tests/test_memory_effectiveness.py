@@ -74,9 +74,9 @@ class TestMemoryEffectiveness:
                 metadata={"session": "debugging"},
             )
 
-        # Verify memories were saved
+        # Verify memories were saved (v1.5+ nests under <project>/)
         today = datetime.now().strftime("%Y-%m-%d")
-        yaml_file = temp_memory_dir / f"{today}.yaml"
+        yaml_file = temp_memory_dir / project / f"{today}.yaml"
         assert yaml_file.exists()
 
         with open(yaml_file) as f:

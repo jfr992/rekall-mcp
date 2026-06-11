@@ -273,9 +273,9 @@ def _body_int(body: dict, key: str, default: int, lo: int = 0, hi: int = 10000) 
 def _parse_graph_filters(query_params) -> dict[str, str | dict[str, str]]:
     filters: dict[str, str | dict[str, str]] = {}
 
-    project = query_params.get("project")
+    project = _safe_project(query_params.get("project"))
     if project:
-        filters["project"] = _safe_project(project)
+        filters["project"] = project
 
     mem_type = query_params.get("type")
     if mem_type:

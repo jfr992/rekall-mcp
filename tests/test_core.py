@@ -219,7 +219,6 @@ class TestEmbedder:
 # =============================================================================
 
 
-@pytest.mark.integration
 class TestVectorStore:
     """VectorStore saves and searches vectors in Qdrant."""
 
@@ -349,7 +348,8 @@ class TestVectorStore:
         # Collection doesn't exist
         mock_qdrant.get_collections.return_value = MagicMock(collections=[])
 
-        store = VectorStore(collection="new_collection")
+        # url=:6334 so the test-isolation guard allows the (mocked) connect
+        store = VectorStore(collection="new_collection", url="http://localhost:6334")
         _ = store.client  # Triggers connection
 
         mock_qdrant.create_collection.assert_called_once()
