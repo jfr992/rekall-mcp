@@ -195,32 +195,3 @@ class TestNoDRYViolations:
 
         assert result1 == result2 == "decision"
 
-    def test_no_hardcoded_memory_types(self):
-        """Memory types should be configurable, not hardcoded strings."""
-        # This is more of a code review test, but we can check
-        # that types come from somewhere consistent
-
-        # Should return dict with known types
-        # (This requires embedder, so we'll test the structure)
-        # The types should be defined once and reused
-        pass  # Implementation will validate this
-
-
-class TestDataLoaderSystem:
-    """Test configurable data loader (no hardcoded docs)."""
-
-    def test_data_loader_reads_yaml(self):
-        """Data loader should read tool config from YAML files."""
-        # This test will pass once we implement the data loader
-        # For now, it documents the expected behavior
-        pytest.skip("Data loader not yet implemented")
-
-    def test_user_can_override_tool_config(self):
-        """Users should be able to add custom tool configs."""
-        # Expected: User creates ~/.config/memento-mcp/data/mytool_docs.yaml
-        # System loads it automatically
-        pytest.skip("Data loader not yet implemented")
-
-    def test_no_hardcoded_documentation(self):
-        """Documentation should come from YAML, not hardcoded dicts."""
-        pytest.skip("Data loader not yet implemented")
