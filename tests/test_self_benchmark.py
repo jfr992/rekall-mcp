@@ -12,6 +12,7 @@ import pytest
 from memory import MemoryManager
 
 
+@pytest.mark.integration
 class TestSelfBenchmark:
     """Simulate real conversations and measure actual token usage."""
 
