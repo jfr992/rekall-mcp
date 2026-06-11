@@ -10,9 +10,9 @@ class TestSmartContextRanking:
 
     def test_score_memory_higher_for_recent(self):
         """Recent memories score higher than old ones."""
-        from memory.smart_context import score_memory
-
         from datetime import datetime, timedelta
+
+        from memory.smart_context import score_memory
 
         today = datetime.now().strftime("%Y-%m-%d")
         old = (datetime.now() - timedelta(days=300)).strftime("%Y-%m-%d")
@@ -94,7 +94,12 @@ class TestFormatSmartContext:
 
         memories = [
             {"type": "decision", "content": "Use Python", "date": "2026-03-25", "memory_id": "d1"},
-            {"type": "learning", "content": "Async is hard", "date": "2026-03-20", "memory_id": "l1"},
+            {
+                "type": "learning",
+                "content": "Async is hard",
+                "date": "2026-03-20",
+                "memory_id": "l1",
+            },
         ]
 
         result = format_smart_context(memories, project="my-app")
@@ -125,9 +130,9 @@ class TestFormatSmartContext:
 
     def test_format_groups_by_section(self):
         """format_smart_context organizes memories into sections."""
-        from memory.smart_context import format_smart_context
-
         from datetime import datetime, timedelta
+
+        from memory.smart_context import format_smart_context
 
         today = datetime.now().strftime("%Y-%m-%d")
         old = (datetime.now() - timedelta(days=10)).strftime("%Y-%m-%d")
@@ -148,10 +153,16 @@ class TestSmartContextTruncation:
 
     def test_select_memories_under_budget(self):
         """select_within_budget returns memories fitting token limit."""
-        from memory.smart_context import select_within_budget, estimate_tokens
+        from memory.smart_context import estimate_tokens, select_within_budget
 
         memories = [
-            {"content": "a" * 200, "memory_id": f"m{i}", "type": "note", "date": "2026-03-25", "_score": 1.0 - i * 0.1}
+            {
+                "content": "a" * 200,
+                "memory_id": f"m{i}",
+                "type": "note",
+                "date": "2026-03-25",
+                "_score": 1.0 - i * 0.1,
+            }
             for i in range(10)
         ]
 
@@ -165,8 +176,20 @@ class TestSmartContextTruncation:
         from memory.smart_context import select_within_budget
 
         memories = [
-            {"content": "high score memory", "memory_id": "h", "type": "decision", "date": "2026-03-25", "_score": 0.9},
-            {"content": "low score memory that takes space " * 20, "memory_id": "l", "type": "note", "date": "2026-03-25", "_score": 0.1},
+            {
+                "content": "high score memory",
+                "memory_id": "h",
+                "type": "decision",
+                "date": "2026-03-25",
+                "_score": 0.9,
+            },
+            {
+                "content": "low score memory that takes space " * 20,
+                "memory_id": "l",
+                "type": "note",
+                "date": "2026-03-25",
+                "_score": 0.1,
+            },
         ]
 
         selected = select_within_budget(memories, max_tokens=50)
@@ -183,17 +206,25 @@ class TestGetSmartContext:
     def test_get_smart_context_returns_dict(self, tmp_path, monkeypatch):
         """get_smart_context returns dict with context and metadata."""
         import yaml
-        from memory.smart_context import get_smart_context
+
         from memory.manager import MemoryManager
+        from memory.smart_context import get_smart_context
 
         # Write test YAML memory
         (tmp_path / "2026-03-25.yaml").write_text(
-            yaml.dump({
-                "date": "2026-03-25",
-                "decisions": [
-                    {"id": "d1", "content": "Use Python for the project", "project": "test-proj", "timestamp": "2026-03-25T10:00:00"},
-                ],
-            })
+            yaml.dump(
+                {
+                    "date": "2026-03-25",
+                    "decisions": [
+                        {
+                            "id": "d1",
+                            "content": "Use Python for the project",
+                            "project": "test-proj",
+                            "timestamp": "2026-03-25T10:00:00",
+                        },
+                    ],
+                }
+            )
         )
 
         monkeypatch.setenv("QDRANT_URL", "http://localhost:6334")
@@ -210,11 +241,20 @@ class TestGetSmartContext:
     def test_get_smart_context_respects_max_tokens(self, tmp_path, monkeypatch):
         """get_smart_context respects max_tokens budget."""
         import yaml
-        from memory.smart_context import get_smart_context, estimate_tokens
+
         from memory.manager import MemoryManager
+        from memory.smart_context import estimate_tokens, get_smart_context
 
         # Write several memories
-        memories = [{"id": f"m{i}", "content": f"Memory content number {i} with some detail here", "project": "p", "timestamp": f"2026-03-25T0{i}:00:00"} for i in range(5)]
+        memories = [
+            {
+                "id": f"m{i}",
+                "content": f"Memory content number {i} with some detail here",
+                "project": "p",
+                "timestamp": f"2026-03-25T0{i}:00:00",
+            }
+            for i in range(5)
+        ]
         (tmp_path / "2026-03-25.yaml").write_text(
             yaml.dump({"date": "2026-03-25", "notes": memories})
         )

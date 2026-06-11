@@ -7,7 +7,9 @@ from memory.knowledge_graph import KnowledgeGraph
 from memory.manager import MemoryManager
 
 
-def _manager_with_graph(tmp_path, store: MagicMock, embedder: MagicMock, graph: KnowledgeGraph) -> MemoryManager:
+def _manager_with_graph(
+    tmp_path, store: MagicMock, embedder: MagicMock, graph: KnowledgeGraph
+) -> MemoryManager:
     manager = MemoryManager(memory_dir=tmp_path, qdrant_url="http://localhost:6333")
     manager._store = store
     manager._embedder = embedder
@@ -28,27 +30,25 @@ def test_recall_includes_graph_neighbors(tmp_path):
     kg.add_edge("decision_pg", "learning_pool", "led_to", weight=0.8)
 
     store = MagicMock()
-    store.search.side_effect = [
-        [
-            {
-                "memory_id": "decision_pg",
-                "score": 0.82,
-                "content": "Use PostgreSQL",
-                "date": "2026-02-01",
-                "type": "decision",
-                "project": "api",
-            },
-        ],
-        [
-            {
-                "memory_id": "learning_pool",
-                "score": 0.45,
-                "content": "Connection pooling with pgbouncer",
-                "date": "2026-02-02",
-                "type": "learning",
-                "project": "api",
-            },
-        ],
+    store.search.return_value = [
+        {
+            "memory_id": "decision_pg",
+            "score": 0.82,
+            "content": "Use PostgreSQL",
+            "date": "2026-02-01",
+            "type": "decision",
+            "project": "api",
+        },
+    ]
+    # Graph-expanded neighbors are now batch-fetched via get_many (was N+1 search).
+    store.get_many.return_value = [
+        {
+            "memory_id": "learning_pool",
+            "content": "Connection pooling with pgbouncer",
+            "date": "2026-02-02",
+            "type": "learning",
+            "project": "api",
+        },
     ]
 
     manager = _manager_with_graph(tmp_path, store, _mock_embedder(), kg)
@@ -56,6 +56,7 @@ def test_recall_includes_graph_neighbors(tmp_path):
 
     ids = {r["memory_id"] for r in results}
     assert ids == {"decision_pg", "learning_pool"}
+    store.get_many.assert_called_once()
 
 
 def test_recall_falls_back_without_graph(tmp_path):
@@ -173,3 +174,27 @@ def test_recency_affects_ranking(tmp_path):
     result = manager.recall("test", limit=2)
 
     assert result[0]["memory_id"] == "recent"
+
+
+def test_recall_does_not_write_graph_to_disk(tmp_path):
+    """Recall is read-only on disk: record_access mutates in-memory, the next
+    save()/delete() flushes — no fsync-per-query write amplification."""
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    kg.add_node("a", memory_type="note")
+    kg.add_node("b", memory_type="note")
+    kg.add_edge("a", "b", "related_to", weight=0.8)
+    kg.save()
+    graph_file = tmp_path / "_graph.json"
+    mtime_before = graph_file.stat().st_mtime_ns
+
+    store = MagicMock()
+    store.search.return_value = [
+        {"memory_id": "a", "score": 0.8, "content": "A", "date": "2026-02-01", "type": "note"},
+    ]
+    store.get_many.return_value = [
+        {"memory_id": "b", "content": "B", "date": "2026-02-01", "type": "note"},
+    ]
+    manager = _manager_with_graph(tmp_path, store, _mock_embedder(), kg)
+    manager.recall("test", limit=5)
+
+    assert graph_file.stat().st_mtime_ns == mtime_before, "recall wrote _graph.json"

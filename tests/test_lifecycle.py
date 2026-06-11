@@ -26,7 +26,9 @@ def test_promote_preference_stays_semantic_not_identity():
 
 
 def test_compute_retention_identity_longest():
-    assert compute_retention_days("preference", "identity") > compute_retention_days("note", "working")
+    assert compute_retention_days("preference", "identity") > compute_retention_days(
+        "note", "working"
+    )
 
 
 def test_summarize_lifecycle_returns_tier_and_retention():

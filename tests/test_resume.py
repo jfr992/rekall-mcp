@@ -5,8 +5,8 @@ from memory.scope import MemoryScope
 
 
 def test_build_resume_packet_groups_recent_important_and_conflicts(tmp_path):
-    from memory.manager import MemoryManager
     from memory.knowledge_graph import KnowledgeGraph
+    from memory.manager import MemoryManager
 
     manager = MemoryManager(memory_dir=tmp_path, qdrant_url="http://localhost:6333")
     manager._store = MagicMock()
@@ -36,7 +36,9 @@ def test_build_resume_packet_groups_recent_important_and_conflicts(tmp_path):
         },
     ]
 
-    scope = MemoryScope(agent="claude-code", project="brain", repo_name="brain", trust_boundary="personal")
+    scope = MemoryScope(
+        agent="claude-code", project="brain", repo_name="brain", trust_boundary="personal"
+    )
     packet = build_resume_packet(manager, scope=scope)
 
     assert packet["scope"]["project"] == "brain"

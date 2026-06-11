@@ -16,6 +16,7 @@ Usage:
 
 import logging
 import os
+import re
 import sys
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -97,15 +98,26 @@ async def app_lifespan(_server: FastMCP) -> AsyncIterator[dict]:
     logger.info(f"Total operations processed: {total_ops}")
 
 
+def _resolve_host() -> str:
+    """Default to loopback. Memento has no auth — non-loopback binds are opt-in and loud."""
+    host = os.getenv("HOST", "127.0.0.1")
+    if host not in {"127.0.0.1", "localhost", "::1"}:
+        logger.warning(
+            f"Binding to {host}: Memento has no authentication — "
+            "anyone who can reach this interface can read and delete memories."
+        )
+    return host
+
+
 # Create the MCP server
-# Set host to 0.0.0.0 for Docker container access
+# Host defaults to loopback; Docker sets HOST=0.0.0.0 explicitly (compose line 48).
 # stateless_http must be True for Claude Code compatibility.
 # Claude Code sends each request independently without session tracking.
 mcp = FastMCP(
     "AI Memory & Tools Server",
     lifespan=app_lifespan,
-    host="0.0.0.0",
-    port=8000,
+    host=_resolve_host(),
+    port=int(os.getenv("PORT", "8000")),
     stateless_http=True,
 )
 
@@ -199,24 +211,69 @@ def _get_memory_manager():
     return _memory_manager_instance
 
 
-def _read_int(query_params, key: str, default: int) -> int:
-    value = query_params.get(key)
-    if value is None:
-        return default
-    return int(value)
+class RequestValidationError(ValueError):
+    """Invalid request parameter — mapped to HTTP 400."""
 
 
-def _read_float(query_params, key: str, default: float) -> float:
-    value = query_params.get(key)
-    if value is None:
+_PROJECT_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+
+VALID_MEMORY_TYPES = frozenset(
+    {"decision", "learning", "preference", "requirement", "fact", "note", "session", "summary"}
+)
+
+
+def _safe_project(value) -> str | None:
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str) or not _PROJECT_RE.match(value):
+        raise RequestValidationError(
+            "project must be 1-64 characters of letters, digits, dot, dash, underscore"
+        )
+    return value
+
+
+def _safe_type(value: str, *, allow_auto: bool = False) -> str:
+    if allow_auto and value == "auto":
+        return value
+    if value not in VALID_MEMORY_TYPES:
+        raise RequestValidationError(f"type must be one of {sorted(VALID_MEMORY_TYPES)}")
+    return value
+
+
+def _read_int(query_params, key: str, default: int, lo: int = 1, hi: int = 10000) -> int:
+    raw = query_params.get(key)
+    if raw is None:
         return default
-    return float(value)
+    try:
+        value = int(raw)
+    except ValueError as e:
+        raise RequestValidationError(f"{key} must be an integer") from e
+    return max(lo, min(value, hi))
+
+
+def _read_float(query_params, key: str, default: float, lo: float = 0.0, hi: float = 1.0) -> float:
+    raw = query_params.get(key)
+    if raw is None:
+        return default
+    try:
+        value = float(raw)
+    except ValueError as e:
+        raise RequestValidationError(f"{key} must be a number") from e
+    return max(lo, min(value, hi))
+
+
+def _body_int(body: dict, key: str, default: int, lo: int = 0, hi: int = 10000) -> int:
+    try:
+        value = int(body.get(key, default))
+    except (TypeError, ValueError) as e:
+        raise RequestValidationError(f"{key} must be an integer") from e
+    return max(lo, min(value, hi))
 
 
 def _parse_graph_filters(query_params) -> dict[str, str | dict[str, str]]:
     filters: dict[str, str | dict[str, str]] = {}
 
-    project = query_params.get("project")
+    project = _safe_project(query_params.get("project"))
     if project:
         filters["project"] = project
 
@@ -239,16 +296,19 @@ def _parse_graph_filters(query_params) -> dict[str, str | dict[str, str]]:
 
 def _ok(data: dict):
     from starlette.responses import JSONResponse
+
     return JSONResponse(data)
 
 
 def _bad_request(message: str):
     from starlette.responses import JSONResponse
+
     return JSONResponse({"error": message}, status_code=400)
 
 
 def _server_error(message: str):
     from starlette.responses import JSONResponse
+
     return JSONResponse({"error": message}, status_code=500)
 
 
@@ -260,8 +320,8 @@ async def api_save_memory(request):
     try:
         body = await request.json()
         content = body.get("content")
-        mem_type = body.get("type", "note")
-        project = body.get("project")
+        mem_type = _safe_type(body.get("type", "note"))
+        project = _safe_project(body.get("project"))
 
         if not content:
             return JSONResponse({"error": "content is required"}, status_code=400)
@@ -270,6 +330,8 @@ async def api_save_memory(request):
         memory_id = manager.save(content, type=mem_type, project=project)
 
         return JSONResponse({"memory_id": memory_id, "status": "saved", "type": mem_type})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error saving memory: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -283,9 +345,11 @@ async def api_recall_memories(request):
     try:
         body = await request.json()
         query = body.get("query")
-        limit = body.get("limit", 5)
-        project = body.get("project")
+        limit = _body_int(body, "limit", 5, lo=1, hi=100)
+        project = _safe_project(body.get("project"))
         mem_type = body.get("type")
+        if mem_type:
+            mem_type = _safe_type(mem_type)
 
         if not query:
             return JSONResponse({"error": "query is required"}, status_code=400)
@@ -294,6 +358,8 @@ async def api_recall_memories(request):
         results = manager.recall(query, limit=limit, project=project, type=mem_type)
 
         return JSONResponse({"query": query, "count": len(results), "memories": results})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error recalling memories: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -305,12 +371,14 @@ async def api_get_context(request):
     from starlette.responses import JSONResponse
 
     try:
-        project = request.query_params.get("project") or "general"
+        project = _safe_project(request.query_params.get("project")) or "general"
 
         manager = _get_memory_manager()
         context = manager.get_project_context(project)
 
         return JSONResponse({"project": project, "context": context})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error getting context: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -329,14 +397,9 @@ async def api_smart_context(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
-        limit = _read_int(query, "limit", 30)
-        max_tokens = _read_int(query, "max_tokens", 2000)
-
-        if limit < 1:
-            limit = 1
-        if max_tokens < 100:
-            max_tokens = 100
+        project = _safe_project(query.get("project"))
+        limit = _read_int(query, "limit", 30, lo=1, hi=1000)
+        max_tokens = _read_int(query, "max_tokens", 2000, lo=100, hi=20000)
 
         from memory.smart_context import get_smart_context
 
@@ -344,6 +407,8 @@ async def api_smart_context(request):
         result = get_smart_context(manager, project=project, limit=limit, max_tokens=max_tokens)
 
         return JSONResponse(result)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building smart context: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -402,15 +467,10 @@ async def api_get_hierarchical_context(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
-        limit = _read_int(query, "limit", 120)
-        max_topics = _read_int(query, "max_topics", 8)
+        project = _safe_project(query.get("project"))
+        limit = _read_int(query, "limit", 120, lo=1, hi=10000)
+        max_topics = _read_int(query, "max_topics", 8, lo=1, hi=100)
         similarity_threshold = _read_float(query, "similarity_threshold", 0.72)
-
-        if limit < 1:
-            limit = 1
-        if max_topics < 1:
-            max_topics = 1
 
         manager = _get_memory_manager()
         context = manager.get_hierarchical_project_context(
@@ -431,6 +491,8 @@ async def api_get_hierarchical_context(request):
                 },
             }
         )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error getting hierarchical context: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -483,13 +545,20 @@ async def api_cleanup_memories(request):
 
     try:
         body = await request.json()
+        max_age = (
+            None
+            if body.get("max_age_days_facts") is None
+            else _body_int(body, "max_age_days_facts", 0, lo=0, hi=36500)
+        )
         result = _get_memory_manager().cleanup(
-            max_age_days_facts=body.get("max_age_days_facts"),
+            max_age_days_facts=max_age,
             prune_superseded=body.get("prune_superseded", False),
             dry_run=body.get("dry_run", False),
         )
 
         return JSONResponse(result)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error during cleanup: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -515,7 +584,10 @@ async def api_memory_graph(request):
         cutoff_date = filters.pop("_cutoff_date", None)
 
         manager = _get_memory_manager()
-        points = manager.store.scroll(filters=filters if filters else None, limit=limit, with_vectors=True)
+        points = manager.store.scroll(
+            filters=filters if filters else None, limit=limit, with_vectors=True
+        )
+        truncated = len(points) >= limit
         if cutoff_date:
             points = [p for p in points if (p.get("date") or "") >= cutoff_date]
 
@@ -529,7 +601,9 @@ async def api_memory_graph(request):
             knowledge_graph=manager.knowledge_graph,
         )
 
-        return JSONResponse({"query": {"limit": limit, "filters": filters}, "graph": graph})
+        return JSONResponse(
+            {"query": {"limit": limit, "filters": filters}, "graph": graph, "truncated": truncated}
+        )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception as e:
@@ -561,13 +635,10 @@ async def api_consolidate_memories(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
-        limit = _read_int(query, "limit", 240)
+        project = _safe_project(query.get("project"))
+        limit = _read_int(query, "limit", 240, lo=1, hi=10000)
         save_summary_raw = query.get("save_summary", "").lower()
         save_summary = save_summary_raw in {"1", "true", "yes", "on"}
-
-        if limit < 1:
-            limit = 1
 
         manager = _get_memory_manager()
         summary = manager.consolidate_memories(
@@ -583,6 +654,8 @@ async def api_consolidate_memories(request):
                 "summary": summary,
             }
         )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error consolidating memories: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -595,7 +668,7 @@ async def api_skill_context(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
+        project = _safe_project(query.get("project"))
         min_mentions = _read_int(query, "min_mentions", 2)
         max_skills = _read_int(query, "max_skills", 8)
 
@@ -613,6 +686,8 @@ async def api_skill_context(request):
                 "summary": summary,
             }
         )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building skill context: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -625,33 +700,17 @@ async def api_agent_startup(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
+        project = _safe_project(query.get("project"))
         agent = query.get("agent")
         limit = _read_int(query, "limit", 12)
 
         manager = _get_memory_manager()
         payload = manager.get_agent_startup(project=project, agent=agent, limit=limit)
         return JSONResponse(payload)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building agent startup payload: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@mcp.custom_route("/api/memory/context/resume", methods=["GET"])
-async def api_resume_packet(request):
-    """REST API: Continuity-oriented resume packet for session start."""
-    from starlette.responses import JSONResponse
-
-    try:
-        query = request.query_params
-        project = query.get("project")
-        limit = _read_int(query, "limit", 12)
-
-        manager = _get_memory_manager()
-        packet = manager.get_resume_packet(project=project, limit=limit)
-        return JSONResponse(packet)
-    except Exception as e:
-        logger.error(f"Error building resume packet: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -662,11 +721,8 @@ async def api_proactive_context_summary(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
-        limit = _read_int(query, "limit", 120)
-
-        if limit < 1:
-            limit = 1
+        project = _safe_project(query.get("project"))
+        limit = _read_int(query, "limit", 120, lo=1, hi=10000)
 
         manager = _get_memory_manager()
         summary = manager.get_proactive_context_summary(project=project, limit=limit)
@@ -677,6 +733,8 @@ async def api_proactive_context_summary(request):
                 "summary": summary,
             }
         )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building proactive context summary: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -696,10 +754,12 @@ async def api_compact_memories(request):
 
     try:
         body = await request.json()
-        older_than_days = int(body.get("older_than_days", 30))
+        older_than_days = _body_int(body, "older_than_days", 30, lo=1, hi=36500)
         dry_run = bool(body.get("dry_run", True))
-        project = body.get("project")
+        project = _safe_project(body.get("project"))
         llm_provider = body.get("llm_provider", "anthropic")
+        if llm_provider not in {"anthropic", "openai"}:
+            raise RequestValidationError("llm_provider must be anthropic or openai")
 
         manager = _get_memory_manager()
 
@@ -719,6 +779,8 @@ async def api_compact_memories(request):
         )
 
         return JSONResponse(result)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error compacting memories: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -729,12 +791,14 @@ async def api_memory_resume(request):
     """REST API: Continuity-oriented resume packet, propagating truncated flag."""
     try:
         query = request.query_params
-        project = query.get("project")
+        project = _safe_project(query.get("project"))
         limit = _read_int(query, "limit", 12)
 
         manager = _get_memory_manager()
         packet = manager.get_resume_packet(project=project, limit=limit)
         return _ok(packet)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building resume packet: {e}")
         return _server_error(str(e))
@@ -746,11 +810,13 @@ async def api_lifecycle_backfill(request):
     try:
         body = await request.json()
         dry_run = bool(body.get("dry_run", True))
-        project = body.get("project")
+        project = _safe_project(body.get("project"))
 
         manager = _get_memory_manager()
         report = manager.backfill_lifecycle(dry_run=dry_run, project=project)
         return _ok(report)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error during lifecycle backfill: {e}")
         return _server_error(str(e))
@@ -794,14 +860,16 @@ async def api_memory_prune_plan(request):
 
     try:
         body = await request.json()
-        project = body.get("project")
+        project = _safe_project(body.get("project"))
         if not project:
             return _bad_request("project is required")
-        limit = int(body.get("limit", 200))
+        limit = _body_int(body, "limit", 200, lo=1, hi=1000)
 
         manager = _get_memory_manager()
         plan = build_plan(manager, project=project, limit=limit)
         return _ok(plan.to_dict())
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building prune plan: {e}")
         return _server_error(str(e))
@@ -812,16 +880,20 @@ async def api_memory_projects(_request):
     """REST API: Distinct projects with their memory counts, sorted desc."""
     try:
         manager = _get_memory_manager()
-        points = manager.store.scroll(limit=5000)
+        cap = 5000
+        points = manager.store.scroll(limit=cap)
         counts: dict[str, int] = {}
         for p in points:
             project = p.get("project") or "unknown"
             counts[project] = counts.get(project, 0) + 1
         sorted_projects = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-        return _ok({
-            "total": len(points),
-            "projects": [{"name": name, "count": n} for name, n in sorted_projects],
-        })
+        return _ok(
+            {
+                "total": len(points),
+                "projects": [{"name": name, "count": n} for name, n in sorted_projects],
+                "truncated": len(points) >= cap,
+            }
+        )
     except Exception as e:
         logger.error(f"Error listing projects: {e}")
         return _server_error(str(e))
@@ -834,11 +906,12 @@ async def api_memory_pressure(request):
 
     try:
         query = request.query_params
-        project = query.get("project")
+        project = _safe_project(query.get("project"))
 
         manager = _get_memory_manager()
+        cap = 2000
         filters = {"project": project} if project else None
-        memories = manager.store.scroll(filters=filters, limit=2000)
+        memories = manager.store.scroll(filters=filters, limit=cap)
         pressure = identify_pressure(memories)
 
         total = max(len(memories), 1)
@@ -855,17 +928,22 @@ async def api_memory_pressure(request):
                 if mid and manager.knowledge_graph.count_contradicts(mid) > 0:
                     contradiction_count += 1
 
-        return _ok({
-            "project": project or "all",
-            "load_score": load_score,
-            "capacity": total,
-            "flagged": {
-                "stale_working_count": pressure.get("stale_working_count", 0),
-                "low_value_count": pressure.get("low_value_count", 0),
-                "contradiction_count": contradiction_count,
-            },
-            "candidates": pressure.get("candidates", [])[:50],
-        })
+        return _ok(
+            {
+                "project": project or "all",
+                "load_score": load_score,
+                "capacity": total,
+                "flagged": {
+                    "stale_working_count": pressure.get("stale_working_count", 0),
+                    "low_value_count": pressure.get("low_value_count", 0),
+                    "contradiction_count": contradiction_count,
+                },
+                "candidates": pressure.get("candidates", [])[:50],
+                "truncated": len(memories) >= cap,
+            }
+        )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error fetching pressure: {e}")
         return _server_error(str(e))
@@ -880,12 +958,13 @@ async def api_memory_kb(request):
     """
     try:
         query = request.query_params
-        project = query.get("project")
+        project = _safe_project(query.get("project"))
         full = query.get("full", "false").lower() == "true"
 
         manager = _get_memory_manager()
+        cap = 2000
         filters = {"project": project} if project else None
-        points = manager.store.scroll(filters=filters, limit=2000)
+        points = manager.store.scroll(filters=filters, limit=cap)
 
         def _summarize(m: dict) -> dict:
             out = {
@@ -904,13 +983,18 @@ async def api_memory_kb(request):
         preferences = [_summarize(m) for m in points if m.get("type") == "preference"]
         learnings = [_summarize(m) for m in points if m.get("type") == "learning"]
 
-        return _ok({
-            "project": project or "all",
-            "decisions": decisions,
-            "requirements": requirements,
-            "preferences": preferences,
-            "learnings": learnings,
-        })
+        return _ok(
+            {
+                "project": project or "all",
+                "decisions": decisions,
+                "requirements": requirements,
+                "preferences": preferences,
+                "learnings": learnings,
+                "truncated": len(points) >= cap,
+            }
+        )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error fetching kb: {e}")
         return _server_error(str(e))
@@ -933,24 +1017,27 @@ async def api_memory_detail(request):
             for edge in graph.get_edges(memory_id, direction="out"):
                 neighbor_payload = manager.store.get_by_id(edge.target)
                 if neighbor_payload:
-                    neighbors.append({
-                        "relation": edge.relation,
-                        "memory": neighbor_payload,
-                    })
+                    neighbors.append(
+                        {
+                            "relation": edge.relation,
+                            "memory": neighbor_payload,
+                        }
+                    )
 
-        return _ok({
-            "memory": memory,
-            "neighbors": neighbors,
-            "scope": {
-                "project": memory.get("project"),
-                "agent": memory.get("agent"),
-                "repo_name": memory.get("repo_name"),
-            },
-        })
+        return _ok(
+            {
+                "memory": memory,
+                "neighbors": neighbors,
+                "scope": {
+                    "project": memory.get("project"),
+                    "agent": memory.get("agent"),
+                    "repo_name": memory.get("repo_name"),
+                },
+            }
+        )
     except Exception as e:
         logger.error(f"Error fetching memory detail: {e}")
         return _server_error(str(e))
-
 
 
 @mcp.custom_route("/api/memory/observe", methods=["POST"])
@@ -961,10 +1048,10 @@ async def api_observe(request):
     try:
         body = await request.json()
         summary = body.get("summary")
-        mem_type = body.get("type", "auto")
+        mem_type = _safe_type(body.get("type", "auto"), allow_auto=True)
         context = body.get("context")
         caller_cwd = body.get("cwd") or body.get("workspace_root")
-        caller_project = body.get("project")
+        caller_project = _safe_project(body.get("project"))
 
         if not summary:
             return JSONResponse({"error": "summary is required"}, status_code=400)
@@ -972,12 +1059,10 @@ async def api_observe(request):
         manager = _get_memory_manager()
 
         if mem_type == "auto":
-            from core import Embedder
             from tools.builtin.memory import _classify_by_embedding, _classify_by_keywords
 
             try:
-                embedder = Embedder()
-                mem_type = _classify_by_embedding(summary, embedder)
+                mem_type = _classify_by_embedding(summary, manager.embedder)
             except Exception:
                 mem_type = _classify_by_keywords(summary)
 
@@ -1001,6 +1086,8 @@ async def api_observe(request):
                 "project": scope.project,
             }
         )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error observing: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -1009,7 +1096,7 @@ async def api_observe(request):
 def main() -> None:
     """Main entry point."""
     transport = os.getenv("MCP_TRANSPORT", "stdio")
-    host = os.getenv("HOST", "127.0.0.1")
+    host = _resolve_host()
     port = int(os.getenv("PORT", "8000"))
 
     logger.info(f"Starting MCP server with {transport} transport")

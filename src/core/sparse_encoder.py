@@ -19,11 +19,40 @@ from collections import Counter
 from pathlib import Path
 
 # Common English stopwords (minimal — preserve technical terms like IDs)
-STOPWORDS = frozenset([
-    "a", "an", "the", "is", "it", "to", "of", "and", "or", "in", "on", "at",
-    "for", "with", "as", "by", "this", "that", "be", "are", "was", "were",
-    "its", "not", "but", "all", "so", "do", "if", "up",
-])
+STOPWORDS = frozenset(
+    [
+        "a",
+        "an",
+        "the",
+        "is",
+        "it",
+        "to",
+        "of",
+        "and",
+        "or",
+        "in",
+        "on",
+        "at",
+        "for",
+        "with",
+        "as",
+        "by",
+        "this",
+        "that",
+        "be",
+        "are",
+        "was",
+        "were",
+        "its",
+        "not",
+        "but",
+        "all",
+        "so",
+        "do",
+        "if",
+        "up",
+    ]
+)
 
 
 class BM25Encoder:
@@ -65,7 +94,7 @@ class BM25Encoder:
         """
         text = text.lower()
         # Match hyphenated IDs, underscore identifiers, and plain words
-        tokens = re.findall(r'[a-z0-9][a-z0-9_-]*[a-z0-9]|[a-z0-9]', text)
+        tokens = re.findall(r"[a-z0-9][a-z0-9_-]*[a-z0-9]|[a-z0-9]", text)
         return [t for t in tokens if t not in STOPWORDS]
 
     def fit(self, corpus: list[str]) -> None:

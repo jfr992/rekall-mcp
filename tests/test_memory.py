@@ -524,7 +524,9 @@ class TestIntelligenceLayer:
         from memory.knowledge_graph import KnowledgeGraph
 
         memory_manager._knowledge_graph = KnowledgeGraph(memory_manager.memory_dir / "_graph.json")
-        memory_manager._knowledge_graph.add_node("old_decision", topic="api", memory_type="decision")
+        memory_manager._knowledge_graph.add_node(
+            "old_decision", topic="api", memory_type="decision"
+        )
 
         mock_store.search.return_value = [
             {
@@ -543,8 +545,7 @@ class TestIntelligenceLayer:
 
         graph_edges = memory_manager._knowledge_graph.get_edges(memory_id, direction="out")
         assert any(
-            edge.target == "old_decision" and edge.relation == "contradicts"
-            for edge in graph_edges
+            edge.target == "old_decision" and edge.relation == "contradicts" for edge in graph_edges
         )
 
     def test_consolidate_memories_reports_signals(self, memory_manager, mock_store):
@@ -563,10 +564,30 @@ class TestIntelligenceLayer:
         graph.add_edge("conflict_a", "conflict_b", "contradicts", weight=0.82)
 
         mock_store.scroll.return_value = [
-            {"memory_id": "old", "project": "api", "type": "decision", "content": "Old decision to cache in Redis"},
-            {"memory_id": "new", "project": "api", "type": "decision", "content": "New decision to cache in Redis via RedisJSON"},
-            {"memory_id": "conflict_a", "project": "api", "type": "decision", "content": "Do not cache responses on hot path"},
-            {"memory_id": "conflict_b", "project": "api", "type": "decision", "content": "Cache responses aggressively on hot path"},
+            {
+                "memory_id": "old",
+                "project": "api",
+                "type": "decision",
+                "content": "Old decision to cache in Redis",
+            },
+            {
+                "memory_id": "new",
+                "project": "api",
+                "type": "decision",
+                "content": "New decision to cache in Redis via RedisJSON",
+            },
+            {
+                "memory_id": "conflict_a",
+                "project": "api",
+                "type": "decision",
+                "content": "Do not cache responses on hot path",
+            },
+            {
+                "memory_id": "conflict_b",
+                "project": "api",
+                "type": "decision",
+                "content": "Cache responses aggressively on hot path",
+            },
         ]
 
         report = memory_manager.consolidate_memories(project="api")
@@ -591,8 +612,18 @@ class TestIntelligenceLayer:
         graph.add_edge("mem_b", "mem_a", "contradicts", weight=0.80)
 
         mock_store.scroll.return_value = [
-            {"memory_id": "mem_a", "project": "api", "type": "decision", "content": "Use EST timezone"},
-            {"memory_id": "mem_b", "project": "api", "type": "decision", "content": "Use UTC timezone"},
+            {
+                "memory_id": "mem_a",
+                "project": "api",
+                "type": "decision",
+                "content": "Use EST timezone",
+            },
+            {
+                "memory_id": "mem_b",
+                "project": "api",
+                "type": "decision",
+                "content": "Use UTC timezone",
+            },
         ]
 
         report = memory_manager.consolidate_memories(project="api")
@@ -640,6 +671,7 @@ class TestIntelligenceLayer:
         top_signals_section = report.split("Top Signals")[1]
         assert top_signals_section.index("high") < top_signals_section.index("old")
 
+
 # =============================================================================
 # STATS TESTS
 # =============================================================================
@@ -665,17 +697,21 @@ class TestStats:
 
         # Create YAML files (current format)
         (temp_memory_dir / "2026-02-01.yaml").write_text(
-            yaml.dump({
-                "date": "2026-02-01",
-                "notes": [{"id": "1", "content": "note 1"}],
-                "decisions": [{"id": "2", "content": "decision 1"}],
-            })
+            yaml.dump(
+                {
+                    "date": "2026-02-01",
+                    "notes": [{"id": "1", "content": "note 1"}],
+                    "decisions": [{"id": "2", "content": "decision 1"}],
+                }
+            )
         )
         (temp_memory_dir / "2026-02-02.yaml").write_text(
-            yaml.dump({
-                "date": "2026-02-02",
-                "preferences": [{"id": "3", "content": "pref 1"}],
-            })
+            yaml.dump(
+                {
+                    "date": "2026-02-02",
+                    "preferences": [{"id": "3", "content": "pref 1"}],
+                }
+            )
         )
 
         stats = memory_manager.get_stats()
@@ -755,6 +791,7 @@ class TestSanitizerFalsePositives:
     @pytest.fixture
     def sanitizer(self):
         from memory.manager import Sanitizer
+
         return Sanitizer.sanitize
 
     def test_preserves_md5_hashes(self, sanitizer):
@@ -801,6 +838,7 @@ class TestCliRecallType:
         from pathlib import Path
 
         import memory.cli
+
         source = Path(memory.cli.__file__).read_text()
         # The recall function body should use type= not memory_type=
         assert "type=memory_type," in source
@@ -814,6 +852,7 @@ class TestCliSaveAlias:
         from pathlib import Path
 
         import memory.cli
+
         source = Path(memory.cli.__file__).read_text()
         assert "mgr.save(" in source
         assert "mgr.save_memory(" not in source
@@ -873,10 +912,10 @@ class TestIntegration:
 
         return MemoryManager(
             memory_dir=memory_dir,
-            qdrant_url="http://localhost:6333",
+            qdrant_url="http://localhost:6334",
         )
 
-    @pytest.mark.skip(reason="Requires running Qdrant server")
+    @pytest.mark.integration
     def test_full_save_and_recall_cycle(self, real_memory_manager):
         """Test complete save -> recall cycle."""
         # Save
@@ -886,10 +925,13 @@ class TestIntegration:
             project="integration-test",
         )
 
-        # Recall
+        # Recall — single-word query scores ~0.4, so lower the gate below the
+        # 0.45 default; this test exercises the save->recall round-trip, not
+        # relevance tuning.
         results = real_memory_manager.recall(
             query="architecture",
             project="integration-test",
+            score_threshold=0.3,
         )
 
         assert len(results) > 0

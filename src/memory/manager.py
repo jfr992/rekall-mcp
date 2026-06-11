@@ -189,7 +189,7 @@ class MemoryManager:
                 sparse_encoder=self.sparse_encoder,
             )
             # Create indexes for filtering
-            for field in ["date", "project", "type"]:
+            for field in ["date", "project", "type", "memory_id"]:
                 try:
                     self._store.create_index(field)
                 except Exception:
@@ -243,6 +243,9 @@ class MemoryManager:
             content = Sanitizer.sanitize(content)
             scope = scope or ScopeDetector.detect(project=project)
             project_name = project or scope.project or "general"
+
+            if "/" in project_name or "\\" in project_name or ".." in project_name:
+                raise ValueError(f"Invalid project name: {project_name!r}")
 
             existing_memory_id = self._find_duplicate_memory_id(
                 content=content,
@@ -302,7 +305,9 @@ class MemoryManager:
                 if link_result.edges_created:
                     logger.info(f"Auto-linked: {link_result.relations}")
             except Exception:
-                logger.warning("Auto-linking failed, memory saved without graph edges", exc_info=True)
+                logger.warning(
+                    "Auto-linking failed, memory saved without graph edges", exc_info=True
+                )
 
             logger.info(f"Saved memory: {memory_id}")
             return memory_id
@@ -411,7 +416,12 @@ class MemoryManager:
         filters = {"project": project} if project else None
         now = _dt.now()
 
-        updated_by_tier: dict[str, int] = {"working": 0, "episodic": 0, "semantic": 0, "identity": 0}
+        updated_by_tier: dict[str, int] = {
+            "working": 0,
+            "episodic": 0,
+            "semantic": 0,
+            "identity": 0,
+        }
         skipped: list[str] = []
         errors: list[dict[str, str]] = []
 
@@ -453,12 +463,14 @@ class MemoryManager:
                 continue
 
             new_payload = dict(point)
-            new_payload.update({
-                "tier": result.tier,
-                "durability": result.durability,
-                "lifecycle_reason": result.reason,
-                "retention_days": compute_retention_days(signals.memory_type, result.tier),
-            })
+            new_payload.update(
+                {
+                    "tier": result.tier,
+                    "durability": result.durability,
+                    "lifecycle_reason": result.reason,
+                    "retention_days": compute_retention_days(signals.memory_type, result.tier),
+                }
+            )
             try:
                 self.store.update_payload(memory_id, new_payload)
             except Exception as e:  # noqa: BLE001
@@ -591,7 +603,9 @@ class MemoryManager:
             fd, tmp = tempfile.mkstemp(dir=self.memory_dir, suffix=".yaml.tmp")
             try:
                 with os.fdopen(fd, "w") as f:
-                    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+                    yaml.dump(
+                        data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
+                    )
                 os.replace(tmp, yaml_file)
             except BaseException:
                 try:
@@ -602,8 +616,9 @@ class MemoryManager:
 
         # Best-effort: delete from vector store
         try:
-            from core import stable_hash_id
             from qdrant_client.models import PointIdsList
+
+            from core import stable_hash_id
 
             self.store.client.delete(
                 collection_name=self.store.collection,
@@ -650,7 +665,7 @@ class MemoryManager:
         if max_age_days_facts is not None:
             cutoff = (datetime.now() - timedelta(days=max_age_days_facts)).strftime("%Y-%m-%d")
 
-            for yaml_file in sorted(self.memory_dir.glob("*.yaml")):
+            for yaml_file in sorted(self.memory_dir.rglob("*.yaml")):
                 file_date = yaml_file.stem
                 if file_date.startswith("_") or file_date >= cutoff:
                     continue
@@ -687,10 +702,12 @@ class MemoryManager:
                         continue
                     seen_pairs.add(pair)
                     stats["contradictions_flagged"] += 1
-                    stats["contradictions"].append({
-                        "memory_a": source,
-                        "memory_b": target,
-                    })
+                    stats["contradictions"].append(
+                        {
+                            "memory_a": source,
+                            "memory_b": target,
+                        }
+                    )
 
         return stats
 
@@ -765,23 +782,20 @@ class MemoryManager:
                     neighbors = graph.get_neighbors(memory_id, hops=1)
                     expanded_ids.update(neighbors)
 
-                # Deduplicate expanded items and ignore seed IDs.
-                new_ids = expanded_ids - seed_ids
-                for expanded_id in list(new_ids):
-                    expanded_results = self.store.search(
-                        vector=query_vector,
-                        limit=1,
-                        filters={"memory_id": expanded_id},
-                        score_threshold=0.0,
-                    )
+                # Batch-fetch all expanded neighbors in ONE retrieve call
+                # (was N+1: one vector search per neighbor). Graph-expanded
+                # items are ranked by the composite scorer via graph_proximity,
+                # not vector similarity, so their vector score is 0.
+                new_ids = [mid for mid in (expanded_ids - seed_ids) if isinstance(mid, str)]
+                for result in self.store.get_many(new_ids):
+                    memory_id = result.get("memory_id")
+                    if memory_id and memory_id not in seed_ids:
+                        seed_results.append({**result, "score": 0.0, "_graph_expanded": True})
+                        seed_ids.add(memory_id)
 
-                    for result in expanded_results:
-                        memory_id = result.get("memory_id")
-                        if memory_id not in seed_ids:
-                            seed_results.append({**result, "_graph_expanded": True})
-                            seed_ids.add(memory_id)
-
-                graph.save()
+                # record_access() mutates in-memory and marks the graph dirty;
+                # the next save()/delete() flushes it. Recall stays read-only on
+                # disk — no fsync-per-query write amplification, no read/read race.
 
             # Phase 3: RANK — combined scoring
             scored: list[dict[str, float]] = []
@@ -1016,7 +1030,9 @@ class MemoryManager:
             if project:
                 filters["project"] = project
 
-            points = self.store.scroll(filters=filters if filters else None, limit=limit, with_vectors=True)
+            points = self.store.scroll(
+                filters=filters if filters else None, limit=limit, with_vectors=True
+            )
             if not points:
                 return ""
 
@@ -1114,10 +1130,7 @@ class MemoryManager:
                 ):
                     target = points_by_id.get(target_id, {})
                     snippet = self._memory_snippet(target.get("content", ""))
-                    lines.append(
-                        f"- `{source_id}` supersedes `{target_id}` "
-                        f"(score: {weight:.3f})"
-                    )
+                    lines.append(f"- `{source_id}` supersedes `{target_id}` (score: {weight:.3f})")
                     if snippet:
                         lines.append(f"  - {snippet}")
 
@@ -1131,8 +1144,7 @@ class MemoryManager:
                     source_snippet = self._memory_snippet(source.get("content", ""))
                     target_snippet = self._memory_snippet(target.get("content", ""))
                     lines.append(
-                        f"- `{source_id}` and `{target_id}` may conflict "
-                        f"(score: {weight:.3f})"
+                        f"- `{source_id}` and `{target_id}` may conflict (score: {weight:.3f})"
                     )
                     if source_snippet:
                         lines.append(f"  - {source_id}: {source_snippet}")
@@ -1221,8 +1233,12 @@ class MemoryManager:
                 lines.append("")
                 lines.append("## Conflicts to Review")
                 for source_id, target_id in sorted(set(conflict_edges)):
-                    source = self._memory_snippet(points_by_id.get(source_id, {}).get("content", ""))
-                    target = self._memory_snippet(points_by_id.get(target_id, {}).get("content", ""))
+                    source = self._memory_snippet(
+                        points_by_id.get(source_id, {}).get("content", "")
+                    )
+                    target = self._memory_snippet(
+                        points_by_id.get(target_id, {}).get("content", "")
+                    )
                     lines.append(f"- `{source_id}` conflicts with `{target_id}`")
                     if source:
                         lines.append(f"  - {source}")
@@ -1363,8 +1379,32 @@ class MemoryManager:
     # CLEANUP: Remove memories
     # -------------------------------------------------------------------------
 
-    def clear_project(self, project: str) -> None:
-        """Delete all memories for a project."""
+    def clear_project(self, project: str) -> dict[str, int]:
+        """Delete all memories for a project from YAML, vector store, AND knowledge graph."""
         with self._telemetry.track("memory.clear_project"):
+            points = self.store.scroll(filters={"project": project}, limit=10000)
+            ids = [p["memory_id"] for p in points if p.get("memory_id")]
+            deleted = sum(1 for memory_id in ids if self.delete(memory_id))
+
+            # Vector points whose YAML was already gone aren't reachable via delete().
             self.store.delete(filters={"project": project})
-            logger.info(f"Cleared memories for project: {project}")
+
+            # YAML entries that never reached the vector store.
+            strays = 0
+            project_dir = self.memory_dir / project
+            if project_dir.is_dir():
+                for yaml_file in list(project_dir.rglob("*.yaml")):
+                    data = yaml.safe_load(yaml_file.read_text()) or {}
+                    for value in data.values():
+                        if isinstance(value, list):
+                            for entry in value:
+                                if entry.get("id"):
+                                    self.knowledge_graph.remove_node(entry["id"])
+                                    strays += 1
+                    yaml_file.unlink()
+                self.knowledge_graph.save()
+
+            logger.info(
+                f"Cleared project {project}: {deleted} deleted, {strays} stray YAML entries"
+            )
+            return {"deleted": deleted, "strays_removed": strays}

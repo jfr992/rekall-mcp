@@ -47,14 +47,16 @@ def build_resume_packet(
         content = (point.get("content", "") or "").strip().replace("\n", " ")
         importance = graph.get_importance(memory_id) if graph_has_nodes and memory_id else 0.5
 
-        enriched.append({
-            "memory_id": memory_id,
-            "type": mem_type,
-            "date": date,
-            "content": content,
-            "importance": round(float(importance), 4),
-            "tier": point.get("tier", "working"),
-        })
+        enriched.append(
+            {
+                "memory_id": memory_id,
+                "type": mem_type,
+                "date": date,
+                "content": content,
+                "importance": round(float(importance), 4),
+                "tier": point.get("tier", "working"),
+            }
+        )
 
     # Sort by (date desc, importance desc) — this is the fix for C2.
     enriched.sort(key=lambda item: (item["date"] or "", item["importance"]), reverse=True)
@@ -70,11 +72,13 @@ def build_resume_packet(
                 continue
             for edge in graph.get_edges(memory_id, direction="out"):
                 if edge.relation == "contradicts":
-                    unresolved.append({
-                        "memory_id": memory_id,
-                        "conflicts_with": edge.target,
-                        "content": item["content"],
-                    })
+                    unresolved.append(
+                        {
+                            "memory_id": memory_id,
+                            "conflicts_with": edge.target,
+                            "content": item["content"],
+                        }
+                    )
             if len(unresolved) >= 6:
                 break
 
@@ -115,7 +119,13 @@ def build_resume_packet(
     }
 
 
-def render_resume_packet(*, scope: MemoryScope, recent: list[dict[str, Any]], important: list[dict[str, Any]], unresolved: list[dict[str, Any]]) -> str:
+def render_resume_packet(
+    *,
+    scope: MemoryScope,
+    recent: list[dict[str, Any]],
+    important: list[dict[str, Any]],
+    unresolved: list[dict[str, Any]],
+) -> str:
     lines = [f"# Resume Packet: {scope.project}", ""]
     lines.append(f"- agent: {scope.agent}")
     if scope.branch:
@@ -134,7 +144,9 @@ def render_resume_packet(*, scope: MemoryScope, recent: list[dict[str, Any]], im
     if recent:
         lines.append("## Recent Changes")
         for item in recent:
-            lines.append(f"- [{item['date']}] [{item['tier']}/{item['type']}] {item['content'][:160]}")
+            lines.append(
+                f"- [{item['date']}] [{item['tier']}/{item['type']}] {item['content'][:160]}"
+            )
         lines.append("")
 
     if unresolved:
