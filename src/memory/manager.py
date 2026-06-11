@@ -305,7 +305,9 @@ class MemoryManager:
                 if link_result.edges_created:
                     logger.info(f"Auto-linked: {link_result.relations}")
             except Exception:
-                logger.warning("Auto-linking failed, memory saved without graph edges", exc_info=True)
+                logger.warning(
+                    "Auto-linking failed, memory saved without graph edges", exc_info=True
+                )
 
             logger.info(f"Saved memory: {memory_id}")
             return memory_id
@@ -414,7 +416,12 @@ class MemoryManager:
         filters = {"project": project} if project else None
         now = _dt.now()
 
-        updated_by_tier: dict[str, int] = {"working": 0, "episodic": 0, "semantic": 0, "identity": 0}
+        updated_by_tier: dict[str, int] = {
+            "working": 0,
+            "episodic": 0,
+            "semantic": 0,
+            "identity": 0,
+        }
         skipped: list[str] = []
         errors: list[dict[str, str]] = []
 
@@ -456,12 +463,14 @@ class MemoryManager:
                 continue
 
             new_payload = dict(point)
-            new_payload.update({
-                "tier": result.tier,
-                "durability": result.durability,
-                "lifecycle_reason": result.reason,
-                "retention_days": compute_retention_days(signals.memory_type, result.tier),
-            })
+            new_payload.update(
+                {
+                    "tier": result.tier,
+                    "durability": result.durability,
+                    "lifecycle_reason": result.reason,
+                    "retention_days": compute_retention_days(signals.memory_type, result.tier),
+                }
+            )
             try:
                 self.store.update_payload(memory_id, new_payload)
             except Exception as e:  # noqa: BLE001
@@ -594,7 +603,9 @@ class MemoryManager:
             fd, tmp = tempfile.mkstemp(dir=self.memory_dir, suffix=".yaml.tmp")
             try:
                 with os.fdopen(fd, "w") as f:
-                    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+                    yaml.dump(
+                        data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
+                    )
                 os.replace(tmp, yaml_file)
             except BaseException:
                 try:
@@ -691,10 +702,12 @@ class MemoryManager:
                         continue
                     seen_pairs.add(pair)
                     stats["contradictions_flagged"] += 1
-                    stats["contradictions"].append({
-                        "memory_a": source,
-                        "memory_b": target,
-                    })
+                    stats["contradictions"].append(
+                        {
+                            "memory_a": source,
+                            "memory_b": target,
+                        }
+                    )
 
         return stats
 
@@ -1017,7 +1030,9 @@ class MemoryManager:
             if project:
                 filters["project"] = project
 
-            points = self.store.scroll(filters=filters if filters else None, limit=limit, with_vectors=True)
+            points = self.store.scroll(
+                filters=filters if filters else None, limit=limit, with_vectors=True
+            )
             if not points:
                 return ""
 
@@ -1115,10 +1130,7 @@ class MemoryManager:
                 ):
                     target = points_by_id.get(target_id, {})
                     snippet = self._memory_snippet(target.get("content", ""))
-                    lines.append(
-                        f"- `{source_id}` supersedes `{target_id}` "
-                        f"(score: {weight:.3f})"
-                    )
+                    lines.append(f"- `{source_id}` supersedes `{target_id}` (score: {weight:.3f})")
                     if snippet:
                         lines.append(f"  - {snippet}")
 
@@ -1132,8 +1144,7 @@ class MemoryManager:
                     source_snippet = self._memory_snippet(source.get("content", ""))
                     target_snippet = self._memory_snippet(target.get("content", ""))
                     lines.append(
-                        f"- `{source_id}` and `{target_id}` may conflict "
-                        f"(score: {weight:.3f})"
+                        f"- `{source_id}` and `{target_id}` may conflict (score: {weight:.3f})"
                     )
                     if source_snippet:
                         lines.append(f"  - {source_id}: {source_snippet}")
@@ -1222,8 +1233,12 @@ class MemoryManager:
                 lines.append("")
                 lines.append("## Conflicts to Review")
                 for source_id, target_id in sorted(set(conflict_edges)):
-                    source = self._memory_snippet(points_by_id.get(source_id, {}).get("content", ""))
-                    target = self._memory_snippet(points_by_id.get(target_id, {}).get("content", ""))
+                    source = self._memory_snippet(
+                        points_by_id.get(source_id, {}).get("content", "")
+                    )
+                    target = self._memory_snippet(
+                        points_by_id.get(target_id, {}).get("content", "")
+                    )
                     lines.append(f"- `{source_id}` conflicts with `{target_id}`")
                     if source:
                         lines.append(f"  - {source}")
@@ -1389,5 +1404,7 @@ class MemoryManager:
                     yaml_file.unlink()
                 self.knowledge_graph.save()
 
-            logger.info(f"Cleared project {project}: {deleted} deleted, {strays} stray YAML entries")
+            logger.info(
+                f"Cleared project {project}: {deleted} deleted, {strays} stray YAML entries"
+            )
             return {"deleted": deleted, "strays_removed": strays}

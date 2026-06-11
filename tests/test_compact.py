@@ -15,10 +15,34 @@ class TestGroupMemoriesForCompaction:
         from memory.compact import group_memories
 
         memories = [
-            {"memory_id": "1", "content": "A", "project": "p1", "type": "decision", "date": "2026-01-01"},
-            {"memory_id": "2", "content": "B", "project": "p1", "type": "decision", "date": "2026-01-02"},
-            {"memory_id": "3", "content": "C", "project": "p1", "type": "learning", "date": "2026-01-03"},
-            {"memory_id": "4", "content": "D", "project": "p2", "type": "decision", "date": "2026-01-04"},
+            {
+                "memory_id": "1",
+                "content": "A",
+                "project": "p1",
+                "type": "decision",
+                "date": "2026-01-01",
+            },
+            {
+                "memory_id": "2",
+                "content": "B",
+                "project": "p1",
+                "type": "decision",
+                "date": "2026-01-02",
+            },
+            {
+                "memory_id": "3",
+                "content": "C",
+                "project": "p1",
+                "type": "learning",
+                "date": "2026-01-03",
+            },
+            {
+                "memory_id": "4",
+                "content": "D",
+                "project": "p2",
+                "type": "decision",
+                "date": "2026-01-04",
+            },
         ]
 
         groups = group_memories(memories)
@@ -48,7 +72,13 @@ class TestSelectOldMemories:
 
         memories = [
             {"memory_id": "old", "content": "Old one", "date": old, "type": "note", "project": "p"},
-            {"memory_id": "new", "content": "New one", "date": today, "type": "note", "project": "p"},
+            {
+                "memory_id": "new",
+                "content": "New one",
+                "date": today,
+                "type": "note",
+                "project": "p",
+            },
         ]
 
         old_mems = select_old_memories(memories, older_than_days=30)
@@ -64,7 +94,14 @@ class TestSelectOldMemories:
         old = (datetime.now() - timedelta(days=35)).strftime("%Y-%m-%d")
 
         memories = [
-            {"memory_id": "1", "content": "A", "date": old, "type": "note", "project": "p", "compacted": True},
+            {
+                "memory_id": "1",
+                "content": "A",
+                "date": old,
+                "type": "note",
+                "project": "p",
+                "compacted": True,
+            },
             {"memory_id": "2", "content": "B", "date": old, "type": "note", "project": "p"},
         ]
 
@@ -81,7 +118,13 @@ class TestSelectOldMemories:
         old = (datetime.now() - timedelta(days=35)).strftime("%Y-%m-%d")
 
         memories = [
-            {"memory_id": "s1", "content": "Summary", "date": old, "type": "summary", "project": "p"},
+            {
+                "memory_id": "s1",
+                "content": "Summary",
+                "date": old,
+                "type": "summary",
+                "project": "p",
+            },
             {"memory_id": "n1", "content": "Note", "date": old, "type": "note", "project": "p"},
         ]
 
@@ -130,13 +173,15 @@ class TestMarkCompactedInYaml:
         old_date = (datetime.now() - timedelta(days=35)).strftime("%Y-%m-%d")
         yaml_file = tmp_path / f"{old_date}.yaml"
         yaml_file.write_text(
-            yaml.dump({
-                "date": old_date,
-                "notes": [
-                    {"id": "m1", "content": "First note", "project": "p"},
-                    {"id": "m2", "content": "Second note", "project": "p"},
-                ],
-            })
+            yaml.dump(
+                {
+                    "date": old_date,
+                    "notes": [
+                        {"id": "m1", "content": "First note", "project": "p"},
+                        {"id": "m2", "content": "Second note", "project": "p"},
+                    ],
+                }
+            )
         )
 
         mark_compacted_in_yaml(
@@ -163,10 +208,12 @@ class TestMarkCompactedInYaml:
         date = "2026-01-01"
         yaml_file = tmp_path / f"{date}.yaml"
         yaml_file.write_text(
-            yaml.dump({
-                "date": date,
-                "notes": [{"id": "keep_me", "content": "Keep", "project": "p"}],
-            })
+            yaml.dump(
+                {
+                    "date": date,
+                    "notes": [{"id": "keep_me", "content": "Keep", "project": "p"}],
+                }
+            )
         )
 
         mark_compacted_in_yaml(
@@ -191,9 +238,27 @@ class TestCompactDryRun:
 
         old_date = (datetime.now() - timedelta(days=35)).strftime("%Y-%m-%d")
         memories = [
-            {"memory_id": "m0", "content": "Old memory 0", "date": old_date, "type": "note", "project": "test"},
-            {"memory_id": "m1", "content": "Old memory 1", "date": old_date, "type": "note", "project": "test"},
-            {"memory_id": "new", "content": "New memory", "date": datetime.now().strftime("%Y-%m-%d"), "type": "note", "project": "test"},
+            {
+                "memory_id": "m0",
+                "content": "Old memory 0",
+                "date": old_date,
+                "type": "note",
+                "project": "test",
+            },
+            {
+                "memory_id": "m1",
+                "content": "Old memory 1",
+                "date": old_date,
+                "type": "note",
+                "project": "test",
+            },
+            {
+                "memory_id": "new",
+                "content": "New memory",
+                "date": datetime.now().strftime("%Y-%m-%d"),
+                "type": "note",
+                "project": "test",
+            },
         ]
 
         result = compact_memories(memories, dry_run=True, older_than_days=30)

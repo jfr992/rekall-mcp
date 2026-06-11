@@ -29,11 +29,7 @@ def test_every_hint_dict_has_content():
 
 def test_live_hints_cover_core_concepts():
     """The live hint blob must reference the same core concepts the doc covers."""
-    all_hint_text = " ".join(
-        hint.lower()
-        for hints in SYSTEM_HINTS.values()
-        for hint in hints
-    )
+    all_hint_text = " ".join(hint.lower() for hints in SYSTEM_HINTS.values() for hint in hints)
     doc = pathlib.Path("docs/AGENT_STARTUP.md").read_text().lower()
 
     required_concepts = [

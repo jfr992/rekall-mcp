@@ -13,6 +13,7 @@ pytestmark = pytest.mark.integration  # exercises live endpoints against a real 
 @pytest.fixture
 def client():
     from server import mcp
+
     app = mcp.streamable_http_app()
     return TestClient(app)
 

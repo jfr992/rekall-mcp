@@ -194,4 +194,3 @@ class TestNoDRYViolations:
         result2 = _classify_smart("Decided to use X", None)  # Falls back to keywords
 
         assert result1 == result2 == "decision"
-

@@ -48,7 +48,9 @@ def _clean_integration_collection(request):
         from core.vector_store import VectorStore
 
         try:
-            VectorStore(collection=MemoryManager.COLLECTION, url=TEST_QDRANT_URL).recreate_collection()
+            VectorStore(
+                collection=MemoryManager.COLLECTION, url=TEST_QDRANT_URL
+            ).recreate_collection()
         except Exception:
             pass
     yield
@@ -129,12 +131,14 @@ def _reset_scope_trust_cache():
     """Reset the scope detector's trust cache between tests so env var changes take effect."""
     try:
         from memory.scope import ScopeDetector
+
         ScopeDetector.reset_trust_cache()
     except (ImportError, AttributeError):
         pass
     yield
     try:
         from memory.scope import ScopeDetector
+
         ScopeDetector.reset_trust_cache()
     except (ImportError, AttributeError):
         pass

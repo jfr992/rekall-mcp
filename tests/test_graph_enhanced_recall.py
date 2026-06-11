@@ -7,7 +7,9 @@ from memory.knowledge_graph import KnowledgeGraph
 from memory.manager import MemoryManager
 
 
-def _manager_with_graph(tmp_path, store: MagicMock, embedder: MagicMock, graph: KnowledgeGraph) -> MemoryManager:
+def _manager_with_graph(
+    tmp_path, store: MagicMock, embedder: MagicMock, graph: KnowledgeGraph
+) -> MemoryManager:
     manager = MemoryManager(memory_dir=tmp_path, qdrant_url="http://localhost:6333")
     manager._store = store
     manager._embedder = embedder

@@ -171,12 +171,14 @@ class TestBM25Encoder:
         from core.sparse_encoder import BM25Encoder
 
         encoder = BM25Encoder()
-        encoder.fit([
-            "common word appears here",
-            "common word also here",
-            "common word again here",
-            "rare_unique_xyz only once",
-        ])
+        encoder.fit(
+            [
+                "common word appears here",
+                "common word also here",
+                "common word again here",
+                "rare_unique_xyz only once",
+            ]
+        )
 
         common_id = encoder.vocab.get("common")
         rare_id = encoder.vocab.get("rare_unique_xyz")

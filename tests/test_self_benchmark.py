@@ -340,7 +340,7 @@ class TestSelfBenchmark:
         print("   ─────────────────────────────────────────")
         print(f"   Total:               {total_tokens:,}")
 
-        print(f"\n🎯 Cache Hit Ratio: {cache_hit_ratio*100:.0f}%")
+        print(f"\n🎯 Cache Hit Ratio: {cache_hit_ratio * 100:.0f}%")
 
         print("\n💰 Cost Comparison:")
         print(f"   Without cache: ${total_cost_without_cache:.6f} (@$3.00/1M)")
@@ -356,13 +356,13 @@ class TestSelfBenchmark:
         print("\n" + "=" * 80)
 
         # Assertions
-        assert (
-            cache_hit_ratio > 0.70
-        ), f"Cache hit ratio should be >70%, got {cache_hit_ratio*100:.0f}%"
+        assert cache_hit_ratio > 0.70, (
+            f"Cache hit ratio should be >70%, got {cache_hit_ratio * 100:.0f}%"
+        )
         assert savings_percentage > 50, f"Should save >50%, got {savings_percentage:.0f}%"
-        assert (
-            effective_rate < 2.00
-        ), f"Effective rate should be <$2.00/1M, got ${effective_rate:.2f}"
+        assert effective_rate < 2.00, (
+            f"Effective rate should be <$2.00/1M, got ${effective_rate:.2f}"
+        )
 
     def test_scenario_real_world_week(self, memory_manager: MemoryManager):
         """Complete real-world test: 1 week of development work.
@@ -449,7 +449,7 @@ class TestSelfBenchmark:
 
         print(f"   Sessions: {sessions_on_day5}")
         print(f"   Turns per session: {turns_per_session}")
-        print(f"   Cache hit ratio: {cache_hit_ratio*100:.0f}%")
+        print(f"   Cache hit ratio: {cache_hit_ratio * 100:.0f}%")
 
         print("\n" + "=" * 80)
         print("📊 WEEK SUMMARY")
@@ -465,7 +465,7 @@ class TestSelfBenchmark:
         print(f"   With memory:    {tokens_with_memory_day5:,} tokens")
         print("   ─────────────────────────────────────")
         print(
-            f"   Saved:          {tokens_saved:,} tokens ({tokens_saved/tokens_without_memory_day5*100:.0f}%)"
+            f"   Saved:          {tokens_saved:,} tokens ({tokens_saved / tokens_without_memory_day5 * 100:.0f}%)"
         )
 
         print("\n💰 Day 5 Cost:")
@@ -484,10 +484,12 @@ class TestSelfBenchmark:
         print(f"   Total time saved: {time_saved_minutes} minutes")
 
         print("\n🎯 Key Metrics:")
-        print(f"   Token efficiency: {tokens_saved/tokens_without_memory_day5*100:.0f}% reduction")
+        print(
+            f"   Token efficiency: {tokens_saved / tokens_without_memory_day5 * 100:.0f}% reduction"
+        )
         print(f"   Cost efficiency: ${cost_saved:.4f} saved in one day")
         print(f"   Time efficiency: {time_saved_minutes} minutes saved")
-        print(f"   Cache effectiveness: {cache_hit_ratio*100:.0f}% hit ratio")
+        print(f"   Cache effectiveness: {cache_hit_ratio * 100:.0f}% hit ratio")
 
         print("\n💡 Insight:")
         print("   Memory system paid for itself by Day 5!")

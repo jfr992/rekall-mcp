@@ -11,12 +11,26 @@ def manager_with_legacy_memories(tmp_path):
 
     legacy_memories = [
         {"memory_id": "m1", "type": "note", "content": "a", "date": "2026-01-01", "salience": 0.3},
-        {"memory_id": "m2", "type": "decision", "content": "b", "date": "2026-02-01", "salience": 0.8},
-        {"memory_id": "m3", "type": "preference", "content": "c", "date": "2026-03-01", "salience": 0.5},
+        {
+            "memory_id": "m2",
+            "type": "decision",
+            "content": "b",
+            "date": "2026-02-01",
+            "salience": 0.8,
+        },
+        {
+            "memory_id": "m3",
+            "type": "preference",
+            "content": "c",
+            "date": "2026-03-01",
+            "salience": 0.5,
+        },
     ]
 
-    with patch("memory.manager.VectorStore") as store_class, \
-         patch("memory.manager.Embedder") as embedder_class:
+    with (
+        patch("memory.manager.VectorStore") as store_class,
+        patch("memory.manager.Embedder") as embedder_class,
+    ):
         store = MagicMock()
         embedder = MagicMock()
         embedder.encode.return_value = [0.1] * 384
@@ -26,6 +40,7 @@ def manager_with_legacy_memories(tmp_path):
         # scroll returns the legacy memories in one batch
         def scroll_side_effect(filters=None, limit=500, **kwargs):
             return list(legacy_memories)
+
         store.scroll.side_effect = scroll_side_effect
 
         store_class.return_value = store

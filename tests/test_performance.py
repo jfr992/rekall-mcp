@@ -15,6 +15,7 @@ class TestEmbeddingCache:
     @pytest.fixture(autouse=True)
     def reset_telemetry(self):
         from core.telemetry import Telemetry
+
         Telemetry.reset()
         yield
         Telemetry.reset()
@@ -110,6 +111,7 @@ class TestCentroidClassification:
     def reset_cache(self):
         """Reset the type embeddings cache before each test."""
         import tools.builtin.memory as mem_mod
+
         mem_mod._TYPE_EMBEDDINGS_CACHE = None
         yield
         mem_mod._TYPE_EMBEDDINGS_CACHE = None
@@ -117,6 +119,7 @@ class TestCentroidClassification:
     @pytest.fixture(autouse=True)
     def reset_telemetry(self):
         from core.telemetry import Telemetry
+
         Telemetry.reset()
         yield
         Telemetry.reset()

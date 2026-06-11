@@ -16,7 +16,10 @@ def extract_next_steps(memories: list[dict[str, Any]], *, limit: int = 6) -> lis
             continue
 
         score = float(memory.get("importance", 0.0) or 0.0)
-        if any(token in lowered for token in ["todo", "next", "follow up", "need to", "remaining", "pending"]):
+        if any(
+            token in lowered
+            for token in ["todo", "next", "follow up", "need to", "remaining", "pending"]
+        ):
             score += 0.5
         if memory.get("type") in {"requirement", "decision", "learning"}:
             score += 0.2
@@ -38,13 +41,17 @@ def extract_next_steps(memories: list[dict[str, Any]], *, limit: int = 6) -> lis
     return output
 
 
-def format_handoff_summary(*, recent: list[dict[str, Any]], important: list[dict[str, Any]], next_steps: list[str]) -> str:
+def format_handoff_summary(
+    *, recent: list[dict[str, Any]], important: list[dict[str, Any]], next_steps: list[str]
+) -> str:
     lines = ["## Handoff Summary", ""]
 
     if important:
         lines.append("### Keep in mind")
         for item in important[:5]:
-            lines.append(f"- [{item.get('tier', 'working')}/{item.get('type', 'note')}] {item.get('content', '')[:150]}")
+            lines.append(
+                f"- [{item.get('tier', 'working')}/{item.get('type', 'note')}] {item.get('content', '')[:150]}"
+            )
         lines.append("")
 
     if recent:

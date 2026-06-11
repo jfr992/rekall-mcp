@@ -75,11 +75,13 @@ def load_trust_rules() -> list[TrustBoundary]:
                 return tuple(str(v).lower() for v in value)
             return ()
 
-        result.append(TrustBoundary(
-            name=name,
-            remote_contains=_tuple(remote_contains),
-            name_contains=_tuple(name_contains),
-        ))
+        result.append(
+            TrustBoundary(
+                name=name,
+                remote_contains=_tuple(remote_contains),
+                name_contains=_tuple(name_contains),
+            )
+        )
     return result
 
 

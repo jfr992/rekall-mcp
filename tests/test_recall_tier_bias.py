@@ -10,8 +10,14 @@ from __future__ import annotations
 import pytest
 
 
-def _score(*, vector_score: float, tier: str, importance: float = 0.5,
-           is_expanded: bool = False, days_old: int = 0) -> float:
+def _score(
+    *,
+    vector_score: float,
+    tier: str,
+    importance: float = 0.5,
+    is_expanded: bool = False,
+    days_old: int = 0,
+) -> float:
     """Replicate the scoring block from manager.recall() for a single result."""
     graph_proximity = 0.7 if is_expanded else 1.0
     recency = max(0.0, 1.0 - days_old / 365)
