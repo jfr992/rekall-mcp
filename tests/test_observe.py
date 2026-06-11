@@ -66,3 +66,16 @@ def test_observation_engine_detects_preference():
 
     assert candidate.memory_type == "preference"
     assert candidate.should_save is True
+
+
+def test_phrase_inside_long_substantive_note_is_not_low_signal():
+    """A noise phrase ('working on') inside a longer substantive observation
+    must not get rejected — substring matching alone was dropping real memories."""
+    engine = ObservationEngine()
+    candidate = engine.evaluate(
+        "Fixed the auth bug we were working on; root cause was a missing await in "
+        "the token refresh path that dropped the session on slow networks",
+        memory_type="learning",
+    )
+    assert candidate.should_save is True
+    assert candidate.reason != "low-signal"
