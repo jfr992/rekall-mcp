@@ -118,9 +118,7 @@ async def test_api_skill_context_endpoint(monkeypatch):
     assert payload["min_mentions"] == 3
     assert payload["max_skills"] == 5
 
-    manager.get_skill_context.assert_called_once_with(
-        project="api", min_mentions=3, max_skills=5
-    )
+    manager.get_skill_context.assert_called_once_with(project="api", min_mentions=3, max_skills=5)
 
 
 @pytest.mark.asyncio
@@ -140,9 +138,7 @@ async def test_api_skill_context_defaults(monkeypatch):
     assert payload["min_mentions"] == 2
     assert payload["max_skills"] == 8
 
-    manager.get_skill_context.assert_called_once_with(
-        project=None, min_mentions=2, max_skills=8
-    )
+    manager.get_skill_context.assert_called_once_with(project=None, min_mentions=2, max_skills=8)
 
 
 @pytest.mark.asyncio

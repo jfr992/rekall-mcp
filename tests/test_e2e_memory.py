@@ -94,6 +94,7 @@ class TestObserveClassification:
         assert result == "learning"
 
 
+@pytest.mark.integration
 class TestEndToEndWorkflow:
     """Test the complete observe → save → recall workflow."""
 
@@ -114,9 +115,9 @@ class TestEndToEndWorkflow:
             content="Decided to use PostgreSQL", type="decision", project="test-project"
         )
 
-        # Should create YAML file for today
+        # Should create YAML file for today (v1.5+ nests under <project>/)
         today = datetime.now().strftime("%Y-%m-%d")
-        yaml_file = temp_memory_dir / f"{today}.yaml"
+        yaml_file = temp_memory_dir / "test-project" / f"{today}.yaml"
 
         assert yaml_file.exists(), f"Expected YAML file at {yaml_file}"
 
@@ -130,9 +131,9 @@ class TestEndToEndWorkflow:
         manager.save("Decided to use PostgreSQL", type="decision", project="test")
         manager.save("User prefers Terraform", type="preference", project="test")
 
-        # Load YAML
+        # Load YAML (v1.5+ nests under <project>/)
         today = datetime.now().strftime("%Y-%m-%d")
-        yaml_file = temp_memory_dir / f"{today}.yaml"
+        yaml_file = temp_memory_dir / "test" / f"{today}.yaml"
 
         with open(yaml_file) as f:
             data = yaml.safe_load(f)
@@ -156,9 +157,9 @@ class TestEndToEndWorkflow:
         manager = MemoryManager(memory_dir=temp_memory_dir)
         manager.save("Original content", type="note", project="test")
 
-        # Get YAML file
+        # Get YAML file (v1.5+ nests under <project>/)
         today = datetime.now().strftime("%Y-%m-%d")
-        yaml_file = temp_memory_dir / f"{today}.yaml"
+        yaml_file = temp_memory_dir / "test" / f"{today}.yaml"
 
         # Manually edit it
         with open(yaml_file) as f:
@@ -193,33 +194,3 @@ class TestNoDRYViolations:
         result2 = _classify_smart("Decided to use X", None)  # Falls back to keywords
 
         assert result1 == result2 == "decision"
-
-    def test_no_hardcoded_memory_types(self):
-        """Memory types should be configurable, not hardcoded strings."""
-        # This is more of a code review test, but we can check
-        # that types come from somewhere consistent
-
-        # Should return dict with known types
-        # (This requires embedder, so we'll test the structure)
-        # The types should be defined once and reused
-        pass  # Implementation will validate this
-
-
-class TestDataLoaderSystem:
-    """Test configurable data loader (no hardcoded docs)."""
-
-    def test_data_loader_reads_yaml(self):
-        """Data loader should read tool config from YAML files."""
-        # This test will pass once we implement the data loader
-        # For now, it documents the expected behavior
-        pytest.skip("Data loader not yet implemented")
-
-    def test_user_can_override_tool_config(self):
-        """Users should be able to add custom tool configs."""
-        # Expected: User creates ~/.config/memento-mcp/data/mytool_docs.yaml
-        # System loads it automatically
-        pytest.skip("Data loader not yet implemented")
-
-    def test_no_hardcoded_documentation(self):
-        """Documentation should come from YAML, not hardcoded dicts."""
-        pytest.skip("Data loader not yet implemented")

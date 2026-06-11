@@ -87,7 +87,8 @@ def select_old_memories(
     cutoff = (datetime.now() - timedelta(days=older_than_days)).strftime("%Y-%m-%d")
 
     return [
-        m for m in memories
+        m
+        for m in memories
         if (
             m.get("date", "9999") <= cutoff
             and not m.get("compacted")
@@ -169,7 +170,9 @@ def mark_compacted_in_yaml(
             fd, tmp_path = tempfile.mkstemp(dir=memory_dir, suffix=".yaml.tmp")
             try:
                 with os.fdopen(fd, "w") as f:
-                    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+                    yaml.dump(
+                        data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
+                    )
                 os.replace(tmp_path, yaml_file)
             except Exception:
                 try:
@@ -278,7 +281,9 @@ def compact_memories(
         prompt = build_compaction_prompt(group_mems, project=project, mem_type=mem_type)
 
         try:
-            summary_text = asyncio.run(_summarize_with_llm(prompt, llm_provider=llm_provider, model=model))
+            summary_text = asyncio.run(
+                _summarize_with_llm(prompt, llm_provider=llm_provider, model=model)
+            )
         except Exception as e:
             logger.error(f"LLM summarization failed for ({project}, {mem_type}): {e}")
             continue

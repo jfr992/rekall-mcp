@@ -155,6 +155,7 @@ class TestDocumentChunker:
 # =============================================================================
 
 
+@pytest.mark.integration
 class TestQdrantIndexer:
     """Tests for the Qdrant indexer."""
 
@@ -164,15 +165,15 @@ class TestQdrantIndexer:
 
         assert QdrantIndexer is not None
 
-    def test_indexer_initialization(self):
+    def test_indexer_initialization(self, monkeypatch):
         """Test indexer initializes with correct defaults."""
+        monkeypatch.delenv("QDRANT_URL", raising=False)
         from indexer.qdrant import QdrantIndexer
 
         indexer = QdrantIndexer()
 
         assert indexer.collection_name == "tool_docs"
         assert "6333" in indexer.url
-        print("✅ Indexer initialized with defaults")
 
     def test_indexer_custom_config(self):
         """Test indexer accepts custom configuration."""

@@ -287,7 +287,8 @@ class VectorStore:
             vector: Query vector (dense)
             limit: Maximum results
             filters: Filter by payload fields {"field": "value"}
-            score_threshold: Minimum similarity (0-1)
+            score_threshold: Minimum similarity (0-1). In hybrid mode this gates the dense
+                candidates; BM25 candidates are exempt (RRF scores are rank-based).
             query_text: Original query text for BM25 sparse search
 
         Returns:
@@ -316,6 +317,9 @@ class VectorStore:
                                 using="",
                                 limit=prefetch_limit,
                                 filter=query_filter,
+                                # RRF-fused scores are rank-based; cosine thresholds only
+                                # make sense on the dense candidate set.
+                                score_threshold=score_threshold or None,
                             ),
                             Prefetch(
                                 query=SparseVector(
@@ -403,6 +407,24 @@ class VectorStore:
         with self._telemetry.track("vector_store.get_by_id"):
             results = self.scroll(filters={"memory_id": memory_id}, limit=1)
             return results[0] if results else None
+
+    def get_many(self, memory_ids: list[str]) -> list[dict[str, Any]]:
+        """Batch-fetch payloads by memory_id in a single retrieve call.
+
+        Point IDs are deterministic (stable_hash_id of memory_id), so this
+        avoids the N+1 of one filtered search per id. Missing ids are silently
+        omitted by Qdrant.
+        """
+        if not memory_ids:
+            return []
+        with self._telemetry.track("vector_store.get_many"):
+            point_ids = [stable_hash_id(m) for m in memory_ids]
+            records = self.client.retrieve(
+                collection_name=self.collection,
+                ids=point_ids,
+                with_payload=True,
+            )
+            return [dict(r.payload or {}) for r in records]
 
     def update_payload(self, memory_id: str, payload: dict[str, Any]) -> None:
         """Upsert the payload for an existing point (match by memory_id).

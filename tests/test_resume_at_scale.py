@@ -1,10 +1,7 @@
 """Fix C2 — resume must sort by date, not by Qdrant point-id order."""
 
 import random
-from datetime import datetime
 from unittest.mock import MagicMock
-
-import pytest
 
 from memory.resume import build_resume_packet
 from memory.scope import MemoryScope
@@ -25,17 +22,19 @@ def _scope(project="test"):
 
 def test_resume_returns_recent_by_date_not_insertion_order():
     memories = []
-    dates = [f"2026-0{(i%4)+1}-{(i%28)+1:02d}" for i in range(100)]
+    dates = [f"2026-0{(i % 4) + 1}-{(i % 28) + 1:02d}" for i in range(100)]
     random.seed(0)
     random.shuffle(dates)
     for i, d in enumerate(dates):
-        memories.append({
-            "memory_id": f"m{i}",
-            "type": "note",
-            "content": f"m{i}",
-            "date": d,
-            "tier": "working",
-        })
+        memories.append(
+            {
+                "memory_id": f"m{i}",
+                "type": "note",
+                "content": f"m{i}",
+                "date": d,
+                "tier": "working",
+            }
+        )
 
     mgr = _fake_manager(memories)
     packet = build_resume_packet(mgr, scope=_scope(), limit=20)
@@ -52,11 +51,17 @@ def test_resume_returns_recent_by_date_not_insertion_order():
 
 def test_resume_truncated_flag_on_overflow(monkeypatch):
     import memory.resume as resume_mod
+
     monkeypatch.setattr(resume_mod, "MAX_RESUME_SCROLL", 50)
 
     memories = [
-        {"memory_id": f"m{i}", "type": "note", "content": f"m{i}",
-         "date": "2026-01-01", "tier": "working"}
+        {
+            "memory_id": f"m{i}",
+            "type": "note",
+            "content": f"m{i}",
+            "date": "2026-01-01",
+            "tier": "working",
+        }
         for i in range(100)
     ]
     mgr = _fake_manager(memories)
@@ -67,8 +72,13 @@ def test_resume_truncated_flag_on_overflow(monkeypatch):
 
 def test_resume_not_truncated_when_under_cap():
     memories = [
-        {"memory_id": f"m{i}", "type": "note", "content": f"m{i}",
-         "date": "2026-01-01", "tier": "working"}
+        {
+            "memory_id": f"m{i}",
+            "type": "note",
+            "content": f"m{i}",
+            "date": "2026-01-01",
+            "tier": "working",
+        }
         for i in range(50)
     ]
     mgr = _fake_manager(memories)

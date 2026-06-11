@@ -52,6 +52,7 @@ packages = ["src/memory", "src/core", "src/tools"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
+pythonpath = ["src", "."]
 testpaths = ["tests"]
 addopts = "-v"
 markers = [
