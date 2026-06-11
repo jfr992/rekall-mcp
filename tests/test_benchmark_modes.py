@@ -3,7 +3,7 @@
 Requires Qdrant on port 6334 (test instance).
 Run: docker compose up qdrant-test -d
 """
-import json
+
 import pytest
 
 qdrant = pytest.importorskip("qdrant_client")
@@ -65,17 +65,13 @@ class TestDenseMode:
     def test_retrieves_correct_session(self):
         from benchmarks.modes import retrieve_dense
 
-        ranked_ids = retrieve_dense(
-            SAMPLE_ENTRY, qdrant_url="http://localhost:6334", n_results=5
-        )
+        ranked_ids = retrieve_dense(SAMPLE_ENTRY, qdrant_url="http://localhost:6334", n_results=5)
         assert "sess_003" in ranked_ids[:5]
 
     def test_returns_all_session_ids(self):
         from benchmarks.modes import retrieve_dense
 
-        ranked_ids = retrieve_dense(
-            SAMPLE_ENTRY, qdrant_url="http://localhost:6334", n_results=10
-        )
+        ranked_ids = retrieve_dense(SAMPLE_ENTRY, qdrant_url="http://localhost:6334", n_results=10)
         assert len(ranked_ids) == 5
 
 
@@ -83,9 +79,7 @@ class TestHybridMode:
     def test_retrieves_correct_session(self):
         from benchmarks.modes import retrieve_hybrid
 
-        ranked_ids = retrieve_hybrid(
-            SAMPLE_ENTRY, qdrant_url="http://localhost:6334", n_results=5
-        )
+        ranked_ids = retrieve_hybrid(SAMPLE_ENTRY, qdrant_url="http://localhost:6334", n_results=5)
         assert "sess_003" in ranked_ids[:5]
 
 

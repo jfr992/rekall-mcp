@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import pytest
 import yaml
-from pathlib import Path
 
 
 class TestLoadAllYamlMemories:
@@ -15,12 +13,18 @@ class TestLoadAllYamlMemories:
         from memory.migrate_hybrid import load_all_yaml_memories
 
         (tmp_path / "2026-03-25.yaml").write_text(
-            yaml.dump({
-                "date": "2026-03-25",
-                "decisions": [
-                    {"id": "2026-03-25_decision_abc", "content": "Use hybrid search", "project": "memento"},
-                ]
-            })
+            yaml.dump(
+                {
+                    "date": "2026-03-25",
+                    "decisions": [
+                        {
+                            "id": "2026-03-25_decision_abc",
+                            "content": "Use hybrid search",
+                            "project": "memento",
+                        },
+                    ],
+                }
+            )
         )
 
         memories = load_all_yaml_memories(tmp_path)
@@ -35,12 +39,14 @@ class TestLoadAllYamlMemories:
         from memory.migrate_hybrid import load_all_yaml_memories
 
         (tmp_path / "2026-03-25.yaml").write_text(
-            yaml.dump({
-                "date": "2026-03-25",
-                "decisions": [{"id": "d1", "content": "Decision content", "project": "p"}],
-                "learnings": [{"id": "l1", "content": "Learning content", "project": "p"}],
-                "notes": [{"id": "n1", "content": "Note content", "project": "p"}],
-            })
+            yaml.dump(
+                {
+                    "date": "2026-03-25",
+                    "decisions": [{"id": "d1", "content": "Decision content", "project": "p"}],
+                    "learnings": [{"id": "l1", "content": "Learning content", "project": "p"}],
+                    "notes": [{"id": "n1", "content": "Note content", "project": "p"}],
+                }
+            )
         )
 
         memories = load_all_yaml_memories(tmp_path)
@@ -55,10 +61,12 @@ class TestLoadAllYamlMemories:
 
         for i, date in enumerate(["2026-03-23", "2026-03-24", "2026-03-25"]):
             (tmp_path / f"{date}.yaml").write_text(
-                yaml.dump({
-                    "date": date,
-                    "notes": [{"id": f"n{i}", "content": f"Note {i}", "project": "p"}],
-                })
+                yaml.dump(
+                    {
+                        "date": date,
+                        "notes": [{"id": f"n{i}", "content": f"Note {i}", "project": "p"}],
+                    }
+                )
             )
 
         memories = load_all_yaml_memories(tmp_path)
@@ -72,10 +80,12 @@ class TestLoadAllYamlMemories:
         (tmp_path / "_bm25_vocab.json").write_text("{}")
         (tmp_path / "_graph.json").write_text("{}")
         (tmp_path / "2026-03-25.yaml").write_text(
-            yaml.dump({
-                "date": "2026-03-25",
-                "notes": [{"id": "n1", "content": "Real note", "project": "p"}],
-            })
+            yaml.dump(
+                {
+                    "date": "2026-03-25",
+                    "notes": [{"id": "n1", "content": "Real note", "project": "p"}],
+                }
+            )
         )
 
         memories = load_all_yaml_memories(tmp_path)
@@ -96,7 +106,9 @@ class TestLoadAllYamlMemories:
 
         (tmp_path / "bad.yaml").write_text("this: is: not: valid: yaml: [unclosed")
         (tmp_path / "2026-03-25.yaml").write_text(
-            yaml.dump({"date": "2026-03-25", "notes": [{"id": "n1", "content": "OK", "project": "p"}]})
+            yaml.dump(
+                {"date": "2026-03-25", "notes": [{"id": "n1", "content": "OK", "project": "p"}]}
+            )
         )
 
         memories = load_all_yaml_memories(tmp_path)
@@ -143,13 +155,19 @@ class TestMigrateToHybridDryRun:
         from memory.migrate_hybrid import migrate_to_hybrid
 
         (tmp_path / "2026-03-25.yaml").write_text(
-            yaml.dump({
-                "date": "2026-03-25",
-                "decisions": [
-                    {"id": "d1", "content": "Use BM25 for search", "project": "memento"},
-                    {"id": "d2", "content": "Keep YAML as source of truth", "project": "memento"},
-                ],
-            })
+            yaml.dump(
+                {
+                    "date": "2026-03-25",
+                    "decisions": [
+                        {"id": "d1", "content": "Use BM25 for search", "project": "memento"},
+                        {
+                            "id": "d2",
+                            "content": "Keep YAML as source of truth",
+                            "project": "memento",
+                        },
+                    ],
+                }
+            )
         )
 
         result = migrate_to_hybrid(
@@ -179,7 +197,9 @@ class TestMigrateToHybridDryRun:
         from memory.migrate_hybrid import migrate_to_hybrid
 
         (tmp_path / "2026-03-25.yaml").write_text(
-            yaml.dump({"date": "2026-03-25", "notes": [{"id": "n1", "content": "test", "project": "p"}]})
+            yaml.dump(
+                {"date": "2026-03-25", "notes": [{"id": "n1", "content": "test", "project": "p"}]}
+            )
         )
 
         migrate_to_hybrid(memory_dir=tmp_path, qdrant_url="http://localhost:6334", dry_run=True)

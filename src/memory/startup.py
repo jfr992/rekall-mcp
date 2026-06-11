@@ -10,7 +10,6 @@ from typing import Any
 
 from memory.scope import MemoryScope, ScopeDetector
 
-
 SYSTEM_HINTS = {
     "claude-code": [
         "Load resume_packet or handoff_summary at session start.",
@@ -29,7 +28,9 @@ SYSTEM_HINTS = {
 }
 
 
-def build_agent_startup(manager, *, project: str | None = None, agent: str | None = None, limit: int = 12) -> dict[str, Any]:
+def build_agent_startup(
+    manager, *, project: str | None = None, agent: str | None = None, limit: int = 12
+) -> dict[str, Any]:
     scope = ScopeDetector.detect(project=project, agent=agent)
     packet = manager.get_resume_packet(project=scope.project, scope=scope, limit=limit)
 

@@ -9,10 +9,9 @@ from uuid import uuid4
 import pytest
 
 from memory.manager import MemoryManager
-from memory.prune import PlanIdMismatch, _PLAN_STORE, apply_plan, build_plan
+from memory.prune import _PLAN_STORE, PlanIdMismatch, apply_plan, build_plan
 from memory.resume import build_resume_packet
 from memory.scope import MemoryScope
-
 
 pytestmark = pytest.mark.integration
 

@@ -24,7 +24,7 @@ bash scripts/start-memento.sh       # starts the MCP backend on :8000 (and the c
 ### 2. Tell Claude
 
 ```bash
-claude mcp add --transport http --url http://localhost:8000/mcp memory
+claude mcp add --transport http --url http://localhost:8000 memory
 ```
 
 ### 3. Verify
@@ -102,7 +102,7 @@ Recall uses a 3-phase pipeline instead of flat cosine search:
 ```
 1. SEED    - Vector search (top K x 2 candidates)
 2. EXPAND  - Traverse 1-hop graph neighbors of seed results
-3. RANK    - Composite: vector(50%) + importance(20%) + recency(15%) + proximity(15%)
+3. RANK    - Composite: vector(40%) + importance(20%) + proximity(15%) + tier(15%) + recency(10%)
 ```
 
 This finds memories that are *structurally related*, not just textually similar. Falls back to pure vector search when the graph is empty.
@@ -312,7 +312,10 @@ AI:  vector search finds the memory
 | `/api/memory/projects` | GET | List of projects + memory counts |
 | `/api/memory/context` | GET | Flat project context |
 | `/api/memory/context/hierarchy` | GET | Topic-grouped (`?days=N` for date filter) |
+| `/api/memory/context/smart` | GET | Token-capped smart context (`?limit=&max_tokens=`) |
 | `/api/memory/context/proactive` | GET | Top signals + conflict detection |
+| `/api/memory/context/skills` | GET | Inferred skill context from memory clusters |
+| `/api/memory/context/startup` | GET | Unified agent startup payload |
 | `/api/memory/detail/{id}` | GET | Full memory + neighbors + scope |
 | `/api/memory/kb` | GET | Typed slices |
 | `/api/memory/pressure` | GET | Pressure metrics + flagged candidates |
@@ -325,6 +328,8 @@ AI:  vector search finds the memory
 | `/api/memory/graph` | GET | Graph visualization data |
 | `/api/memory/graph/rebuild` | POST | Rebuild knowledge graph |
 | `/api/memory/consolidate` | GET | Detect superseded/conflicting pairs |
+| `/api/memory/recall/quick` | GET | Fast high-threshold recall for per-prompt injection |
+| `/api/memory/compact` | POST | LLM-summarize old memories (dry-run by default) |
 
 </details>
 

@@ -245,8 +245,18 @@ class TestMemoryManagerDelete:
         data = {
             "date": "2026-04-01",
             "facts": [
-                {"id": "2026-04-01_fact_aaa", "content": "Ran git commit", "project": "test", "timestamp": "2026-04-01T10:00:00"},
-                {"id": "2026-04-01_fact_bbb", "content": "Ran go test", "project": "test", "timestamp": "2026-04-01T11:00:00"},
+                {
+                    "id": "2026-04-01_fact_aaa",
+                    "content": "Ran git commit",
+                    "project": "test",
+                    "timestamp": "2026-04-01T10:00:00",
+                },
+                {
+                    "id": "2026-04-01_fact_bbb",
+                    "content": "Ran go test",
+                    "project": "test",
+                    "timestamp": "2026-04-01T11:00:00",
+                },
             ],
         }
         (tmp_path / "2026-04-01.yaml").write_text(yaml.dump(data))
@@ -275,7 +285,12 @@ class TestMemoryManagerDelete:
         data = {
             "date": "2026-04-01",
             "facts": [
-                {"id": "2026-04-01_fact_only", "content": "Only entry", "project": "test", "timestamp": "2026-04-01T10:00:00"},
+                {
+                    "id": "2026-04-01_fact_only",
+                    "content": "Only entry",
+                    "project": "test",
+                    "timestamp": "2026-04-01T10:00:00",
+                },
             ],
         }
         yaml_file = tmp_path / "2026-04-01.yaml"
@@ -304,7 +319,12 @@ class TestMemoryManagerCleanup:
         old_data = {
             "date": old_date,
             "facts": [
-                {"id": f"{old_date}_fact_old1", "content": "Old fact", "project": "test", "timestamp": f"{old_date}T10:00:00"},
+                {
+                    "id": f"{old_date}_fact_old1",
+                    "content": "Old fact",
+                    "project": "test",
+                    "timestamp": f"{old_date}T10:00:00",
+                },
             ],
         }
         (tmp_path / f"{old_date}.yaml").write_text(yaml.dump(old_data))
@@ -312,10 +332,20 @@ class TestMemoryManagerCleanup:
         recent_data = {
             "date": recent_date,
             "facts": [
-                {"id": f"{recent_date}_fact_new1", "content": "New fact", "project": "test", "timestamp": f"{recent_date}T10:00:00"},
+                {
+                    "id": f"{recent_date}_fact_new1",
+                    "content": "New fact",
+                    "project": "test",
+                    "timestamp": f"{recent_date}T10:00:00",
+                },
             ],
             "decisions": [
-                {"id": f"{recent_date}_decision_1", "content": "A decision", "project": "test", "timestamp": f"{recent_date}T11:00:00"},
+                {
+                    "id": f"{recent_date}_decision_1",
+                    "content": "A decision",
+                    "project": "test",
+                    "timestamp": f"{recent_date}T11:00:00",
+                },
             ],
         }
         (tmp_path / f"{recent_date}.yaml").write_text(yaml.dump(recent_data))
@@ -338,8 +368,18 @@ class TestMemoryManagerCleanup:
         data = {
             "date": today,
             "preferences": [
-                {"id": f"{today}_preference_old", "content": "Old preference", "project": "test", "timestamp": f"{today}T10:00:00"},
-                {"id": f"{today}_preference_new", "content": "New preference", "project": "test", "timestamp": f"{today}T11:00:00"},
+                {
+                    "id": f"{today}_preference_old",
+                    "content": "Old preference",
+                    "project": "test",
+                    "timestamp": f"{today}T10:00:00",
+                },
+                {
+                    "id": f"{today}_preference_new",
+                    "content": "New preference",
+                    "project": "test",
+                    "timestamp": f"{today}T11:00:00",
+                },
             ],
         }
         (tmp_path / f"{today}.yaml").write_text(yaml.dump(data))
@@ -350,7 +390,9 @@ class TestMemoryManagerCleanup:
 
         manager.knowledge_graph.add_node(f"{today}_preference_old", memory_type="preference")
         manager.knowledge_graph.add_node(f"{today}_preference_new", memory_type="preference")
-        manager.knowledge_graph.add_edge(f"{today}_preference_new", f"{today}_preference_old", relation="supersedes", weight=0.9)
+        manager.knowledge_graph.add_edge(
+            f"{today}_preference_new", f"{today}_preference_old", relation="supersedes", weight=0.9
+        )
         manager.knowledge_graph.save()
 
         result = manager.cleanup(prune_superseded=True)
@@ -367,8 +409,18 @@ class TestMemoryManagerCleanup:
         data = {
             "date": today,
             "decisions": [
-                {"id": f"{today}_decision_a", "content": "Use Postgres", "project": "test", "timestamp": f"{today}T10:00:00"},
-                {"id": f"{today}_decision_b", "content": "Use MySQL", "project": "test", "timestamp": f"{today}T11:00:00"},
+                {
+                    "id": f"{today}_decision_a",
+                    "content": "Use Postgres",
+                    "project": "test",
+                    "timestamp": f"{today}T10:00:00",
+                },
+                {
+                    "id": f"{today}_decision_b",
+                    "content": "Use MySQL",
+                    "project": "test",
+                    "timestamp": f"{today}T11:00:00",
+                },
             ],
         }
         (tmp_path / f"{today}.yaml").write_text(yaml.dump(data))
@@ -378,7 +430,9 @@ class TestMemoryManagerCleanup:
         manager = MemoryManager(memory_dir=tmp_path)
         manager.knowledge_graph.add_node(f"{today}_decision_a", memory_type="decision")
         manager.knowledge_graph.add_node(f"{today}_decision_b", memory_type="decision")
-        manager.knowledge_graph.add_edge(f"{today}_decision_a", f"{today}_decision_b", relation="contradicts", weight=0.8)
+        manager.knowledge_graph.add_edge(
+            f"{today}_decision_a", f"{today}_decision_b", relation="contradicts", weight=0.8
+        )
         manager.knowledge_graph.save()
 
         result = manager.cleanup(prune_superseded=True)
@@ -395,7 +449,12 @@ class TestMemoryManagerCleanup:
         data = {
             "date": old_date,
             "facts": [
-                {"id": f"{old_date}_fact_1", "content": "Old fact", "project": "test", "timestamp": f"{old_date}T10:00:00"},
+                {
+                    "id": f"{old_date}_fact_1",
+                    "content": "Old fact",
+                    "project": "test",
+                    "timestamp": f"{old_date}T10:00:00",
+                },
             ],
         }
         yaml_file = tmp_path / f"{old_date}.yaml"
@@ -416,6 +475,7 @@ class TestMemoryManagerCleanup:
 # =============================================================================
 
 
+@pytest.mark.integration
 class TestCleanupIntegration:
     """Integration: save -> supersede -> cleanup -> verify gone."""
 
@@ -427,7 +487,9 @@ class TestCleanupIntegration:
 
         # Save two preferences — new supersedes old
         old_id = manager.save("Prefer tabs over spaces", type="preference", project="test")
-        new_id = manager.save("Prefer spaces over tabs (changed mind)", type="preference", project="test")
+        new_id = manager.save(
+            "Prefer spaces over tabs (changed mind)", type="preference", project="test"
+        )
 
         # Create supersedes edge
         manager.knowledge_graph.add_edge(new_id, old_id, relation="supersedes", weight=0.9)
@@ -438,7 +500,12 @@ class TestCleanupIntegration:
         old_fact_data = {
             "date": old_date,
             "facts": [
-                {"id": f"{old_date}_fact_stale", "content": "Stale observation", "project": "test", "timestamp": f"{old_date}T10:00:00"},
+                {
+                    "id": f"{old_date}_fact_stale",
+                    "content": "Stale observation",
+                    "project": "test",
+                    "timestamp": f"{old_date}T10:00:00",
+                },
             ],
         }
         (tmp_path / f"{old_date}.yaml").write_text(yaml.dump(old_fact_data))
@@ -450,10 +517,88 @@ class TestCleanupIntegration:
         assert result["superseded_pruned"] >= 1  # auto-linker may create extra edges
         assert not (tmp_path / f"{old_date}.yaml").exists()
 
-        # New preference should survive, old one deleted
+        # New preference should survive, old one deleted.
+        # v1.5.0+ writes nested: <project>/<date>.yaml
         today = datetime.now().strftime("%Y-%m-%d")
-        with open(tmp_path / f"{today}.yaml") as f:
-            remaining = yaml.safe_load(f)
-        preference_ids = [p["id"] for p in remaining.get("preferences", [])]
-        assert new_id in preference_ids
-        assert old_id not in preference_ids
+        candidates = list(tmp_path.rglob(f"{today}.yaml"))
+        assert len(candidates) >= 1, f"No surviving YAML found under {tmp_path}"
+        all_preference_ids: list[str] = []
+        for yaml_file in candidates:
+            data = yaml.safe_load(yaml_file.read_text()) or {}
+            all_preference_ids.extend(p["id"] for p in data.get("preferences", []))
+        assert new_id in all_preference_ids
+        assert old_id not in all_preference_ids
+
+    def test_cleanup_prunes_old_facts_in_nested_project_layout(self, tmp_path):
+        """v1.5.0+ writes <project>/<date>.yaml — cleanup must find those too."""
+        project_dir = tmp_path / "my-app"
+        project_dir.mkdir()
+        old = {
+            "date": "2020-01-01",
+            "facts": [
+                {
+                    "id": "2020-01-01_fact_aaa",
+                    "content": "ancient fact",
+                    "project": "my-app",
+                    "timestamp": "2020-01-01T10:00:00",
+                }
+            ],
+        }
+        (project_dir / "2020-01-01.yaml").write_text(yaml.dump(old))
+
+        from memory.manager import MemoryManager
+
+        manager = MemoryManager(memory_dir=tmp_path)
+        stats = manager.cleanup(max_age_days_facts=30)
+
+        assert stats["facts_pruned"] == 1
+        assert not (project_dir / "2020-01-01.yaml").exists()
+
+
+class TestClearProject:
+    """clear_project() must remove YAML, vectors, and graph nodes — not just vectors."""
+
+    def test_clear_project_removes_yaml_vectors_and_graph(self, tmp_path):
+        from unittest.mock import MagicMock
+
+        from memory.manager import MemoryManager
+
+        manager = MemoryManager(memory_dir=tmp_path)
+        project_dir = tmp_path / "my-app"
+        project_dir.mkdir()
+        data = {
+            "date": "2026-04-01",
+            "facts": [
+                {
+                    "id": "2026-04-01_fact_aaa",
+                    "content": "x",
+                    "project": "my-app",
+                    "timestamp": "2026-04-01T10:00:00",
+                }
+            ],
+        }
+        (project_dir / "2026-04-01.yaml").write_text(yaml.dump(data))
+        manager.knowledge_graph.add_node("2026-04-01_fact_aaa", topic="my-app")
+
+        mock_store = MagicMock()
+        mock_store.scroll.return_value = [{"memory_id": "2026-04-01_fact_aaa"}]
+        manager._store = mock_store
+
+        result = manager.clear_project("my-app")
+
+        assert result["deleted"] == 1
+        assert not (project_dir / "2026-04-01.yaml").exists()
+        assert "2026-04-01_fact_aaa" not in manager.knowledge_graph._graph
+        mock_store.delete.assert_called_with(filters={"project": "my-app"})
+
+
+class TestProjectNameGuard:
+    """save() must refuse path-separator project names regardless of caller."""
+
+    def test_save_rejects_traversal_project(self, tmp_path):
+        from memory.manager import MemoryManager
+
+        manager = MemoryManager(memory_dir=tmp_path)
+        with pytest.raises(ValueError, match="Invalid project name"):
+            manager.save("content", project="../evil")
+        assert not (tmp_path.parent / "evil").exists()

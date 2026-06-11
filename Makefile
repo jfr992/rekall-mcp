@@ -1,4 +1,4 @@
-.PHONY: install dev test lint format typecheck clean docker-build docker-run docker-test help
+.PHONY: install dev test lint format typecheck clean docker-build docker-run docker-test help backup
 
 # Default target
 help:
@@ -19,6 +19,7 @@ help:
 	@echo "Memory Commands:"
 	@echo "  memory-stats   Show memory storage statistics"
 	@echo "  memory-clean   Clean up old memory files (interactive)"
+	@echo "  backup         Tarball ~/.claude/memory + Qdrant volume to ~/backups"
 	@echo "  qdrant         Start Qdrant vector database"
 	@echo "  qdrant-stop    Stop Qdrant"
 	@echo ""
@@ -106,6 +107,15 @@ qdrant:
 
 qdrant-stop:
 	docker compose stop qdrant
+
+backup:
+	@mkdir -p ~/backups
+	@TS=$$(date +%Y%m%d-%H%M%S); \
+	tar czf ~/backups/pre-$$TS-memory.tar.gz -C ~ .claude/memory; \
+	docker compose stop qdrant; \
+	tar czf ~/backups/pre-$$TS-qdrant.tar.gz -C ~/.claude qdrant; \
+	docker compose start qdrant; \
+	echo "Backups written: ~/backups/pre-$$TS-{memory,qdrant}.tar.gz"
 
 # =============================================================================
 # DOCKER COMMANDS
