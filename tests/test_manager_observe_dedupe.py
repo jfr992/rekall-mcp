@@ -11,8 +11,10 @@ def manager_with_fake_store(tmp_path):
     """Construct a MemoryManager with an in-memory fake store + mocked embedder."""
     from memory.manager import MemoryManager
 
-    with patch("memory.manager.VectorStore") as store_class, \
-         patch("memory.manager.Embedder") as embedder_class:
+    with (
+        patch("memory.manager.VectorStore") as store_class,
+        patch("memory.manager.Embedder") as embedder_class,
+    ):
         store = MagicMock()
         embedder = MagicMock()
         store.count.return_value = 0
@@ -111,6 +113,7 @@ def test_reinforce_failure_does_not_raise(manager_with_fake_store):
 
     # Since manager imports it inside _reinforce_existing_memory, patch via memory.intelligence
     from unittest.mock import patch
+
     with patch("memory.intelligence.reinforce_and_reclassify", side_effect=RuntimeError("boom")):
         # This MUST NOT raise
         memory_id = mgr.save(content="test", type="note", project="test")

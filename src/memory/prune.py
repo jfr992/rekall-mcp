@@ -134,13 +134,15 @@ def build_plan(manager, *, project: str, limit: int = MAX_DELETIONS_PER_APPLY) -
         if is_protected_neighbor(memory_id):
             continue
 
-        candidates.append(PruneCandidate(
-            memory_id=memory_id,
-            tier=tier,
-            reason=f"tier={tier} salience={salience:.2f} age={age}d",
-            age_days=age,
-            salience=salience,
-        ))
+        candidates.append(
+            PruneCandidate(
+                memory_id=memory_id,
+                tier=tier,
+                reason=f"tier={tier} salience={salience:.2f} age={age}d",
+                age_days=age,
+                salience=salience,
+            )
+        )
 
         if len(candidates) >= limit:
             break
@@ -222,7 +224,9 @@ def plan_prune(memories: list[dict[str, Any]], *, aggressive: bool = False) -> d
     }
 
 
-def apply_prune_plan(manager, prune_plan: dict[str, Any], *, dry_run: bool = True) -> dict[str, Any]:
+def apply_prune_plan(
+    manager, prune_plan: dict[str, Any], *, dry_run: bool = True
+) -> dict[str, Any]:
     """Legacy entrypoint — dict-shaped apply, kept for old callers."""
     selected = prune_plan.get("selected", [])
     deleted: list[str] = []

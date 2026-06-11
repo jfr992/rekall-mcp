@@ -15,17 +15,16 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: uv sync --extra dev
-      # Blocking gates — these are green today and must stay green.
+      # Blocking gates — green today and must stay green.
       - name: Ruff lint
         run: uv run ruff check src tests
+      - name: Ruff format
+        run: uv run ruff format --check src tests
       - name: Unit tests
         run: uv run pytest -m "not integration" --tb=short -q
-      # Advisory gates — pre-existing drift (53 files unformatted, ~110 mypy
-      # errors on main) predates CI. Surfaced, not blocking, until cleaned up
-      # in a dedicated pass. Flip continue-on-error off once the backlog clears.
-      - name: Ruff format (advisory)
-        continue-on-error: true
-        run: uv run ruff format --check src tests
+      # Advisory gate — ~110 pre-existing mypy errors predate CI; surfaced, not
+      # blocking, until cleaned up in a dedicated pass. Flip continue-on-error
+      # off once that backlog clears.
       - name: Mypy (advisory)
         continue-on-error: true
         run: uv run mypy --ignore-missing-imports src

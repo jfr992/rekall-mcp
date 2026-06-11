@@ -296,16 +296,19 @@ def _parse_graph_filters(query_params) -> dict[str, str | dict[str, str]]:
 
 def _ok(data: dict):
     from starlette.responses import JSONResponse
+
     return JSONResponse(data)
 
 
 def _bad_request(message: str):
     from starlette.responses import JSONResponse
+
     return JSONResponse({"error": message}, status_code=400)
 
 
 def _server_error(message: str):
     from starlette.responses import JSONResponse
+
     return JSONResponse({"error": message}, status_code=500)
 
 
@@ -543,7 +546,8 @@ async def api_cleanup_memories(request):
     try:
         body = await request.json()
         max_age = (
-            None if body.get("max_age_days_facts") is None
+            None
+            if body.get("max_age_days_facts") is None
             else _body_int(body, "max_age_days_facts", 0, lo=0, hi=36500)
         )
         result = _get_memory_manager().cleanup(
@@ -580,7 +584,9 @@ async def api_memory_graph(request):
         cutoff_date = filters.pop("_cutoff_date", None)
 
         manager = _get_memory_manager()
-        points = manager.store.scroll(filters=filters if filters else None, limit=limit, with_vectors=True)
+        points = manager.store.scroll(
+            filters=filters if filters else None, limit=limit, with_vectors=True
+        )
         truncated = len(points) >= limit
         if cutoff_date:
             points = [p for p in points if (p.get("date") or "") >= cutoff_date]
@@ -881,11 +887,13 @@ async def api_memory_projects(_request):
             project = p.get("project") or "unknown"
             counts[project] = counts.get(project, 0) + 1
         sorted_projects = sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
-        return _ok({
-            "total": len(points),
-            "projects": [{"name": name, "count": n} for name, n in sorted_projects],
-            "truncated": len(points) >= cap,
-        })
+        return _ok(
+            {
+                "total": len(points),
+                "projects": [{"name": name, "count": n} for name, n in sorted_projects],
+                "truncated": len(points) >= cap,
+            }
+        )
     except Exception as e:
         logger.error(f"Error listing projects: {e}")
         return _server_error(str(e))
@@ -920,18 +928,20 @@ async def api_memory_pressure(request):
                 if mid and manager.knowledge_graph.count_contradicts(mid) > 0:
                     contradiction_count += 1
 
-        return _ok({
-            "project": project or "all",
-            "load_score": load_score,
-            "capacity": total,
-            "flagged": {
-                "stale_working_count": pressure.get("stale_working_count", 0),
-                "low_value_count": pressure.get("low_value_count", 0),
-                "contradiction_count": contradiction_count,
-            },
-            "candidates": pressure.get("candidates", [])[:50],
-            "truncated": len(memories) >= cap,
-        })
+        return _ok(
+            {
+                "project": project or "all",
+                "load_score": load_score,
+                "capacity": total,
+                "flagged": {
+                    "stale_working_count": pressure.get("stale_working_count", 0),
+                    "low_value_count": pressure.get("low_value_count", 0),
+                    "contradiction_count": contradiction_count,
+                },
+                "candidates": pressure.get("candidates", [])[:50],
+                "truncated": len(memories) >= cap,
+            }
+        )
     except RequestValidationError as e:
         return _bad_request(str(e))
     except Exception as e:
@@ -973,14 +983,16 @@ async def api_memory_kb(request):
         preferences = [_summarize(m) for m in points if m.get("type") == "preference"]
         learnings = [_summarize(m) for m in points if m.get("type") == "learning"]
 
-        return _ok({
-            "project": project or "all",
-            "decisions": decisions,
-            "requirements": requirements,
-            "preferences": preferences,
-            "learnings": learnings,
-            "truncated": len(points) >= cap,
-        })
+        return _ok(
+            {
+                "project": project or "all",
+                "decisions": decisions,
+                "requirements": requirements,
+                "preferences": preferences,
+                "learnings": learnings,
+                "truncated": len(points) >= cap,
+            }
+        )
     except RequestValidationError as e:
         return _bad_request(str(e))
     except Exception as e:
@@ -1005,24 +1017,27 @@ async def api_memory_detail(request):
             for edge in graph.get_edges(memory_id, direction="out"):
                 neighbor_payload = manager.store.get_by_id(edge.target)
                 if neighbor_payload:
-                    neighbors.append({
-                        "relation": edge.relation,
-                        "memory": neighbor_payload,
-                    })
+                    neighbors.append(
+                        {
+                            "relation": edge.relation,
+                            "memory": neighbor_payload,
+                        }
+                    )
 
-        return _ok({
-            "memory": memory,
-            "neighbors": neighbors,
-            "scope": {
-                "project": memory.get("project"),
-                "agent": memory.get("agent"),
-                "repo_name": memory.get("repo_name"),
-            },
-        })
+        return _ok(
+            {
+                "memory": memory,
+                "neighbors": neighbors,
+                "scope": {
+                    "project": memory.get("project"),
+                    "agent": memory.get("agent"),
+                    "repo_name": memory.get("repo_name"),
+                },
+            }
+        )
     except Exception as e:
         logger.error(f"Error fetching memory detail: {e}")
         return _server_error(str(e))
-
 
 
 @mcp.custom_route("/api/memory/observe", methods=["POST"])

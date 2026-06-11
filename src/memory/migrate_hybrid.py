@@ -57,14 +57,16 @@ def load_all_yaml_memories(memory_dir: Path | str) -> list[dict[str, Any]]:
                 if not isinstance(item, dict):
                     continue
 
-                memories.append({
-                    "memory_id": item.get("id", ""),
-                    "content": item.get("content", ""),
-                    "date": date,
-                    "type": mem_type,
-                    "project": item.get("project", "general"),
-                    "timestamp": item.get("timestamp", ""),
-                })
+                memories.append(
+                    {
+                        "memory_id": item.get("id", ""),
+                        "content": item.get("content", ""),
+                        "date": date,
+                        "type": mem_type,
+                        "project": item.get("project", "general"),
+                        "timestamp": item.get("timestamp", ""),
+                    }
+                )
 
     return memories
 

@@ -4,11 +4,17 @@ from memory.scope import _strip_creds
 
 
 def test_strip_creds_from_https_with_user_token():
-    assert _strip_creds("https://user:ghp_abc@github.com/foo/bar.git") == "https://github.com/foo/bar.git"
+    assert (
+        _strip_creds("https://user:ghp_abc@github.com/foo/bar.git")
+        == "https://github.com/foo/bar.git"
+    )
 
 
 def test_strip_creds_from_https_with_token_only():
-    assert _strip_creds("https://x-access-token:ghs_xyz@github.com/foo/bar.git") == "https://github.com/foo/bar.git"
+    assert (
+        _strip_creds("https://x-access-token:ghs_xyz@github.com/foo/bar.git")
+        == "https://github.com/foo/bar.git"
+    )
 
 
 def test_strip_creds_from_https_user_only():

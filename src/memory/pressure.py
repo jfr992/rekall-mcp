@@ -10,7 +10,9 @@ from datetime import datetime, timedelta
 from typing import Any
 
 
-def identify_pressure(memories: list[dict[str, Any]], *, today: str | None = None) -> dict[str, Any]:
+def identify_pressure(
+    memories: list[dict[str, Any]], *, today: str | None = None
+) -> dict[str, Any]:
     current = today or datetime.now().strftime("%Y-%m-%d")
     low_value: list[dict[str, Any]] = []
     stale_working: list[dict[str, Any]] = []
@@ -25,7 +27,9 @@ def identify_pressure(memories: list[dict[str, Any]], *, today: str | None = Non
             low_value.append(memory)
 
         if tier == "working" and retention:
-            cutoff = (datetime.strptime(current, "%Y-%m-%d") - timedelta(days=retention)).strftime("%Y-%m-%d")
+            cutoff = (datetime.strptime(current, "%Y-%m-%d") - timedelta(days=retention)).strftime(
+                "%Y-%m-%d"
+            )
             if date <= cutoff:
                 stale_working.append(memory)
 

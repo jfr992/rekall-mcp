@@ -22,14 +22,16 @@ if TYPE_CHECKING:
     from core.vector_store import VectorStore
 
 
-RELATION_TYPES = frozenset({
-    "related_to",
-    "led_to",
-    "depends_on",
-    "contradicts",
-    "supersedes",
-    "part_of",
-})
+RELATION_TYPES = frozenset(
+    {
+        "related_to",
+        "led_to",
+        "depends_on",
+        "contradicts",
+        "supersedes",
+        "part_of",
+    }
+)
 
 TYPE_WEIGHTS: dict[str, float] = {
     "requirement": 1.0,
@@ -95,9 +97,7 @@ class KnowledgeGraph:
 
         data = {
             "version": GRAPH_VERSION,
-            "nodes": {
-                node_id: dict(self._graph.nodes[node_id]) for node_id in self._graph.nodes
-            },
+            "nodes": {node_id: dict(self._graph.nodes[node_id]) for node_id in self._graph.nodes},
             "edges": [
                 {
                     "source": source,
@@ -331,10 +331,7 @@ class KnowledgeGraph:
         """Serialize graph state for inspection."""
         return {
             "version": GRAPH_VERSION,
-            "nodes": [
-                {"id": node_id, **attrs}
-                for node_id, attrs in self._graph.nodes(data=True)
-            ],
+            "nodes": [{"id": node_id, **attrs} for node_id, attrs in self._graph.nodes(data=True)],
             "edges": [
                 {
                     "source": source,

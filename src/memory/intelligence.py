@@ -74,11 +74,15 @@ def reinforce_and_reclassify(
     new_memory["tier"] = result.tier
     new_memory["durability"] = result.durability
     new_memory["lifecycle_reason"] = result.reason
-    new_memory["retention_days"] = compute_retention_days(new_memory.get("type", "note"), result.tier)
+    new_memory["retention_days"] = compute_retention_days(
+        new_memory.get("type", "note"), result.tier
+    )
     return new_memory
 
 
-def changed_since_last_session(memories: list[dict[str, Any]], *, limit: int = 8) -> list[dict[str, Any]]:
+def changed_since_last_session(
+    memories: list[dict[str, Any]], *, limit: int = 8
+) -> list[dict[str, Any]]:
     """Return the most meaningful recent changes for continuity."""
     ranked = sorted(
         memories,

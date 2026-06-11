@@ -30,5 +30,7 @@ def test_identify_pressure_finds_low_value_and_stale_working():
 
 
 def test_render_pressure_report_has_header():
-    report = render_pressure_report({"low_value_count": 1, "stale_working_count": 1, "candidates": []})
+    report = render_pressure_report(
+        {"low_value_count": 1, "stale_working_count": 1, "candidates": []}
+    )
     assert "Memory Pressure Report" in report
