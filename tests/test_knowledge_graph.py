@@ -27,7 +27,7 @@ def test_save_and_reload_roundtrip(tmp_path):
     kg.add_edge("mem_a", "mem_b", "led_to", weight=0.8)
     kg.save()
 
-    kg2 = _tmp_graph(tmp_path / "_graph.json")
+    kg2 = _tmp_graph(tmp_path)
     assert kg2.stats()["nodes"] == 2
     assert kg2.stats()["edges"] == 1
 
