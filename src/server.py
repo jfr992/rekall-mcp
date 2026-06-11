@@ -98,6 +98,39 @@ async def app_lifespan(_server: FastMCP) -> AsyncIterator[dict]:
     logger.info(f"Total operations processed: {total_ops}")
 
 
+class BearerAuthMiddleware:
+    """Optional bearer-token auth for the HTTP server (pure ASGI — does not
+    buffer the MCP stream).
+
+    Enabled only when MEMENTO_API_TOKEN is set. When set, every HTTP request
+    except /health must carry `Authorization: Bearer <token>` (constant-time
+    compared). Unset → no auth, identical to default behavior.
+    """
+
+    OPEN_PATHS = frozenset({"/health"})
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] == "http":
+            token = os.getenv("MEMENTO_API_TOKEN")
+            if token and scope.get("path", "") not in self.OPEN_PATHS:
+                import secrets
+
+                from starlette.responses import JSONResponse
+
+                headers = dict(scope.get("headers") or [])
+                provided = headers.get(b"authorization", b"")
+                expected = b"Bearer " + token.encode()
+                if not secrets.compare_digest(provided, expected):
+                    await JSONResponse({"error": "unauthorized"}, status_code=401)(
+                        scope, receive, send
+                    )
+                    return
+        await self.app(scope, receive, send)
+
+
 def _resolve_host() -> str:
     """Default to 0.0.0.0 — Claude Code reaches the server through a port-mapped /
     namespaced network (Docker, WSL, devcontainer) where loopback-only is unreachable.
@@ -1112,6 +1145,7 @@ def main() -> None:
 
         import uvicorn
         from starlette.applications import Starlette
+        from starlette.middleware import Middleware
         from starlette.routing import Route
 
         original_app = mcp.streamable_http_app()
@@ -1128,9 +1162,16 @@ def main() -> None:
             async with session_manager.run():
                 yield
 
-        # Mount MCP at root, plus all custom routes
+        # Mount MCP at root, plus all custom routes. Optional bearer auth
+        # (no-op unless MEMENTO_API_TOKEN is set) guards everything but /health.
         routes = [Route("/", endpoint=mcp_endpoint)] + custom_routes
-        app = Starlette(routes=routes, lifespan=lifespan)
+        app = Starlette(
+            routes=routes,
+            lifespan=lifespan,
+            middleware=[Middleware(BearerAuthMiddleware)],
+        )
+        if os.getenv("MEMENTO_API_TOKEN"):
+            logger.info("Bearer auth enabled (MEMENTO_API_TOKEN set) — /health stays open")
 
         uvicorn.run(app, host=host, port=port, log_level="info")
     else:
