@@ -16,7 +16,14 @@ export function ProjectSwitcher() {
 
   const handleChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     setProject(e.target.value);
-    qc.invalidateQueries();
+    // Only project-scoped data depends on scope; leave the project list and
+    // health badge alone so the switcher and header don't flicker on change.
+    qc.invalidateQueries({
+      predicate: (q) => {
+        const key = q.queryKey[0];
+        return key !== "projects" && key !== "health";
+      },
+    });
   };
 
   return (

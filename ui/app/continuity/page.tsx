@@ -36,9 +36,9 @@ export default function ContinuityPage() {
           <TruncatedWarning truncated={data.truncated} />
           <ResumeHeader scope={data.scope} />
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-3">
-            <ImportantSection items={data.important as any} />
-            <RecentSection items={data.recent as any} />
-            <ConflictsPanel conflicts={data.unresolved as any} />
+            <ImportantSection items={data.important} />
+            <RecentSection items={data.recent} />
+            <ConflictsPanel conflicts={data.unresolved} />
           </div>
           <NextStepsList steps={data.next_steps} />
         </>
