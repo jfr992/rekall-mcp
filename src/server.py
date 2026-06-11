@@ -581,6 +581,7 @@ async def api_memory_graph(request):
 
         manager = _get_memory_manager()
         points = manager.store.scroll(filters=filters if filters else None, limit=limit, with_vectors=True)
+        truncated = len(points) >= limit
         if cutoff_date:
             points = [p for p in points if (p.get("date") or "") >= cutoff_date]
 
@@ -594,7 +595,9 @@ async def api_memory_graph(request):
             knowledge_graph=manager.knowledge_graph,
         )
 
-        return JSONResponse({"query": {"limit": limit, "filters": filters}, "graph": graph})
+        return JSONResponse(
+            {"query": {"limit": limit, "filters": filters}, "graph": graph, "truncated": truncated}
+        )
     except ValueError as e:
         return JSONResponse({"error": str(e)}, status_code=400)
     except Exception as e:
@@ -702,26 +705,6 @@ async def api_agent_startup(request):
         return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building agent startup payload: {e}")
-        return JSONResponse({"error": str(e)}, status_code=500)
-
-
-@mcp.custom_route("/api/memory/context/resume", methods=["GET"])
-async def api_resume_packet(request):
-    """REST API: Continuity-oriented resume packet for session start."""
-    from starlette.responses import JSONResponse
-
-    try:
-        query = request.query_params
-        project = _safe_project(query.get("project"))
-        limit = _read_int(query, "limit", 12)
-
-        manager = _get_memory_manager()
-        packet = manager.get_resume_packet(project=project, limit=limit)
-        return JSONResponse(packet)
-    except RequestValidationError as e:
-        return _bad_request(str(e))
-    except Exception as e:
-        logger.error(f"Error building resume packet: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
@@ -891,7 +874,8 @@ async def api_memory_projects(_request):
     """REST API: Distinct projects with their memory counts, sorted desc."""
     try:
         manager = _get_memory_manager()
-        points = manager.store.scroll(limit=5000)
+        cap = 5000
+        points = manager.store.scroll(limit=cap)
         counts: dict[str, int] = {}
         for p in points:
             project = p.get("project") or "unknown"
@@ -900,6 +884,7 @@ async def api_memory_projects(_request):
         return _ok({
             "total": len(points),
             "projects": [{"name": name, "count": n} for name, n in sorted_projects],
+            "truncated": len(points) >= cap,
         })
     except Exception as e:
         logger.error(f"Error listing projects: {e}")
@@ -916,8 +901,9 @@ async def api_memory_pressure(request):
         project = _safe_project(query.get("project"))
 
         manager = _get_memory_manager()
+        cap = 2000
         filters = {"project": project} if project else None
-        memories = manager.store.scroll(filters=filters, limit=2000)
+        memories = manager.store.scroll(filters=filters, limit=cap)
         pressure = identify_pressure(memories)
 
         total = max(len(memories), 1)
@@ -944,6 +930,7 @@ async def api_memory_pressure(request):
                 "contradiction_count": contradiction_count,
             },
             "candidates": pressure.get("candidates", [])[:50],
+            "truncated": len(memories) >= cap,
         })
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -965,8 +952,9 @@ async def api_memory_kb(request):
         full = query.get("full", "false").lower() == "true"
 
         manager = _get_memory_manager()
+        cap = 2000
         filters = {"project": project} if project else None
-        points = manager.store.scroll(filters=filters, limit=2000)
+        points = manager.store.scroll(filters=filters, limit=cap)
 
         def _summarize(m: dict) -> dict:
             out = {
@@ -991,6 +979,7 @@ async def api_memory_kb(request):
             "requirements": requirements,
             "preferences": preferences,
             "learnings": learnings,
+            "truncated": len(points) >= cap,
         })
     except RequestValidationError as e:
         return _bad_request(str(e))
