@@ -155,12 +155,32 @@ export const BackfillReportSchema = z.object({
 
 // ----- Resume --------------------------------------------------------------
 
+export const ResumeMemorySchema = z.object({
+  memory_id: z.string(),
+  content: z.string(),
+  date: z.string().optional(),
+  type: z.string().optional(),
+  tier: z.string().optional(),
+  importance: z.number().optional(),
+});
+
+export const ResumeConflictSchema = z.object({
+  memory_id: z.string(),
+  conflicts_with: z.string(),
+  content: z.string().optional(),
+}).passthrough();
+
+export const ResumeScopeSchema = z.object({
+  project: z.string().optional(),
+  agent: z.string().optional(),
+}).passthrough();
+
 export const ResumeResponseSchema = z.object({
-  scope: z.record(z.string(), z.any()),
-  recent: z.array(z.any()),
-  important: z.array(z.any()),
-  unresolved: z.array(z.any()),
-  next_steps: z.array(z.any()),
+  scope: ResumeScopeSchema,
+  recent: z.array(ResumeMemorySchema),
+  important: z.array(ResumeMemorySchema),
+  unresolved: z.array(ResumeConflictSchema),
+  next_steps: z.array(z.string()),
   handoff: z.string().nullable(),
   pressure: z.any(),
   pressure_report: z.string().optional(),
