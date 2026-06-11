@@ -35,6 +35,25 @@ def _qdrant_isolation(monkeypatch):
     monkeypatch.setattr(VectorStore, "_connect", guarded_connect)
 
 
+@pytest.fixture(autouse=True)
+def _clean_integration_collection(request):
+    """Give each integration test a fresh agent_memory collection.
+
+    The test Qdrant is shared across the run; without this, save() dedups
+    against memories left by earlier tests — which skips YAML writes and
+    creates spurious supersedes edges. Only integration tests hit real Qdrant,
+    so unit tests (which mock the store) are left untouched.
+    """
+    if request.node.get_closest_marker("integration"):
+        from core.vector_store import VectorStore
+
+        try:
+            VectorStore(collection=MemoryManager.COLLECTION, url=TEST_QDRANT_URL).recreate_collection()
+        except Exception:
+            pass
+    yield
+
+
 @pytest.fixture
 def temp_memory_dir():
     """Create temporary memory directory for tests."""
