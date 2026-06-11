@@ -18,6 +18,7 @@ export const ProjectInfoSchema = z.object({
 export const ProjectsResponseSchema = z.object({
   total: z.number(),
   projects: z.array(ProjectInfoSchema),
+  truncated: z.boolean().optional(),
 });
 
 // ----- Memory core ---------------------------------------------------------
@@ -98,6 +99,7 @@ export const KbResponseSchema = z.object({
   requirements: z.array(KbEntrySchema),
   preferences: z.array(KbEntrySchema),
   learnings: z.array(KbEntrySchema),
+  truncated: z.boolean().optional(),
 });
 
 // ----- Pressure ------------------------------------------------------------
@@ -112,6 +114,7 @@ export const PressureResponseSchema = z.object({
     contradiction_count: z.number(),
   }),
   candidates: z.array(z.record(z.string(), z.any())),
+  truncated: z.boolean().optional(),
 });
 
 // ----- Prune ---------------------------------------------------------------

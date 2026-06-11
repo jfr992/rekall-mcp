@@ -316,7 +316,6 @@ AI:  vector search finds the memory
 | `/api/memory/context/proactive` | GET | Top signals + conflict detection |
 | `/api/memory/context/skills` | GET | Inferred skill context from memory clusters |
 | `/api/memory/context/startup` | GET | Unified agent startup payload |
-| `/api/memory/context/resume` | GET | Continuity resume packet for session start |
 | `/api/memory/detail/{id}` | GET | Full memory + neighbors + scope |
 | `/api/memory/kb` | GET | Typed slices |
 | `/api/memory/pressure` | GET | Pressure metrics + flagged candidates |
