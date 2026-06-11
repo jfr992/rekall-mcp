@@ -1,13 +1,15 @@
-"""The server must default to loopback; non-loopback binds must warn loudly."""
+"""Server defaults to 0.0.0.0 (Claude Code needs it); the bind is logged loudly."""
 
 import logging
 
 
-def test_resolve_host_defaults_to_loopback(monkeypatch):
+def test_resolve_host_defaults_to_public_bind(monkeypatch):
+    # 0.0.0.0 is required: Claude Code reaches the server through port-mapped /
+    # namespaced networks where loopback-only is unreachable.
     monkeypatch.delenv("HOST", raising=False)
     from server import _resolve_host
 
-    assert _resolve_host() == "127.0.0.1"
+    assert _resolve_host() == "0.0.0.0"
 
 
 def test_resolve_host_warns_on_public_bind(monkeypatch, caplog):
@@ -19,3 +21,14 @@ def test_resolve_host_warns_on_public_bind(monkeypatch, caplog):
 
     assert host == "0.0.0.0"
     assert any("no authentication" in r.message for r in caplog.records)
+
+
+def test_resolve_host_respects_loopback_override(monkeypatch, caplog):
+    monkeypatch.setenv("HOST", "127.0.0.1")
+    from server import _resolve_host
+
+    with caplog.at_level(logging.WARNING, logger="server"):
+        host = _resolve_host()
+
+    assert host == "127.0.0.1"
+    assert not any("no authentication" in r.message for r in caplog.records)

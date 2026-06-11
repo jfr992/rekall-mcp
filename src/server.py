@@ -99,18 +99,23 @@ async def app_lifespan(_server: FastMCP) -> AsyncIterator[dict]:
 
 
 def _resolve_host() -> str:
-    """Default to loopback. Memento has no auth — non-loopback binds are opt-in and loud."""
-    host = os.getenv("HOST", "127.0.0.1")
+    """Default to 0.0.0.0 — Claude Code reaches the server through a port-mapped /
+    namespaced network (Docker, WSL, devcontainer) where loopback-only is unreachable.
+
+    Memento has no auth, so a non-loopback bind is logged: on an untrusted network,
+    set HOST=127.0.0.1 or put it behind a reverse proxy with auth.
+    """
+    host = os.getenv("HOST", "0.0.0.0")  # noqa: S104 — required for the primary client
     if host not in {"127.0.0.1", "localhost", "::1"}:
         logger.warning(
-            f"Binding to {host}: Memento has no authentication — "
-            "anyone who can reach this interface can read and delete memories."
+            f"Binding to {host}: Memento has no authentication — anyone who can reach "
+            "this interface can read and delete memories. Set HOST=127.0.0.1 on untrusted networks."
         )
     return host
 
 
 # Create the MCP server
-# Host defaults to loopback; Docker sets HOST=0.0.0.0 explicitly (compose line 48).
+# Host defaults to 0.0.0.0 so Claude Code (and Docker port-mapping) can connect.
 # stateless_http must be True for Claude Code compatibility.
 # Claude Code sends each request independently without session tracking.
 mcp = FastMCP(
