@@ -23,9 +23,11 @@ if curl -sfo /dev/null http://localhost:8000/health; then
   echo "✓ Backend already running on :8000"
 else
   echo "→ Starting backend on :8000…"
+  # 0.0.0.0 so Claude Code can reach the server through port-mapped/namespaced
+  # networks (Docker, WSL, devcontainer). Set MEMENTO_HOST=127.0.0.1 on untrusted nets.
   nohup env \
     MCP_TRANSPORT=streamable-http \
-    HOST="${MEMENTO_HOST:-127.0.0.1}" \
+    HOST="${MEMENTO_HOST:-0.0.0.0}" \
     PORT=8000 \
     QDRANT_URL=http://localhost:6333 \
     uv run python -m server \
