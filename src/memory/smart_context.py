@@ -139,13 +139,6 @@ def format_smart_context(
     if not memories:
         return ""
 
-    (
-        datetime.now()
-        .__class__
-        .now()
-        .replace(hour=0, minute=0, second=0, microsecond=0)
-    )
-    # Use 7-day cutoff for "recent"
     from datetime import timedelta
 
     recent_cutoff = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
