@@ -40,16 +40,17 @@ def _is_low_signal(text: str) -> bool:
     """Return True for low-signal observations.
 
     Rules:
-    - Any known phrase like "just exploring" or "maybe later" → low signal.
+    - A known phrase ("just exploring", "working on") only marks SHORT text as
+      noise; the same phrase inside a longer substantive note is not noise.
     - Short (< 20 tokens) text with ≥ 2 hedge words → low signal.
     - A single hedge word inside a longer substantive observation is NOT low signal
       (avoids rejecting "User is trying to migrate from Postgres" etc.).
     """
     lowered = text.lower()
-    if any(phrase in lowered for phrase in LOW_SIGNAL_PHRASES):
-        return True
     tokens = re.findall(r"\b\w+\b", lowered)
     if not tokens:
+        return True
+    if len(tokens) < 12 and any(phrase in lowered for phrase in LOW_SIGNAL_PHRASES):
         return True
     hedge_count = sum(1 for t in tokens if _HEDGE_WORD_RE.fullmatch(t))
     return hedge_count >= 2 and len(tokens) < 20
