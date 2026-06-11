@@ -1,3 +1,35 @@
+# Migration Guide — v1.5.x → v1.6.0 (Hardening)
+
+**No breaking changes. No migration steps required** — upgrade in place.
+
+v1.6.0 is a hardening release: input validation, correctness fixes, retrieval
+performance, and CI. Behavior is backward-compatible; the server still binds
+`0.0.0.0` by default (required for Claude Code).
+
+### Highlights
+
+- **Security:** every REST route validates `project` (blocks path traversal),
+  `type` (enum), and numeric params (bounded) → `400` instead of `500` or silent
+  acceptance. `HOST` defaults to `0.0.0.0`; set `HOST=127.0.0.1` on untrusted
+  networks (a no-auth warning logs on non-loopback bind).
+- **Correctness (silent failures fixed):** `cleanup()` now prunes the nested
+  `<project>/<date>.yaml` layout (was a no-op); `clear_project()` clears YAML +
+  graph + vectors (was vectors-only); hybrid search honors `score_threshold`.
+- **Performance:** graph-neighbor expansion in recall is one batched fetch (was
+  N+1); `memory_id` is indexed; recall no longer writes the graph to disk per query.
+- **API:** `/kb`, `/pressure`, `/projects`, `/graph` now return a `truncated`
+  flag; the duplicate `/api/memory/context/resume` route was removed (use
+  `/api/memory/resume`).
+- **Ops:** GitHub Actions CI (lint, format, tests, integration vs Qdrant, UI),
+  `make backup`, importance-decay now runs during graph rebuild.
+
+### Optional
+
+- If you relied on `/api/memory/context/resume`, switch to `/api/memory/resume`
+  (identical payload).
+
+---
+
 # Migration Guide — v1.4.0 → v1.5.0 (Brain Observatory cockpit)
 
 This release replaces the legacy embedded HTML dashboard at `:8000/dashboard` with a standalone Next.js cockpit at `:3333`, adds new REST endpoints + MCP tools for memory hygiene and continuity, and tightens scope resolution on `/api/memory/observe`.
