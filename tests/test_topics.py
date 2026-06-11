@@ -7,7 +7,11 @@ def test_vectors_form_fewer_clusters_when_similar():
     """Agglomerative similarity should merge close vectors into one topic."""
     points = [
         {"memory_id": "a", "content": "PostgreSQL JSON query tuning", "vector": [1.0, 0.01, 0.0]},
-        {"memory_id": "b", "content": "PostgreSQL indexing and tuning", "vector": [0.99, 0.02, 0.01]},
+        {
+            "memory_id": "b",
+            "content": "PostgreSQL indexing and tuning",
+            "vector": [0.99, 0.02, 0.01],
+        },
         {"memory_id": "c", "content": "CSS button layout", "vector": [-1.0, 0.0, 0.0]},
     ]
 
@@ -49,7 +53,11 @@ def test_render_hierarchical_context_is_stable():
     topics = build_topic_clusters(
         [
             {"memory_id": "a", "content": "PostgreSQL query tuning", "vector": [1.0, 0.0, 0.0]},
-            {"memory_id": "b", "content": "PostgreSQL partition planning", "vector": [0.98, 0.0, 0.0]},
+            {
+                "memory_id": "b",
+                "content": "PostgreSQL partition planning",
+                "vector": [0.98, 0.0, 0.0],
+            },
         ],
         similarity_threshold=0.9,
     )

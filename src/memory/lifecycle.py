@@ -32,7 +32,7 @@ _TYPE_DEFAULT_TIER: dict[str, Tier] = {
     "requirement": "semantic",
     "decision": "semantic",
     "fact": "semantic",
-    "preference": "semantic",   # identity only via explicit_tier
+    "preference": "semantic",  # identity only via explicit_tier
     "learning": "episodic",
     "session": "episodic",
     "note": "working",
@@ -87,7 +87,9 @@ def classify(signals: LifecycleSignals) -> LifecycleResult:
         and signals.age_days >= 7
     ):
         tier = "semantic"
-        reasons.append(f"reinforced x{signals.reinforcement_count} + age {signals.age_days}d -> promoted to semantic")
+        reasons.append(
+            f"reinforced x{signals.reinforcement_count} + age {signals.age_days}d -> promoted to semantic"
+        )
 
     # Rule 3: high-salience decisions/requirements stay at semantic
     if signals.memory_type in {"decision", "requirement"} and signals.salience >= 0.6:

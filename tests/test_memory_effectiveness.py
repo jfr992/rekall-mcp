@@ -204,7 +204,7 @@ class TestMemoryEffectiveness:
         efficiency_multiplier = manual_search_time_seconds / semantic_search_time_seconds
 
         print("\n⚡ Time Savings from Semantic Search:")
-        print(f"   Manual search:   ~{manual_search_time_seconds/60:.1f} minutes")
+        print(f"   Manual search:   ~{manual_search_time_seconds / 60:.1f} minutes")
         print(f"   Semantic search: ~{semantic_search_time_seconds} seconds")
         print(f"   Time saved:      ~{time_saved_minutes:.1f} minutes")
         print(f"   Efficiency:      {efficiency_multiplier:.0f}x faster")
@@ -466,7 +466,7 @@ class TestMemoryEffectiveness:
         print("   ")
         print("   Input Token Distribution:")
         print(
-            f"   ├─ Fresh input tokens:    {total_fresh_input_tokens:,} ({100-cache_hit_percentage:.0f}%)"
+            f"   ├─ Fresh input tokens:    {total_fresh_input_tokens:,} ({100 - cache_hit_percentage:.0f}%)"
         )
         print(
             f"   └─ Cached input tokens:   {total_cached_input_tokens:,} ({cache_hit_percentage:.0f}%)"
@@ -498,7 +498,7 @@ class TestMemoryEffectiveness:
         """
         print("\n📊 Cache Hit Ratio Comparison\n")
         print(f"{'Scenario':<30} {'Cache Hit':<12} {'Cost':<12} {'Savings':<12}")
-        print(f"{'-'*30} {'-'*12} {'-'*12} {'-'*12}")
+        print(f"{'-' * 30} {'-' * 12} {'-' * 12} {'-' * 12}")
 
         scenarios = [
             {
@@ -558,7 +558,7 @@ class TestMemoryEffectiveness:
             savings_pct = (savings / total_cost_without_cache) * 100
 
             print(
-                f"{scenario['name']:<30} {cache_hit_ratio*100:>6.0f}%      "
+                f"{scenario['name']:<30} {cache_hit_ratio * 100:>6.0f}%      "
                 f"${total_cost_with_cache:>8.6f}  "
                 f"{savings_pct:>6.0f}%"
             )

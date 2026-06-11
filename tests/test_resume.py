@@ -36,7 +36,9 @@ def test_build_resume_packet_groups_recent_important_and_conflicts(tmp_path):
         },
     ]
 
-    scope = MemoryScope(agent="claude-code", project="brain", repo_name="brain", trust_boundary="personal")
+    scope = MemoryScope(
+        agent="claude-code", project="brain", repo_name="brain", trust_boundary="personal"
+    )
     packet = build_resume_packet(manager, scope=scope)
 
     assert packet["scope"]["project"] == "brain"

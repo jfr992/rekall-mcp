@@ -53,7 +53,9 @@ def test_single_hedge_word_in_long_decision_is_fine():
 
 def test_observation_engine_detects_decision_and_salience():
     engine = ObservationEngine()
-    candidate = engine.evaluate("Decided to use PostgreSQL because connection pooling and JSON support matter")
+    candidate = engine.evaluate(
+        "Decided to use PostgreSQL because connection pooling and JSON support matter"
+    )
 
     assert candidate.memory_type == "decision"
     assert candidate.should_save is True

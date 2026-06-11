@@ -27,7 +27,9 @@ async def test_api_agent_startup(monkeypatch):
     }
     monkeypatch.setattr("server._get_memory_manager", lambda: manager)
 
-    request = SimpleNamespace(query_params=QueryParams({"project": "brain", "agent": "claude-code", "limit": "7"}))
+    request = SimpleNamespace(
+        query_params=QueryParams({"project": "brain", "agent": "claude-code", "limit": "7"})
+    )
     response = await api_agent_startup(request)
 
     assert isinstance(response, JSONResponse)

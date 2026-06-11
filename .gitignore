@@ -64,3 +64,9 @@ brain-*.png
 
 # TypeScript incremental build cache
 *.tsbuildinfo
+
+# Node / Next.js (UI)
+node_modules/
+**/node_modules/
+.next/
+**/.next/

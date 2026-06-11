@@ -613,7 +613,9 @@ class OptimizedMemoryTools(BaseToolProvider):
         registered.append("memory_pressure")
 
         @mcp.tool(structured_output=False)
-        async def agent_startup(project: str | None = None, agent: str | None = None, limit: int = 12) -> str:
+        async def agent_startup(
+            project: str | None = None, agent: str | None = None, limit: int = 12
+        ) -> str:
             """Get one startup summary for agent clients."""
             payload = self.manager.get_agent_startup(project=project, agent=agent, limit=limit)
             return payload["startup_summary"]
@@ -665,9 +667,8 @@ class OptimizedMemoryTools(BaseToolProvider):
                 project: Optional project filter
             """
             report = self.manager.backfill_lifecycle(dry_run=dry_run, project=project)
-            return (
-                f"Backfill (dry_run={dry_run}) — total {report['total']}: "
-                + ", ".join(f"{k}={v}" for k, v in report["updated_by_tier"].items())
+            return f"Backfill (dry_run={dry_run}) — total {report['total']}: " + ", ".join(
+                f"{k}={v}" for k, v in report["updated_by_tier"].items()
             )
 
         registered.append("backfill_lifecycle")
@@ -709,7 +710,9 @@ class OptimizedMemoryTools(BaseToolProvider):
             for name, items in slices.items():
                 lines.append(f"\n## {name.title()} ({len(items)})")
                 for item in items[:10]:
-                    lines.append(f"- [{item.get('tier', 'working')}] {item.get('content', '')[:140]}")
+                    lines.append(
+                        f"- [{item.get('tier', 'working')}] {item.get('content', '')[:140]}"
+                    )
             return "\n".join(lines)
 
         registered.append("memory_kb")
