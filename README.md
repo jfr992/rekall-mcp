@@ -160,6 +160,26 @@ Input:  "Set api_key to sk-abc123def456"
 Stored: "Set api_key to [REDACTED]"
 ```
 
+### Securing a non-localhost deployment
+
+The server binds `0.0.0.0` (required for Claude Code's port-mapped network) and is
+**unauthenticated by default** — fine on a trusted machine. If you expose it on an
+untrusted network, either bind loopback (`HOST=127.0.0.1`) or enable bearer auth:
+
+```bash
+export MEMENTO_API_TOKEN=$(openssl rand -hex 32)   # on the server
+```
+
+When set, every request except `/health` requires the token. Point clients at it:
+
+```bash
+# Claude Code
+claude mcp add --transport http --url http://localhost:8000 \
+  --header "Authorization: Bearer $MEMENTO_API_TOKEN" memory
+# Cockpit: ui/.env.local
+echo "NEXT_PUBLIC_MEMENTO_API_TOKEN=$MEMENTO_API_TOKEN" >> ui/.env.local
+```
+
 ---
 
 ## Benchmark
