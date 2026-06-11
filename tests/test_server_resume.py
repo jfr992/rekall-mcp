@@ -16,7 +16,9 @@ class QueryParams:
 
 @pytest.mark.asyncio
 async def test_api_resume_packet(monkeypatch):
-    from server import api_resume_packet
+    # /api/memory/context/resume was removed as a duplicate; /api/memory/resume
+    # (api_memory_resume) is the single resume route.
+    from server import api_memory_resume
 
     manager = MagicMock()
     manager.get_resume_packet.return_value = {
@@ -29,7 +31,7 @@ async def test_api_resume_packet(monkeypatch):
     monkeypatch.setattr("server._get_memory_manager", lambda: manager)
 
     request = SimpleNamespace(query_params=QueryParams({"project": "brain", "limit": "9"}))
-    response = await api_resume_packet(request)
+    response = await api_memory_resume(request)
 
     assert isinstance(response, JSONResponse)
     payload = json.loads(response.body)
