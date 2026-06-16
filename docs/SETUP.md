@@ -36,7 +36,7 @@ This starts:
 ### Step 2: Tell Claude About It
 
 ```bash
-claude mcp add --transport http memory http://localhost:8000
+claude mcp add --transport http --url http://localhost:8000 memory
 ```
 
 Verify:
@@ -53,8 +53,8 @@ docker compose ps
 # Check health
 curl http://localhost:8000/health
 
-# Check dashboard
-curl http://localhost:8000/dashboard
+# Cockpit UI runs separately on :3333
+# cd ui && npm run dev -- -p 3333
 ```
 
 ### Step 4: Build the Knowledge Graph
@@ -77,7 +77,7 @@ Once the MCP server is running, add instructions to your project:
 
 ### Option A: Project-level (recommended)
 
-Create `.claude/CLAUDE.md` in your project:
+Create `CLAUDE.md` at your project root (or `.claude/CLAUDE.md` if you prefer the dotfile layout — Claude Code reads either):
 
 ```markdown
 ## Memory System

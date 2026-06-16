@@ -13,30 +13,24 @@ Memento MCP is a persistent memory system with a **knowledge graph** layer. It s
 ```bash
 git clone https://github.com/jfr992/memento-mcp.git
 cd memento-mcp
-docker compose up -d
+docker compose up -d                # starts Qdrant on :6333
+bash scripts/start-memento.sh       # starts the MCP backend on :8000 (and the cockpit on :3333)
 ```
-```bash
-# Optional: plain Docker run (HTTP + dashboard enabled)
-docker run -p 8000:8000 \
-  -e QDRANT_URL=http://host.docker.internal:6333 \
-  -e MCP_TRANSPORT=streamable-http \
-  -e HOST=0.0.0.0 \
-  memento-mcp
-```
+
+`start-memento.sh` is idempotent — re-run it any time. Memories live at `$MEMORY_STORAGE_PATH` (default `~/.claude/memory`); set the env var before running the script if you want a different location.
 
 > **Need Docker?** Get it free at [docker.com/get-started](https://www.docker.com/get-started/)
 
 ### 2. Tell Claude
 
 ```bash
-claude mcp add --transport http --url http://localhost:8000/mcp memory
+claude mcp add --transport http --url http://localhost:8000 memory
 ```
 
 ### 3. Verify
 
 ```bash
 curl http://localhost:8000/health
-curl http://localhost:8000/dashboard
 ```
 
 **Done.** Claude now remembers things between sessions.
@@ -108,58 +102,42 @@ Recall uses a 3-phase pipeline instead of flat cosine search:
 ```
 1. SEED    - Vector search (top K x 2 candidates)
 2. EXPAND  - Traverse 1-hop graph neighbors of seed results
-3. RANK    - Composite: vector(50%) + importance(20%) + recency(15%) + proximity(15%)
+3. RANK    - Composite: vector(40%) + importance(20%) + proximity(15%) + tier(15%) + recency(10%)
 ```
 
 This finds memories that are *structurally related*, not just textually similar. Falls back to pure vector search when the graph is empty.
 
-### Dashboard
+### Cockpit UI
 
-Browse the knowledge graph at `http://localhost:8000/dashboard`. Nodes are memories, edges show typed relationships with labels.
+Browse the knowledge graph at `http://localhost:3333/brain` (Next.js cockpit, run with `cd ui && npm run dev -- -p 3333`). Surfaces:
+
+- `/brain` — force-directed graph view, nodes are memories, edges show typed relationships
+- `/kb` — typed columns (decisions, requirements, preferences, learnings)
+- `/continuity` — resume packets and handoff summaries
+- `/hygiene` — pressure metrics, prune flow, lifecycle backfill
 
 ---
 
-## Memory Plugin (Auto-Triggering Skills)
+## Slash command shortcuts (optional, manual)
 
-Make memory completely automatic with the Memory Plugin.
-
-Instead of manually calling memory tools, the plugin:
-- **Auto-restores** context at session start (silently)
-- **Auto-saves** decisions when detected
-- **Auto-recalls** memories when you ask questions
-- **Works invisibly** - feels like Claude naturally "remembers"
-
-### Quick Install
-
-Use [claude-dotfiles](https://github.com/jfr992/claude-dotfiles) for the full setup (hooks, skills, rules):
+`claude/skills/` ships seven user-invocable slash commands. They are NOT auto-triggering — type the slash command to invoke. Install once globally:
 
 ```bash
-git clone https://github.com/jfr992/claude-dotfiles.git ~/Repos/claude-dotfiles
-cd ~/Repos/claude-dotfiles
 mkdir -p ~/.claude/skills
-cp -r claude/skills/setup ~/.claude/skills/setup
-# Then in Claude Code: /setup
+cp -r claude/skills/* ~/.claude/skills/
 ```
 
-Or install just the memory skills manually:
-
-```bash
-cp -r claude/skills/memory-* ~/.claude/skills/
-```
-
-### Available Skills
-
-| Skill | Purpose |
-|-------|---------|
-| `/memory-restore` | Load context at session start (hierarchical + flat) |
-| `/memory-observe <note>` | Save an observation manually |
+| Slash command | What it does |
+|---------------|--------------|
+| `/memory-observe <note>` | Manual save with auto-classification |
 | `/memory-recall <query>` | Graph-enhanced semantic search |
-| `/memory-stats` | Health check with graph metrics |
-| `/memory-rebuild` | Rebuild knowledge graph from all memories |
+| `/memory-restore` | Manual context restore (importance-ranked) |
+| `/memory-stats` | Health check + graph metrics |
+| `/memory-rebuild` | Rebuild the knowledge graph |
 | `/memory-consolidate` | Detect duplicate and contradictory memories |
 | `/memory-skills` | Show extracted skills from memory clusters |
 
-See **[Memory Plugin](docs/MEMORY_PLUGIN.md)** for architecture and technical details.
+The auto-save mechanism is the **Stop hook** at `claude/hooks/memento-observe.sh` (a Haiku judge gated by signal detection — keywords, new commits, or session length), not the slash commands. See [`claude/INSTALL.md`](claude/INSTALL.md) for hook setup.
 
 ---
 
@@ -182,18 +160,40 @@ Input:  "Set api_key to sk-abc123def456"
 Stored: "Set api_key to [REDACTED]"
 ```
 
+### Securing a non-localhost deployment
+
+The server binds `0.0.0.0` (required for Claude Code's port-mapped network) and is
+**unauthenticated by default** — fine on a trusted machine. If you expose it on an
+untrusted network, either bind loopback (`HOST=127.0.0.1`) or enable bearer auth:
+
+```bash
+export MEMENTO_API_TOKEN=$(openssl rand -hex 32)   # on the server
+```
+
+When set, every request except `/health` requires the token. Point clients at it:
+
+```bash
+# Claude Code
+claude mcp add --transport http --url http://localhost:8000 \
+  --header "Authorization: Bearer $MEMENTO_API_TOKEN" memory
+# Cockpit: ui/.env.local
+echo "NEXT_PUBLIC_MEMENTO_API_TOKEN=$MEMENTO_API_TOKEN" >> ui/.env.local
+```
+
 ---
 
 ## Benchmark
 
 Tested on [LongMemEval](https://github.com/xiaowu0162/LongMemEval) (500 questions, 6 question types). Reproducible — runner in [`benchmarks/`](benchmarks/).
 
-| Mode | R@5 | What It Tests |
-|------|-----|---------------|
-| Dense (semantic only) | 96.6% | Same as MemPalace raw — identical score |
-| **Hybrid (BM25 + dense)** | **97.6%** | **Memento's default pipeline — beats all published zero-API scores** |
-| Hybrid + graph | 97.6% | Adds knowledge graph expansion |
-| MemPalace (raw, ChromaDB) | 96.6% | Highest previously published zero-API score |
+`main` ships with **dense-only** retrieval (96.6% R@5 — matches MemPalace raw). Hybrid BM25 + dense retrieval and the +graph variant live on the `feat/hybrid-search-bm25` branch and reproduce the higher scores in the table below.
+
+| Mode | R@5 | Branch | What It Tests |
+|------|-----|--------|---------------|
+| Dense (semantic only) | 96.6% | `main` (default) | Same as MemPalace raw — identical score |
+| Hybrid (BM25 + dense) | 97.6% | `feat/hybrid-search-bm25` | Beats all published zero-API scores |
+| Hybrid + graph | 97.6% | `feat/hybrid-search-bm25` | Adds knowledge graph expansion |
+| MemPalace (raw, ChromaDB) | 96.6% | (external) | Highest previously published zero-API score |
 
 Hybrid search catches entity-specific queries that pure semantic search misses. No LLM required, no API calls, runs entirely local.
 
@@ -230,9 +230,10 @@ When you ask "what database?", Claude searches by meaning, not keywords. The kno
 
 **"Connection refused"** - Make sure Docker is running: `docker compose ps`
 
-**"No dashboard UI"** - Verify transport is HTTP:
+**"Cockpit UI not loading"** - Backend transport must be HTTP and the cockpit must be running:
 ```bash
-docker compose exec mcp env | rg 'MCP_TRANSPORT|HOST'
+docker compose exec mcp env | rg 'MCP_TRANSPORT|HOST'   # backend
+cd ui && npm run dev -- -p 3333                          # cockpit
 ```
 
 **"Claude forgets"** - Install the memory plugin (skills + hook) or add to `~/.claude/CLAUDE.md`:
@@ -298,9 +299,19 @@ AI:  vector search finds the memory
 
 | Tool | Purpose |
 |------|---------|
-| `observe(summary)` | Auto-classify and save |
+| `observe(summary)` | Auto-classify and save (accepts caller `cwd` for project scope) |
 | `recall_memories(query)` | Graph-enhanced semantic search |
 | `save_memory(content, type)` | Manual save with explicit type |
+| `memory_detail(memory_id)` | Single memory + neighbors + scope |
+| `memory_kb(project)` | Typed slices (decisions / requirements / preferences / learnings) |
+| `memory_pressure(project)` | Pressure metrics + flagged candidates |
+| `memory_pressure_snapshot()` | Detailed pressure snapshot |
+| `prune_plan(project, limit)` | Build prune plan (apply via REST only) |
+| `backfill_lifecycle(project, dry_run)` | Tier metadata backfill on existing memories |
+| `resume_packet(project)` | Continuity resume |
+| `handoff_summary(project)` | Continuity summary |
+| `agent_startup(project)` | Unified startup payload |
+| `memory_lifecycle()` | Behavioral classifier output |
 | `get_cached_context(project)` | Flat context (prompt-cache optimized) |
 | `get_hierarchical_context(project)` | Topic-grouped context tree |
 | `skill_context()` | Extracted skills from memory clusters |
@@ -314,19 +325,31 @@ AI:  vector search finds the memory
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
 | `/health` | GET | Health check |
-| `/dashboard` | GET | Graph visualization UI |
 | `/api/memory/save` | POST | Save a memory |
 | `/api/memory/recall` | POST | Graph-enhanced search |
-| `/api/memory/observe` | POST | Auto-classify and save |
+| `/api/memory/observe` | POST | Auto-classify and save (accepts `cwd` for scope) |
 | `/api/memory/stats` | GET | Statistics + graph metrics |
+| `/api/memory/projects` | GET | List of projects + memory counts |
 | `/api/memory/context` | GET | Flat project context |
-| `/api/memory/context/hierarchy` | GET | Topic-grouped hierarchical context |
+| `/api/memory/context/hierarchy` | GET | Topic-grouped (`?days=N` for date filter) |
+| `/api/memory/context/smart` | GET | Token-capped smart context (`?limit=&max_tokens=`) |
 | `/api/memory/context/proactive` | GET | Top signals + conflict detection |
+| `/api/memory/context/skills` | GET | Inferred skill context from memory clusters |
+| `/api/memory/context/startup` | GET | Unified agent startup payload |
+| `/api/memory/detail/{id}` | GET | Full memory + neighbors + scope |
+| `/api/memory/kb` | GET | Typed slices |
+| `/api/memory/pressure` | GET | Pressure metrics + flagged candidates |
+| `/api/memory/resume` | GET | Resume packet for continuity |
+| `/api/memory/prune/plan` | POST | Build prune plan (plan-id, 15-min TTL, 200-deletion cap) |
+| `/api/memory/prune/apply` | POST | Apply plan with typed-id confirmation (REST-only) |
+| `/api/memory/lifecycle/backfill` | POST | Backfill tier metadata (dry-run + execute) |
 | `/api/memory/{id}` | DELETE | Delete a single memory |
 | `/api/memory/cleanup` | POST | Batch cleanup (prune superseded, age-based) |
 | `/api/memory/graph` | GET | Graph visualization data |
 | `/api/memory/graph/rebuild` | POST | Rebuild knowledge graph |
 | `/api/memory/consolidate` | GET | Detect superseded/conflicting pairs |
+| `/api/memory/recall/quick` | GET | Fast high-threshold recall for per-prompt injection |
+| `/api/memory/compact` | POST | LLM-summarize old memories (dry-run by default) |
 
 </details>
 
@@ -386,7 +409,7 @@ docker compose --profile test down
 
 ```
 src/
-├── server.py               # MCP server with REST API + dashboard
+├── server.py               # MCP server + REST API endpoints
 ├── core/                   # Embedder, VectorStore, Telemetry, utils
 │   └── utils.py            # stable_hash_id() for string->int64 hashing
 ├── memory/

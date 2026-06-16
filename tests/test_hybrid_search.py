@@ -48,11 +48,13 @@ class TestBM25EncoderHybridFlow:
         from core import BM25Encoder
 
         encoder = BM25Encoder()
-        encoder.fit([
-            "TOPE-123 connection pooling issue in prod",
-            "PostgreSQL database optimization tips",
-            "Memory leak in worker process identified",
-        ])
+        encoder.fit(
+            [
+                "TOPE-123 connection pooling issue in prod",
+                "PostgreSQL database optimization tips",
+                "Memory leak in worker process identified",
+            ]
+        )
 
         result = encoder.encode("TOPE-123")
 
@@ -64,11 +66,13 @@ class TestBM25EncoderHybridFlow:
         from core import BM25Encoder
 
         encoder = BM25Encoder()
-        encoder.fit([
-            "TOPE-123 connection pooling",
-            "database optimization",
-            "memory management tips",
-        ])
+        encoder.fit(
+            [
+                "TOPE-123 connection pooling",
+                "database optimization",
+                "memory management tips",
+            ]
+        )
 
         v1 = encoder.encode("TOPE-123 connection")
         v2 = encoder.encode("database optimization")
@@ -81,12 +85,14 @@ class TestBM25EncoderHybridFlow:
 
         encoder = BM25Encoder()
         # "common" appears in all docs; "rare_unique_xyz" only once
-        encoder.fit([
-            "common term everywhere here",
-            "common word appears again",
-            "common repeated once more",
-            "rare_unique_xyz single mention",
-        ])
+        encoder.fit(
+            [
+                "common term everywhere here",
+                "common word appears again",
+                "common repeated once more",
+                "rare_unique_xyz single mention",
+            ]
+        )
 
         common_vec = encoder.encode("common")
         rare_vec = encoder.encode("rare_unique_xyz")

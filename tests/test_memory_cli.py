@@ -66,9 +66,7 @@ class TestSaveCommand:
         result = cli_runner.invoke(memory, ["save", "Decision made", "--type", "decision"])
 
         assert result.exit_code == 0
-        mock_memory_manager.save.assert_called_with(
-            "Decision made", type="decision", project=None
-        )
+        mock_memory_manager.save.assert_called_with("Decision made", type="decision", project=None)
 
     def test_save_with_project(self, cli_runner, mock_memory_manager):
         """Save with --project flag."""
@@ -77,9 +75,7 @@ class TestSaveCommand:
         result = cli_runner.invoke(memory, ["save", "Content", "--project", "my-project"])
 
         assert result.exit_code == 0
-        mock_memory_manager.save.assert_called_with(
-            "Content", type="note", project="my-project"
-        )
+        mock_memory_manager.save.assert_called_with("Content", type="note", project="my-project")
 
     def test_save_with_all_options(self, cli_runner, mock_memory_manager):
         """Save with all options."""

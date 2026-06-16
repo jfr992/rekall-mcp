@@ -158,7 +158,7 @@ def _cosine_similarity(left: list[float], right: list[float]) -> float:
     if left_norm == 0.0 or right_norm == 0.0:
         return 0.0
 
-    return dot / ((left_norm ** 0.5) * (right_norm ** 0.5))
+    return dot / ((left_norm**0.5) * (right_norm**0.5))
 
 
 def _extract_terms(content: str, max_terms: int = 4) -> list[str]:
@@ -304,10 +304,7 @@ def build_topic_clusters(
 
         point_copy = dict(point)
         point_copy["memory_id"] = str(
-            point.get("memory_id")
-            or point.get("id")
-            or point.get("timestamp")
-            or idx
+            point.get("memory_id") or point.get("id") or point.get("timestamp") or idx
         )
         point_copy["vector"] = _coerce_vector(point.get("vector"))
         prepared.append(point_copy)

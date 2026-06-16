@@ -22,14 +22,16 @@ if TYPE_CHECKING:
     from core.vector_store import VectorStore
 
 
-RELATION_TYPES = frozenset({
-    "related_to",
-    "led_to",
-    "depends_on",
-    "contradicts",
-    "supersedes",
-    "part_of",
-})
+RELATION_TYPES = frozenset(
+    {
+        "related_to",
+        "led_to",
+        "depends_on",
+        "contradicts",
+        "supersedes",
+        "part_of",
+    }
+)
 
 TYPE_WEIGHTS: dict[str, float] = {
     "requirement": 1.0,
@@ -61,18 +63,6 @@ class KnowledgeGraph:
 
     def __init__(self, graph_path: Path | str) -> None:
         self._path = Path(graph_path)
-        if (
-            self._path.suffix == ".json"
-            and self._path.name == "_graph.json"
-            and self._path.parent.name == "_graph.json"
-            and not self._path.exists()
-        ):
-            # Compatibility for callers that pass an already-appended
-            # graph path (e.g. _tmp_graph(tmp_path / "_graph.json")).
-            fallback_path = self._path.parent.parent / "_graph.json"
-            if fallback_path.exists():
-                self._path = fallback_path
-
         self._graph = nx.DiGraph()
         self._dirty = False
         self._load()
@@ -107,9 +97,7 @@ class KnowledgeGraph:
 
         data = {
             "version": GRAPH_VERSION,
-            "nodes": {
-                node_id: dict(self._graph.nodes[node_id]) for node_id in self._graph.nodes
-            },
+            "nodes": {node_id: dict(self._graph.nodes[node_id]) for node_id in self._graph.nodes},
             "edges": [
                 {
                     "source": source,
@@ -162,6 +150,7 @@ class KnowledgeGraph:
         # Refresh access metadata when existing node is referenced again.
         self._graph.nodes[memory_id]["last_accessed"] = date.today().isoformat()
         self._graph.nodes[memory_id]["topic"] = topic
+        self._dirty = True
 
     def record_access(self, memory_id: str) -> None:
         if memory_id not in self._graph:
@@ -218,6 +207,16 @@ class KnowledgeGraph:
                 edges.append(Edge(source=source, target=memory_id, **data))
 
         return edges
+
+    def count_contradicts(self, memory_id: str) -> int:
+        """Count contradicts-edges incident on memory_id (in + out)."""
+        if memory_id not in self._graph:
+            return 0
+        count = 0
+        for edge in self.get_edges(memory_id, direction="both"):
+            if edge.relation == "contradicts":
+                count += 1
+        return count
 
     # ------------------------------------------------------------------
     # Traversal
@@ -332,10 +331,7 @@ class KnowledgeGraph:
         """Serialize graph state for inspection."""
         return {
             "version": GRAPH_VERSION,
-            "nodes": [
-                {"id": node_id, **attrs}
-                for node_id, attrs in self._graph.nodes(data=True)
-            ],
+            "nodes": [{"id": node_id, **attrs} for node_id, attrs in self._graph.nodes(data=True)],
             "edges": [
                 {
                     "source": source,
@@ -387,11 +383,16 @@ class KnowledgeGraph:
                 store=store,
             )
 
+        # Apply idle-based importance decay as part of maintenance so the
+        # advertised decay actually runs (previously dead code).
+        decayed = self.decay_importance()
+
         self.save()
         duration_ms = int((time.monotonic() - start) * 1000)
 
         return {
             "nodes": self._graph.number_of_nodes(),
             "edges": self._graph.number_of_edges(),
+            "decayed": decayed,
             "duration_ms": duration_ms,
         }

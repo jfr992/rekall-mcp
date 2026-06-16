@@ -73,12 +73,8 @@ def test_build_memory_graph_filters_similarity_threshold():
     result = _graph(points, neighbor_count=2, min_similarity=0.9)
 
     assert len(result["nodes"]) == 3
-    assert any(
-        link["source"] == "a" and link["target"] == "b" for link in result["links"]
-    )
-    assert not any(
-        link["source"] == "a" and link["target"] == "c" for link in result["links"]
-    )
+    assert any(link["source"] == "a" and link["target"] == "b" for link in result["links"])
+    assert not any(link["source"] == "a" and link["target"] == "c" for link in result["links"])
 
 
 def test_graph_ignores_missing_vectors():

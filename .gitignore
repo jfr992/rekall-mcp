@@ -54,3 +54,19 @@ config.yaml
 # Data (stored in ~/.claude/)
 data/
 *.jsonl
+.superpowers/
+
+# Audit/debug screenshots — never commit
+brain-*.png
+
+# Playwright MCP session artifacts
+.playwright-mcp/
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Node / Next.js (UI)
+node_modules/
+**/node_modules/
+.next/
+**/.next/

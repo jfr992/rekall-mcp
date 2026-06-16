@@ -32,8 +32,8 @@ def test_parse_graph_filters_includes_expected_fields():
 
     assert filters["project"] == "api"
     assert filters["type"] == "decision"
-    assert filters["date"]["gte"] == expected_cutoff
-    assert filters["date"]["gte"] <= now
+    assert filters["_cutoff_date"] == expected_cutoff
+    assert filters["_cutoff_date"] <= now
 
 
 def test_parse_graph_filters_without_days_has_no_date_filter():
@@ -43,7 +43,7 @@ def test_parse_graph_filters_without_days_has_no_date_filter():
     filters = _parse_graph_filters(QueryParams({"project": "api"}))
 
     assert filters["project"] == "api"
-    assert "date" not in filters
+    assert filters.get("_cutoff_date") is None
 
 
 @pytest.mark.asyncio
@@ -118,9 +118,7 @@ async def test_api_skill_context_endpoint(monkeypatch):
     assert payload["min_mentions"] == 3
     assert payload["max_skills"] == 5
 
-    manager.get_skill_context.assert_called_once_with(
-        project="api", min_mentions=3, max_skills=5
-    )
+    manager.get_skill_context.assert_called_once_with(project="api", min_mentions=3, max_skills=5)
 
 
 @pytest.mark.asyncio
@@ -140,9 +138,7 @@ async def test_api_skill_context_defaults(monkeypatch):
     assert payload["min_mentions"] == 2
     assert payload["max_skills"] == 8
 
-    manager.get_skill_context.assert_called_once_with(
-        project=None, min_mentions=2, max_skills=8
-    )
+    manager.get_skill_context.assert_called_once_with(project=None, min_mentions=2, max_skills=8)
 
 
 @pytest.mark.asyncio

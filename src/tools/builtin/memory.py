@@ -9,9 +9,9 @@ Based on best practices from:
 
 from __future__ import annotations
 
-import os
-from pathlib import Path
 from typing import TYPE_CHECKING
+
+from memory.scope import ScopeDetector
 
 from ..base import BaseToolProvider, ToolDefinition
 
@@ -270,17 +270,61 @@ class OptimizedMemoryTools(BaseToolProvider):
                 description="Generate a proactive memory summary ordered by signal strength",
                 handler=None,
             ),
+            ToolDefinition(
+                name="resume_packet",
+                description="Get a continuity-oriented resume packet for Claude Code or Codex session start",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="memory_lifecycle",
+                description="Explain memory tiers and retention behavior for the current project",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="handoff_summary",
+                description="Get a startup handoff summary with next steps and recent momentum",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="memory_pressure",
+                description="Inspect memory pressure and cleanup candidates for the current project",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="agent_startup",
+                description="Get a single startup payload for Claude Code or Codex sessions",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="prune_plan",
+                description="Build a safe prune plan (does not delete). Apply is REST-only.",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="memory_detail",
+                description="Fetch a single memory by id with its 1-hop graph neighbors",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="memory_kb",
+                description="Typed semantic slices of the knowledge base: decisions, requirements, preferences, learnings",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="memory_pressure_snapshot",
+                description="Structured memory pressure snapshot (load_score, capacity, flagged, candidates)",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="backfill_lifecycle",
+                description="One-shot backfill: compute tier/durability for existing memories (dry_run by default)",
+                handler=None,
+            ),
         ]
 
-    def _get_current_project(self) -> str:
-        """Extract project from working directory.
-
-        Best practice from Semantic Kernel: Auto-detect context.
-        """
-        try:
-            return Path(os.getcwd()).name
-        except Exception:
-            return "general"
+    def _get_current_scope(self, project: str | None = None):
+        """Detect full scope, not just cwd basename."""
+        return ScopeDetector.detect(project=project)
 
     def register(self, mcp: FastMCP) -> list[str]:
         """Register optimized memory tools."""
@@ -316,22 +360,23 @@ class OptimizedMemoryTools(BaseToolProvider):
                 type: Memory type or "auto" for automatic classification
                 context: Optional: Why this matters or what prompted it
             """
-            # Get current project (Semantic Kernel pattern)
-            project = self._get_current_project()
+            scope = self._get_current_scope()
 
-            # Classify type (Qdrant + embedding best practice)
             if type == "auto":
                 type = _classify_smart(summary, self.manager.embedder)
 
-            # Build full content
-            full_content = summary
-            if context:
-                full_content = f"{summary}\n\nContext: {context}"
+            result = self.manager.observe(
+                summary=summary,
+                type=type,
+                project=scope.project,
+                scope=scope,
+                context=context,
+            )
 
-            # Save (creates keyword indexes automatically)
-            memory_id = self.manager.save(content=full_content, type=type, project=project)
+            if isinstance(result, str):
+                return f"✓ Observed as {type}: {result}\n\nAvailable for recall in future sessions."
 
-            return f"✓ Observed as {type}: {memory_id}\n\nAvailable for recall in future sessions."
+            return f"Skipped memory save ({result.reason}, salience={result.salience:.2f})"
 
         registered.append("observe")
 
@@ -369,7 +414,10 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         @mcp.tool(structured_output=False)
         async def save_memory(
-            content: str, memory_type: str = "note", project: str | None = None
+            content: str,
+            memory_type: str = "note",
+            project: str | None = None,
+            context: str | None = None,
         ) -> str:
             """Save a memory explicitly (manual mode).
 
@@ -382,8 +430,16 @@ class OptimizedMemoryTools(BaseToolProvider):
                 content: What to remember
                 memory_type: Type (decision, learning, preference, requirement, fact, note)
                 project: Optional project to associate with
+                context: Optional: why this matters, appended to content as "Context: ..."
             """
-            memory_id = self.manager.save(content=content, type=memory_type, project=project)
+            scope = self._get_current_scope(project=project)
+            full_content = content if not context else f"{content}\n\nContext: {context}"
+            memory_id = self.manager.save(
+                content=full_content,
+                type=memory_type,
+                project=scope.project,
+                scope=scope,
+            )
             return f"Saved memory: {memory_id}"
 
         registered.append("save_memory")
@@ -508,6 +564,87 @@ class OptimizedMemoryTools(BaseToolProvider):
         registered.append("proactive_context_summary")
 
         @mcp.tool(structured_output=False)
+        async def resume_packet(project: str | None = None, limit: int = 12) -> str:
+            """Return a session-start continuity packet for the current agent scope."""
+            scope = self._get_current_scope(project=project)
+            packet = self.manager.get_resume_packet(project=scope.project, scope=scope, limit=limit)
+            return packet["summary"]
+
+        registered.append("resume_packet")
+
+        @mcp.tool(structured_output=False)
+        async def memory_lifecycle(project: str | None = None, limit: int = 20) -> str:
+            """Summarize tiering and retention for recent project memories."""
+            scope = self._get_current_scope(project=project)
+            points = self.manager.store.scroll(filters={"project": scope.project}, limit=limit)
+            if not points:
+                return "No memories found."
+
+            lines = [f"# Memory Lifecycle: {scope.project}", ""]
+            for point in points:
+                tier = point.get("tier", "working")
+                retention = point.get("retention_days", "?")
+                lines.append(
+                    f"- [{tier}] [{point.get('type', 'note')}] {point.get('content', '')[:120]} (retention={retention}d)"
+                )
+            return "\n".join(lines)
+
+        registered.append("memory_lifecycle")
+
+        @mcp.tool(structured_output=False)
+        async def handoff_summary(project: str | None = None, limit: int = 12) -> str:
+            """Return a momentum-oriented handoff summary for session startup."""
+            scope = self._get_current_scope(project=project)
+            packet = self.manager.get_resume_packet(project=scope.project, scope=scope, limit=limit)
+            return packet.get("handoff", packet["summary"])
+
+        registered.append("handoff_summary")
+
+        @mcp.tool(structured_output=False)
+        async def memory_pressure(project: str | None = None, limit: int = 40) -> str:
+            """Inspect memory pressure for the current project."""
+            from memory.pressure import identify_pressure, render_pressure_report
+
+            scope = self._get_current_scope(project=project)
+            points = self.manager.store.scroll(filters={"project": scope.project}, limit=limit)
+            pressure = identify_pressure(points)
+            return render_pressure_report(pressure)
+
+        registered.append("memory_pressure")
+
+        @mcp.tool(structured_output=False)
+        async def agent_startup(
+            project: str | None = None, agent: str | None = None, limit: int = 12
+        ) -> str:
+            """Get one startup summary for agent clients."""
+            payload = self.manager.get_agent_startup(project=project, agent=agent, limit=limit)
+            return payload["startup_summary"]
+
+        registered.append("agent_startup")
+
+        @mcp.tool(structured_output=False)
+        async def prune_plan(project: str | None = None, limit: int = 200) -> str:
+            """Build a safe prune plan. Identity tier and memories without explicit
+            salience are never selected. Returns a plan_id that the UI (NOT an agent)
+            can later apply via the REST endpoint.
+
+            Args:
+                project: Project to plan prune for (defaults to current scope)
+                limit: Max candidates (default 200)
+            """
+            scope = self._get_current_scope(project=project)
+            from memory.prune import build_plan
+
+            plan = build_plan(self.manager, project=scope.project, limit=limit)
+            return (
+                f"Plan {plan.plan_id} — {len(plan.candidates)} candidates "
+                f"(expires {plan.expires_at.isoformat()})\n"
+                f"(Apply via REST only: POST /api/memory/prune/apply)"
+            )
+
+        registered.append("prune_plan")
+
+        @mcp.tool(structured_output=False)
         async def rebuild_knowledge_graph() -> str:
             """Rebuild the knowledge graph from all existing memories."""
             stats = self.manager.knowledge_graph.rebuild(
@@ -520,5 +657,78 @@ class OptimizedMemoryTools(BaseToolProvider):
             )
 
         registered.append("rebuild_knowledge_graph")
+
+        @mcp.tool(structured_output=False)
+        async def backfill_lifecycle(dry_run: bool = True, project: str | None = None) -> str:
+            """Backfill tier/durability on existing memories.
+
+            Args:
+                dry_run: If True, report what would change without writing (default True)
+                project: Optional project filter
+            """
+            report = self.manager.backfill_lifecycle(dry_run=dry_run, project=project)
+            return f"Backfill (dry_run={dry_run}) — total {report['total']}: " + ", ".join(
+                f"{k}={v}" for k, v in report["updated_by_tier"].items()
+            )
+
+        registered.append("backfill_lifecycle")
+
+        @mcp.tool(structured_output=False)
+        async def memory_pressure_snapshot(project: str | None = None) -> str:
+            """Return structured memory pressure for the current project.
+
+            Args:
+                project: Optional project filter
+            """
+            from memory.pressure import identify_pressure, render_pressure_report
+
+            scope = self._get_current_scope(project=project)
+            filters = {"project": scope.project} if scope.project else None
+            memories = self.manager.store.scroll(filters=filters, limit=2000)
+            pressure = identify_pressure(memories)
+            return render_pressure_report(pressure)
+
+        registered.append("memory_pressure_snapshot")
+
+        @mcp.tool(structured_output=False)
+        async def memory_kb(project: str | None = None) -> str:
+            """Return typed KB slices: decisions, requirements, preferences, learnings.
+
+            Args:
+                project: Optional project filter
+            """
+            scope = self._get_current_scope(project=project)
+            filters = {"project": scope.project} if scope.project else None
+            points = self.manager.store.scroll(filters=filters, limit=2000)
+            slices = {
+                "decisions": [p for p in points if p.get("type") == "decision"],
+                "requirements": [p for p in points if p.get("type") == "requirement"],
+                "preferences": [p for p in points if p.get("type") == "preference"],
+                "learnings": [p for p in points if p.get("type") == "learning"],
+            }
+            lines = [f"# KB: {scope.project}"]
+            for name, items in slices.items():
+                lines.append(f"\n## {name.title()} ({len(items)})")
+                for item in items[:10]:
+                    lines.append(
+                        f"- [{item.get('tier', 'working')}] {item.get('content', '')[:140]}"
+                    )
+            return "\n".join(lines)
+
+        registered.append("memory_kb")
+
+        @mcp.tool(structured_output=False)
+        async def memory_detail(memory_id: str) -> str:
+            """Fetch a single memory by id with its 1-hop graph neighbors.
+
+            Args:
+                memory_id: The memory id to fetch
+            """
+            memory = self.manager.store.get_by_id(memory_id)
+            if not memory:
+                return f"Memory not found: {memory_id}"
+            return str(memory)
+
+        registered.append("memory_detail")
 
         return registered

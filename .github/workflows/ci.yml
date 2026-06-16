@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: uv sync --extra dev
+      # Blocking gates — green today and must stay green.
+      - name: Ruff lint
+        run: uv run ruff check src tests
+      - name: Ruff format
+        run: uv run ruff format --check src tests
+      - name: Unit tests
+        run: uv run pytest -m "not integration" --tb=short -q
+      # Advisory gate — ~110 pre-existing mypy errors predate CI; surfaced, not
+      # blocking, until cleaned up in a dedicated pass. Flip continue-on-error
+      # off once that backlog clears.
+      - name: Mypy (advisory)
+        continue-on-error: true
+        run: uv run mypy --ignore-missing-imports src
+
+  integration:
+    runs-on: ubuntu-latest
+    services:
+      qdrant:
+        image: qdrant/qdrant:v1.13.4
+        ports:
+          - 6334:6333
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: uv sync --extra dev
+      - name: Wait for Qdrant
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:6334/healthz && exit 0
+            sleep 1
+          done
+          echo "Qdrant did not become healthy" >&2
+          exit 1
+      - name: Integration tests
+        env:
+          QDRANT_URL: http://localhost:6334
+        run: PYTHONPATH=src uv run pytest -m integration --tb=short -q
+
+  ui:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+      # `next lint` is interactive under Next 15 (prompts for config) and is
+      # deprecated; run eslint directly, advisory until a flat config lands.
+      - name: ESLint (advisory)
+        continue-on-error: true
+        run: npx eslint . --max-warnings=0
+      - run: npm test

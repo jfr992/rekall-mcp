@@ -372,3 +372,117 @@ embedder = Embedder(model="paraphrase-MiniLM-L6-v2")
 ```
 
 After switching models, rebuild the index: `python -m memory.migrate`
+
+---
+
+## Memory OS (Backend Hardening — 2026-04-10)
+
+### Behavioral tiering
+
+Tiers are computed from behavioral signals, not a pure type→tier lookup. See
+`src/memory/lifecycle.py:classify` and `LifecycleSignals`. Promotion is
+deterministic; identity tier is sacred (only reachable via explicit
+`save(tier="identity")`).
+
+- `working` — recent scratch, low-confidence
+- `episodic` — session/time-anchored events
+- `semantic` — durable facts, decisions, high-salience requirements, reinforced notes
+- `identity` — stable user/agent preferences (explicit only)
+
+**Classification rules** (applied in order):
+1. `explicit_tier="identity"` → `identity` (sacred, short-circuits)
+2. `type ∈ {note, fact, learning}` AND `reinforcement_count ≥ 5` AND `age_days ≥ 7` → `semantic`
+3. `type ∈ {decision, requirement}` AND `salience ≥ 0.6` → `semantic`
+4. `contradicts_count ≥ 2` → demote one tier (floored at `working`)
+
+**Recall tier weights**: `identity=1.0, semantic=0.66, episodic=0.33, working=0.0`
+at `0.15` final weight. Old weights made tier a rounding error (max 0.015).
+
+### Reinforcement loop
+
+When `manager.save` hits the dedupe path, it calls
+`intelligence.reinforce_and_reclassify` — a pure function that:
+1. Increments `reinforcement_count`
+2. Recomputes tier/durability via `classify()`
+3. Returns a new dict (does not mutate the input)
+
+The caller (`_reinforce_existing_memory`) persists via `store.update_payload`.
+Identity tier is preserved through the reinforcement path.
+
+### Safe pruning
+
+Prune is a two-step plan/apply contract with a plan id gate, 15-minute TTL,
+and a hard cap of 200 deletions per apply. See `src/memory/prune.py`.
+
+**Safety rules enforced in `build_plan`:**
+- Identity-tier memories are NEVER selected
+- Memories without an explicit `salience` field are NEVER selected
+  (prevents wiping hand-saved notes whose salience is unknown)
+- Memories adjacent (1-hop) to an identity-tier memory are NEVER selected
+  (neighborhood protection)
+- Reinforced memories (`reinforcement_count > 0`) are NEVER selected
+- Young memories (`age_days < 7`) are NEVER selected
+
+**`apply_plan` requires:**
+- A matching `confirm_plan_id` (not just any UUID)
+- Non-expired plan (15-minute TTL)
+- Hard-caps at 200 deletions; excess goes to `skipped`
+
+**`prune_apply` is REST-only.** There is deliberately no matching MCP tool,
+so agents cannot self-delete. Only the UI (or a human with `curl`) can
+execute a prune.
+
+### Trust boundaries
+
+`src/memory/trust.py` loads `~/.claude/memory/trust.yaml` (override via
+`MEMENTO_MEMORY_DIR`). If the file is missing or malformed, every detection
+resolves to `personal`. No hardcoded client names.
+
+Schema:
+```yaml
+boundaries:
+  - name: my-client
+    match:
+      remote_contains: "gitlab.my-client.internal"
+      name_contains: "client-repo-"   # list of strings also accepted
+```
+
+`ScopeDetector.detect()` is `lru_cache`d per cwd. Credentials in HTTPS
+remote URLs are stripped via `_strip_creds` before being persisted in
+memory payloads.
+
+### New REST endpoints
+
+All endpoints return structured JSON (plain dicts via `_ok`). MCP tool
+parity exists for every endpoint EXCEPT `POST /api/memory/prune/apply`,
+which is deliberately REST-only.
+
+| Path | Method | Purpose | MCP tool |
+|------|--------|---------|----------|
+| `/api/memory/detail/{id}` | GET | Single memory + 1-hop neighbors | `memory_detail` |
+| `/api/memory/kb` | GET | Typed slices (decisions, requirements, preferences, learnings) | `memory_kb` |
+| `/api/memory/pressure` | GET | Structured pressure snapshot with `load_score`, `capacity`, `flagged` | `memory_pressure_snapshot` |
+| `/api/memory/prune/plan` | POST | Build a dry prune plan | `prune_plan` |
+| `/api/memory/prune/apply` | POST | Apply a plan (requires `{plan_id, confirm}`) | **none (REST-only)** |
+| `/api/memory/lifecycle/backfill` | POST | One-shot backfill for existing memories | `backfill_lifecycle` |
+| `/api/memory/resume` | GET | Bounded-scroll resume packet with `truncated` flag | `resume_packet` |
+
+### Migration
+
+Existing installations with memories saved before this branch need a one-shot
+lifecycle backfill to populate `tier` / `durability` / `retention_days` on
+legacy memories:
+
+```bash
+# Dry run first
+curl -X POST http://localhost:8000/api/memory/lifecycle/backfill \
+  -H 'content-type: application/json' \
+  -d '{"dry_run": true}' | jq
+
+# Then apply
+curl -X POST http://localhost:8000/api/memory/lifecycle/backfill \
+  -H 'content-type: application/json' \
+  -d '{"dry_run": false}' | jq
+```
+
+The backfill is idempotent and safe to re-run.

@@ -35,8 +35,13 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from core import Embedder, Telemetry, VectorStore
+from memory.lifecycle import summarize_lifecycle
 from memory.linker import auto_link
+from memory.observe import ObservationCandidate, ObservationEngine
+from memory.resume import build_resume_packet
+from memory.scope import MemoryScope, ScopeDetector
 from memory.skills import extract_skills, render_skill_context
+from memory.startup import build_agent_startup
 
 if TYPE_CHECKING:
     from memory.knowledge_graph import KnowledgeGraph
@@ -157,6 +162,7 @@ class MemoryManager:
 
         # Telemetry
         self._telemetry = Telemetry.get()
+        self._observer = ObservationEngine()
 
     # -------------------------------------------------------------------------
     # LAZY INITIALIZATION: Load on first use
@@ -183,7 +189,7 @@ class MemoryManager:
                 sparse_encoder=self.sparse_encoder,
             )
             # Create indexes for filtering
-            for field in ["date", "project", "type"]:
+            for field in ["date", "project", "type", "memory_id"]:
                 try:
                     self._store.create_index(field)
                 except Exception:
@@ -215,6 +221,7 @@ class MemoryManager:
         content: str,
         type: str = "note",
         project: str | None = None,
+        scope: MemoryScope | None = None,
         **metadata: Any,
     ) -> str:
         """Save a memory.
@@ -233,29 +240,41 @@ class MemoryManager:
             memory.save("Chose hybrid architecture", type="decision", project="my-app")
         """
         with self._telemetry.track("memory.save"):
-            # Sanitize
             content = Sanitizer.sanitize(content)
+            scope = scope or ScopeDetector.detect(project=project)
+            project_name = project or scope.project or "general"
 
-            # Generate ID and timestamps
+            if "/" in project_name or "\\" in project_name or ".." in project_name:
+                raise ValueError(f"Invalid project name: {project_name!r}")
+
+            existing_memory_id = self._find_duplicate_memory_id(
+                content=content,
+                project=project_name,
+                memory_type=type,
+            )
+            if existing_memory_id:
+                self._reinforce_existing_memory(existing_memory_id)
+                logger.info(f"Duplicate memory reinforced: {existing_memory_id}")
+                return existing_memory_id
+
             date = datetime.now().strftime("%Y-%m-%d")
             timestamp = datetime.now().isoformat()
-            # Use SHA256 for stable, collision-resistant IDs across processes
-            # Include timestamp in hash to prevent collisions for identical content
-            # 8 hex chars = 32 bits = ~4 billion unique values (collision-resistant)
             unique_string = f"{content}|{timestamp}"
             content_hash = hashlib.sha256(unique_string.encode()).hexdigest()[:8]
             memory_id = f"{date}_{type}_{content_hash}"
 
-            # Build payload
             payload = {
                 "memory_id": memory_id,
                 "content": content,
                 "date": date,
                 "timestamp": timestamp,
                 "type": type,
-                "project": project or "general",
+                "project": project_name,
+                "reinforcement_count": 0,
+                **scope.to_metadata(),
                 **metadata,
             }
+            payload.update(summarize_lifecycle(payload))
 
             # Save to file (durability)
             self._save_to_file(memory_id, content, payload, type, date)
@@ -267,7 +286,7 @@ class MemoryManager:
             # Build/refresh graph node for this memory
             self.knowledge_graph.add_node(
                 memory_id,
-                topic=project or "general",
+                topic=project_name,
                 memory_type=type,
             )
 
@@ -278,7 +297,7 @@ class MemoryManager:
                     memory_id=memory_id,
                     content=content,
                     memory_type=type,
-                    project=project or "general",
+                    project=project_name,
                     embedder=self.embedder,
                     store=self.store,
                 )
@@ -286,10 +305,185 @@ class MemoryManager:
                 if link_result.edges_created:
                     logger.info(f"Auto-linked: {link_result.relations}")
             except Exception:
-                logger.warning("Auto-linking failed, memory saved without graph edges", exc_info=True)
+                logger.warning(
+                    "Auto-linking failed, memory saved without graph edges", exc_info=True
+                )
 
             logger.info(f"Saved memory: {memory_id}")
             return memory_id
+
+    def observe(
+        self,
+        summary: str,
+        type: str = "auto",
+        project: str | None = None,
+        scope: MemoryScope | None = None,
+        context: str | None = None,
+        **metadata: Any,
+    ) -> ObservationCandidate | str:
+        """Evaluate and persist a memory-worthy observation.
+
+        Returns the saved memory ID when persisted, otherwise the candidate verdict.
+        """
+        candidate = self._observer.evaluate(summary, memory_type=type)
+        if not candidate.should_save:
+            return candidate
+
+        content = candidate.content if not context else f"{candidate.content}\n\nContext: {context}"
+        return self.save(
+            content=content,
+            type=candidate.memory_type,
+            project=project,
+            scope=scope,
+            salience=candidate.salience,
+            **metadata,
+        )
+
+    def _find_duplicate_memory_id(
+        self,
+        *,
+        content: str,
+        project: str,
+        memory_type: str,
+    ) -> str | None:
+        """Return existing memory id for near-identical memories in same project/type."""
+        try:
+            matches = self.store.search(
+                vector=self.embedder.encode(content),
+                limit=3,
+                filters={"project": project, "type": memory_type},
+                score_threshold=0.97,
+                query_text=content,
+            )
+        except Exception:
+            return None
+
+        normalized = " ".join(content.split()).strip().lower()
+        for match in matches:
+            existing = " ".join((match.get("content") or "").split()).strip().lower()
+            if existing == normalized:
+                return match.get("memory_id")
+        return None
+
+    def _reinforce_existing_memory(self, memory_id: str) -> None:
+        """Load, reinforce, reclassify, and persist the updated payload."""
+        from datetime import datetime as _dt
+
+        from memory.intelligence import reinforce_and_reclassify
+
+        try:
+            existing = self.store.get_by_id(memory_id)
+        except Exception:
+            logger.warning(f"Could not load memory for reinforcement: {memory_id}", exc_info=True)
+            return
+        if not existing:
+            return
+
+        try:
+            updated = reinforce_and_reclassify(
+                existing,
+                graph=self.knowledge_graph,
+                now=_dt.now(),
+            )
+        except Exception:
+            logger.warning(f"Reinforce/reclassify failed for {memory_id}", exc_info=True)
+            return
+
+        try:
+            self.store.update_payload(memory_id, updated)
+        except Exception:
+            logger.warning(f"Could not persist reinforcement for {memory_id}", exc_info=True)
+
+    def backfill_lifecycle(
+        self,
+        *,
+        dry_run: bool = True,
+        project: str | None = None,
+        batch_size: int = 500,
+    ) -> dict[str, Any]:
+        """Backfill tier/durability/lifecycle_reason on existing memories.
+
+        Scrolls all points (optionally filtered by project), computes
+        LifecycleSignals + classify() for each, and (unless dry_run) writes the
+        updated payload back to the store.
+
+        Returns a report with counts by tier, skipped ids, and errors.
+        """
+        from datetime import datetime as _dt
+
+        from memory.lifecycle import LifecycleSignals, classify, compute_retention_days
+
+        filters = {"project": project} if project else None
+        now = _dt.now()
+
+        updated_by_tier: dict[str, int] = {
+            "working": 0,
+            "episodic": 0,
+            "semantic": 0,
+            "identity": 0,
+        }
+        skipped: list[str] = []
+        errors: list[dict[str, str]] = []
+
+        points = self.store.scroll(filters=filters, limit=batch_size)
+        graph_has_nodes = self.knowledge_graph.stats()["nodes"] > 0
+
+        for point in points:
+            memory_id = point.get("memory_id", "")
+            if not memory_id:
+                skipped.append("<missing_id>")
+                continue
+
+            date_str = point.get("date") or now.strftime("%Y-%m-%d")
+            try:
+                mem_date = _dt.strptime(date_str, "%Y-%m-%d")
+                age_days = max(0, (now - mem_date).days)
+            except ValueError:
+                age_days = 0
+
+            contradicts_count = (
+                self.knowledge_graph.count_contradicts(memory_id) if graph_has_nodes else 0
+            )
+
+            existing_tier = point.get("tier")
+            explicit = existing_tier if existing_tier == "identity" else None
+
+            signals = LifecycleSignals(
+                memory_type=point.get("type", "note"),
+                salience=float(point.get("salience") or 0.0),
+                age_days=age_days,
+                reinforcement_count=int(point.get("reinforcement_count") or 0),
+                contradicts_count=contradicts_count,
+                explicit_tier=explicit,
+            )
+            result = classify(signals)
+
+            updated_by_tier[result.tier] += 1
+            if dry_run:
+                continue
+
+            new_payload = dict(point)
+            new_payload.update(
+                {
+                    "tier": result.tier,
+                    "durability": result.durability,
+                    "lifecycle_reason": result.reason,
+                    "retention_days": compute_retention_days(signals.memory_type, result.tier),
+                }
+            )
+            try:
+                self.store.update_payload(memory_id, new_payload)
+            except Exception as e:  # noqa: BLE001
+                errors.append({"memory_id": memory_id, "error": str(e)})
+
+        return {
+            "dry_run": dry_run,
+            "project": project,
+            "updated_by_tier": updated_by_tier,
+            "skipped": skipped,
+            "errors": errors,
+            "total": sum(updated_by_tier.values()),
+        }
 
     def _save_to_file(
         self,
@@ -299,8 +493,11 @@ class MemoryManager:
         memory_type: str,
         date: str,
     ) -> None:
-        """Save memory to human-readable YAML file."""
-        yaml_file = self.memory_dir / f"{date}.yaml"
+        """Save memory to human-readable YAML file, organized by project."""
+        project = metadata.get("project", "general")
+        project_dir = self.memory_dir / project
+        project_dir.mkdir(parents=True, exist_ok=True)
+        yaml_file = project_dir / f"{date}.yaml"
 
         # Load existing data for this date
         if yaml_file.exists():
@@ -330,7 +527,7 @@ class MemoryManager:
         data[type_key].append(memory_entry)
 
         # Atomic write: write to temp file, then os.replace() (POSIX atomic)
-        fd, tmp_path = tempfile.mkstemp(dir=self.memory_dir, suffix=".yaml.tmp")
+        fd, tmp_path = tempfile.mkstemp(dir=project_dir, suffix=".yaml.tmp")
         try:
             with os.fdopen(fd, "w") as f:
                 yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
@@ -361,9 +558,25 @@ class MemoryManager:
         if not date or len(date) != 10 or date[4] != "-" or date[7] != "-":
             return False
 
-        yaml_file = self.memory_dir / f"{date}.yaml"
-        if not yaml_file.exists():
-            return False
+        # Search across all project subdirs for the YAML file
+        yaml_file = None
+        for candidate in self.memory_dir.rglob(f"{date}.yaml"):
+            with open(candidate) as f:
+                check = yaml.safe_load(f) or {}
+            for type_key in check:
+                if isinstance(check[type_key], list):
+                    if any(m.get("id") == memory_id for m in check[type_key]):
+                        yaml_file = candidate
+                        break
+            if yaml_file:
+                break
+        if not yaml_file:
+            # Also try flat (legacy) path
+            flat = self.memory_dir / f"{date}.yaml"
+            if flat.exists():
+                yaml_file = flat
+            else:
+                return False
 
         with open(yaml_file) as f:
             data = yaml.safe_load(f) or {}
@@ -390,7 +603,9 @@ class MemoryManager:
             fd, tmp = tempfile.mkstemp(dir=self.memory_dir, suffix=".yaml.tmp")
             try:
                 with os.fdopen(fd, "w") as f:
-                    yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+                    yaml.dump(
+                        data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
+                    )
                 os.replace(tmp, yaml_file)
             except BaseException:
                 try:
@@ -401,8 +616,9 @@ class MemoryManager:
 
         # Best-effort: delete from vector store
         try:
-            from core import stable_hash_id
             from qdrant_client.models import PointIdsList
+
+            from core import stable_hash_id
 
             self.store.client.delete(
                 collection_name=self.store.collection,
@@ -449,7 +665,7 @@ class MemoryManager:
         if max_age_days_facts is not None:
             cutoff = (datetime.now() - timedelta(days=max_age_days_facts)).strftime("%Y-%m-%d")
 
-            for yaml_file in sorted(self.memory_dir.glob("*.yaml")):
+            for yaml_file in sorted(self.memory_dir.rglob("*.yaml")):
                 file_date = yaml_file.stem
                 if file_date.startswith("_") or file_date >= cutoff:
                     continue
@@ -486,10 +702,12 @@ class MemoryManager:
                         continue
                     seen_pairs.add(pair)
                     stats["contradictions_flagged"] += 1
-                    stats["contradictions"].append({
-                        "memory_a": source,
-                        "memory_b": target,
-                    })
+                    stats["contradictions"].append(
+                        {
+                            "memory_a": source,
+                            "memory_b": target,
+                        }
+                    )
 
         return stats
 
@@ -564,23 +782,20 @@ class MemoryManager:
                     neighbors = graph.get_neighbors(memory_id, hops=1)
                     expanded_ids.update(neighbors)
 
-                # Deduplicate expanded items and ignore seed IDs.
-                new_ids = expanded_ids - seed_ids
-                for expanded_id in list(new_ids):
-                    expanded_results = self.store.search(
-                        vector=query_vector,
-                        limit=1,
-                        filters={"memory_id": expanded_id},
-                        score_threshold=0.0,
-                    )
+                # Batch-fetch all expanded neighbors in ONE retrieve call
+                # (was N+1: one vector search per neighbor). Graph-expanded
+                # items are ranked by the composite scorer via graph_proximity,
+                # not vector similarity, so their vector score is 0.
+                new_ids = [mid for mid in (expanded_ids - seed_ids) if isinstance(mid, str)]
+                for result in self.store.get_many(new_ids):
+                    memory_id = result.get("memory_id")
+                    if memory_id and memory_id not in seed_ids:
+                        seed_results.append({**result, "score": 0.0, "_graph_expanded": True})
+                        seed_ids.add(memory_id)
 
-                    for result in expanded_results:
-                        memory_id = result.get("memory_id")
-                        if memory_id not in seed_ids:
-                            seed_results.append({**result, "_graph_expanded": True})
-                            seed_ids.add(memory_id)
-
-                graph.save()
+                # record_access() mutates in-memory and marks the graph dirty;
+                # the next save()/delete() flushes it. Recall stays read-only on
+                # disk — no fsync-per-query write amplification, no read/read race.
 
             # Phase 3: RANK — combined scoring
             scored: list[dict[str, float]] = []
@@ -604,6 +819,7 @@ class MemoryManager:
                 importance = graph.get_importance(memory_id) if memory_id else 0.5
                 is_expanded = bool(result.get("_graph_expanded"))
                 graph_proximity = 0.7 if is_expanded else 1.0
+                tier = result.get("tier", "working")
 
                 days_old = 0
                 if result.get("date"):
@@ -615,11 +831,19 @@ class MemoryManager:
 
                 recency = max(0.0, 1.0 - days_old / 365)
 
+                tier_norm = {
+                    "identity": 1.0,
+                    "semantic": 0.66,
+                    "episodic": 0.33,
+                    "working": 0.0,
+                }.get(tier, 0.0)
+
                 final_score = (
-                    vector_score * 0.50
+                    vector_score * 0.40
                     + importance * 0.20
-                    + recency * 0.15
+                    + recency * 0.10
                     + graph_proximity * 0.15
+                    + tier_norm * 0.15
                 )
 
                 scored.append(
@@ -631,6 +855,7 @@ class MemoryManager:
                         "type": result.get("type"),
                         "project": result.get("project"),
                         "memory_id": memory_id,
+                        "tier": tier,
                     }
                 )
 
@@ -805,7 +1030,9 @@ class MemoryManager:
             if project:
                 filters["project"] = project
 
-            points = self.store.scroll(filters=filters if filters else None, limit=limit, with_vectors=True)
+            points = self.store.scroll(
+                filters=filters if filters else None, limit=limit, with_vectors=True
+            )
             if not points:
                 return ""
 
@@ -903,10 +1130,7 @@ class MemoryManager:
                 ):
                     target = points_by_id.get(target_id, {})
                     snippet = self._memory_snippet(target.get("content", ""))
-                    lines.append(
-                        f"- `{source_id}` supersedes `{target_id}` "
-                        f"(score: {weight:.3f})"
-                    )
+                    lines.append(f"- `{source_id}` supersedes `{target_id}` (score: {weight:.3f})")
                     if snippet:
                         lines.append(f"  - {snippet}")
 
@@ -920,8 +1144,7 @@ class MemoryManager:
                     source_snippet = self._memory_snippet(source.get("content", ""))
                     target_snippet = self._memory_snippet(target.get("content", ""))
                     lines.append(
-                        f"- `{source_id}` and `{target_id}` may conflict "
-                        f"(score: {weight:.3f})"
+                        f"- `{source_id}` and `{target_id}` may conflict (score: {weight:.3f})"
                     )
                     if source_snippet:
                         lines.append(f"  - {source_id}: {source_snippet}")
@@ -1010,8 +1233,12 @@ class MemoryManager:
                 lines.append("")
                 lines.append("## Conflicts to Review")
                 for source_id, target_id in sorted(set(conflict_edges)):
-                    source = self._memory_snippet(points_by_id.get(source_id, {}).get("content", ""))
-                    target = self._memory_snippet(points_by_id.get(target_id, {}).get("content", ""))
+                    source = self._memory_snippet(
+                        points_by_id.get(source_id, {}).get("content", "")
+                    )
+                    target = self._memory_snippet(
+                        points_by_id.get(target_id, {}).get("content", "")
+                    )
                     lines.append(f"- `{source_id}` conflicts with `{target_id}`")
                     if source:
                         lines.append(f"  - {source}")
@@ -1084,6 +1311,25 @@ class MemoryManager:
     # STATS: System information
     # -------------------------------------------------------------------------
 
+    def get_resume_packet(
+        self,
+        project: str | None = None,
+        scope: MemoryScope | None = None,
+        limit: int = 12,
+    ) -> dict[str, Any]:
+        """Return a continuity-oriented startup packet for an agent session."""
+        scope = scope or ScopeDetector.detect(project=project)
+        return build_resume_packet(self, scope=scope, limit=limit)
+
+    def get_agent_startup(
+        self,
+        project: str | None = None,
+        agent: str | None = None,
+        limit: int = 12,
+    ) -> dict[str, Any]:
+        """Return a single startup payload for agent clients."""
+        return build_agent_startup(self, project=project, agent=agent, limit=limit)
+
     def get_stats(self) -> dict[str, Any]:
         """Get memory system statistics."""
         with self._telemetry.track("memory.get_stats"):
@@ -1133,8 +1379,32 @@ class MemoryManager:
     # CLEANUP: Remove memories
     # -------------------------------------------------------------------------
 
-    def clear_project(self, project: str) -> None:
-        """Delete all memories for a project."""
+    def clear_project(self, project: str) -> dict[str, int]:
+        """Delete all memories for a project from YAML, vector store, AND knowledge graph."""
         with self._telemetry.track("memory.clear_project"):
+            points = self.store.scroll(filters={"project": project}, limit=10000)
+            ids = [p["memory_id"] for p in points if p.get("memory_id")]
+            deleted = sum(1 for memory_id in ids if self.delete(memory_id))
+
+            # Vector points whose YAML was already gone aren't reachable via delete().
             self.store.delete(filters={"project": project})
-            logger.info(f"Cleared memories for project: {project}")
+
+            # YAML entries that never reached the vector store.
+            strays = 0
+            project_dir = self.memory_dir / project
+            if project_dir.is_dir():
+                for yaml_file in list(project_dir.rglob("*.yaml")):
+                    data = yaml.safe_load(yaml_file.read_text()) or {}
+                    for value in data.values():
+                        if isinstance(value, list):
+                            for entry in value:
+                                if entry.get("id"):
+                                    self.knowledge_graph.remove_node(entry["id"])
+                                    strays += 1
+                    yaml_file.unlink()
+                self.knowledge_graph.save()
+
+            logger.info(
+                f"Cleared project {project}: {deleted} deleted, {strays} stray YAML entries"
+            )
+            return {"deleted": deleted, "strays_removed": strays}

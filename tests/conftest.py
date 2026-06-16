@@ -9,6 +9,52 @@ import yaml
 
 from memory import MemoryManager
 
+TEST_QDRANT_URL = "http://localhost:6334"
+
+
+@pytest.fixture(autouse=True)
+def _qdrant_isolation(monkeypatch):
+    """Force every test toward the disposable test Qdrant and refuse :6333.
+
+    Production Qdrant lives on :6333 (CLAUDE.md: tests must never touch it).
+    """
+    monkeypatch.setenv("QDRANT_URL", TEST_QDRANT_URL)
+
+    from core.vector_store import VectorStore
+
+    original_connect = VectorStore._connect
+
+    def guarded_connect(self):
+        if ":6333" in self.url:
+            raise RuntimeError(
+                f"Test attempted to reach production Qdrant ({self.url}). "
+                "Tests must use :6334 — start it with: docker compose --profile test up -d qdrant-test"
+            )
+        return original_connect(self)
+
+    monkeypatch.setattr(VectorStore, "_connect", guarded_connect)
+
+
+@pytest.fixture(autouse=True)
+def _clean_integration_collection(request):
+    """Give each integration test a fresh agent_memory collection.
+
+    The test Qdrant is shared across the run; without this, save() dedups
+    against memories left by earlier tests — which skips YAML writes and
+    creates spurious supersedes edges. Only integration tests hit real Qdrant,
+    so unit tests (which mock the store) are left untouched.
+    """
+    if request.node.get_closest_marker("integration"):
+        from core.vector_store import VectorStore
+
+        try:
+            VectorStore(
+                collection=MemoryManager.COLLECTION, url=TEST_QDRANT_URL
+            ).recreate_collection()
+        except Exception:
+            pass
+    yield
+
 
 @pytest.fixture
 def temp_memory_dir():
@@ -19,8 +65,8 @@ def temp_memory_dir():
 
 @pytest.fixture
 def memory_manager(temp_memory_dir: Path) -> MemoryManager:
-    """Create a MemoryManager instance for testing."""
-    return MemoryManager(memory_dir=temp_memory_dir)
+    """Create a MemoryManager instance for testing (test Qdrant only)."""
+    return MemoryManager(memory_dir=temp_memory_dir, qdrant_url=TEST_QDRANT_URL)
 
 
 @pytest.fixture
@@ -78,6 +124,24 @@ def tool_registry():
         return decorator
 
     return capture_tool, registered_tools
+
+
+@pytest.fixture(autouse=True)
+def _reset_scope_trust_cache():
+    """Reset the scope detector's trust cache between tests so env var changes take effect."""
+    try:
+        from memory.scope import ScopeDetector
+
+        ScopeDetector.reset_trust_cache()
+    except (ImportError, AttributeError):
+        pass
+    yield
+    try:
+        from memory.scope import ScopeDetector
+
+        ScopeDetector.reset_trust_cache()
+    except (ImportError, AttributeError):
+        pass
 
 
 @pytest.fixture
