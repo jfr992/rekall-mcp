@@ -312,6 +312,37 @@ def _build_synth():
     return synth, "llm"
 
 
+def prewarm_synthesis(clusters, cache, synth, workers=10) -> None:
+    """Populate the synthesis cache concurrently before build_bundle runs.
+
+    Sequential per-cluster LLM calls make big projects time out (~6s each).
+    This fans them out (bounded thread pool) so the subsequent build hits a
+    warm cache. Uncached-on-error clusters fall back to raw in build_bundle.
+    """
+    if synth is None:
+        return
+    from concurrent.futures import ThreadPoolExecutor
+
+    todo = [c for c in clusters if cluster_key(c) not in cache]
+    if not todo:
+        return
+
+    def _one(cluster):
+        try:
+            result = synth(cluster)
+            if _plausible(result) and result[1]:
+                return cluster_key(cluster), list(result)
+        except Exception:
+            return None
+        return None
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        for outcome in pool.map(_one, todo):
+            if outcome:
+                key, value = outcome
+                cache[key] = value
+
+
 def publish_from_manager(manager, *, project=None, fmt="okf") -> Bundle:
     """Build an export bundle from a MemoryManager. Loads memories + graph,
     distills each cluster into a knowledge brief (LLM when configured, raw
@@ -326,6 +357,11 @@ def publish_from_manager(manager, *, project=None, fmt="okf") -> Bundle:
     cache_path = Path(manager.memory_dir) / "_publish_cache.json"
     cache = _load_cache(cache_path)
     synth, mode = _build_synth()
+
+    # Warm the cache concurrently so the sequential build doesn't time out.
+    mems = [m for m in memories if _keep(m)]
+    prewarm_synthesis(cluster_memories(mems, graph), cache, synth)
+
     synthesis_fn = make_synthesis_fn(cache, synth=synth)
 
     bundle = build_bundle(
