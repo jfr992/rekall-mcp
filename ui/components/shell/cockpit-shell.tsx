@@ -15,9 +15,9 @@ export function CockpitShell({ children }: { children: ReactNode }) {
         style={{ zIndex: "var(--z-shell)" }}
       >
         <SerifHeading eyebrow="MEMENTO" title="Cockpit" size="section" />
+        <ProjectSwitcher />
         <SidebarNav />
-        <div className="mt-auto flex flex-col gap-3">
-          <ProjectSwitcher />
+        <div className="mt-auto">
           <HealthBadge />
         </div>
       </aside>
