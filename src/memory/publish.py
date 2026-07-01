@@ -7,7 +7,10 @@ is testable without an LLM and reusable across export formats.
 from __future__ import annotations
 
 import hashlib
+import json
+import os
 import re
+from pathlib import Path
 from typing import Callable
 
 import networkx as nx
@@ -203,4 +206,61 @@ def build_bundle(memories, graph, *, title_fn, renderer, project_hint=""):
         tree=bundle.tree,
         files=bundle.files,
         stats={**bundle.stats, "clusters": len(clusters)},
+    )
+
+
+def _load_cache(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except Exception:
+        return {}
+
+
+def _save_cache(path: Path, cache: dict) -> None:
+    try:
+        path.write_text(json.dumps(cache, indent=0))
+    except OSError:
+        pass  # cache is best-effort; export must not fail on cache write
+
+
+def _build_judge():
+    model = os.getenv("MEMENTO_JUDGE_MODEL")
+    if not model:
+        return None, "slug"
+
+    def judge(cluster):
+        from memory.intelligence import summarize_cluster_title
+
+        return summarize_cluster_title(cluster, model=model)
+
+    return judge, "haiku"
+
+
+def publish_from_manager(manager, *, project=None, fmt="okf") -> Bundle:
+    """Build an export bundle from a MemoryManager. Loads memories + graph,
+    manages the title cache on disk, and picks a judge if one is configured.
+    """
+    from memory.renderers import get_renderer
+
+    filters = {"project": project} if project and project != "all" else None
+    memories = manager.store.scroll(filters=filters, limit=10000)
+    graph = manager.knowledge_graph
+
+    cache_path = Path(manager.memory_dir) / "_publish_cache.json"
+    cache = _load_cache(cache_path)
+    judge, titled_by = _build_judge()
+    title_fn = make_title_fn(cache, judge=judge)
+
+    bundle = build_bundle(
+        memories,
+        graph,
+        title_fn=title_fn,
+        renderer=get_renderer(fmt),
+        project_hint=project or "",
+    )
+    _save_cache(cache_path, cache)
+    return Bundle(
+        tree=bundle.tree,
+        files=bundle.files,
+        stats={**bundle.stats, "titled_by": titled_by},
     )
