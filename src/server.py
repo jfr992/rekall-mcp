@@ -1144,6 +1144,10 @@ async def api_memory_kb(request):
         requirements = [_summarize(m) for m in points if m.get("type") == "requirement"]
         preferences = [_summarize(m) for m in points if m.get("type") == "preference"]
         learnings = [_summarize(m) for m in points if m.get("type") == "learning"]
+        # facts is the largest type; note/reference/session folded in so no
+        # memory is invisible in the KB view.
+        _sliced = {"decision", "requirement", "preference", "learning"}
+        facts = [_summarize(m) for m in points if m.get("type") not in _sliced]
 
         return _ok(
             {
@@ -1152,6 +1156,7 @@ async def api_memory_kb(request):
                 "requirements": requirements,
                 "preferences": preferences,
                 "learnings": learnings,
+                "facts": facts,
                 "truncated": len(points) >= cap,
             }
         )
