@@ -12,6 +12,8 @@ from typing import Callable
 
 import networkx as nx
 
+from memory.publish_types import Bundle, Concept
+
 GROUPING_RELATIONS = frozenset(
     {"related_to", "led_to", "depends_on", "part_of", "supersedes"}
 )
@@ -101,3 +103,104 @@ def make_title_fn(
         return result
 
     return title_fn
+
+
+_TYPE_MAP = {"learning": "runbook"}
+_MIN_CONTENT = 40
+
+
+def map_type(t: str) -> str:
+    return _TYPE_MAP.get(t, t or "note")
+
+
+def _keep(m: dict) -> bool:
+    c = (m.get("content") or "").strip()
+    if m.get("project") == "test-project":
+        return False
+    if m.get("type") == "note" and len(c) < _MIN_CONTENT:
+        return False
+    return bool(c)
+
+
+def _dominant_type(cluster: list[dict]) -> str:
+    counts: dict[str, int] = {}
+    for m in cluster:
+        counts[m.get("type", "note")] = counts.get(m.get("type", "note"), 0) + 1
+    return max(counts, key=counts.get)
+
+
+def _unique_slug(slug: str, used: set[str]) -> str:
+    candidate, n = slug, 2
+    while candidate in used:
+        candidate = f"{slug}-{n}"
+        n += 1
+    used.add(candidate)
+    return candidate
+
+
+def _render_body(cluster, summary, graph, id_to_path, self_path) -> str:
+    lines = [summary, ""]
+    for m in cluster:
+        lines.append(f"## {m.get('content', '').strip()}")
+        meta = m.get("date") or (m.get("timestamp") or "")[:10]
+        if meta:
+            lines.append(f"_{meta}_")
+        lines.append("")
+    related: set[str] = set()
+    for m in cluster:
+        for e in graph.get_edges(_mid(m)):
+            other = e.target if e.source == _mid(m) else e.source
+            tgt = id_to_path.get(other)
+            if tgt and tgt != self_path:
+                related.add(tgt)
+    if related:
+        lines.append("## Related")
+        for p in sorted(related):
+            lines.append(f"- [/{p[:-3]}](/{p})")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def build_bundle(memories, graph, *, title_fn, renderer, project_hint=""):
+    """Filter → cluster → title → render into a Bundle. Cross-cluster edges
+    (including contradicts) surface as bundle-relative links in a Related section.
+    """
+    from memory.renderers.okf import slugify
+
+    mems = [m for m in memories if _keep(m)]
+    clusters = cluster_memories(mems, graph)
+
+    # First pass: assign each cluster a path so cross-links can resolve.
+    assigned: list[tuple[list[dict], str, tuple[str, str], str]] = []
+    id_to_path: dict[str, str] = {}
+    used: set[str] = set()
+    for cluster in clusters:
+        okf_type = map_type(_dominant_type(cluster))
+        title, summary = title_fn(cluster)
+        proj = cluster[0].get("project") or project_hint or "general"
+        slug = _unique_slug(slugify(title), used)
+        path = f"{proj}/{okf_type}s/{slug}.md"
+        assigned.append((cluster, path, (title, summary), okf_type))
+        for m in cluster:
+            id_to_path[_mid(m)] = path
+
+    concepts: list[Concept] = []
+    for cluster, path, (title, summary), okf_type in assigned:
+        body = _render_body(cluster, summary, graph, id_to_path, path)
+        newest = max((m.get("timestamp") or m.get("date") or "") for m in cluster)
+        proj = cluster[0].get("project") or project_hint or "general"
+        fm = {
+            "type": okf_type,
+            "title": title,
+            "tags": sorted({proj} | {m.get("type", "note") for m in cluster}),
+        }
+        if newest:
+            fm["timestamp"] = newest
+        concepts.append(Concept(path=path, frontmatter=fm, body=body))
+
+    bundle = renderer.render(concepts)
+    return Bundle(
+        tree=bundle.tree,
+        files=bundle.files,
+        stats={**bundle.stats, "clusters": len(clusters)},
+    )
