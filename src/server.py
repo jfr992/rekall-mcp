@@ -649,6 +649,130 @@ async def api_memory_graph(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/publish", methods=["GET", "POST"])
+async def api_memory_publish(request):
+    """REST API: export memory to an OKF bundle (mode=preview|tar|dir)."""
+    import io
+    import tarfile
+    from pathlib import Path
+
+    from starlette.responses import Response
+
+    from memory.publish import publish_from_manager
+
+    try:
+        q = request.query_params
+        project = _safe_project(q.get("project"))
+        fmt = q.get("format", "okf")
+        mode = q.get("mode", "preview")
+
+        manager = _get_memory_manager()
+        try:
+            bundle = publish_from_manager(manager, project=project, fmt=fmt)
+        except ValueError as e:
+            return _bad_request(str(e))
+
+        if mode == "preview":
+            return _ok({"tree": bundle.tree, "files": bundle.files, "stats": bundle.stats})
+
+        if mode == "tar":
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+                for path, content in bundle.files.items():
+                    data = content.encode()
+                    info = tarfile.TarInfo(name=path)
+                    info.size = len(data)
+                    tar.addfile(info, io.BytesIO(data))
+            buf.seek(0)
+            return Response(
+                buf.read(),
+                media_type="application/gzip",
+                headers={"Content-Disposition": 'attachment; filename="okf-bundle.tar.gz"'},
+            )
+
+        if mode == "dir":
+            base = Path(
+                os.getenv("MEMENTO_PUBLISH_DIR", os.path.expanduser("~/.claude/publish"))
+            ).resolve()
+            dest = q.get("dest")
+            if not dest:
+                return _bad_request("dest required for mode=dir")
+            target = Path(dest).resolve() if os.path.isabs(dest) else (base / dest).resolve()
+            if base != target and base not in target.parents:
+                return _bad_request("dest must be within MEMENTO_PUBLISH_DIR")
+            tmp = target.with_suffix(".tmp")
+            for path, content in bundle.files.items():
+                fp = tmp / path
+                fp.parent.mkdir(parents=True, exist_ok=True)
+                fp.write_text(content)
+            if target.exists():
+                import shutil
+
+                shutil.rmtree(target)
+            tmp.rename(target)
+            return _ok({"written": len(bundle.files), "path": str(target)})
+
+        return _bad_request(f"unknown mode: {mode}")
+    except Exception as e:
+        logger.error(f"Error building publish bundle: {e}")
+        return _server_error(str(e))
+
+
+# In-memory synthesis job registry. Keyed by project; a job warms the synthesis
+# cache in a background thread so the async loop is never blocked.
+_PUBLISH_JOBS: dict[str, dict] = {}
+
+
+@mcp.custom_route("/api/memory/publish/synthesize", methods=["POST"])
+async def api_memory_publish_synthesize(request):
+    """Start (or report) a background synthesis job for a project scope."""
+    import threading
+
+    from memory.publish import publish_from_manager
+
+    q = request.query_params
+    project = _safe_project(q.get("project")) or ""
+    key = project or "__all__"
+
+    job = _PUBLISH_JOBS.get(key)
+    if job and job.get("status") == "running":
+        return _ok({"status": "running", "done": job["done"], "total": job["total"]})
+
+    _PUBLISH_JOBS[key] = {"status": "running", "done": 0, "total": 0}
+
+    def _run():
+        try:
+            manager = _get_memory_manager()
+
+            def _progress(done, total):
+                _PUBLISH_JOBS[key]["done"] = done
+                _PUBLISH_JOBS[key]["total"] = total
+
+            publish_from_manager(
+                manager, project=project or None, synthesize=True, progress=_progress
+            )
+            _PUBLISH_JOBS[key]["status"] = "done"
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Synthesis job failed for {key}: {e}")
+            _PUBLISH_JOBS[key]["status"] = "error"
+            _PUBLISH_JOBS[key]["error"] = str(e)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return _ok({"status": "started"})
+
+
+@mcp.custom_route("/api/memory/publish/status", methods=["GET"])
+async def api_memory_publish_status(request):
+    """Poll a synthesis job's progress."""
+    q = request.query_params
+    project = _safe_project(q.get("project")) or ""
+    key = project or "__all__"
+    job = _PUBLISH_JOBS.get(key)
+    if not job:
+        return _ok({"status": "idle"})
+    return _ok(job)
+
+
 @mcp.custom_route("/api/memory/graph/rebuild", methods=["POST"])
 async def api_rebuild_memory_graph(_request):
     """REST API: Rebuild the memory knowledge graph."""
