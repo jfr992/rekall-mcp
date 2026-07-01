@@ -109,7 +109,7 @@ This finds memories that are *structurally related*, not just textually similar.
 
 ### Cockpit UI
 
-Browse the knowledge graph at `http://localhost:3333/brain` (Next.js cockpit, run with `cd ui && npm run dev -- -p 3333`). Surfaces:
+Browse the knowledge graph at `http://localhost:3333/brain` — the Next.js cockpit ships as a container, started by `docker compose up -d` alongside Qdrant and the backend. (For UI development, `cd ui && npm run dev -- -p 3333` still works.) Surfaces:
 
 - `/brain` — force-directed graph view, nodes are memories, edges show typed relationships
 - `/kb` — typed columns (decisions, requirements, preferences, learnings), plus an **Export OKF** tab that distills memory into a portable [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf) bundle
@@ -229,10 +229,10 @@ When you ask "what database?", Claude searches by meaning, not keywords. The kno
 
 **"Connection refused"** - Make sure Docker is running: `docker compose ps`
 
-**"Cockpit UI not loading"** - Backend transport must be HTTP and the cockpit must be running:
+**"Cockpit UI not loading"** - Confirm all three containers are up:
 ```bash
-docker compose exec mcp env | rg 'MCP_TRANSPORT|HOST'   # backend
-cd ui && npm run dev -- -p 3333                          # cockpit
+docker compose ps            # qdrant, mcp, ui should all be running
+docker compose up -d ui      # (re)start just the cockpit
 ```
 
 **"Claude forgets"** - Install the memory plugin (skills + hook) or add to `~/.claude/CLAUDE.md`:
