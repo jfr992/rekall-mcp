@@ -26,16 +26,21 @@ export function KbEntry({ entry }: Props) {
         />
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <MonoLabel>{entry.date ?? "—"}</MonoLabel>
-          <p className="text-sm text-[var(--fg)]">{entry.summary}</p>
-          {open && entry.content ? (
-            <div className="mt-2 space-y-2 rounded-md border border-[var(--border)] bg-[var(--surface-0)] p-3">
-              <p className="text-sm leading-relaxed text-[var(--fg)]">{entry.content}</p>
-              <div className="flex items-center gap-2">
-                {entry.tier ? <Badge kind="tier" value={entry.tier} /> : null}
-                {entry.type ? <Badge kind="type" value={entry.type} /> : null}
-              </div>
-            </div>
-          ) : null}
+          {open ? (
+            <>
+              <p className="text-sm leading-relaxed text-[var(--fg)]">
+                {entry.content ?? entry.summary}
+              </p>
+              {entry.tier || entry.type ? (
+                <div className="mt-1 flex items-center gap-2">
+                  {entry.tier ? <Badge kind="tier" value={entry.tier} /> : null}
+                  {entry.type ? <Badge kind="type" value={entry.type} /> : null}
+                </div>
+              ) : null}
+            </>
+          ) : (
+            <p className="line-clamp-2 text-sm text-[var(--fg)]">{entry.summary}</p>
+          )}
         </div>
       </button>
     </li>
