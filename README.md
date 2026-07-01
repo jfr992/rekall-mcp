@@ -13,11 +13,10 @@ Memento MCP is a persistent memory system with a **knowledge graph** layer. It s
 ```bash
 git clone https://github.com/jfr992/memento-mcp.git
 cd memento-mcp
-docker compose up -d                # starts Qdrant on :6333
-bash scripts/start-memento.sh       # starts the MCP backend on :8000 (and the cockpit on :3333)
+docker compose up -d    # Qdrant (:6333) + MCP backend (:8000) + cockpit (:3333)
 ```
 
-`start-memento.sh` is idempotent — re-run it any time. Memories live at `$MEMORY_STORAGE_PATH` (default `~/.claude/memory`); set the env var before running the script if you want a different location.
+That's the whole stack — three containers. Memories live at `$MEMORY_STORAGE_PATH` (default `~/.claude/memory`); set the env var before `docker compose up` to relocate. (`scripts/start-memento.sh` remains for running the backend/UI on the host during development.)
 
 > **Need Docker?** Get it free at [docker.com/get-started](https://www.docker.com/get-started/)
 
@@ -109,7 +108,7 @@ This finds memories that are *structurally related*, not just textually similar.
 
 ### Cockpit UI
 
-Browse the knowledge graph at `http://localhost:3333/brain` (Next.js cockpit, run with `cd ui && npm run dev -- -p 3333`). Surfaces:
+Browse the knowledge graph at `http://localhost:3333/brain` — the Next.js cockpit ships as a container, started by `docker compose up -d` alongside Qdrant and the backend. (For UI development, `cd ui && npm run dev -- -p 3333` still works.) Surfaces:
 
 - `/brain` — force-directed graph view, nodes are memories, edges show typed relationships
 - `/kb` — typed columns (decisions, requirements, preferences, learnings), plus an **Export OKF** tab that distills memory into a portable [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf) bundle
@@ -229,10 +228,10 @@ When you ask "what database?", Claude searches by meaning, not keywords. The kno
 
 **"Connection refused"** - Make sure Docker is running: `docker compose ps`
 
-**"Cockpit UI not loading"** - Backend transport must be HTTP and the cockpit must be running:
+**"Cockpit UI not loading"** - Confirm all three containers are up:
 ```bash
-docker compose exec mcp env | rg 'MCP_TRANSPORT|HOST'   # backend
-cd ui && npm run dev -- -p 3333                          # cockpit
+docker compose ps            # qdrant, mcp, ui should all be running
+docker compose up -d ui      # (re)start just the cockpit
 ```
 
 **"Claude forgets"** - Install the memory plugin (skills + hook) or add to `~/.claude/CLAUDE.md`:

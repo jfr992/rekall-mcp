@@ -39,7 +39,7 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 
 ### Failsafe
 - If memory seems stale, call `memory_stats()` and check graph node/edge counts.
-- Cockpit UI at `http://localhost:3333/brain` for visual graph exploration (Next.js app, run with `cd ui && npm run dev -- -p 3333`).
+- Cockpit UI at `http://localhost:3333/brain` for visual graph exploration (ships as a container via `docker compose up -d`).
 ```
 
 ## 2) Runtime knobs available today
