@@ -77,8 +77,8 @@ base classes or plugin registry until a second format actually exists — the
 - `src/server.py` — one thin `@mcp.custom_route("/api/memory/publish")` handler.
 - `src/tools/builtin/memory.py` — one `@mcp.tool()`.
 - `ui/` — schema, api client, query hook, `/kb` tab (no new route).
-- `scripts/digest.py` — **retired**; the endpoint + tool supersede it. (Removes the
-  duplication introduced during exploration.)
+- `scripts/digest.py` — **kept** as the quick type-grouped human dump (RUNBOOK.md /
+  HOW_I_WORK.md). OKF is the portable cluster-based bundle — different output, both stay.
 
 ---
 
