@@ -205,3 +205,17 @@ export type PrunePlan = z.infer<typeof PrunePlanSchema>;
 export type PruneApplyResponse = z.infer<typeof PruneApplyResponseSchema>;
 export type BackfillReport = z.infer<typeof BackfillReportSchema>;
 export type ResumeResponse = z.infer<typeof ResumeResponseSchema>;
+
+export const PublishResponseSchema = z
+  .object({
+    tree: z.array(z.string()),
+    files: z.record(z.string(), z.string()),
+    stats: z
+      .object({
+        concepts: z.number(),
+        clusters: z.number().optional(),
+        titled_by: z.string().optional(),
+      })
+      .passthrough(),
+  });
+export type PublishResponse = z.infer<typeof PublishResponseSchema>;
