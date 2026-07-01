@@ -53,8 +53,8 @@ docker compose ps
 # Check health
 curl http://localhost:8000/health
 
-# Cockpit UI runs separately on :3333
-# cd ui && npm run dev -- -p 3333
+# Cockpit UI is part of the stack — browse http://localhost:3333
+# (for UI dev only: cd ui && npm run dev -- -p 3333)
 ```
 
 ### Step 4: Build the Knowledge Graph
