@@ -1,5 +1,5 @@
 import networkx as nx
-from memory.publish import build_bundle, make_title_fn, map_type
+from memory.publish import build_bundle, make_synthesis_fn, map_type
 from memory.renderers import get_renderer
 
 
@@ -26,7 +26,7 @@ def _mem(mid, content, project="byte-edge", mtype="learning"):
 def test_build_bundle_produces_concepts():
     mems = [_mem("a", "KubeVirt stuck namespace recovery recipe long enough")]
     g = FakeGraph([])
-    b = build_bundle(mems, g, title_fn=make_title_fn({}), renderer=get_renderer("okf"))
+    b = build_bundle(mems, g, synthesis_fn=make_synthesis_fn({}), renderer=get_renderer("okf"))
     assert b.stats["concepts"] >= 1
     assert any(p.endswith(".md") and "index" not in p for p in b.tree)
 
@@ -42,7 +42,7 @@ def test_short_notes_filtered_out():
         _mem("b", "a genuinely long useful learning here"),
     ]
     g = FakeGraph([])
-    b = build_bundle(mems, g, title_fn=make_title_fn({}), renderer=get_renderer("okf"))
+    b = build_bundle(mems, g, synthesis_fn=make_synthesis_fn({}), renderer=get_renderer("okf"))
     joined = "\n".join(b.files.values())
     assert "genuinely long useful" in joined
     assert "\n## hi\n" not in joined
@@ -54,6 +54,6 @@ def test_contradicts_becomes_related_link():
         _mem("b", "we should NOT use approach X for the thing"),
     ]
     g = FakeGraph([("a", "b", "contradicts")])
-    b = build_bundle(mems, g, title_fn=make_title_fn({}), renderer=get_renderer("okf"))
+    b = build_bundle(mems, g, synthesis_fn=make_synthesis_fn({}), renderer=get_renderer("okf"))
     joined = "\n".join(b.files.values())
     assert "## Related" in joined

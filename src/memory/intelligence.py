@@ -94,13 +94,3 @@ def changed_since_last_session(
         reverse=True,
     )
     return ranked[:limit]
-
-
-def summarize_cluster_title(cluster: list[dict], *, model: str) -> tuple[str, str]:
-    """Ask the judge model for a (title, summary) for a memory cluster.
-
-    Deferred: real LLM wiring lands in a follow-up. Raising here is intentional —
-    make_title_fn catches it and falls back to a deterministic slug title, so
-    export works keyless today.
-    """
-    raise NotImplementedError("wire to LLM client in a follow-up step")

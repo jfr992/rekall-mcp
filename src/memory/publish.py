@@ -90,29 +90,41 @@ def _plausible(t) -> bool:
     )
 
 
-def make_title_fn(
-    cache: dict, judge: Callable[[list[dict]], tuple[str, str]] | None = None
-) -> Callable[[list[dict]], tuple[str, str]]:
-    """Return a title_fn that caches by cluster membership and falls back to slug."""
+def _raw_brief(cluster: list[dict]) -> str:
+    """Fallback body when synthesis is unavailable: memory contents as bullets."""
+    return "\n".join(f"- {m.get('content', '').strip()}" for m in cluster)
 
-    def title_fn(cluster: list[dict]) -> tuple[str, str]:
+
+def make_synthesis_fn(
+    cache: dict, synth: Callable[[list[dict]], tuple[str, str]] | None = None
+) -> Callable[[list[dict]], tuple[str, str]]:
+    """Return a fn that distills a cluster into (title, brief).
+
+    `synth` (LLM) is injected: when present and it returns a plausible result,
+    that's the distilled knowledge brief. When absent or it errors, falls back
+    to a slug title + raw memory contents so export always works keyless.
+    Cached by cluster membership so preview == export and re-runs are free.
+    """
+
+    def synthesis_fn(cluster: list[dict]) -> tuple[str, str]:
         key = cluster_key(cluster)
         if key in cache:
             return tuple(cache[key])
         result = None
-        if judge is not None:
+        if synth is not None:
             try:
-                candidate = judge(cluster)
-                if _plausible(candidate):
+                candidate = synth(cluster)
+                if _plausible(candidate) and candidate[1]:
                     result = candidate
             except Exception:
                 result = None
         if result is None:
-            result = slug_title(cluster)
+            title, _ = slug_title(cluster)
+            result = (title, _raw_brief(cluster))
         cache[key] = list(result)
         return result
 
-    return title_fn
+    return synthesis_fn
 
 
 _TYPE_MAP = {"learning": "runbook"}
@@ -148,14 +160,20 @@ def _unique_slug(slug: str, used: set[str]) -> str:
     return candidate
 
 
-def _render_body(cluster, summary, graph, id_to_path, self_path) -> str:
-    lines = [summary, ""]
+def _render_body(cluster, brief, graph, id_to_path, self_path) -> str:
+    """Body = the distilled brief, then a collapsed Sources list of the
+    underlying memories, then cross-cluster Related links.
+    """
+    lines = [brief, ""]
+
+    lines.append("## Sources")
     for m in cluster:
-        lines.append(f"## {m.get('content', '').strip()}")
         meta = m.get("date") or (m.get("timestamp") or "")[:10]
-        if meta:
-            lines.append(f"_{meta}_")
-        lines.append("")
+        content = m.get("content", "").strip()
+        suffix = f" _({meta})_" if meta else ""
+        lines.append(f"- {content}{suffix}")
+    lines.append("")
+
     related: set[str] = set()
     for m in cluster:
         for e in graph.get_edges(_mid(m)):
@@ -171,9 +189,10 @@ def _render_body(cluster, summary, graph, id_to_path, self_path) -> str:
     return "\n".join(lines)
 
 
-def build_bundle(memories, graph, *, title_fn, renderer, project_hint=""):
-    """Filter → cluster → title → render into a Bundle. Cross-cluster edges
-    (including contradicts) surface as bundle-relative links in a Related section.
+def build_bundle(memories, graph, *, synthesis_fn, renderer, project_hint=""):
+    """Filter → cluster → synthesize → render into a Bundle. Each cluster
+    becomes one concept: an LLM-distilled brief (or raw fallback) + a Sources
+    list. Cross-cluster edges (incl. contradicts) surface as Related links.
     """
     from memory.renderers.okf import slugify
 
@@ -186,17 +205,17 @@ def build_bundle(memories, graph, *, title_fn, renderer, project_hint=""):
     used: set[str] = set()
     for cluster in clusters:
         okf_type = map_type(_dominant_type(cluster))
-        title, summary = title_fn(cluster)
+        title, brief = synthesis_fn(cluster)
         proj = cluster[0].get("project") or project_hint or "general"
         slug = _unique_slug(slugify(title), used)
         path = f"{proj}/{okf_type}s/{slug}.md"
-        assigned.append((cluster, path, (title, summary), okf_type))
+        assigned.append((cluster, path, (title, brief), okf_type))
         for m in cluster:
             id_to_path[_mid(m)] = path
 
     concepts: list[Concept] = []
-    for cluster, path, (title, summary), okf_type in assigned:
-        body = _render_body(cluster, summary, graph, id_to_path, path)
+    for cluster, path, (title, brief), okf_type in assigned:
+        body = _render_body(cluster, brief, graph, id_to_path, path)
         newest = max((m.get("timestamp") or m.get("date") or "") for m in cluster)
         proj = cluster[0].get("project") or project_hint or "general"
         fm = {
@@ -230,22 +249,73 @@ def _save_cache(path: Path, cache: dict) -> None:
         pass  # cache is best-effort; export must not fail on cache write
 
 
-def _build_judge():
-    model = os.getenv("MEMENTO_JUDGE_MODEL")
-    if not model:
-        return None, "slug"
+_SYNTH_PROMPT = (
+    "You are distilling an engineer's raw memory notes into one durable knowledge "
+    "brief. Below are {n} related notes. Write:\n"
+    "1. A short title (3-8 words, no quotes).\n"
+    "2. A tight 2-4 sentence brief capturing the durable knowledge — the decision, "
+    "the root cause, the rule, or the runbook step. Synthesize; do not transcribe. "
+    "Drop ticket noise and dates.\n\n"
+    "Return exactly:\nTITLE: <title>\nBRIEF: <brief>\n\nNotes:\n{notes}"
+)
 
-    def judge(cluster):
-        from memory.intelligence import summarize_cluster_title
 
-        return summarize_cluster_title(cluster, model=model)
+def _parse_synth(text: str) -> tuple[str, str]:
+    title, brief = "", ""
+    for line in text.splitlines():
+        if line.startswith("TITLE:"):
+            title = line[len("TITLE:") :].strip()
+        elif line.startswith("BRIEF:"):
+            brief = line[len("BRIEF:") :].strip()
+        elif brief and line.strip():
+            brief += " " + line.strip()
+    return title, brief
 
-    return judge, "haiku"
+
+def _llm_complete(prompt: str, *, model: str, base_url: str, token: str) -> str:
+    """POST to an Anthropic-compatible /v1/messages endpoint (works against the
+    litellm proxy). Uses httpx directly — no anthropic SDK dependency.
+    """
+    import httpx
+
+    resp = httpx.post(
+        f"{base_url.rstrip('/')}/v1/messages",
+        headers={"x-api-key": token, "anthropic-version": "2023-06-01"},
+        json={
+            "model": model,
+            "max_tokens": 400,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        timeout=60,
+    )
+    resp.raise_for_status()
+    return resp.json()["content"][0]["text"]
+
+
+def _build_synth():
+    """Return (synth_fn, mode). synth_fn distills a cluster into (title, brief)
+    via an Anthropic-compatible endpoint (honors ANTHROPIC_BASE_URL/AUTH_TOKEN,
+    including the litellm proxy). Returns (None, 'raw') when unconfigured.
+    """
+    model = os.getenv("MEMENTO_PUBLISH_MODEL") or os.getenv("ANTHROPIC_MODEL")
+    base_url = os.getenv("ANTHROPIC_BASE_URL")
+    token = os.getenv("ANTHROPIC_AUTH_TOKEN") or os.getenv("ANTHROPIC_API_KEY")
+    if not (model and base_url and token):
+        return None, "raw"
+
+    def synth(cluster):
+        notes = "\n".join(f"- {m.get('content', '').strip()}" for m in cluster)
+        prompt = _SYNTH_PROMPT.format(n=len(cluster), notes=notes)
+        text = _llm_complete(prompt, model=model, base_url=base_url, token=token)
+        return _parse_synth(text)
+
+    return synth, "llm"
 
 
 def publish_from_manager(manager, *, project=None, fmt="okf") -> Bundle:
     """Build an export bundle from a MemoryManager. Loads memories + graph,
-    manages the title cache on disk, and picks a judge if one is configured.
+    distills each cluster into a knowledge brief (LLM when configured, raw
+    fallback otherwise), and caches results by cluster membership.
     """
     from memory.renderers import get_renderer
 
@@ -255,13 +325,13 @@ def publish_from_manager(manager, *, project=None, fmt="okf") -> Bundle:
 
     cache_path = Path(manager.memory_dir) / "_publish_cache.json"
     cache = _load_cache(cache_path)
-    judge, titled_by = _build_judge()
-    title_fn = make_title_fn(cache, judge=judge)
+    synth, mode = _build_synth()
+    synthesis_fn = make_synthesis_fn(cache, synth=synth)
 
     bundle = build_bundle(
         memories,
         graph,
-        title_fn=title_fn,
+        synthesis_fn=synthesis_fn,
         renderer=get_renderer(fmt),
         project_hint=project or "",
     )
@@ -269,5 +339,5 @@ def publish_from_manager(manager, *, project=None, fmt="okf") -> Bundle:
     return Bundle(
         tree=bundle.tree,
         files=bundle.files,
-        stats={**bundle.stats, "titled_by": titled_by},
+        stats={**bundle.stats, "synthesized": mode},
     )
