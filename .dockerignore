@@ -1,0 +1,18 @@
+# Keep build contexts small for both the mcp (root) and ui image builds.
+.git
+**/__pycache__
+**/*.pyc
+.venv
+.pytest_cache
+.ruff_cache
+.mypy_cache
+
+# UI build artifacts + deps (Dockerfile runs npm ci / build itself)
+ui/node_modules
+ui/.next
+**/node_modules
+
+# Local data / scratch never belongs in an image
+digest/
+docs/superpowers
+*.log
