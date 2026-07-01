@@ -718,6 +718,61 @@ async def api_memory_publish(request):
         return _server_error(str(e))
 
 
+# In-memory synthesis job registry. Keyed by project; a job warms the synthesis
+# cache in a background thread so the async loop is never blocked.
+_PUBLISH_JOBS: dict[str, dict] = {}
+
+
+@mcp.custom_route("/api/memory/publish/synthesize", methods=["POST"])
+async def api_memory_publish_synthesize(request):
+    """Start (or report) a background synthesis job for a project scope."""
+    import threading
+
+    from memory.publish import publish_from_manager
+
+    q = request.query_params
+    project = _safe_project(q.get("project")) or ""
+    key = project or "__all__"
+
+    job = _PUBLISH_JOBS.get(key)
+    if job and job.get("status") == "running":
+        return _ok({"status": "running", "done": job["done"], "total": job["total"]})
+
+    _PUBLISH_JOBS[key] = {"status": "running", "done": 0, "total": 0}
+
+    def _run():
+        try:
+            manager = _get_memory_manager()
+
+            def _progress(done, total):
+                _PUBLISH_JOBS[key]["done"] = done
+                _PUBLISH_JOBS[key]["total"] = total
+
+            publish_from_manager(
+                manager, project=project or None, synthesize=True, progress=_progress
+            )
+            _PUBLISH_JOBS[key]["status"] = "done"
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Synthesis job failed for {key}: {e}")
+            _PUBLISH_JOBS[key]["status"] = "error"
+            _PUBLISH_JOBS[key]["error"] = str(e)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return _ok({"status": "started"})
+
+
+@mcp.custom_route("/api/memory/publish/status", methods=["GET"])
+async def api_memory_publish_status(request):
+    """Poll a synthesis job's progress."""
+    q = request.query_params
+    project = _safe_project(q.get("project")) or ""
+    key = project or "__all__"
+    job = _PUBLISH_JOBS.get(key)
+    if not job:
+        return _ok({"status": "idle"})
+    return _ok(job)
+
+
 @mcp.custom_route("/api/memory/graph/rebuild", methods=["POST"])
 async def api_rebuild_memory_graph(_request):
     """REST API: Rebuild the memory knowledge graph."""

@@ -312,19 +312,20 @@ def _build_synth():
     return synth, "llm"
 
 
-def prewarm_synthesis(clusters, cache, synth, workers=10) -> None:
-    """Populate the synthesis cache concurrently before build_bundle runs.
-
-    Sequential per-cluster LLM calls make big projects time out (~6s each).
-    This fans them out (bounded thread pool) so the subsequent build hits a
-    warm cache. Uncached-on-error clusters fall back to raw in build_bundle.
+def prewarm_synthesis(clusters, cache, synth, workers=10, progress=None) -> None:
+    """Populate the synthesis cache concurrently. Fans LLM calls out over a
+    bounded thread pool. `progress(done, total)` fires after each completion.
+    Uncached-on-error clusters fall back to raw in build_bundle.
     """
     if synth is None:
         return
     from concurrent.futures import ThreadPoolExecutor
 
     todo = [c for c in clusters if cluster_key(c) not in cache]
-    if not todo:
+    total = len(todo)
+    if not total:
+        if progress:
+            progress(0, 0)
         return
 
     def _one(cluster):
@@ -336,17 +337,29 @@ def prewarm_synthesis(clusters, cache, synth, workers=10) -> None:
             return None
         return None
 
+    done = 0
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for outcome in pool.map(_one, todo):
             if outcome:
                 key, value = outcome
                 cache[key] = value
+            done += 1
+            if progress:
+                progress(done, total)
 
 
-def publish_from_manager(manager, *, project=None, fmt="okf") -> Bundle:
-    """Build an export bundle from a MemoryManager. Loads memories + graph,
-    distills each cluster into a knowledge brief (LLM when configured, raw
-    fallback otherwise), and caches results by cluster membership.
+def publish_from_manager(
+    manager, *, project=None, fmt="okf", synthesize=False, progress=None
+) -> Bundle:
+    """Build an export bundle from a MemoryManager.
+
+    synthesize=False (default): fast, keyless — raw briefs, no LLM. Cached
+    syntheses from a prior run are still used if present. This is the preview
+    path and never blocks on the LLM.
+
+    synthesize=True: warm the cache with LLM-distilled briefs first (concurrent,
+    `progress(done, total)` callback), then build. Use off the request hot path
+    (background job / download), never inline in an async handler.
     """
     from memory.renderers import get_renderer
 
@@ -358,11 +371,14 @@ def publish_from_manager(manager, *, project=None, fmt="okf") -> Bundle:
     cache = _load_cache(cache_path)
     synth, mode = _build_synth()
 
-    # Warm the cache concurrently so the sequential build doesn't time out.
-    mems = [m for m in memories if _keep(m)]
-    prewarm_synthesis(cluster_memories(mems, graph), cache, synth)
+    if synthesize and synth is not None:
+        mems = [m for m in memories if _keep(m)]
+        prewarm_synthesis(cluster_memories(mems, graph), cache, synth, progress=progress)
+    else:
+        mode = "cached" if cache else "raw"
 
-    synthesis_fn = make_synthesis_fn(cache, synth=synth)
+    # build_bundle only reads the cache — it never triggers new LLM calls here.
+    synthesis_fn = make_synthesis_fn(cache, synth=None)
 
     bundle = build_bundle(
         memories,

@@ -38,3 +38,13 @@ def test_tar_mode_returns_gzip(client):
     r = client.get("/api/memory/publish?project=nonexistent-xyz&mode=tar")
     assert r.status_code == 200
     assert r.content[:2] == b"\x1f\x8b"
+
+
+@pytest.mark.integration
+def test_synthesize_starts_job_and_status_polls(client):
+    r = client.post("/api/memory/publish/synthesize?project=nonexistent-xyz")
+    assert r.status_code == 200
+    assert r.json()["status"] in {"started", "running"}
+    s = client.get("/api/memory/publish/status?project=nonexistent-xyz")
+    assert s.status_code == 200
+    assert s.json()["status"] in {"running", "done", "idle", "error"}
