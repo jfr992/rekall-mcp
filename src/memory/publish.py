@@ -28,11 +28,13 @@ def _mid(m: dict) -> str:
 
 
 def cluster_memories(memories: list[dict], graph) -> list[list[dict]]:
-    """Group memories into concept clusters via graph connected components.
+    """Group memories into topic clusters via graph community detection.
 
     Uses grouping relations only (excludes `contradicts` — a contradiction
-    should keep two memories as separate concepts). Singletons form their own
-    cluster. Components larger than MAX_CLUSTER split by memory type.
+    should keep two memories as separate concepts). Greedy modularity finds
+    sub-topics inside dense blobs where connected-components would return one
+    giant group. Isolated memories fall out as singletons. Communities larger
+    than MAX_CLUSTER split by memory type.
     """
     by_id = {_mid(m): m for m in memories if _mid(m)}
     g = nx.Graph()
@@ -43,8 +45,13 @@ def cluster_memories(memories: list[dict], graph) -> list[list[dict]]:
 
     clusters: list[list[dict]] = []
     for comp in nx.connected_components(g):
-        members = [by_id[i] for i in comp]
-        clusters.extend(_split_oversized(members))
+        sub = g.subgraph(comp)
+        if sub.number_of_edges() == 0:
+            clusters.append([by_id[i] for i in comp])
+            continue
+        for community in nx.community.greedy_modularity_communities(sub):
+            members = [by_id[i] for i in community]
+            clusters.extend(_split_oversized(members))
     return clusters
 
 
