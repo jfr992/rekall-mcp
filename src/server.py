@@ -649,6 +649,75 @@ async def api_memory_graph(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/publish", methods=["GET", "POST"])
+async def api_memory_publish(request):
+    """REST API: export memory to an OKF bundle (mode=preview|tar|dir)."""
+    import io
+    import tarfile
+    from pathlib import Path
+
+    from starlette.responses import Response
+
+    from memory.publish import publish_from_manager
+
+    try:
+        q = request.query_params
+        project = _safe_project(q.get("project"))
+        fmt = q.get("format", "okf")
+        mode = q.get("mode", "preview")
+
+        manager = _get_memory_manager()
+        try:
+            bundle = publish_from_manager(manager, project=project, fmt=fmt)
+        except ValueError as e:
+            return _bad_request(str(e))
+
+        if mode == "preview":
+            return _ok({"tree": bundle.tree, "files": bundle.files, "stats": bundle.stats})
+
+        if mode == "tar":
+            buf = io.BytesIO()
+            with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+                for path, content in bundle.files.items():
+                    data = content.encode()
+                    info = tarfile.TarInfo(name=path)
+                    info.size = len(data)
+                    tar.addfile(info, io.BytesIO(data))
+            buf.seek(0)
+            return Response(
+                buf.read(),
+                media_type="application/gzip",
+                headers={"Content-Disposition": 'attachment; filename="okf-bundle.tar.gz"'},
+            )
+
+        if mode == "dir":
+            base = Path(
+                os.getenv("MEMENTO_PUBLISH_DIR", os.path.expanduser("~/.claude/publish"))
+            ).resolve()
+            dest = q.get("dest")
+            if not dest:
+                return _bad_request("dest required for mode=dir")
+            target = Path(dest).resolve() if os.path.isabs(dest) else (base / dest).resolve()
+            if base != target and base not in target.parents:
+                return _bad_request("dest must be within MEMENTO_PUBLISH_DIR")
+            tmp = target.with_suffix(".tmp")
+            for path, content in bundle.files.items():
+                fp = tmp / path
+                fp.parent.mkdir(parents=True, exist_ok=True)
+                fp.write_text(content)
+            if target.exists():
+                import shutil
+
+                shutil.rmtree(target)
+            tmp.rename(target)
+            return _ok({"written": len(bundle.files), "path": str(target)})
+
+        return _bad_request(f"unknown mode: {mode}")
+    except Exception as e:
+        logger.error(f"Error building publish bundle: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/graph/rebuild", methods=["POST"])
 async def api_rebuild_memory_graph(_request):
     """REST API: Rebuild the memory knowledge graph."""
