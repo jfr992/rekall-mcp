@@ -731,4 +731,28 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("memory_detail")
 
+        @mcp.tool(structured_output=False)
+        async def publish_memory(project: str | None = None, format: str = "okf") -> str:
+            """Use when exporting memory to a shareable knowledge bundle (OKF markdown).
+
+            Builds an OKF v0.1 bundle from memory (one project or all) and returns
+            the file tree. For a downloadable .tar.gz or writing to disk, use the
+            /api/memory/publish endpoint or the cockpit Export tab.
+
+            Args:
+                project: Scope to one project, or omit for all memory
+                format: Export format (default: okf)
+            """
+            from memory.publish import publish_from_manager
+
+            bundle = publish_from_manager(self.manager, project=project, fmt=format)
+            header = (
+                f"OKF bundle — {bundle.stats.get('concepts', 0)} concepts, "
+                f"{bundle.stats.get('clusters', 0)} clusters, "
+                f"titled by {bundle.stats.get('titled_by', 'slug')}"
+            )
+            return "\n".join([header, ""] + bundle.tree)
+
+        registered.append("publish_memory")
+
         return registered

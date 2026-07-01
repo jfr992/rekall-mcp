@@ -112,7 +112,7 @@ This finds memories that are *structurally related*, not just textually similar.
 Browse the knowledge graph at `http://localhost:3333/brain` (Next.js cockpit, run with `cd ui && npm run dev -- -p 3333`). Surfaces:
 
 - `/brain` — force-directed graph view, nodes are memories, edges show typed relationships
-- `/kb` — typed columns (decisions, requirements, preferences, learnings)
+- `/kb` — typed columns (decisions, requirements, preferences, learnings), plus an **Export OKF** tab that distills memory into a portable [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf) bundle
 - `/continuity` — resume packets and handoff summaries
 - `/hygiene` — pressure metrics, prune flow, lifecycle backfill
 
@@ -186,16 +186,15 @@ echo "NEXT_PUBLIC_MEMENTO_API_TOKEN=$MEMENTO_API_TOKEN" >> ui/.env.local
 
 Tested on [LongMemEval](https://github.com/xiaowu0162/LongMemEval) (500 questions, 6 question types). Reproducible — runner in [`benchmarks/`](benchmarks/).
 
-`main` ships with **dense-only** retrieval (96.6% R@5 — matches MemPalace raw). Hybrid BM25 + dense retrieval and the +graph variant live on the `feat/hybrid-search-bm25` branch and reproduce the higher scores in the table below.
+These are **R@5 retrieval-recall** numbers — "was the correct memory in the top 5 retrieved" — with no LLM at any stage. They are **not** end-to-end QA-accuracy and are **not** comparable to the QA-accuracy figures other systems (mem0, Zep) publish on LongMemEval. The only fair comparison here is against MemPalace's raw retrieval baseline, which uses the same metric.
 
-| Mode | R@5 | Branch | What It Tests |
-|------|-----|--------|---------------|
-| Dense (semantic only) | 96.6% | `main` (default) | Same as MemPalace raw — identical score |
-| Hybrid (BM25 + dense) | 97.6% | `feat/hybrid-search-bm25` | Beats all published zero-API scores |
-| Hybrid + graph | 97.6% | `feat/hybrid-search-bm25` | Adds knowledge graph expansion |
-| MemPalace (raw, ChromaDB) | 96.6% | (external) | Highest previously published zero-API score |
+| Mode | R@5 (retrieval recall) | Branch |
+|------|------------------------|--------|
+| Dense (semantic only) | 96.6% | `main` (default) — matches MemPalace raw |
+| Hybrid (BM25 + dense) | 97.6% | `feat/hybrid-search-bm25` |
+| Hybrid + graph | 97.6% | `feat/hybrid-search-bm25` |
 
-Hybrid search catches entity-specific queries that pure semantic search misses. No LLM required, no API calls, runs entirely local.
+Hybrid search catches entity-specific queries (ticket IDs, error codes) that pure semantic search misses. No LLM required, no API calls, runs entirely local. R@5 measures retrieval, not answer quality — a system can retrieve well and still answer poorly.
 
 ```bash
 # Reproduce
@@ -350,6 +349,7 @@ AI:  vector search finds the memory
 | `/api/memory/consolidate` | GET | Detect superseded/conflicting pairs |
 | `/api/memory/recall/quick` | GET | Fast high-threshold recall for per-prompt injection |
 | `/api/memory/compact` | POST | LLM-summarize old memories (dry-run by default) |
+| `/api/memory/publish` | GET | Export memory to an OKF v0.1 bundle (`mode=preview\|tar\|dir`) |
 
 </details>
 
@@ -432,8 +432,9 @@ src/
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Technical design, knowledge graph internals |
 | [docs/SETUP.md](docs/SETUP.md) | Setup, embedding providers, migration |
 | [docs/TUNING.md](docs/TUNING.md) | Customize what Claude remembers |
-| [docs/MEMORY_PLUGIN.md](docs/MEMORY_PLUGIN.md) | Memory Plugin skills and hooks |
+| [claude/INSTALL.md](claude/INSTALL.md) | Claude Code bundle: skills and hooks install |
 | [docs/CLAUDE_MEMORY_SETTINGS.md](docs/CLAUDE_MEMORY_SETTINGS.md) | Claude-specific policy and tuning knobs |
+| [docs/MIGRATION.md](docs/MIGRATION.md) | Version upgrade notes |
 
 </details>
 
