@@ -7,11 +7,12 @@ type Props = {
 
 export function KbColumns({ data }: Props) {
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden md:grid-cols-2 xl:grid-cols-4">
+    <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-hidden md:grid-cols-2 xl:grid-cols-5">
       <KbSlice title="Decisions" accentVar="var(--accent-warning)" entries={data.decisions} />
       <KbSlice title="Requirements" accentVar="var(--accent-danger)" entries={data.requirements} />
       <KbSlice title="Preferences" accentVar="var(--accent-secondary)" entries={data.preferences} />
       <KbSlice title="Learnings" accentVar="var(--accent-success)" entries={data.learnings} />
+      <KbSlice title="Facts" accentVar="var(--accent-primary)" entries={data.facts ?? []} />
     </div>
   );
 }

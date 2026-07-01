@@ -99,6 +99,7 @@ export const KbResponseSchema = z.object({
   requirements: z.array(KbEntrySchema),
   preferences: z.array(KbEntrySchema),
   learnings: z.array(KbEntrySchema),
+  facts: z.array(KbEntrySchema).optional(),
   truncated: z.boolean().optional(),
 });
 
