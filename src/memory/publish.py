@@ -110,19 +110,17 @@ def make_synthesis_fn(
         key = cluster_key(cluster)
         if key in cache:
             return tuple(cache[key])
-        result = None
         if synth is not None:
             try:
                 candidate = synth(cluster)
                 if _plausible(candidate) and candidate[1]:
-                    result = candidate
+                    cache[key] = list(candidate)  # cache ONLY real syntheses
+                    return candidate
             except Exception:
-                result = None
-        if result is None:
-            title, _ = slug_title(cluster)
-            result = (title, _raw_brief(cluster))
-        cache[key] = list(result)
-        return result
+                pass
+        # Uncached raw fallback — retried on the next run once a model is available.
+        title, _ = slug_title(cluster)
+        return (title, "")  # empty brief signals "not synthesized" to the renderer
 
     return synthesis_fn
 
@@ -164,7 +162,10 @@ def _render_body(cluster, brief, graph, id_to_path, self_path) -> str:
     """Body = the distilled brief, then a collapsed Sources list of the
     underlying memories, then cross-cluster Related links.
     """
-    lines = [brief, ""]
+    if brief.strip():
+        lines = [brief, ""]
+    else:
+        lines = ["_Not yet synthesized — run Synthesize to distill these._", ""]
 
     lines.append("## Sources")
     for m in cluster:

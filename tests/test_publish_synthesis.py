@@ -25,18 +25,20 @@ def test_synthesis_uses_llm_and_caches():
 def test_synthesis_falls_back_to_slug_when_no_synth():
     fn = make_synthesis_fn({}, synth=None)
     title, brief = fn([_mem("a", "a genuinely useful long learning here")])
-    assert title  # slug title
-    assert brief  # falls back to raw content
+    assert title  # slug title always present
+    assert brief == ""  # empty brief signals "not synthesized"
 
 
-def test_synthesis_falls_back_on_error():
+def test_synthesis_error_is_not_cached():
     def boom(cluster):
         raise RuntimeError("proxy down")
 
-    fn = make_synthesis_fn({}, synth=boom)
+    cache: dict = {}
+    fn = make_synthesis_fn(cache, synth=boom)
     title, brief = fn([_mem("a", "real content that is long enough here")])
     assert title
-    assert brief
+    assert brief == ""
+    assert cache == {}  # failures must NOT poison the cache — retried next run
 
 
 def test_cache_key_stable_across_calls():
