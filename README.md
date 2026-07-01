@@ -350,6 +350,7 @@ AI:  vector search finds the memory
 | `/api/memory/consolidate` | GET | Detect superseded/conflicting pairs |
 | `/api/memory/recall/quick` | GET | Fast high-threshold recall for per-prompt injection |
 | `/api/memory/compact` | POST | LLM-summarize old memories (dry-run by default) |
+| `/api/memory/publish` | GET | Export memory to an OKF v0.1 bundle (`mode=preview\|tar\|dir`) |
 
 </details>
 
