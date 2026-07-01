@@ -1,4 +1,5 @@
 import networkx as nx
+
 from memory.publish import publish_from_manager
 
 
@@ -40,7 +41,7 @@ def test_publish_from_manager_raw_when_no_model(tmp_path, monkeypatch):
 def test_publish_writes_and_reuses_cache(tmp_path, monkeypatch):
     for var in ("MEMENTO_PUBLISH_MODEL", "ANTHROPIC_MODEL", "ANTHROPIC_BASE_URL"):
         monkeypatch.delenv(var, raising=False)
-    for var in ("MEMENTO_PUBLISH_MODEL","ANTHROPIC_MODEL","ANTHROPIC_BASE_URL"):
+    for var in ("MEMENTO_PUBLISH_MODEL", "ANTHROPIC_MODEL", "ANTHROPIC_BASE_URL"):
         monkeypatch.delenv(var, raising=False)
     publish_from_manager(FakeManager(tmp_path))
     assert (tmp_path / "_publish_cache.json").exists()

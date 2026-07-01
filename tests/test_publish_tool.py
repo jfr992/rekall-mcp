@@ -1,6 +1,7 @@
 """Guards the data contract the publish_memory tool formats."""
 
 import networkx as nx
+
 from memory.publish import publish_from_manager
 
 

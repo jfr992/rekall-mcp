@@ -1,4 +1,5 @@
 import pytest
+
 from memory.publish_types import Bundle, Concept
 
 

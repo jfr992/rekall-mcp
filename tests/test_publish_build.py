@@ -1,4 +1,5 @@
 import networkx as nx
+
 from memory.publish import build_bundle, make_synthesis_fn, map_type
 from memory.renderers import get_renderer
 
@@ -13,9 +14,7 @@ class FakeGraph:
         out = []
         for s, t, d in self._graph.edges(data=True):
             if s == mid or t == mid:
-                out.append(
-                    type("E", (), {"source": s, "target": t, "relation": d["relation"]})
-                )
+                out.append(type("E", (), {"source": s, "target": t, "relation": d["relation"]}))
         return out
 
 

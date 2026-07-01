@@ -1,4 +1,4 @@
-from memory.publish import make_synthesis_fn, cluster_key
+from memory.publish import cluster_key, make_synthesis_fn
 
 
 def _mem(mid, content):

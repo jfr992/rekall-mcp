@@ -10,16 +10,14 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import networkx as nx
 
 from memory.publish_types import Bundle, Concept
 
-GROUPING_RELATIONS = frozenset(
-    {"related_to", "led_to", "depends_on", "part_of", "supersedes"}
-)
+GROUPING_RELATIONS = frozenset({"related_to", "led_to", "depends_on", "part_of", "supersedes"})
 MAX_CLUSTER = 15  # ponytail: split at 15, tune if docs read badly
 
 
@@ -85,9 +83,7 @@ def slug_title(cluster: list[dict]) -> tuple[str, str]:
 
 
 def _plausible(t) -> bool:
-    return bool(
-        isinstance(t, tuple) and len(t) == 2 and t[0] and 2 <= len(t[0]) <= 120
-    )
+    return bool(isinstance(t, tuple) and len(t) == 2 and t[0] and 2 <= len(t[0]) <= 120)
 
 
 def _raw_brief(cluster: list[dict]) -> str:

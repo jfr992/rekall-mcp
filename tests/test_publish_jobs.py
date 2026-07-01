@@ -1,5 +1,6 @@
 import networkx as nx
-from memory.publish import publish_from_manager, prewarm_synthesis, cluster_key
+
+from memory.publish import prewarm_synthesis, publish_from_manager
 
 
 class FakeGraph:
@@ -13,7 +14,12 @@ class FakeGraph:
 class FakeStore:
     def scroll(self, filters=None, limit=100, with_vectors=False):
         return [
-            {"memory_id": str(i), "content": f"a useful long learning number {i} here", "project": "p", "type": "learning"}
+            {
+                "memory_id": str(i),
+                "content": f"a useful long learning number {i} here",
+                "project": "p",
+                "type": "learning",
+            }
             for i in range(5)
         ]
 

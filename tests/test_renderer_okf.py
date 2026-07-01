@@ -1,4 +1,5 @@
 import yaml
+
 from memory.publish_types import Concept
 from memory.renderers.okf import OkfRenderer, slugify
 

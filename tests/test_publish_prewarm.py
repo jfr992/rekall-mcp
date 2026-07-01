@@ -1,5 +1,6 @@
 import time
-from memory.publish import prewarm_synthesis, cluster_key
+
+from memory.publish import cluster_key, prewarm_synthesis
 
 
 def _mem(mid, content):
