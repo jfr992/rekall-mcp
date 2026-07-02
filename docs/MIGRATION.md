@@ -1,3 +1,27 @@
+# Migration Guide — v1.6.0 → v1.7.0 (Rekall rename)
+
+**Breaking: `MEMENTO_*` environment variables are gone.** The project renamed
+memento → rekall; the temporary `MEMENTO_*` fallback shim has been removed.
+Rename any env vars you set:
+
+| Old | New |
+|-----|-----|
+| `MEMENTO_API_TOKEN` | `REKALL_API_TOKEN` |
+| `MEMENTO_API_URL` | `REKALL_API_URL` |
+| `MEMENTO_MEMORY_DIR` | `REKALL_MEMORY_DIR` |
+| `MEMENTO_PUBLISH_DIR` | `REKALL_PUBLISH_DIR` |
+| `MEMENTO_PUBLISH_MODEL` | `REKALL_PUBLISH_MODEL` |
+| `MEMENTO_AUTOSAVE` | `REKALL_AUTOSAVE` |
+| `MEMENTO_JUDGE_MODEL` | `REKALL_JUDGE_MODEL` |
+| `MEMENTO_JUDGE_INFLIGHT` | `REKALL_JUDGE_INFLIGHT` |
+| `MEMENTO_HOST` | `REKALL_HOST` |
+| `NEXT_PUBLIC_MEMENTO_API_TOKEN` | `NEXT_PUBLIC_REKALL_API_TOKEN` |
+
+The CLI entrypoint is now `rekall` (was `memento`). Data (YAML, Qdrant, graph)
+is unchanged — no data migration needed.
+
+---
+
 # Migration Guide — v1.5.x → v1.6.0 (Hardening)
 
 **No breaking changes. No migration steps required** — upgrade in place.
