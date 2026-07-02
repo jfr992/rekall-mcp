@@ -2,9 +2,10 @@
 
 ## Goal
 
-Make Rekall safe and trustworthy enough for Claude Code to use as an initial
-agent memory substrate, while preserving a clear path to team deployments and
-later Codex support.
+Improve the Rekall system that is already backing Claude Code into a real
+agent nervous system: reliable enough to remember, explain, protect, and evolve
+while it is in active use. Preserve a clear path to team deployments and later
+Codex support.
 
 ## Design Principles
 
@@ -16,6 +17,8 @@ later Codex support.
 - Graph recall must explain itself to the agent.
 - Every saved memory must carry enough provenance to answer who saved it, from
   where, with which tool, and why.
+- Existing Claude Code memories and workflows must keep working throughout the
+  upgrade.
 
 ## Approaches Considered
 
@@ -30,9 +33,9 @@ neighbors appeared, and whether the deployment is safe for real memories.
 
 ### Approach B: Claude Code Reliability Layer
 
-Treat Claude Code as the first supported agent profile. Make storage, project
-identity, local deployment defaults, graph evidence, and provenance into an
-explicit contract around the existing manager, MCP tools, REST endpoints, and
+Treat Claude Code as the live, already-in-use agent profile. Make storage,
+project identity, local deployment defaults, graph evidence, and provenance into
+an explicit contract around the existing manager, MCP tools, REST endpoints, and
 startup packet.
 
 This is the recommended path. It keeps the architecture small, reuses the
@@ -53,7 +56,7 @@ before the local agent contract is proven.
 
 Use Approach B.
 
-Claude Code gets one blessed startup path:
+Claude Code keeps one blessed startup path:
 
 ```text
 agent_startup(project?, agent="claude-code")
@@ -62,6 +65,11 @@ agent_startup(project?, agent="claude-code")
 That startup packet should include scope, trust boundary, recent memories,
 important memories, unresolved contradictions, graph-backed related context,
 memory health warnings, and save/recall policy hints.
+
+Because Claude Code is already using the system, every implementation phase must
+be compatible with existing memory data. Risky changes need a preflight report,
+dry-run mode, or migration guard before they can modify YAML, Qdrant, or the
+knowledge graph.
 
 The write path should flow through one identity and provenance envelope:
 
@@ -121,6 +129,23 @@ blocked/unsafe result unless the caller passes an explicit force flag.
 Compaction should be async-safe when called from async REST routes. It should
 mark nested YAML originals as compacted before deleting originals from Qdrant,
 and it should report partial failures instead of swallowing them.
+
+## Live Upgrade Constraints
+
+This is a hardening project for a running memory system, not a greenfield
+install.
+
+Before destructive or schema-changing work, capture a live baseline:
+
+- YAML memory file count by project
+- Qdrant memory count by project
+- knowledge graph node and edge counts
+- current Claude Code startup output shape
+- current `recall_memories()` output shape
+
+Any migration must be repeatable, dry-runnable, and reversible by restoring YAML
+and Qdrant backups. Existing project keys should remain valid for reads even if
+new writes use normalized keys.
 
 ## Project Identity
 
@@ -185,7 +210,7 @@ Minimum fields:
 Every memory saved through `observe`, `save_memory`, REST save, and future
 Claude Code hooks should persist this metadata to both YAML and Qdrant.
 
-## Claude Code MVP Contract
+## Claude Code Agent Contract
 
 Claude Code should use:
 
@@ -198,6 +223,18 @@ Claude Code should use:
 Claude Code should not use destructive maintenance paths by default. Prune and
 compaction apply operations remain REST/admin actions until the safety contract
 is stronger.
+
+## Agent Nervous System Target
+
+The target is not just "memory storage." A useful agent nervous system should:
+
+- sense: capture durable observations with provenance
+- recall: retrieve relevant memories with evidence
+- connect: use graph relationships as working context
+- protect: avoid accidental exposure or destructive maintenance
+- repair: detect drift between YAML, Qdrant, and graph state
+- explain: show why a memory was saved or recalled
+- evolve: support team and Codex modes without forking the architecture
 
 ## Codex Later
 

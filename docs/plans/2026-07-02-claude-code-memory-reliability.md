@@ -2,13 +2,71 @@
 
 > **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
-**Goal:** Make Rekall reliable and safe enough for Claude Code to use as the first supported agent memory client.
+**Goal:** Harden the Rekall system already used by Claude Code into a reliable agent nervous system.
 
-**Architecture:** Keep YAML as source of truth, Qdrant as recall index, and the knowledge graph as ranking/evidence metadata. Add one shared project identity resolver, one provenance envelope, local-first secure defaults, and explicit graph recall evidence around the existing `MemoryManager`, MCP tools, REST routes, and startup packet.
+**Architecture:** Keep YAML as source of truth, Qdrant as recall index, and the knowledge graph as ranking/evidence metadata. Add one shared project identity resolver, one provenance envelope, local-first secure defaults, and explicit graph recall evidence around the existing `MemoryManager`, MCP tools, REST routes, and startup packet. Treat this as an in-place upgrade of a live Claude Code memory system: every risky change needs a baseline, dry-run, or compatibility guard.
 
 **Tech Stack:** Python 3.12, FastMCP/Starlette, Qdrant, PyYAML, pytest, Next.js/TypeScript, Vitest, Docker Compose.
 
 ---
+
+### Task 0: Capture Live-System Baseline
+
+**Files:**
+- Create: `docs/plans/2026-07-02-claude-code-memory-baseline.md`
+
+**Step 1: Record current branch and dirty state**
+
+Run:
+
+```bash
+git status --short
+git branch --show-current
+```
+
+Expected: record the branch and any unrelated local files without modifying
+them.
+
+**Step 2: Record storage configuration**
+
+Run:
+
+```bash
+env | rg 'MEMORY_STORAGE_PATH|REKALL_MEMORY_DIR|QDRANT_URL|REKALL_API_TOKEN|HOST|PORT|MCP_TRANSPORT|AGENT|CLAUDE'
+```
+
+Expected: document configured paths and redact secrets.
+
+**Step 3: Record live memory counts**
+
+Use existing safe commands or a read-only Python snippet to record:
+
+- YAML memory file count by project
+- Qdrant memory count by project
+- knowledge graph node and edge counts
+- current `agent_startup(agent="claude-code")` output shape
+- current `recall_memories()` output shape
+
+Do not run prune, sync apply, compaction apply, graph rebuild, or migration
+commands in this step.
+
+**Step 4: Write baseline notes**
+
+Create `docs/plans/2026-07-02-claude-code-memory-baseline.md` with:
+
+- timestamp
+- environment summary
+- counts
+- known dirty files
+- any commands that could not be run
+- restore notes for YAML and Qdrant backups
+
+**Step 5: Commit**
+
+```bash
+git add docs/plans/2026-07-02-claude-code-memory-baseline.md
+git commit -m "docs: capture claude-code memory baseline"
+```
 
 ### Task 1: Add Regression Tests For Nested YAML Discovery
 
@@ -214,6 +272,7 @@ Cover:
 - path traversal is rejected
 - display name is preserved
 - legacy exact project values can still be resolved for reads
+- existing live Claude Code project keys remain readable
 
 **Step 2: Add identity module**
 
@@ -317,6 +376,9 @@ Pass `QDRANT_API_KEY` from environment into `VectorStore` and Qdrant clients.
 
 In `.env.example`, document local mode, team mode, token requirements, and
 Qdrant API key behavior.
+
+Team mode is an expansion path. Local Claude Code use remains the default and
+must not require new credentials unless HTTP exposure is enabled.
 
 **Step 6: Run targeted tests**
 
@@ -433,6 +495,9 @@ In MCP tools:
 
 REST save should set `source_tool="rest:/api/memory/save"`.
 
+Existing memories without provenance should remain valid. Backfill provenance
+only when an explicit migration or backfill command is run.
+
 **Step 4: Persist to YAML and Qdrant**
 
 Ensure `_save_to_file()` copies provenance metadata into memory entries.
@@ -482,6 +547,9 @@ Include cheap checks only:
 - local/team mode hint
 
 Do not run expensive sync or full graph rebuild during startup.
+
+Because Claude Code already calls this path, preserve the existing human-readable
+summary shape and add new sections in a way that older habits remain usable.
 
 **Step 3: Update startup copy**
 
@@ -574,6 +642,7 @@ Document:
 - local-first default
 - team mode opt-in
 - Claude Code startup flow
+- live-system upgrade notes
 - project identity behavior
 - provenance fields
 - recall evidence
