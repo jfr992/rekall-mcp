@@ -75,7 +75,7 @@ A memory record has:
 |-------|------|-------|
 | `id` / `memory_id` | string | `<date>_<type>_<short_hash>` |
 | `content` | string | the actual memory text, sanitized |
-| `type` | enum | `decision \| learning \| preference \| requirement \| fact \| note \| summary` |
+| `type` | enum | `decision \| learning \| preference \| requirement \| fact \| note \| session \| summary` |
 | `project` | string | resolved from caller cwd, never default to backend cwd |
 | `date` | YYYY-MM-DD string | NOT epoch — Qdrant `Range` filters won't work; filter post-retrieval |
 | `tier` | enum | `working \| episodic \| semantic \| identity` |
@@ -97,11 +97,10 @@ A memory record has:
 
 ## Hook discipline (claude/hooks/)
 
-Three hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/hooks/` with matching `~/.claude/settings.json` entries.
+Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/hooks/` with matching `~/.claude/settings.json` entries.
 
 - **`rekall-restore.sh`** (UserPromptSubmit) — fetch-don't-inject. Status line only (~92 bytes/session). **Don't add context dumps here.** If you want context, the agent calls `recall_memories()` on demand.
 - **`rekall-observe.sh`** (Stop) — Haiku judge with cheap signal gate. **Never add a hook that fires Haiku per turn without a gate.** Current gate fires on (a) new commits since last fire, (b) durability keyword in last user message, or (c) 5+ turns AND zero saves today. Without the gate you'd burn ~$30/month per active developer.
-- **`rekall-post-tool.sh`** (PostToolUse Bash matcher) — captures git commit SHAs. Passive, no LLM calls.
 
 **Re-entrancy:** if a hook invokes `claude -p`, that inner Claude Code instance fires its own hooks. Guard with `REKALL_JUDGE_INFLIGHT=1` set before exec, checked at the top of the hook. Without this, infinite hook recursion.
 
@@ -125,15 +124,15 @@ Three hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude
 
 ## Deferred work (with reason)
 
-- **BM25 hybrid merge** — adds Qdrant-native sparse vectors for identifier-style queries. Marginal value at <5k memories; merge when scale demands. Pre-merge fixes required: `compact.py:281` asyncio.run, `migrate_hybrid.py` glob→rglob.
-- **Auto-compaction** — `compact.py` from the BM25 branch summarizes old memories by project+type, marks originals compacted in YAML, removes from Qdrant. Standalone module, doesn't depend on BM25. Would clean the bulk-import noise floor. Safe to extract independently with the same fixes.
+- **BM25 hybrid merge** — adds Qdrant-native sparse vectors for identifier-style queries. Marginal value at <5k memories; merge when scale demands. Pre-merge fix required: `migrate_hybrid.py` glob→rglob.
+- **Auto-compaction** — shipped on main (`src/memory/compact.py`, route `POST /api/memory/compact`). Known issue: asyncio.run inside sync path (see pitfall table).
 - **Session-end summary** — Claude Code has no native end-of-session hook. Workaround would be a slash command the user types at session end. Not worth building until per-turn judge proves insufficient.
 
 ## Pitfalls (real ones we've hit)
 
 | Pitfall | Where | Fix |
 |---------|-------|-----|
-| `asyncio.run()` inside sync function called from async route → "event loop already running" | `compact.py:281` (BM25 branch) | Make `compact_memories` async, change to `await _summarize_with_llm(...)` |
+| `asyncio.run()` inside sync function called from async route → "event loop already running" | `src/memory/compact.py:284` (main) | Make `compact_memories` async, change to `await _summarize_with_llm(...)` |
 | `glob("*.yaml")` returns zero files when YAML is nested per-project | `migrate_hybrid.py` (BM25 branch) | `rglob("*.yaml")` |
 | Qdrant `Range` filter on `date` (string `YYYY-MM-DD`) silently returns 0 hits | `manager.recall()` `days` filter | Filter post-retrieval via Python string compare |
 | RRF prefetch drops `query_filter` at the outer `query_points` level | `vector_store.py:331` (fixed in v1.5.0) | Pass `query_filter=query_filter` to the outer `query_points` call too |

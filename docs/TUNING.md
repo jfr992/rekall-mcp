@@ -141,14 +141,15 @@ Floor: 0.1 (never fully forgotten). Access via recall resets the timer.
 
 ### Recall Scoring
 
-The composite score balances four signals:
+The composite score balances five signals:
 
 | Signal | Weight | What it measures |
 |--------|--------|------------------|
-| Vector similarity | 50% | Textual relevance to query |
+| Vector similarity | 40% | Textual relevance to query |
 | Importance | 20% | Type weight + graph centrality |
-| Recency | 15% | How recent the memory is |
 | Graph proximity | 15% | Whether found via graph expansion |
+| Tier | 15% | Lifecycle tier (identity > semantic > episodic > working) |
+| Recency | 10% | How recent the memory is |
 
 ### Rebuilding the Graph
 
@@ -168,7 +169,7 @@ Find superseded and contradictory pairs:
 curl http://localhost:8000/api/memory/consolidate
 ```
 
-Bidirectional pairs (A supersedes B and B supersedes A) are deduplicated automatically. Review the output, remove stale entries from `~/.claude/memory/*.yaml`, sync, then rebuild.
+Bidirectional pairs (A supersedes B and B supersedes A) are deduplicated automatically. Review the output, remove stale entries from `~/.claude/memory/<project>/*.yaml`, sync, then rebuild.
 
 ---
 
@@ -177,8 +178,10 @@ Bidirectional pairs (A supersedes B and B supersedes A) are deduplicated automat
 ### Check What's Saved
 
 ```bash
-# Today's memories
-cat ~/.claude/memory/$(date +%Y-%m-%d).yaml
+# Today's memories (nested per project since v1.5)
+cat ~/.claude/memory/<project>/$(date +%Y-%m-%d).yaml
+# or across all projects:
+find ~/.claude/memory -name "$(date +%Y-%m-%d).yaml"
 
 # All memories
 ls ~/.claude/memory/
@@ -227,7 +230,7 @@ If edges = 0, rebuild: `curl -X POST http://localhost:8000/api/memory/graph/rebu
 Memories are plain YAML. Edit directly:
 
 ```bash
-code ~/.claude/memory/$(date +%Y-%m-%d).yaml
+code ~/.claude/memory/<project>/$(date +%Y-%m-%d).yaml
 ```
 
 After editing YAML files, rebuild the graph to update relationships:
@@ -249,7 +252,7 @@ curl -X POST http://localhost:8000/api/memory/graph/rebuild
 cp -r ~/.claude/memory ~/memory-backup-$(date +%Y%m%d)
 
 # Clear specific day
-rm ~/.claude/memory/2026-02-02.yaml
+rm ~/.claude/memory/<project>/2026-02-02.yaml
 
 # Clear all
 rm -rf ~/.claude/memory/*

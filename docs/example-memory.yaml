@@ -1,5 +1,5 @@
 # Example Memory File
-# This is what ~/.claude/memory/2026-02-01.yaml looks like
+# This is what ~/.claude/memory/<project>/2026-02-01.yaml looks like (nested per project since v1.5)
 #
 # You can edit this file directly! Add notes, modify content, organize however you like.
 # The AI will search these when you ask it to recall memories.
