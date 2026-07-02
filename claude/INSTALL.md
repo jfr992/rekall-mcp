@@ -15,6 +15,7 @@ claude/
 │   └── rekall-observe.sh       Stop — gated Haiku judge that auto-saves durable observations
 └── skills/
     ├── rekall-setup/SKILL.md       /rekall-setup             — re-run installer from inside Claude Code
+    ├── rekall-publish/SKILL.md     /rekall-publish           — export memory to an OKF knowledge bundle
     ├── memory-observe/SKILL.md      /memory-observe <text>     — manual save shortcut
     ├── memory-recall/SKILL.md       /memory-recall <query>     — graph-enhanced recall
     ├── memory-restore/SKILL.md      /memory-restore            — load proactive context (manual)
@@ -35,7 +36,7 @@ What it does (all idempotent):
 - Starts Qdrant + backend if not already running
 - Copies the 2 hooks to `~/.claude/hooks/`
 - Backs up `~/.claude/settings.json` then merges in `UserPromptSubmit` + `Stop` entries (deduped — won't duplicate if already wired)
-- Copies all 8 slash commands to `~/.claude/skills/`
+- Copies all 9 slash commands to `~/.claude/skills/`
 - Verifies backend health + reports memory count
 
 **Restart your Claude Code session** after install for slash commands to load.
