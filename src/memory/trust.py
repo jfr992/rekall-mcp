@@ -1,6 +1,6 @@
 """Trust boundary loader.
 
-Reads ~/.claude/memory/trust.yaml (or $MEMENTO_MEMORY_DIR/trust.yaml) and
+Reads ~/.claude/memory/trust.yaml (or $REKALL_MEMORY_DIR/trust.yaml) and
 returns a TrustResolver. If the file is missing or malformed, every repo
 resolves to 'personal'.
 """
@@ -29,7 +29,7 @@ class TrustBoundary:
 
 
 def _memory_dir() -> Path:
-    override = os.environ.get("MEMENTO_MEMORY_DIR")
+    override = os.environ.get("REKALL_MEMORY_DIR") or os.environ.get("MEMENTO_MEMORY_DIR")
     if override:
         return Path(override)
     return Path.home() / ".claude" / "memory"

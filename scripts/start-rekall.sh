@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the Memento stack: Qdrant (via docker-compose), backend, UI.
+# Start the Rekall stack: Qdrant (via docker-compose), backend, UI.
 # Idempotent — safe to run multiple times.
 set -euo pipefail
 
@@ -44,7 +44,7 @@ if curl -sfo /dev/null --max-time 3 http://localhost:3333; then
 else
   echo "→ Starting UI on :3333…"
   cd ui
-  nohup npx next dev -p 3333 > /tmp/memento-ui.log 2>&1 &
+  nohup npx next dev -p 3333 > /tmp/rekall-ui.log 2>&1 &
   UI_PID=$!
   cd ..
   # UI takes longer to compile — give it up to 30s
@@ -56,7 +56,7 @@ else
 fi
 
 echo ""
-echo "Memento stack is up:"
+echo "Rekall stack is up:"
 echo "  Qdrant:  http://localhost:6333"
 echo "  Backend: http://localhost:8000"
 echo "  Cockpit: http://localhost:3333"

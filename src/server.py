@@ -102,7 +102,7 @@ class BearerAuthMiddleware:
     """Optional bearer-token auth for the HTTP server (pure ASGI — does not
     buffer the MCP stream).
 
-    Enabled only when MEMENTO_API_TOKEN is set. When set, every HTTP request
+    Enabled only when REKALL_API_TOKEN (or legacy MEMENTO_API_TOKEN) is set. When set, every HTTP request
     except /health must carry `Authorization: Bearer <token>` (constant-time
     compared). Unset → no auth, identical to default behavior.
     """
@@ -114,7 +114,7 @@ class BearerAuthMiddleware:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
-            token = os.getenv("MEMENTO_API_TOKEN")
+            token = os.getenv("REKALL_API_TOKEN") or os.getenv("MEMENTO_API_TOKEN")
             if token and scope.get("path", "") not in self.OPEN_PATHS:
                 import secrets
 
@@ -135,13 +135,13 @@ def _resolve_host() -> str:
     """Default to 0.0.0.0 — Claude Code reaches the server through a port-mapped /
     namespaced network (Docker, WSL, devcontainer) where loopback-only is unreachable.
 
-    Memento has no auth, so a non-loopback bind is logged: on an untrusted network,
+    Rekall has no auth, so a non-loopback bind is logged: on an untrusted network,
     set HOST=127.0.0.1 or put it behind a reverse proxy with auth.
     """
     host = os.getenv("HOST", "0.0.0.0")  # noqa: S104 — required for the primary client
     if host not in {"127.0.0.1", "localhost", "::1"}:
         logger.warning(
-            f"Binding to {host}: Memento has no authentication — anyone who can reach "
+            f"Binding to {host}: Rekall has no authentication — anyone who can reach "
             "this interface can read and delete memories. Set HOST=127.0.0.1 on untrusted networks."
         )
     return host
@@ -692,7 +692,8 @@ async def api_memory_publish(request):
 
         if mode == "dir":
             base = Path(
-                os.getenv("MEMENTO_PUBLISH_DIR", os.path.expanduser("~/.claude/publish"))
+                os.getenv("REKALL_PUBLISH_DIR")
+                or os.getenv("MEMENTO_PUBLISH_DIR", os.path.expanduser("~/.claude/publish"))
             ).resolve()
             dest = q.get("dest")
             if not dest:
@@ -1239,7 +1240,7 @@ async def api_observe(request):
 
         # Resolve scope from CALLER'S cwd, not the backend's. Without this,
         # every observation from every Claude session lands under the backend's
-        # own repo name (memento-mcp).
+        # own repo name (rekall-mcp).
         from memory.scope import ScopeDetector
 
         scope = ScopeDetector.detect(project=caller_project, cwd=caller_cwd)
@@ -1299,8 +1300,8 @@ def main() -> None:
             lifespan=lifespan,
             middleware=[Middleware(BearerAuthMiddleware)],
         )
-        if os.getenv("MEMENTO_API_TOKEN"):
-            logger.info("Bearer auth enabled (MEMENTO_API_TOKEN set) — /health stays open")
+        if os.getenv("REKALL_API_TOKEN") or os.getenv("MEMENTO_API_TOKEN"):
+            logger.info("Bearer auth enabled (REKALL_API_TOKEN set) — /health stays open")
 
         uvicorn.run(app, host=host, port=port, log_level="info")
     else:

@@ -25,7 +25,7 @@ Everything runs in containers. No Python install needed.
 
 ```bash
 git clone <repo>
-cd memento-mcp
+cd rekall-mcp
 docker compose up -d
 ```
 
@@ -36,7 +36,7 @@ This starts:
 ### Step 2: Tell Claude About It
 
 ```bash
-claude mcp add --transport http --url http://localhost:8000 memory
+claude mcp add --transport http --url http://localhost:8000 rekall
 ```
 
 Verify:
@@ -127,7 +127,7 @@ If you prefer running locally:
 
 ```bash
 git clone <repo>
-cd memento-mcp
+cd rekall-mcp
 pip install -e .
 ```
 
@@ -142,10 +142,10 @@ docker compose up -d qdrant
 ### Step 3: Tell Claude About It
 
 ```bash
-claude mcp add memory \
+claude mcp add rekall \
   --command python \
   --args "-m,server" \
-  --cwd /path/to/memento-mcp/src
+  --cwd /path/to/rekall-mcp/src
 ```
 
 Or manually edit `~/.claude/claude_code_config.json`:
@@ -155,7 +155,7 @@ Or manually edit `~/.claude/claude_code_config.json`:
     "memory": {
       "command": "python",
       "args": ["-m", "server"],
-      "cwd": "/path/to/memento-mcp/src"
+      "cwd": "/path/to/rekall-mcp/src"
     }
   }
 }

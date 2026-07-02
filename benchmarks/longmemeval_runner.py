@@ -1,8 +1,8 @@
 """
-LongMemEval Benchmark Runner for Memento MCP
+LongMemEval Benchmark Runner for Rekall MCP
 =============================================
 
-Evaluates Memento's retrieval pipeline against the LongMemEval benchmark.
+Evaluates Rekall's retrieval pipeline against the LongMemEval benchmark.
 Compares three modes: dense-only (baseline), hybrid (BM25+dense), hybrid+graph.
 
 Usage:
@@ -132,7 +132,7 @@ def run_single_mode(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Run LongMemEval benchmark against Memento MCP retrieval pipeline.",
+        description="Run LongMemEval benchmark against Rekall MCP retrieval pipeline.",
     )
     parser.add_argument("data_file", help="Path to longmemeval_s_cleaned.json")
     parser.add_argument(
