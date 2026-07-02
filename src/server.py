@@ -26,6 +26,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from core import Telemetry
+from memory.types import VALID_MEMORY_TYPES
 from tools import ToolConfig, ToolLoader, ToolRegistry
 
 # Configure logging
@@ -254,10 +255,6 @@ class RequestValidationError(ValueError):
 
 
 _PROJECT_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
-
-VALID_MEMORY_TYPES = frozenset(
-    {"decision", "learning", "preference", "requirement", "fact", "note", "session", "summary"}
-)
 
 
 def _safe_project(value) -> str | None:
