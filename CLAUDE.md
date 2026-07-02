@@ -34,9 +34,9 @@ benchmarks/                  LongMemEval runner + dataset
 tests/                       pytest suite (mirrors src/ structure)
 claude/                      Shippable Claude Code bundle (NOT auto-loaded)
 docs/                        User-facing docs (SETUP, MIGRATION, ARCHITECTURE, ...)
-docs/superpowers/plans/      Historical implementation plans (immutable)
-docs/superpowers/specs/      Historical design docs (immutable)
 ```
+
+(`docs/superpowers/` holds local-only workflow specs/plans — gitignored, not part of the repo.)
 
 ## Adding a new REST endpoint
 
