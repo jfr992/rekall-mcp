@@ -1,3 +1,26 @@
+# Migration Guide — v1.7.0 → v1.8.0 (Parity + hardening)
+
+**No data migration. One env-var behavior change, one API addition.**
+
+- **Spectro subsystem removed.** It never shipped a working implementation
+  (enabling it raised ImportError). `TOOLS_ENABLED=spectro` and `SPECTRO_*`
+  env vars are now silent no-ops — remove them from your config.
+- **`/health` response gained a `vectors` block** and can now report
+  `"status": "degraded"` when sampled memories have all-zero embedding
+  vectors (dead semantic search). If you script against `/health`, treat
+  `degraded` as up-but-unhealthy, not down. Remedy:
+  `scripts/reembed_vectors.py` re-embeds in place (payloads/YAML untouched).
+- **CLI `--type` now accepts all 8 valid types** (`requirement`, `fact`,
+  `summary` were previously rejected).
+- Docs were swept to match the actual system (formula, nested YAML layout,
+  license, env vars) and are now CI-enforced (`tests/test_docs_parity.py`).
+- Benchmark numbers restamped 2026-07-02 on current ranking (dense 91.7%
+  R@5); April figures predate the v1.5 ranking change.
+- Cockpit: `/continuity` is grouped + click-to-drawer; `/brain` uses PCA
+  layout (semantic clusters). Compose healthchecks gate startup ordering.
+
+---
+
 # Migration Guide — v1.6.0 → v1.7.0 (Rekall rename)
 
 **Breaking: `MEMENTO_*` environment variables are gone.** The project renamed
