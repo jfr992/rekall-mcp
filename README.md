@@ -207,21 +207,23 @@ echo "NEXT_PUBLIC_REKALL_API_TOKEN=$REKALL_API_TOKEN" >> ui/.env.local
 
 Tested on [LongMemEval](https://github.com/xiaowu0162/LongMemEval) (500 questions, 6 question types). Reproducible — runner in [`benchmarks/`](benchmarks/).
 
-These are **R@5 retrieval-recall** numbers — "was the correct memory in the top 5 retrieved" — with no LLM at any stage. They are **not** end-to-end QA-accuracy and are **not** comparable to the QA-accuracy figures other systems (mem0, Zep) publish on LongMemEval. The only fair comparison here is against MemPalace's raw retrieval baseline, which uses the same metric.
+These are **R@5 retrieval-recall** numbers — "was the correct memory in the top 5 retrieved" — with no LLM at any stage. They are **not** end-to-end QA-accuracy and are **not** comparable to the QA-accuracy figures other systems (mem0, Zep) publish on LongMemEval. MemPalace's raw retrieval baseline (96.6% R@5) uses the same metric and is the closest comparison point.
 
-| Mode | R@5 (retrieval recall) | Branch |
-|------|------------------------|--------|
-| Dense (semantic only) | 96.6% | `main` (default) — matches MemPalace raw |
-| Hybrid (BM25 + dense) | 97.6% | `feat/hybrid-search-bm25` |
-| Hybrid + graph | 97.6% | `feat/hybrid-search-bm25` |
+Measured 2026-07-02 on v1.7.0 (`main`, 5-weight recall ranking). All three benchmark modes run from `main`; the product's default recall path is dense — BM25 in the product search path still lives on `feat/hybrid-search-bm25`.
+
+| Mode | R@5 | R@10 |
+|------|-----|------|
+| Dense (semantic only) | 91.7% | 96.2% |
+| Hybrid (BM25 + dense) | 93.6% | 97.4% |
+| Hybrid + graph | 93.6% | 97.4% |
 
 Hybrid search catches entity-specific queries (ticket IDs, error codes) that pure semantic search misses. No LLM required, no API calls, runs entirely local. R@5 measures retrieval, not answer quality — a system can retrieve well and still answer poorly.
 
 ```bash
-# Reproduce
+# Reproduce (runs against the isolated test Qdrant on :6334 — production data untouched)
 bash benchmarks/download_data.sh
-docker compose up -d
-PYTHONPATH=src:. .venv/bin/python -m benchmarks.longmemeval_runner \
+docker compose --profile test up -d qdrant-test
+PYTHONPATH=src:. uv run python -m benchmarks.longmemeval_runner \
     benchmarks/data/longmemeval_s_cleaned.json --mode all
 ```
 
