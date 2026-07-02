@@ -120,3 +120,42 @@ def test_build_memory_graph_prefers_knowledge_graph_edges(tmp_path):
     assert result["links"][0]["source"] == "a"
     assert result["links"][0]["target"] == "b"
     assert result["links"][0]["relation"] == "led_to"
+
+
+def test_positions_cluster_and_fill_unit_disc():
+    """PCA layout: similar vectors land together, batch fills the unit disc."""
+    import math
+    import random
+
+    rng = random.Random(42)
+
+    def noisy(base):
+        return [v + rng.gauss(0, 0.03) for v in base]
+
+    cluster_a = [
+        {"memory_id": f"a{i}", "content": f"a{i}", "vector": noisy([1, 0, 0, 0])}
+        for i in range(5)
+    ]
+    cluster_b = [
+        {"memory_id": f"b{i}", "content": f"b{i}", "vector": noisy([0, 0, 0, 1])}
+        for i in range(5)
+    ]
+
+    result = _graph(cluster_a + cluster_b, min_similarity=0.99)
+    pos = {n["id"]: (n["position"]["x"], n["position"]["y"]) for n in result["nodes"]}
+
+    def dist(p, q):
+        return math.hypot(p[0] - q[0], p[1] - q[1])
+
+    radii = [math.hypot(x, y) for x, y in pos.values()]
+    assert max(radii) <= 1.0001, "positions must stay inside the unit disc"
+    assert max(radii) >= 0.95, "batch must be scaled to fill the disc"
+
+    intra = max(
+        dist(pos[f"{c}{i}"], pos[f"{c}{j}"])
+        for c in ("a", "b")
+        for i in range(5)
+        for j in range(i + 1, 5)
+    )
+    inter = min(dist(pos[f"a{i}"], pos[f"b{j}"]) for i in range(5) for j in range(5))
+    assert inter > intra * 3, f"clusters must separate (intra={intra:.3f}, inter={inter:.3f})"
