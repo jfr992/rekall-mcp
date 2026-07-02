@@ -89,7 +89,7 @@ That's all — no context injection, no token bloat. The model uses `mcp__rekall
 
 **Why no injection?** Earlier versions injected ~3KB of proactive memories per session. The signal-to-noise ratio was bad once bulk-imported markdown blobs polluted the rankings. Status-line-only is the lowest-cost honest signal.
 
-Kill switch: `MEMENTO_AUTOSAVE=0`.
+Kill switch: `REKALL_AUTOSAVE=0`.
 
 ### `rekall-observe.sh` — Stop
 
@@ -103,7 +103,7 @@ If none match, hook exits silently. Without the gate, this would fire Haiku on e
 
 When Haiku does fire, it returns strict JSON `{observe, type, content}` and POSTs durable observations to `/api/memory/observe` with the caller's `cwd` (so the observation gets the correct project scope).
 
-Kill switch: `MEMENTO_AUTOSAVE=0`. Re-entrancy guard: `MEMENTO_JUDGE_INFLIGHT=1`.
+Kill switch: `REKALL_AUTOSAVE=0`. Re-entrancy guard: `REKALL_JUDGE_INFLIGHT=1`.
 
 ## Settings example
 

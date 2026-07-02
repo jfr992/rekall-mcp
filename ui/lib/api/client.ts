@@ -12,8 +12,7 @@ export async function fetchJson<T>(
 ): Promise<T> {
   const url = path.startsWith("http") ? path : path; // Proxied via next.config rewrites
   // Optional bearer token — only sent when the backend has auth enabled.
-  const token =
-    process.env.NEXT_PUBLIC_REKALL_API_TOKEN ?? process.env.NEXT_PUBLIC_MEMENTO_API_TOKEN;
+  const token = process.env.NEXT_PUBLIC_REKALL_API_TOKEN;
   const res = await fetch(url, {
     cache: "no-store",
     headers: {

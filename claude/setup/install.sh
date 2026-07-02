@@ -227,4 +227,4 @@ echo "  • Type /rekall-stats in a new session to verify slash commands work."
 [[ -n "$BACKUP" ]] && echo "  • If something's off, restore your settings: cp '$BACKUP' '$HOME/.claude/settings.json'"
 echo
 echo "Kill switches (env vars):"
-echo "  MEMENTO_AUTOSAVE=0   disables both restore status line and Stop-hook auto-save"
+echo "  REKALL_AUTOSAVE=0   disables both restore status line and Stop-hook auto-save"

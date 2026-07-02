@@ -169,8 +169,6 @@ untrusted network, either bind loopback (`HOST=127.0.0.1`) or enable bearer auth
 export REKALL_API_TOKEN=$(openssl rand -hex 32)   # on the server
 ```
 
-> Renamed from Memento: all `REKALL_*` env vars fall back to the old `MEMENTO_*` names, so existing configs keep working.
-
 When set, every request except `/health` requires the token. Point clients at it:
 
 ```bash

@@ -59,7 +59,7 @@ crawler:
   cache_dir: .scrapy_cache
 
   # User agent (be transparent about what you're doing)
-  user_agent: "MementoMCP-DocBot/1.0 (Documentation indexer; contact: your-email@example.com)"
+  user_agent: "RekallMCP-DocBot/1.0 (Documentation indexer; contact: your-email@example.com)"
 
 # Output settings
 output:
