@@ -252,7 +252,7 @@ curl -X POST http://localhost:8000/api/memory/graph/rebuild
 cp -r ~/.claude/memory ~/memory-backup-$(date +%Y%m%d)
 
 # Clear specific day
-rm ~/.claude/memory/2026-02-02.yaml
+rm ~/.claude/memory/<project>/2026-02-02.yaml
 
 # Clear all
 rm -rf ~/.claude/memory/*

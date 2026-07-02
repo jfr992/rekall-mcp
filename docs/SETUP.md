@@ -283,7 +283,7 @@ curl http://localhost:8000/api/memory/stats
 curl http://localhost:8000/api/memory/consolidate
 ```
 
-Review superseded pairs, then manually remove stale entries from `~/.claude/memory/*.yaml` and rebuild:
+Review superseded pairs, then manually remove stale entries from `~/.claude/memory/<project>/*.yaml` and rebuild:
 
 ```bash
 curl -X POST http://localhost:8000/api/memory/graph/rebuild

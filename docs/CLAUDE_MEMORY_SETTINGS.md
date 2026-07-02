@@ -137,7 +137,7 @@ When behavior drifts:
 7. Use cockpit `/brain` scope filter to validate clustering (`/api/memory/graph?project=...`).
 8. Check for drift: `curl http://localhost:8000/api/memory/consolidate` — review supersedes/contradicts.
 9. If needed, perform controlled cleanup:
-   - inspect `~/.claude/memory/*.yaml`
+   - inspect `~/.claude/memory/<project>/*.yaml`
    - remove stale project files
    - rebuild graph: `curl -X POST http://localhost:8000/api/memory/graph/rebuild`
    - restart: `docker compose restart mcp`
