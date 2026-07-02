@@ -8,8 +8,8 @@ const nextConfig: NextConfig = {
   // so in Docker this targets the backend container (http://mcp:8000).
   async rewrites() {
     const apiUrl =
-      process.env.MEMENTO_API_URL ||
-      process.env.NEXT_PUBLIC_MEMENTO_API_URL ||
+      process.env.REKALL_API_URL ||
+      process.env.NEXT_PUBLIC_REKALL_API_URL ||
       "http://localhost:8000";
     return [
       {

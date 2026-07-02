@@ -435,7 +435,7 @@ execute a prune.
 ### Trust boundaries
 
 `src/memory/trust.py` loads `~/.claude/memory/trust.yaml` (override via
-`MEMENTO_MEMORY_DIR`). If the file is missing or malformed, every detection
+`REKALL_MEMORY_DIR`). If the file is missing or malformed, every detection
 resolves to `personal`. No hardcoded client names.
 
 Schema:

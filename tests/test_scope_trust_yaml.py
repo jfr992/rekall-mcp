@@ -14,7 +14,7 @@ def test_no_hardcoded_client_names_in_scope_source():
 
 
 def test_missing_trust_file_defaults_to_personal(tmp_path, monkeypatch):
-    monkeypatch.setenv("MEMENTO_MEMORY_DIR", str(tmp_path))
+    monkeypatch.setenv("REKALL_MEMORY_DIR", str(tmp_path))
     rules = load_trust_rules()
     resolver = TrustResolver(rules)
     assert resolver.resolve(remote="anything", name="any-repo") == "personal"
@@ -27,7 +27,7 @@ boundaries:
     match:
       remote_contains: "gitlab.acme.internal"
 """)
-    monkeypatch.setenv("MEMENTO_MEMORY_DIR", str(tmp_path))
+    monkeypatch.setenv("REKALL_MEMORY_DIR", str(tmp_path))
     rules = load_trust_rules()
     resolver = TrustResolver(rules)
     assert resolver.resolve(remote="https://gitlab.acme.internal/foo.git", name="foo") == "acme"
@@ -41,7 +41,7 @@ boundaries:
     match:
       name_contains: "proto-"
 """)
-    monkeypatch.setenv("MEMENTO_MEMORY_DIR", str(tmp_path))
+    monkeypatch.setenv("REKALL_MEMORY_DIR", str(tmp_path))
     rules = load_trust_rules()
     resolver = TrustResolver(rules)
     assert resolver.resolve(remote="", name="proto-alpha") == "prototype"
@@ -56,7 +56,7 @@ boundaries:
         - "gitlab.work-a.com"
         - "gitlab.work-b.com"
 """)
-    monkeypatch.setenv("MEMENTO_MEMORY_DIR", str(tmp_path))
+    monkeypatch.setenv("REKALL_MEMORY_DIR", str(tmp_path))
     rules = load_trust_rules()
     resolver = TrustResolver(rules)
     assert resolver.resolve(remote="https://gitlab.work-a.com/x.git", name="x") == "work"
@@ -66,7 +66,7 @@ boundaries:
 
 def test_malformed_trust_yaml_defaults_to_personal(tmp_path, monkeypatch):
     (tmp_path / "trust.yaml").write_text("this is not valid yaml: [[[")
-    monkeypatch.setenv("MEMENTO_MEMORY_DIR", str(tmp_path))
+    monkeypatch.setenv("REKALL_MEMORY_DIR", str(tmp_path))
     # Must not raise
     rules = load_trust_rules()
     assert rules == []
@@ -75,6 +75,6 @@ def test_malformed_trust_yaml_defaults_to_personal(tmp_path, monkeypatch):
 
 
 def test_scope_detector_uses_trust_resolver(tmp_path, monkeypatch):
-    monkeypatch.setenv("MEMENTO_MEMORY_DIR", str(tmp_path))
+    monkeypatch.setenv("REKALL_MEMORY_DIR", str(tmp_path))
     scope = ScopeDetector.detect(cwd="/tmp/nowhere", project="test")
     assert scope.trust_boundary == "personal"

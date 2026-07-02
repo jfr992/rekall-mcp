@@ -29,7 +29,7 @@ class TrustBoundary:
 
 
 def _memory_dir() -> Path:
-    override = os.environ.get("REKALL_MEMORY_DIR") or os.environ.get("MEMENTO_MEMORY_DIR")
+    override = os.environ.get("REKALL_MEMORY_DIR")
     if override:
         return Path(override)
     return Path.home() / ".claude" / "memory"

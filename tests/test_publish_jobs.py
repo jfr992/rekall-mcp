@@ -33,7 +33,7 @@ class FakeManager:
 
 def test_preview_is_raw_and_never_calls_llm(tmp_path, monkeypatch):
     # Even with model env set, synthesize=False must NOT call the LLM.
-    monkeypatch.setenv("MEMENTO_PUBLISH_MODEL", "x")
+    monkeypatch.setenv("REKALL_PUBLISH_MODEL", "x")
     monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://unused")
     monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "t")
     b = publish_from_manager(FakeManager(tmp_path), synthesize=False)
