@@ -18,6 +18,7 @@ import logging
 import os
 import re
 import sys
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -220,6 +221,30 @@ async def get_telemetry_summary() -> str:
     return telemetry.summary()
 
 
+_vector_health_cache: dict[str, object] = {"at": 0.0, "value": None}
+_VECTOR_HEALTH_TTL_S = 60.0
+
+
+def _reset_vector_health_cache() -> None:
+    _vector_health_cache["at"] = 0.0
+    _vector_health_cache["value"] = None
+
+
+def _vector_health() -> dict[str, int]:
+    """Sampled zero-vector check, cached — /health is polled by the cockpit."""
+    now = time.monotonic()
+    if (
+        _vector_health_cache["value"] is None
+        or now - _vector_health_cache["at"] > _VECTOR_HEALTH_TTL_S
+    ):
+        try:
+            _vector_health_cache["value"] = _get_memory_manager().vector_health()
+        except Exception:
+            _vector_health_cache["value"] = {"sampled": 0, "zero_vectors": 0}
+        _vector_health_cache["at"] = now
+    return _vector_health_cache["value"]
+
+
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request):
     """Health check endpoint."""
@@ -227,8 +252,15 @@ async def health_check(request):
 
     registry = ToolRegistry.get()
     enabled = registry.get_enabled()
+    vectors = _vector_health()
+    status = "degraded" if vectors["zero_vectors"] > 0 else "healthy"
     return JSONResponse(
-        {"status": "healthy", "transport": "streamable-http", "tools_enabled": enabled}
+        {
+            "status": status,
+            "transport": "streamable-http",
+            "tools_enabled": enabled,
+            "vectors": vectors,
+        }
     )
 
 
