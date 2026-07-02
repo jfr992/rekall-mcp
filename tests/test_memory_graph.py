@@ -133,12 +133,10 @@ def test_positions_cluster_and_fill_unit_disc():
         return [v + rng.gauss(0, 0.03) for v in base]
 
     cluster_a = [
-        {"memory_id": f"a{i}", "content": f"a{i}", "vector": noisy([1, 0, 0, 0])}
-        for i in range(5)
+        {"memory_id": f"a{i}", "content": f"a{i}", "vector": noisy([1, 0, 0, 0])} for i in range(5)
     ]
     cluster_b = [
-        {"memory_id": f"b{i}", "content": f"b{i}", "vector": noisy([0, 0, 0, 1])}
-        for i in range(5)
+        {"memory_id": f"b{i}", "content": f"b{i}", "vector": noisy([0, 0, 0, 1])} for i in range(5)
     ]
 
     result = _graph(cluster_a + cluster_b, min_similarity=0.99)
