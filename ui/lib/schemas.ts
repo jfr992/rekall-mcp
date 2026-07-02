@@ -6,6 +6,9 @@ export const HealthSchema = z.object({
   status: z.string(),
   transport: z.string().optional(),
   tools_enabled: z.array(z.string()).optional(),
+  vectors: z
+    .object({ sampled: z.number(), zero_vectors: z.number() })
+    .optional(),
 });
 
 // ----- Projects ------------------------------------------------------------
