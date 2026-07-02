@@ -52,7 +52,7 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 - `QDRANT_URL` controls vector DB endpoint.
 - `EMBEDDING_PROVIDER` sets embedding backend (`sentence-transformers`, `ollama`, `gemini`).
 - `LOG_LEVEL` for diagnostics.
-- `OLLAMA_URL`, `EMBEDDING_API_KEY` as provider-specific settings.
+- `OLLAMA_URL`, `GEMINI_API_KEY` as provider-specific settings.
 
 Current compose defaults:
 - service: `rekall-mcp` on port `8000`
@@ -113,14 +113,14 @@ Current compose defaults:
 ### Recall pipeline
 1. **SEED**: vector search → top limit × 2 results
 2. **EXPAND**: 1-hop graph neighbors of seeds
-3. **RANK**: `vector(0.50) + importance(0.20) + recency(0.15) + proximity(0.15)`
+3. **RANK**: `vector(0.40) + importance(0.20) + proximity(0.15) + tier(0.15) + recency(0.10)`
 
 ## 4) Known hard constraints (code-level)
 
 - Project auto-detection in tool calls uses current working directory name.
 - `/api/memory/context` returns manager default (50) context items, no `limit` param.
 - `MemoryManager.recall()` uses fixed similarity threshold `0.45` for vector phase.
-- No dedupe guard on `save/observe`; repeated saves create duplicates (use `consolidate` to find them).
+- Dedupe guard on `save/observe`: cosine ≥ 0.97 plus exact normalized string match reinforces the existing memory instead of duplicating. Near-duplicates below the threshold still accumulate — use `consolidate` to find them.
 - `get_project_context()` requires valid project; `general` is catch-all when unset.
 - Knowledge graph `_graph.json` can grow large with many memories; `rebuild()` takes ~60s for ~1300 memories.
 
