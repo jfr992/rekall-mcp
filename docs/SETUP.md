@@ -36,7 +36,7 @@ This starts:
 ### Step 2: Tell Claude About It
 
 ```bash
-claude mcp add --transport http --url http://localhost:8000 rekall
+claude mcp add --transport http rekall http://localhost:8000
 ```
 
 Verify:
@@ -142,13 +142,12 @@ docker compose up -d qdrant
 ### Step 3: Tell Claude About It
 
 ```bash
-claude mcp add rekall \
-  --command python \
-  --args "-m,server" \
-  --cwd /path/to/rekall-mcp/src
+# Run from src/ (the CLI has no --cwd flag; the working dir is where you invoke it)
+cd /path/to/rekall-mcp/src
+claude mcp add rekall -- python -m server
 ```
 
-Or manually edit `~/.claude/claude_code_config.json`:
+Or manually edit `~/.claude/claude_code_config.json` (lets you pin `cwd`):
 ```json
 {
   "mcpServers": {
