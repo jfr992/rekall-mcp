@@ -20,4 +20,6 @@ def test_no_spectro_references_in_src():
         text=True,
     )
     assert result.stdout == "", f"spectro references remain:\n{result.stdout}"
-    assert result.returncode == 1, f"grep did not run cleanly: rc={result.returncode} stderr={result.stderr}"
+    assert result.returncode == 1, (
+        f"grep did not run cleanly: rc={result.returncode} stderr={result.stderr}"
+    )
