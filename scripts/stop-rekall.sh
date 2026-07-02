@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop the Memento stack cleanly.
+# Stop the Rekall stack cleanly.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -16,4 +16,4 @@ pkill -f "python -m server" 2>/dev/null || true
 echo "→ Stopping Qdrant…"
 docker-compose stop qdrant 2>/dev/null || true
 
-echo "✓ Memento stopped. Qdrant volume at ~/.claude/qdrant preserved."
+echo "✓ Rekall stopped. Qdrant volume at ~/.claude/qdrant preserved."

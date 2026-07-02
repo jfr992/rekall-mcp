@@ -1,1 +1,1 @@
-"""LongMemEval benchmark suite for Memento MCP."""
+"""LongMemEval benchmark suite for Rekall MCP."""

@@ -1,14 +1,14 @@
-# Memento MCP - Docker Image
+# Rekall MCP - Docker Image
 #
 # Build:
-#   docker build -t memento-mcp .
+#   docker build -t rekall-mcp .
 #
 # Run:
 #   docker run -p 8000:8000 \
 #     -e QDRANT_URL=http://host.docker.internal:6333 \
 #     -e MCP_TRANSPORT=streamable-http \
 #     -e HOST=0.0.0.0 \
-#     memento-mcp
+#     rekall-mcp
 
 FROM python:3.11-slim
 

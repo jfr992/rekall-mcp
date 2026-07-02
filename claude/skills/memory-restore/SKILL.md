@@ -5,7 +5,7 @@ user-invocable: true
 allowed-tools: Bash(*)
 ---
 
-Policy: See memento-mcp/docs/CLAUDE_MEMORY_SETTINGS.md for session-start and recall defaults.
+Policy: See rekall-mcp/docs/CLAUDE_MEMORY_SETTINGS.md for session-start and recall defaults.
 
 # Session Memory Restoration
 

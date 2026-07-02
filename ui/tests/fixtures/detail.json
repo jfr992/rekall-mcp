@@ -26,6 +26,6 @@
   "scope": {
     "project": "test",
     "agent": "claude-code",
-    "repo_name": "memento-mcp"
+    "repo_name": "rekall-mcp"
   }
 }

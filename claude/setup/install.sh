@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # claude/setup/install.sh
-# One-shot installer for Memento's Claude Code wiring (hooks + skills + settings).
+# One-shot installer for Rekall's Claude Code wiring (hooks + skills + settings).
 # Idempotent: re-run anytime. Backs up ~/.claude/settings.json before patching.
 #
 # Usage: bash claude/setup/install.sh
@@ -34,7 +34,7 @@ REPO_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 CLAUDE_BUNDLE="$REPO_DIR/claude"
 
 if [[ ! -d "$CLAUDE_BUNDLE/hooks" ]]; then
-    echo "ERROR: $CLAUDE_BUNDLE/hooks not found. Run from a memento-mcp checkout." >&2
+    echo "ERROR: $CLAUDE_BUNDLE/hooks not found. Run from a rekall-mcp checkout." >&2
     exit 1
 fi
 
@@ -87,15 +87,15 @@ if [[ "$SKIP_BACKEND" == "0" ]]; then
     else
         if command -v uv >/dev/null 2>&1; then
             cd "$REPO_DIR"
-            MCP_TRANSPORT=streamable-http nohup uv run python -m server > /tmp/memento-backend.log 2>&1 &
+            MCP_TRANSPORT=streamable-http nohup uv run python -m server > /tmp/rekall-backend.log 2>&1 &
             disown
             for _ in $(seq 1 20); do
                 curl -sf -o /dev/null --max-time 2 http://localhost:8000/health 2>/dev/null && break
                 sleep 1
             done
             curl -sf -o /dev/null --max-time 2 http://localhost:8000/health 2>/dev/null \
-                && ok "backend started (logs: /tmp/memento-backend.log)" \
-                || warn "backend didn't come up in 20s — check /tmp/memento-backend.log"
+                && ok "backend started (logs: /tmp/rekall-backend.log)" \
+                || warn "backend didn't come up in 20s — check /tmp/rekall-backend.log"
         else
             warn "uv not found — start backend manually: MCP_TRANSPORT=streamable-http uv run python -m server"
         fi
@@ -107,7 +107,7 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     step "Installing hooks → ~/.claude/hooks/"
     mkdir -p "$HOME/.claude/hooks"
 
-    for hook in memento-restore.sh memento-observe.sh; do
+    for hook in rekall-restore.sh rekall-observe.sh; do
         src="$CLAUDE_BUNDLE/hooks/$hook"
         dst="$HOME/.claude/hooks/$hook"
         if [[ -f "$dst" ]] && cmp -s "$src" "$dst"; then
@@ -136,10 +136,10 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     cp "$SETTINGS" "$BACKUP"
     ok "backed up to $(basename "$BACKUP")"
 
-    # Merge: add UserPromptSubmit (memento-restore) + Stop (memento-observe) hooks.
+    # Merge: add UserPromptSubmit (rekall-restore) + Stop (rekall-observe) hooks.
     # Idempotent — checks if the command path already exists in the array.
-    REST_CMD="$HOME/.claude/hooks/memento-restore.sh"
-    OBS_CMD="$HOME/.claude/hooks/memento-observe.sh"
+    REST_CMD="$HOME/.claude/hooks/rekall-restore.sh"
+    OBS_CMD="$HOME/.claude/hooks/rekall-observe.sh"
 
     /usr/bin/python3 - "$SETTINGS" "$REST_CMD" "$OBS_CMD" <<'PY'
 import json, sys
@@ -163,9 +163,9 @@ def ensure_event_hook(event, command, matcher=""):
 
 added = []
 if ensure_event_hook("UserPromptSubmit", rest_cmd):
-    added.append("UserPromptSubmit → memento-restore.sh")
+    added.append("UserPromptSubmit → rekall-restore.sh")
 if ensure_event_hook("Stop", obs_cmd):
-    added.append("Stop → memento-observe.sh")
+    added.append("Stop → rekall-observe.sh")
 
 with open(path, "w") as f:
     json.dump(d, f, indent=2)
@@ -214,16 +214,16 @@ else
 fi
 
 if [[ "$SKILLS_ONLY" == "0" ]]; then
-    [[ -f "$HOME/.claude/hooks/memento-restore.sh" ]] && ok "memento-restore.sh in place" || warn "memento-restore.sh missing"
-    [[ -f "$HOME/.claude/hooks/memento-observe.sh" ]] && ok "memento-observe.sh in place" || warn "memento-observe.sh missing"
+    [[ -f "$HOME/.claude/hooks/rekall-restore.sh" ]] && ok "rekall-restore.sh in place" || warn "rekall-restore.sh missing"
+    [[ -f "$HOME/.claude/hooks/rekall-observe.sh" ]] && ok "rekall-observe.sh in place" || warn "rekall-observe.sh missing"
 fi
 
 echo
-echo "✓ Memento setup complete."
+echo "✓ Rekall setup complete."
 echo
 echo "Next steps:"
 echo "  • Restart your Claude Code session for the new hooks/skills to load."
-echo "  • Type /memento-stats in a new session to verify slash commands work."
+echo "  • Type /rekall-stats in a new session to verify slash commands work."
 [[ -n "$BACKUP" ]] && echo "  • If something's off, restore your settings: cp '$BACKUP' '$HOME/.claude/settings.json'"
 echo
 echo "Kill switches (env vars):"

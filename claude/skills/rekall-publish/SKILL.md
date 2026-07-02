@@ -1,5 +1,5 @@
 ---
-name: memento-publish
+name: rekall-publish
 description: Use when the user wants to export or publish memory to an OKF (Open Knowledge Format) bundle — shareable markdown knowledge docs.
 ---
 

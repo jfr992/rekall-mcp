@@ -55,7 +55,7 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 - `OLLAMA_URL`, `EMBEDDING_API_KEY` as provider-specific settings.
 
 Current compose defaults:
-- service: `memento-mcp` on port `8000`
+- service: `rekall-mcp` on port `8000`
 - transport: `streamable-http`
 - project storage: `/data/memory` in container (`~/.claude/memory` on host)
 - cockpit: `http://localhost:3333/brain` (Next.js, separate from backend)

@@ -5,7 +5,7 @@ user-invocable: true
 allowed-tools: Bash(*)
 ---
 
-Policy: See memento-mcp/docs/CLAUDE_MEMORY_SETTINGS.md for drift-fix checklist.
+Policy: See rekall-mcp/docs/CLAUDE_MEMORY_SETTINGS.md for drift-fix checklist.
 
 # Memory System Status
 

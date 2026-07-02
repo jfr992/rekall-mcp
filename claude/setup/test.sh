@@ -45,9 +45,9 @@ else
     fail "installer exited non-zero (see $H/install.log)"
 fi
 
-[[ -f "$H/.claude/hooks/memento-restore.sh" ]] && pass "memento-restore.sh installed" || fail "memento-restore.sh missing"
-[[ -f "$H/.claude/hooks/memento-observe.sh" ]] && pass "memento-observe.sh installed" || fail "memento-observe.sh missing"
-[[ -x "$H/.claude/hooks/memento-restore.sh" ]] && pass "memento-restore.sh executable" || fail "memento-restore.sh not executable"
+[[ -f "$H/.claude/hooks/rekall-restore.sh" ]] && pass "rekall-restore.sh installed" || fail "rekall-restore.sh missing"
+[[ -f "$H/.claude/hooks/rekall-observe.sh" ]] && pass "rekall-observe.sh installed" || fail "rekall-observe.sh missing"
+[[ -x "$H/.claude/hooks/rekall-restore.sh" ]] && pass "rekall-restore.sh executable" || fail "rekall-restore.sh not executable"
 
 UPS=$(jq -r '.hooks.UserPromptSubmit | length' "$H/.claude/settings.json" 2>/dev/null)
 [[ "$UPS" == "1" ]] && pass "UserPromptSubmit has 1 entry" || fail "UserPromptSubmit entry count = $UPS (expected 1)"
@@ -127,7 +127,7 @@ else
     fail "installer failed"
 fi
 
-EXPECTED=(memento-setup memory-observe memory-recall memory-restore memory-stats memory-skills memory-rebuild memory-consolidate)
+EXPECTED=(rekall-setup memory-observe memory-recall memory-restore memory-stats memory-skills memory-rebuild memory-consolidate)
 for s in "${EXPECTED[@]}"; do
     [[ -f "$H3/.claude/skills/$s/SKILL.md" ]] && pass "$s/SKILL.md installed" || fail "$s/SKILL.md missing"
 done

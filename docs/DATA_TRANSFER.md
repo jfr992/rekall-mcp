@@ -11,7 +11,7 @@ For per-version upgrades on the *same* machine (e.g. v1.4 → v1.5 in place), se
 On both machines, confirm:
 
 ```bash
-# Memento version
+# Rekall version
 grep '^version' pyproject.toml                                  # e.g. 1.5.0
 
 # Memory count + graph (your "expected delta" for verification later)
@@ -45,11 +45,11 @@ Write down the source machine's count. After migration on the destination, the d
 curl -sX POST http://localhost:6333/collections/agent_memory/snapshots | jq .
 
 # 2. Find the snapshot file
-SNAP=$(docker exec memento-qdrant ls -t /qdrant/storage/snapshots/agent_memory/ | head -1)
+SNAP=$(docker exec rekall-qdrant ls -t /qdrant/storage/snapshots/agent_memory/ | head -1)
 echo "Snapshot: $SNAP"
 
 # 3. Copy it out of the container
-docker cp "memento-qdrant:/qdrant/storage/snapshots/agent_memory/$SNAP" "$HOME/Desktop/$SNAP"
+docker cp "rekall-qdrant:/qdrant/storage/snapshots/agent_memory/$SNAP" "$HOME/Desktop/$SNAP"
 
 # 4. Tarball the YAML directory (human-editable source of truth)
 #    MEMORY_DIR resolves to whatever MEMORY_STORAGE_PATH points to (default ~/.claude/memory).
@@ -102,7 +102,7 @@ find "$MEMORY_DIR/imported-old" -name '*.yaml' | wc -l
 
 ```bash
 SNAP="<snapshot-filename>.snapshot"      # the file you copied over
-docker cp ~/Desktop/$SNAP memento-qdrant:/qdrant/storage/snapshots/agent_memory/
+docker cp ~/Desktop/$SNAP rekall-qdrant:/qdrant/storage/snapshots/agent_memory/
 
 curl -sX PUT "http://localhost:6333/collections/agent_memory/snapshots/recover" \
   -H "Content-Type: application/json" \
@@ -199,7 +199,7 @@ curl -sX POST http://localhost:8000/api/memory/lifecycle/backfill -H "Content-Ty
 curl -sX POST http://localhost:8000/api/memory/graph/rebuild
 ```
 
-`mcp__memento__observe`'s cosine-≥0.97 dedup means re-running this script is idempotent — duplicates collapse via reinforcement instead of creating new entries.
+`mcp__rekall__observe`'s cosine-≥0.97 dedup means re-running this script is idempotent — duplicates collapse via reinforcement instead of creating new entries.
 
 ---
 
@@ -235,7 +235,7 @@ tar xzf ~/backups/pre-transfer-<TS>/memory-current.tar.gz -C "$(dirname "$MEMORY
 # Restart
 docker compose start qdrant
 sleep 4
-MCP_TRANSPORT=streamable-http nohup uv run python -m server > /tmp/memento-backend.log 2>&1 &
+MCP_TRANSPORT=streamable-http nohup uv run python -m server > /tmp/rekall-backend.log 2>&1 &
 disown
 sleep 6
 
