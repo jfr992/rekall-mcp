@@ -153,6 +153,12 @@ services:
     volumes:
       - ./src:/app/src:ro
       - ./tests:/app/tests:ro
+      - ./docs:/app/docs:ro
+      - ./benchmarks:/app/benchmarks:ro
+      - ./claude:/app/claude:ro
+      - ./README.md:/app/README.md:ro
+      - ./.env.example:/app/.env.example:ro
+      - ./docker-compose.yaml:/app/docker-compose.yaml:ro
     depends_on:
       qdrant-test:
         condition: service_healthy
