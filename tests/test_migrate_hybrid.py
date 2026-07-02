@@ -20,7 +20,7 @@ class TestLoadAllYamlMemories:
                         {
                             "id": "2026-03-25_decision_abc",
                             "content": "Use hybrid search",
-                            "project": "memento",
+                            "project": "rekall",
                         },
                     ],
                 }
@@ -32,7 +32,7 @@ class TestLoadAllYamlMemories:
         assert len(memories) == 1
         assert memories[0]["content"] == "Use hybrid search"
         assert memories[0]["type"] == "decision"
-        assert memories[0]["project"] == "memento"
+        assert memories[0]["project"] == "rekall"
 
     def test_loads_multiple_types(self, tmp_path):
         """load_all_yaml_memories reads multiple memory types."""
@@ -159,11 +159,11 @@ class TestMigrateToHybridDryRun:
                 {
                     "date": "2026-03-25",
                     "decisions": [
-                        {"id": "d1", "content": "Use BM25 for search", "project": "memento"},
+                        {"id": "d1", "content": "Use BM25 for search", "project": "rekall"},
                         {
                             "id": "d2",
                             "content": "Keep YAML as source of truth",
-                            "project": "memento",
+                            "project": "rekall",
                         },
                     ],
                 }

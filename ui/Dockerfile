@@ -10,8 +10,8 @@ FROM node:22-slim AS build
 WORKDIR /app
 # Next rewrites are baked at build time under output:standalone — the proxy
 # target must be known here, not just at runtime.
-ARG MEMENTO_API_URL=http://mcp:8000
-ENV MEMENTO_API_URL=${MEMENTO_API_URL}
+ARG REKALL_API_URL=http://mcp:8000
+ENV REKALL_API_URL=${REKALL_API_URL}
 COPY --from=deps /app/node_modules ./node_modules
 COPY ui/ ./
 RUN npm run build

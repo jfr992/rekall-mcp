@@ -102,7 +102,7 @@ class BearerAuthMiddleware:
     """Optional bearer-token auth for the HTTP server (pure ASGI — does not
     buffer the MCP stream).
 
-    Enabled only when REKALL_API_TOKEN (or legacy MEMENTO_API_TOKEN) is set. When set, every HTTP request
+    Enabled only when REKALL_API_TOKEN is set. When set, every HTTP request
     except /health must carry `Authorization: Bearer <token>` (constant-time
     compared). Unset → no auth, identical to default behavior.
     """
@@ -114,7 +114,7 @@ class BearerAuthMiddleware:
 
     async def __call__(self, scope, receive, send):
         if scope["type"] == "http":
-            token = os.getenv("REKALL_API_TOKEN") or os.getenv("MEMENTO_API_TOKEN")
+            token = os.getenv("REKALL_API_TOKEN")
             if token and scope.get("path", "") not in self.OPEN_PATHS:
                 import secrets
 
@@ -692,15 +692,14 @@ async def api_memory_publish(request):
 
         if mode == "dir":
             base = Path(
-                os.getenv("REKALL_PUBLISH_DIR")
-                or os.getenv("MEMENTO_PUBLISH_DIR", os.path.expanduser("~/.claude/publish"))
+                os.getenv("REKALL_PUBLISH_DIR", os.path.expanduser("~/.claude/publish"))
             ).resolve()
             dest = q.get("dest")
             if not dest:
                 return _bad_request("dest required for mode=dir")
             target = Path(dest).resolve() if os.path.isabs(dest) else (base / dest).resolve()
             if base != target and base not in target.parents:
-                return _bad_request("dest must be within MEMENTO_PUBLISH_DIR")
+                return _bad_request("dest must be within REKALL_PUBLISH_DIR")
             tmp = target.with_suffix(".tmp")
             for path, content in bundle.files.items():
                 fp = tmp / path
@@ -1293,14 +1292,14 @@ def main() -> None:
                 yield
 
         # Mount MCP at root, plus all custom routes. Optional bearer auth
-        # (no-op unless MEMENTO_API_TOKEN is set) guards everything but /health.
+        # (no-op unless REKALL_API_TOKEN is set) guards everything but /health.
         routes = [Route("/", endpoint=mcp_endpoint)] + custom_routes
         app = Starlette(
             routes=routes,
             lifespan=lifespan,
             middleware=[Middleware(BearerAuthMiddleware)],
         )
-        if os.getenv("REKALL_API_TOKEN") or os.getenv("MEMENTO_API_TOKEN"):
+        if os.getenv("REKALL_API_TOKEN"):
             logger.info("Bearer auth enabled (REKALL_API_TOKEN set) — /health stays open")
 
         uvicorn.run(app, host=host, port=port, log_level="info")

@@ -110,7 +110,7 @@ PRE_RTK=$(jq -r '.hooks.PreToolUse[0].hooks[0].command' "$H2/.claude/settings.js
 [[ "$PRE_RTK" == "/Users/test/.claude/hooks/preexisting-rtk.sh" ]] && pass "pre-existing PreToolUse hook preserved" || fail "PreToolUse clobbered: $PRE_RTK"
 
 PRE_REST=$(jq -r '[.hooks.UserPromptSubmit[].hooks[].command] | length' "$H2/.claude/settings.json")
-[[ "$PRE_REST" == "2" ]] && pass "UserPromptSubmit now has 2 entries (preexisting + memento)" || fail "UserPromptSubmit count = $PRE_REST"
+[[ "$PRE_REST" == "2" ]] && pass "UserPromptSubmit now has 2 entries (preexisting + rekall)" || fail "UserPromptSubmit count = $PRE_REST"
 
 PLUGIN=$(jq -r '.enabledPlugins."test-plugin"' "$H2/.claude/settings.json")
 [[ "$PLUGIN" == "true" ]] && pass "non-hooks fields preserved (enabledPlugins intact)" || fail "enabledPlugins lost"
@@ -140,7 +140,7 @@ if curl -sf -o /dev/null --max-time 2 http://localhost:8000/health 2>/dev/null; 
     HOME="$H4" bash "$INSTALL_SH" --skip-backend >"$H4/install.log" 2>&1
     grep -q "backend:" "$H4/install.log" && pass "backend stats reported" || fail "no backend stats line"
 else
-    skip "backend not running (start memento and re-run)"
+    skip "backend not running (start rekall and re-run)"
 fi
 
 # ---- summary ----------------------------------------------------------------

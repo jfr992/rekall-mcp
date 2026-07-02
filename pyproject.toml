@@ -4,13 +4,13 @@ version = "1.6.0"
 description = "Persistent memory for AI assistants via MCP"
 readme = "README.md"
 requires-python = ">=3.11"
-license = { text = "MIT" }
+license = { text = "Apache-2.0" }
 authors = [{ name = "jfr992" }]
 keywords = ["mcp", "memory", "ai", "claude", "llm", "context"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: MIT License",
+    "License :: OSI Approved :: Apache Software License",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
 ]
@@ -41,7 +41,7 @@ dev = [
 ]
 
 [project.scripts]
-memento = "memory.cli:main"
+rekall = "memory.cli:main"
 
 [build-system]
 requires = ["hatchling"]

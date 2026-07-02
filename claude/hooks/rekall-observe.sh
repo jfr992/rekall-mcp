@@ -1,22 +1,22 @@
 #!/usr/bin/env bash
 # ~/.claude/hooks/rekall-observe.sh
 # Fires on Stop. Uses a cheap LLM judge (haiku) to decide whether the last
-# exchange contains something worth remembering. If yes, POSTs to memento.
+# exchange contains something worth remembering. If yes, POSTs to rekall.
 #
-# Kill switch: MEMENTO_AUTOSAVE=0
-# Backend URL: MEMENTO_API_URL (default http://localhost:8000)
-# Model:       MEMENTO_JUDGE_MODEL (default claude-haiku-4-5)
+# Kill switch: REKALL_AUTOSAVE=0
+# Backend URL: REKALL_API_URL (default http://localhost:8000)
+# Model:       REKALL_JUDGE_MODEL (default claude-haiku-4-5)
 set -euo pipefail
 
-API="${MEMENTO_API_URL:-http://localhost:8000}"
-MODEL="${MEMENTO_JUDGE_MODEL:-claude-haiku-4-5}"
+API="${REKALL_API_URL:-http://localhost:8000}"
+MODEL="${REKALL_JUDGE_MODEL:-claude-haiku-4-5}"
 
-[[ "${MEMENTO_AUTOSAVE:-1}" == "0" ]] && exit 0
+[[ "${REKALL_AUTOSAVE:-1}" == "0" ]] && exit 0
 
 # Re-entrancy guard: if this hook invokes claude CLI, that inner claude will
 # fire its own Stop hook when it finishes. This env var is set below before
 # calling claude; if we see it, we're nested — bail.
-[[ "${MEMENTO_JUDGE_INFLIGHT:-0}" == "1" ]] && exit 0
+[[ "${REKALL_JUDGE_INFLIGHT:-0}" == "1" ]] && exit 0
 
 LOG="/tmp/rekall-observe.log"
 trace() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" >> "$LOG"; }
@@ -144,7 +144,7 @@ trace "fire: signal detected, calling haiku"
 # Call claude in --bare mode so it doesn't recursively fire hooks / load memory.
 judge_out="$(
   printf '%s\n\n%s\n' "$JUDGE_PROMPT" "$exchange" \
-    | MEMENTO_JUDGE_INFLIGHT=1 perl -e 'alarm 25; exec @ARGV' claude -p --model "$MODEL" 2>/dev/null \
+    | REKALL_JUDGE_INFLIGHT=1 perl -e 'alarm 25; exec @ARGV' claude -p --model "$MODEL" 2>/dev/null \
     | tr -d '\000' \
     || true
 )"
@@ -171,7 +171,7 @@ mtype="$(jq -r '.type // "learning"' <<<"$json" 2>/dev/null)"
 content="$(jq -r '.content // ""' <<<"$json" 2>/dev/null)"
 [[ -z "$content" ]] && exit 0
 
-# POST to memento. Dedupe (cosine ≥ 0.97) is handled server-side.
+# POST to rekall. Dedupe (cosine ≥ 0.97) is handled server-side.
 curl -sfo /dev/null --max-time 5 -X POST "$API/api/memory/observe" \
   -H "Content-Type: application/json" \
   -d "$(jq -cn --arg c "$content" --arg t "$mtype" --arg d "$caller_cwd" '{summary:$c, type:$t, cwd:$d}')" \
