@@ -14,11 +14,6 @@ Example config.yaml:
         enabled: true
         storage_path: ~/.claude/memory
 
-      spectro:
-        enabled: true
-        api_url: https://api.spectrocloud.com
-        api_key: ${SPECTRO_API_KEY}  # Reference env var
-
 Usage:
     from config import Config
 
@@ -64,25 +59,10 @@ class MemoryToolConfig:
 
 
 @dataclass
-class SpectroToolConfig:
-    """Spectro Cloud tool settings."""
-
-    enabled: bool = False  # Disabled by default (needs API key)
-    api_url: str = "https://api.spectrocloud.com"
-    api_key: str = ""
-    project_uid: str = ""
-    search_api_url: str = ""  # Optional semantic search API
-    collection: str = "spectro_docs"
-    docs_index: str = "spectro"  # Which docs index to use (data/{name}_docs.yaml)
-    custom_docs_path: str = ""  # Or provide custom YAML path
-
-
-@dataclass
 class ToolsConfig:
     """All tool configurations."""
 
     memory: MemoryToolConfig = field(default_factory=MemoryToolConfig)
-    spectro: SpectroToolConfig = field(default_factory=SpectroToolConfig)
 
 
 @dataclass
@@ -111,8 +91,7 @@ class Config:
         1. Explicit path argument
         2. CONFIG_PATH environment variable
         3. ./config.yaml
-        4. ~/.config/spectro-mcp/config.yaml
-        5. Defaults
+        4. Defaults
         """
         config = cls()
 
@@ -143,11 +122,6 @@ class Config:
         local_config = Path("config.yaml")
         if local_config.exists():
             return local_config
-
-        # Check user config directory
-        user_config = Path.home() / ".config" / "spectro-mcp" / "config.yaml"
-        if user_config.exists():
-            return user_config
 
         return None
 
@@ -188,17 +162,6 @@ class Config:
                     collection=m.get("collection", "agent_memory"),
                     max_memories=m.get("max_memories", 0),
                     max_age_days=m.get("max_age_days", 0),
-                )
-
-            if "spectro" in tools:
-                s = tools["spectro"]
-                config.tools.spectro = SpectroToolConfig(
-                    enabled=s.get("enabled", False),
-                    api_url=s.get("api_url", "https://api.spectrocloud.com"),
-                    api_key=s.get("api_key", ""),
-                    project_uid=s.get("project_uid", ""),
-                    search_api_url=s.get("search_api_url", ""),
-                    collection=s.get("collection", "spectro_docs"),
                 )
 
         # Server
@@ -242,18 +205,6 @@ class Config:
         if api_key := os.environ.get("QDRANT_API_KEY"):
             config.qdrant.api_key = api_key
 
-        # Spectro
-        if api_key := os.environ.get("SPECTRO_API_KEY"):
-            config.tools.spectro.api_key = api_key
-            # Auto-enable if API key is provided
-            config.tools.spectro.enabled = True
-        if api_url := os.environ.get("SPECTRO_API_URL"):
-            config.tools.spectro.api_url = api_url
-        if project_uid := os.environ.get("SPECTRO_PROJECT_UID"):
-            config.tools.spectro.project_uid = project_uid
-        if search_url := os.environ.get("SPECTRO_SEARCH_API_URL"):
-            config.tools.spectro.search_api_url = search_url
-
         # Memory
         if storage := os.environ.get("MEMORY_STORAGE_PATH"):
             config.tools.memory.storage_path = storage
@@ -276,8 +227,6 @@ class Config:
                 name = name.strip()
                 if name == "memory":
                     config.tools.memory.enabled = True
-                elif name == "spectro":
-                    config.tools.spectro.enabled = True
 
         # TOOLS_DISABLED override
         if disabled := os.environ.get("TOOLS_DISABLED"):
@@ -285,8 +234,6 @@ class Config:
                 name = name.strip()
                 if name == "memory":
                     config.tools.memory.enabled = False
-                elif name == "spectro":
-                    config.tools.spectro.enabled = False
 
         return config
 
@@ -303,12 +250,6 @@ class Config:
                     "enabled": self.tools.memory.enabled,
                     "storage_path": self.tools.memory.storage_path,
                     "collection": self.tools.memory.collection,
-                },
-                "spectro": {
-                    "enabled": self.tools.spectro.enabled,
-                    "api_url": self.tools.spectro.api_url,
-                    "api_key": "***" if self.tools.spectro.api_key else "",
-                    "collection": self.tools.spectro.collection,
                 },
             },
             "server": {
@@ -334,13 +275,6 @@ class Config:
                     "storage_path": self.tools.memory.storage_path,
                     "embedding_model": self.tools.memory.embedding_model,
                     "collection": self.tools.memory.collection,
-                },
-                "spectro": {
-                    "enabled": self.tools.spectro.enabled,
-                    "api_url": self.tools.spectro.api_url,
-                    "api_key": "${SPECTRO_API_KEY}",  # Reference, not value
-                    "project_uid": self.tools.spectro.project_uid or "${SPECTRO_PROJECT_UID}",
-                    "collection": self.tools.spectro.collection,
                 },
             },
             "server": {

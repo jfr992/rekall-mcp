@@ -14,6 +14,6 @@ echo "→ Stopping backend…"
 pkill -f "python -m server" 2>/dev/null || true
 
 echo "→ Stopping Qdrant…"
-docker-compose stop qdrant 2>/dev/null || true
+docker compose stop qdrant 2>/dev/null || true
 
 echo "✓ Rekall stopped. Qdrant volume at ~/.claude/qdrant preserved."

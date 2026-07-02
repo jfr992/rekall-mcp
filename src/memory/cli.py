@@ -5,6 +5,7 @@ from __future__ import annotations
 import click
 
 from .manager import MemoryManager
+from .types import VALID_MEMORY_TYPES
 
 
 @click.group()
@@ -35,7 +36,7 @@ def memory(ctx, memory_dir: str, qdrant_url: str):
     "-t",
     "memory_type",
     default="note",
-    type=click.Choice(["note", "decision", "learning", "preference", "session"]),
+    type=click.Choice(sorted(VALID_MEMORY_TYPES)),
     help="Memory type",
 )
 @click.option("--project", "-p", help="Project name")
