@@ -23,7 +23,7 @@ That's the whole stack — three containers. Memories live at `$MEMORY_STORAGE_P
 ### 2. Tell Claude
 
 ```bash
-claude mcp add --transport http --url http://localhost:8000 rekall
+claude mcp add --transport http rekall http://localhost:8000
 ```
 
 ### 3. Verify
@@ -173,8 +173,8 @@ When set, every request except `/health` requires the token. Point clients at it
 
 ```bash
 # Claude Code
-claude mcp add --transport http --url http://localhost:8000 \
-  --header "Authorization: Bearer $REKALL_API_TOKEN" rekall
+claude mcp add --transport http rekall http://localhost:8000 \
+  --header "Authorization: Bearer $REKALL_API_TOKEN"
 # Cockpit: ui/.env.local
 echo "NEXT_PUBLIC_REKALL_API_TOKEN=$REKALL_API_TOKEN" >> ui/.env.local
 ```
