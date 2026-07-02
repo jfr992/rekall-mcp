@@ -206,7 +206,7 @@ Tracks all operations with counts, latencies, percentiles. OTEL-compatible metri
    "Decided to use Python" → [0.1, 0.3, ...]
                                     │
 4. Save to YAML file (durability)   │
-   ~/.claude/memory/2026-02-23.yaml │
+   ~/.claude/memory/<project>/2026-02-23.yaml │
                                     │
 5. Save to Qdrant (searchability)   │
    Collection: agent_memory         │
@@ -245,10 +245,11 @@ Tracks all operations with counts, latencies, percentiles. OTEL-compatible metri
                                     │
 4. Phase 3: RANK                    │
    For each candidate:              │
-     vector_score × 0.50            │
+     vector_score × 0.40            │
      + importance × 0.20            │
-     + recency × 0.15              │
      + graph_proximity × 0.15      │
+     + tier × 0.15                 │
+     + recency × 0.10              │
    Sort by composite score          │
                                     │
 5. Return top N results             │
@@ -266,7 +267,7 @@ Falls back to pure vector search when the knowledge graph has 0 edges.
 
 | Storage | Purpose | File |
 |---------|---------|------|
-| **YAML files** | Durability, backup, human-readable | `~/.claude/memory/*.yaml` |
+| **YAML files** | Durability, backup, human-readable | `~/.claude/memory/<project>/*.yaml` |
 | **Qdrant** | Fast semantic search | `~/.claude/qdrant/` (Docker volume) |
 | **Knowledge graph** | Typed relationships, traversal | `~/.claude/memory/_graph.json` |
 
@@ -276,8 +277,9 @@ YAML files are the source of truth. Qdrant and the graph can be rebuilt from YAM
 
 ```
 ~/.claude/memory/
-├── 2026-02-01.yaml      # Day's memories
-├── 2026-02-02.yaml
+├── <project>/
+│   ├── 2026-02-01.yaml  # Day's memories, per project
+│   └── 2026-02-02.yaml
 ├── ...
 └── _graph.json           # Knowledge graph (networkx export)
 ```
