@@ -1330,6 +1330,26 @@ class MemoryManager:
         """Return a single startup payload for agent clients."""
         return build_agent_startup(self, project=project, agent=agent, limit=limit)
 
+    def vector_health(self, sample_size: int = 256) -> dict[str, int]:
+        """Sample stored vectors and count degenerate (all-zero) ones.
+
+        Zero vectors mean embeddings were never written — semantic search is
+        silently dead for those memories (real incident: 2026-07).
+        """
+        from memory.graph import _coerce_vector
+
+        try:
+            sample = self.store.scroll(limit=sample_size, with_vectors=True)
+        except Exception:
+            return {"sampled": 0, "zero_vectors": 0}
+
+        zero_vectors = 0
+        for point in sample:
+            vector = _coerce_vector(point.get("vector"))
+            if not vector or not any(v != 0 for v in vector):
+                zero_vectors += 1
+        return {"sampled": len(sample), "zero_vectors": zero_vectors}
+
     def get_stats(self) -> dict[str, Any]:
         """Get memory system statistics."""
         with self._telemetry.track("memory.get_stats"):
@@ -1365,6 +1385,7 @@ class MemoryManager:
 
             return {
                 "total_memories": vector_count,
+                "vector_health": self.vector_health(),
                 "memory_files": file_count,
                 "memory_dir": str(self.memory_dir),
                 "by_type": type_counts,
