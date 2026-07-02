@@ -1,4 +1,4 @@
-# Contributing to Memento
+# Contributing to Rekall
 
 > **For users:** start at [`README.md`](README.md). This file is for agents (and humans) modifying the codebase.
 
@@ -99,13 +99,13 @@ A memory record has:
 
 Three hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/hooks/` with matching `~/.claude/settings.json` entries.
 
-- **`memento-restore.sh`** (UserPromptSubmit) — fetch-don't-inject. Status line only (~92 bytes/session). **Don't add context dumps here.** If you want context, the agent calls `recall_memories()` on demand.
-- **`memento-observe.sh`** (Stop) — Haiku judge with cheap signal gate. **Never add a hook that fires Haiku per turn without a gate.** Current gate fires on (a) new commits since last fire, (b) durability keyword in last user message, or (c) 5+ turns AND zero saves today. Without the gate you'd burn ~$30/month per active developer.
-- **`memento-post-tool.sh`** (PostToolUse Bash matcher) — captures git commit SHAs. Passive, no LLM calls.
+- **`rekall-restore.sh`** (UserPromptSubmit) — fetch-don't-inject. Status line only (~92 bytes/session). **Don't add context dumps here.** If you want context, the agent calls `recall_memories()` on demand.
+- **`rekall-observe.sh`** (Stop) — Haiku judge with cheap signal gate. **Never add a hook that fires Haiku per turn without a gate.** Current gate fires on (a) new commits since last fire, (b) durability keyword in last user message, or (c) 5+ turns AND zero saves today. Without the gate you'd burn ~$30/month per active developer.
+- **`rekall-post-tool.sh`** (PostToolUse Bash matcher) — captures git commit SHAs. Passive, no LLM calls.
 
 **Re-entrancy:** if a hook invokes `claude -p`, that inner Claude Code instance fires its own hooks. Guard with `MEMENTO_JUDGE_INFLIGHT=1` set before exec, checked at the top of the hook. Without this, infinite hook recursion.
 
-**Tool namespace:** the running server registers as `memento` (in the Claude Code MCP config), so tools are `mcp__memento__*` — not `mcp__memory__*`. If you copy a hook from another project, namespace-patch first.
+**Tool namespace:** the running server registers as `rekall` (in the Claude Code MCP config), so tools are `mcp__rekall__*` — not `mcp__memory__*`. If you copy a hook from another project, namespace-patch first.
 
 ## Branch + PR rules
 
@@ -137,10 +137,10 @@ Three hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude
 | `glob("*.yaml")` returns zero files when YAML is nested per-project | `migrate_hybrid.py` (BM25 branch) | `rglob("*.yaml")` |
 | Qdrant `Range` filter on `date` (string `YYYY-MM-DD`) silently returns 0 hits | `manager.recall()` `days` filter | Filter post-retrieval via Python string compare |
 | RRF prefetch drops `query_filter` at the outer `query_points` level | `vector_store.py:331` (fixed in v1.5.0) | Pass `query_filter=query_filter` to the outer `query_points` call too |
-| Backend resolves scope from its own cwd → all observations under "memento-mcp" | `/api/memory/observe` (fixed in v1.5.0) | Endpoint accepts `cwd` from caller, plumbs to `ScopeDetector.detect()` |
-| Stop hook fires per turn at $0.001/each → ~$30/month/dev | `memento-observe.sh` (fixed in v1.5.0) | Cheap signal gate before Haiku call |
-| `claude -p` from a Stop hook recursively fires its own Stop hook | `memento-observe.sh` | `MEMENTO_JUDGE_INFLIGHT=1` env var guard |
-| Restore hook fetches 12KB of "proactive context" but echoes only the status line | pre-v1.5.0 `memento-restore.sh` | Either drop the fetch entirely (current — nuclear mode) or actually inject (was the bug we caught) |
+| Backend resolves scope from its own cwd → all observations under "rekall-mcp" | `/api/memory/observe` (fixed in v1.5.0) | Endpoint accepts `cwd` from caller, plumbs to `ScopeDetector.detect()` |
+| Stop hook fires per turn at $0.001/each → ~$30/month/dev | `rekall-observe.sh` (fixed in v1.5.0) | Cheap signal gate before Haiku call |
+| `claude -p` from a Stop hook recursively fires its own Stop hook | `rekall-observe.sh` | `MEMENTO_JUDGE_INFLIGHT=1` env var guard |
+| Restore hook fetches 12KB of "proactive context" but echoes only the status line | pre-v1.5.0 `rekall-restore.sh` | Either drop the fetch entirely (current — nuclear mode) or actually inject (was the bug we caught) |
 
 ## Where to read next
 

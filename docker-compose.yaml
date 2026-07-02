@@ -1,4 +1,4 @@
-  # Memento MCP - Docker Compose
+  # Rekall MCP - Docker Compose
 #
 # Quick start:
 #   docker compose up -d
@@ -18,7 +18,7 @@ services:
   # =========================================================================
   qdrant:
     image: qdrant/qdrant:v1.13.4
-    container_name: memento-qdrant
+    container_name: rekall-qdrant
     ports:
       - "6333:6333"
     volumes:
@@ -36,7 +36,7 @@ services:
   # =========================================================================
   mcp:
     build: .
-    container_name: memento-mcp
+    container_name: rekall-mcp
     environment:
       - QDRANT_URL=http://qdrant:6333
       - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-sentence-transformers}
@@ -71,7 +71,7 @@ services:
       args:
         # Baked into the Next rewrite at build time (standalone output).
         MEMENTO_API_URL: http://mcp:8000
-    container_name: memento-ui
+    container_name: rekall-ui
     ports:
       - "3333:3333"
     depends_on:
@@ -99,7 +99,7 @@ services:
   # =========================================================================
   mcp-dev:
     build: .
-    container_name: memento-mcp-dev
+    container_name: rekall-mcp-dev
     environment:
       - QDRANT_URL=http://qdrant:6333
       - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-sentence-transformers}
@@ -121,7 +121,7 @@ services:
   # =========================================================================
   qdrant-test:
     image: qdrant/qdrant:v1.13.4
-    container_name: memento-qdrant-test
+    container_name: rekall-qdrant-test
     ports:
       - "6334:6333"
     tmpfs:
@@ -135,7 +135,7 @@ services:
   # =========================================================================
   test:
     build: .
-    container_name: memento-test
+    container_name: rekall-test
     environment:
       - QDRANT_URL=http://qdrant-test:6333
       - MEMORY_STORAGE_PATH=/tmp/test_memory

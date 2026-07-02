@@ -3,6 +3,16 @@
 from __future__ import annotations
 
 import hashlib
+import os
+
+
+def rekall_env(name: str, default: str | None = None) -> str | None:
+    """Read a REKALL_<name> env var, falling back to the legacy MEMENTO_<name>.
+
+    The project was renamed memento → rekall; old configs still set MEMENTO_*.
+    Prefer the new name, honor the old one for backward compatibility.
+    """
+    return os.environ.get(f"REKALL_{name}") or os.environ.get(f"MEMENTO_{name}") or default
 
 
 def stable_hash_id(string_id: str) -> int:

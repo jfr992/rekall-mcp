@@ -20,7 +20,7 @@ try:
     from scrapy.spiders import CrawlSpider, Rule
 except ImportError as e:
     raise ImportError(
-        "Scrapy is required for crawling. Install with: pip install memento-mcp[crawler]"
+        "Scrapy is required for crawling. Install with: pip install rekall-mcp[crawler]"
     ) from e
 
 
@@ -117,7 +117,7 @@ class DocsSpider(CrawlSpider):
             settings.setdefault("LOG_LEVEL", "INFO")
             settings.setdefault(
                 "USER_AGENT",
-                crawler_config.get("user_agent", "MementoMCP-DocBot/1.0 (Documentation indexer)"),
+                crawler_config.get("user_agent", "RekallMCP-DocBot/1.0 (Documentation indexer)"),
             )
             settings.setdefault(
                 "ITEM_PIPELINES",

@@ -17,9 +17,9 @@ describe("Continuity — TruncatedWarning", () => {
 
 describe("Continuity — ResumeHeader", () => {
   test("renders scope metadata as mono", () => {
-    const scope = { project: "test", agent: "claude-code", repo_name: "memento-mcp", branch: "feat/x" };
+    const scope = { project: "test", agent: "claude-code", repo_name: "rekall-mcp", branch: "feat/x" };
     render(<ResumeHeader scope={scope} />);
     expect(screen.getByText(/claude-code/i)).toBeInTheDocument();
-    expect(screen.getByText(/memento-mcp/i)).toBeInTheDocument();
+    expect(screen.getByText(/rekall-mcp/i)).toBeInTheDocument();
   });
 });

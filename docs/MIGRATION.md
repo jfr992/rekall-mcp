@@ -114,7 +114,7 @@ REST endpoints above are mirrored as MCP tools (with one exception):
 
 ### Scope resolution on `/api/memory/observe`
 
-Previously the backend resolved memory scope from its own cwd. So every observation from every Claude Code session landed under `project: memento-mcp`.
+Previously the backend resolved memory scope from its own cwd. So every observation from every Claude Code session landed under `project: rekall-mcp`.
 
 Now the endpoint accepts `cwd` and `project` in the request body. Hooks (e.g. Stop hook calling `/api/memory/observe`) should forward `$CLAUDE_PROJECT_DIR` or `$PWD`. The MCP `observe()` tool already does this implicitly.
 
