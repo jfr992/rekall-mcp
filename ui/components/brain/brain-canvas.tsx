@@ -20,8 +20,8 @@ type EnrichedNode = GraphNode & {
   __color: string;
   __radius: number;
   __phase: number;
-  fx: number; // pinned x — no force drift
-  fy: number; // pinned y
+  fx: number; // pinned PCA position — layout is the projection, no drift
+  fy: number;
 };
 
 // Slow global clock for breathing
@@ -50,15 +50,14 @@ export function BrainCanvas({ nodes, links, selectedId, onNodeClick }: Props) {
     return () => ro.disconnect();
   }, []);
 
-  // Map backend positions ([-1,1]) to fill the viewport with padding.
-  // Pin nodes via fx/fy so d3 force doesn't move them — no drift.
+  // Map backend PCA positions (unit disc) to the viewport with padding.
+  // Uniform scale (no per-axis stretch) keeps the disc a disc, not a box.
   const enriched = useMemo<EnrichedNode[]>(() => {
     const padX = 100;
     const padY = 100;
     const w = dimensions.width - padX * 2;
     const h = dimensions.height - padY * 2;
-    const halfW = w / 2;
-    const halfH = h / 2;
+    const scale = Math.min(w, h) / 2;
 
     // Collect raw positions and compute centroid for re-centering
     const rawPositions = nodes.map((n) => {
@@ -94,8 +93,8 @@ export function BrainCanvas({ nodes, links, selectedId, onNodeClick }: Props) {
         __color: color,
         __radius: radius,
         __phase: i * 0.7,
-        fx: centered.x * halfW,
-        fy: centered.y * halfH,
+        fx: centered.x * scale,
+        fy: centered.y * scale,
       };
     });
   }, [nodes, dimensions]);
@@ -112,15 +111,14 @@ export function BrainCanvas({ nodes, links, selectedId, onNodeClick }: Props) {
     return s;
   }, [hoveredId, links]);
 
-  // Center viewport after data loads
+  // Fit viewport to the pinned layout after data loads
   useEffect(() => {
     if (enriched.length > 0 && fgRef.current) {
       const t = setTimeout(() => {
         try {
-          fgRef.current?.centerAt?.(0, 0, 400);
-          fgRef.current?.zoom?.(1, 400);
+          fgRef.current?.zoomToFit?.(400, 80);
         } catch {}
-      }, 200);
+      }, 300);
       return () => clearTimeout(t);
     }
   }, [enriched.length]);
@@ -285,14 +283,17 @@ export function BrainCanvas({ nodes, links, selectedId, onNodeClick }: Props) {
         width={dimensions.width}
         height={dimensions.height}
         backgroundColor="rgba(0,0,0,0)"
-        // Pinned positions — no simulation drift
+        // PCA positions are the layout — pinned, no simulation drift
         warmupTicks={0}
         cooldownTicks={0}
         // Node
         nodeCanvasObject={nodeCanvasObject}
         nodePointerAreaPaint={(node: any, color: string, ctx: CanvasRenderingContext2D) => {
+          const px: number = node.x ?? node.fx;
+          const py: number = node.y ?? node.fy;
+          if (!Number.isFinite(px) || !Number.isFinite(py)) return;
           ctx.beginPath();
-          ctx.arc(node.x, node.y, (node.__radius ?? 5) + 8, 0, Math.PI * 2);
+          ctx.arc(px, py, (node.__radius ?? 5) + 8, 0, Math.PI * 2);
           ctx.fillStyle = color;
           ctx.fill();
         }}
