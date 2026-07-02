@@ -1,6 +1,6 @@
-# Transferring memories between machines (or memento versions)
+# Transferring memories between machines (or rekall versions)
 
-Use this guide when you have an existing memento install on one machine (or an older version) and want to move its memories to another setup. The destination must already be running memento (see [`docs/SETUP.md`](SETUP.md) and [`README.md`](../README.md)).
+Use this guide when you have an existing rekall (or older memento) install on one machine (or an older version) and want to move its memories to another setup. The destination must already be running rekall (see [`docs/SETUP.md`](SETUP.md) and [`README.md`](../README.md)).
 
 For per-version upgrades on the *same* machine (e.g. v1.4 → v1.5 in place), see [`docs/MIGRATION.md`](MIGRATION.md).
 
@@ -247,7 +247,7 @@ curl -s http://localhost:8000/api/memory/stats | python3 -c "import json,sys; d=
 
 ## Notes
 
-- **Embedding model compatibility**: memento has used `all-MiniLM-L6-v2` (384-dim) since v1.0. If you've switched providers (Ollama, Gemini) on either machine, snapshot transfer (Path A) won't work — embeddings are incompatible. Use Path B.
+- **Embedding model compatibility**: rekall has used `all-MiniLM-L6-v2` (384-dim) since v1.0. If you've switched providers (Ollama, Gemini) on either machine, snapshot transfer (Path A) won't work — embeddings are incompatible. Use Path B.
 - **Project scope**: imported memories all land under whatever `project` they had in the source YAML. To re-tag, edit the project field on disk before running graph rebuild, or use Path B with explicit `project` overrides.
 - **Knowledge graph edges**: never transfer directly. Always rebuild on the destination — the auto-linker uses the *destination's* memory set, not the source's, to compute edges.
 - **Identity-tier memories**: pre-1.5 memories don't have a tier. After backfill, they default to `episodic` unless content matches identity-classification rules. Promote manually via the cockpit's Hygiene surface if needed.

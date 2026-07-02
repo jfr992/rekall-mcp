@@ -23,7 +23,7 @@ That's the whole stack — three containers. Memories live at `$MEMORY_STORAGE_P
 ### 2. Tell Claude
 
 ```bash
-claude mcp add --transport http --url http://localhost:8000 memory
+claude mcp add --transport http --url http://localhost:8000 rekall
 ```
 
 ### 3. Verify
@@ -166,17 +166,19 @@ The server binds `0.0.0.0` (required for Claude Code's port-mapped network) and 
 untrusted network, either bind loopback (`HOST=127.0.0.1`) or enable bearer auth:
 
 ```bash
-export MEMENTO_API_TOKEN=$(openssl rand -hex 32)   # on the server
+export REKALL_API_TOKEN=$(openssl rand -hex 32)   # on the server
 ```
+
+> Renamed from Memento: all `REKALL_*` env vars fall back to the old `MEMENTO_*` names, so existing configs keep working.
 
 When set, every request except `/health` requires the token. Point clients at it:
 
 ```bash
 # Claude Code
 claude mcp add --transport http --url http://localhost:8000 \
-  --header "Authorization: Bearer $MEMENTO_API_TOKEN" memory
+  --header "Authorization: Bearer $REKALL_API_TOKEN" rekall
 # Cockpit: ui/.env.local
-echo "NEXT_PUBLIC_MEMENTO_API_TOKEN=$MEMENTO_API_TOKEN" >> ui/.env.local
+echo "NEXT_PUBLIC_REKALL_API_TOKEN=$REKALL_API_TOKEN" >> ui/.env.local
 ```
 
 ---

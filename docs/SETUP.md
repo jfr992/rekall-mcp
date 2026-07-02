@@ -36,7 +36,7 @@ This starts:
 ### Step 2: Tell Claude About It
 
 ```bash
-claude mcp add --transport http --url http://localhost:8000 memory
+claude mcp add --transport http --url http://localhost:8000 rekall
 ```
 
 Verify:
@@ -142,7 +142,7 @@ docker compose up -d qdrant
 ### Step 3: Tell Claude About It
 
 ```bash
-claude mcp add memory \
+claude mcp add rekall \
   --command python \
   --args "-m,server" \
   --cwd /path/to/rekall-mcp/src
