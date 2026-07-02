@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# ~/.claude/hooks/memento-observe.sh
+# ~/.claude/hooks/rekall-observe.sh
 # Fires on Stop. Uses a cheap LLM judge (haiku) to decide whether the last
 # exchange contains something worth remembering. If yes, POSTs to memento.
 #
@@ -18,7 +18,7 @@ MODEL="${MEMENTO_JUDGE_MODEL:-claude-haiku-4-5}"
 # calling claude; if we see it, we're nested — bail.
 [[ "${MEMENTO_JUDGE_INFLIGHT:-0}" == "1" ]] && exit 0
 
-LOG="/tmp/memento-observe.log"
+LOG="/tmp/rekall-observe.log"
 trace() { printf '[%s] %s\n' "$(date +%H:%M:%S)" "$*" >> "$LOG"; }
 trace "fire: hook invoked"
 
@@ -29,7 +29,7 @@ stop_hook_active="$(jq -r '.stop_hook_active // false' <<<"$payload")"
 
 # Caller's working directory — Claude Code provides this in the Stop payload.
 # Falls back to $CLAUDE_PROJECT_DIR then $PWD so the scope attaches to the
-# right repo, not to memento-mcp (the backend's own cwd).
+# right repo, not to rekall-mcp (the backend's own cwd).
 caller_cwd="$(jq -r '.cwd // ""' <<<"$payload")"
 [[ -z "$caller_cwd" ]] && caller_cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
 
@@ -98,7 +98,7 @@ EOF
 # Three signals: (1) new git commits since last fire,
 # (2) keyword in last user message, (3) 5+ turns AND 0 saves today.
 # ============================================================
-LAST_FIRE_FILE=/tmp/memento-observe-last-fire
+LAST_FIRE_FILE=/tmp/rekall-observe-last-fire
 LAST_FIRE_TS=$(cat "$LAST_FIRE_FILE" 2>/dev/null || echo 0)
 
 fire_haiku=false

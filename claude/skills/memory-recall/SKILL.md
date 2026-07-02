@@ -7,7 +7,7 @@ context: fork
 agent: Explore
 ---
 
-Policy: See memento-mcp/docs/CLAUDE_MEMORY_SETTINGS.md for recall limits and project scoping.
+Policy: See rekall-mcp/docs/CLAUDE_MEMORY_SETTINGS.md for recall limits and project scoping.
 
 # Search Results: $ARGUMENTS
 

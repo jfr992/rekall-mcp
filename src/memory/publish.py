@@ -294,7 +294,11 @@ def _build_synth():
     via an Anthropic-compatible endpoint (honors ANTHROPIC_BASE_URL/AUTH_TOKEN,
     including the litellm proxy). Returns (None, 'raw') when unconfigured.
     """
-    model = os.getenv("MEMENTO_PUBLISH_MODEL") or os.getenv("ANTHROPIC_MODEL")
+    model = (
+        os.getenv("REKALL_PUBLISH_MODEL")
+        or os.getenv("MEMENTO_PUBLISH_MODEL")
+        or os.getenv("ANTHROPIC_MODEL")
+    )
     base_url = os.getenv("ANTHROPIC_BASE_URL")
     token = os.getenv("ANTHROPIC_AUTH_TOKEN") or os.getenv("ANTHROPIC_API_KEY")
     if not (model and base_url and token):

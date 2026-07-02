@@ -14,6 +14,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from core import rekall_env
 from memory.trust import DEFAULT_BOUNDARY, TrustResolver, load_trust_rules
 
 _CRED_RE = re.compile(r"(https?://)[^@/]+@")
@@ -103,13 +104,13 @@ class ScopeDetector:
         repo_remote = _strip_creds(raw_remote)
 
         detected_project = project or repo_name or current.name or "general"
-        detected_agent = agent or os.environ.get("MEMENTO_AGENT") or cls._detect_agent()
+        detected_agent = agent or rekall_env("AGENT") or cls._detect_agent()
         detected_trust = (
             trust_boundary
-            or os.environ.get("MEMENTO_TRUST_BOUNDARY")
+            or rekall_env("TRUST_BOUNDARY")
             or cls._trust_resolver().resolve(remote=repo_remote, name=repo_name)
         )
-        detected_session = session_id or os.environ.get("MEMENTO_SESSION_ID", "")
+        detected_session = session_id or rekall_env("SESSION_ID", "")
 
         return MemoryScope(
             agent=detected_agent,

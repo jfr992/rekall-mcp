@@ -1,6 +1,6 @@
-# Memento MCP — LongMemEval Benchmark
+# Rekall MCP — LongMemEval Benchmark
 
-Reproducible evaluation of Memento MCP's retrieval pipeline against the
+Reproducible evaluation of Rekall MCP's retrieval pipeline against the
 [LongMemEval](https://github.com/xiaowu0162/LongMemEval) benchmark
 (500 questions, 6 question types, ~40 sessions per question).
 
@@ -27,8 +27,8 @@ PYTHONPATH=src:. .venv/bin/python -m benchmarks.longmemeval_runner \
 | Mode | What It Tests | MemPalace Equivalent |
 |------|--------------|---------------------|
 | `dense` | Pure semantic search (all-MiniLM-L6-v2) | Their "raw" mode (96.6% R@5) |
-| `hybrid` | BM25 sparse + dense with RRF fusion | No equivalent — Memento advantage |
-| `hybrid_graph` | Hybrid + 1-hop knowledge graph expansion | No equivalent — Memento advantage |
+| `hybrid` | BM25 sparse + dense with RRF fusion | No equivalent — Rekall advantage |
+| `hybrid_graph` | Hybrid + 1-hop knowledge graph expansion | No equivalent — Rekall advantage |
 
 ## Results (500 questions, April 2026)
 

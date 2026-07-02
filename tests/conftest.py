@@ -1,4 +1,4 @@
-"""Pytest configuration and fixtures for Memento MCP tests."""
+"""Pytest configuration and fixtures for Rekall MCP tests."""
 
 import tempfile
 from datetime import datetime

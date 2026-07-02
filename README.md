@@ -1,8 +1,8 @@
-# Memento MCP
+# Rekall MCP
 
 **Give Claude a memory with associative recall.** Three steps, five minutes.
 
-Memento MCP is a persistent memory system with a **knowledge graph** layer. It stores memories as YAML + vector embeddings, connects them with typed relationships, and retrieves context using graph-enhanced semantic search.
+Rekall MCP is a persistent memory system with a **knowledge graph** layer. It stores memories as YAML + vector embeddings, connects them with typed relationships, and retrieves context using graph-enhanced semantic search.
 
 ---
 
@@ -11,19 +11,19 @@ Memento MCP is a persistent memory system with a **knowledge graph** layer. It s
 ### 1. Download and Start
 
 ```bash
-git clone https://github.com/jfr992/memento-mcp.git
-cd memento-mcp
+git clone https://github.com/jfr992/rekall-mcp.git
+cd rekall-mcp
 docker compose up -d    # Qdrant (:6333) + MCP backend (:8000) + cockpit (:3333)
 ```
 
-That's the whole stack — three containers. Memories live at `$MEMORY_STORAGE_PATH` (default `~/.claude/memory`); set the env var before `docker compose up` to relocate. (`scripts/start-memento.sh` remains for running the backend/UI on the host during development.)
+That's the whole stack — three containers. Memories live at `$MEMORY_STORAGE_PATH` (default `~/.claude/memory`); set the env var before `docker compose up` to relocate. (`scripts/start-rekall.sh` remains for running the backend/UI on the host during development.)
 
 > **Need Docker?** Get it free at [docker.com/get-started](https://www.docker.com/get-started/)
 
 ### 2. Tell Claude
 
 ```bash
-claude mcp add --transport http --url http://localhost:8000 memory
+claude mcp add --transport http --url http://localhost:8000 rekall
 ```
 
 ### 3. Verify
@@ -136,7 +136,7 @@ cp -r claude/skills/* ~/.claude/skills/
 | `/memory-consolidate` | Detect duplicate and contradictory memories |
 | `/memory-skills` | Show extracted skills from memory clusters |
 
-The auto-save mechanism is the **Stop hook** at `claude/hooks/memento-observe.sh` (a Haiku judge gated by signal detection — keywords, new commits, or session length), not the slash commands. See [`claude/INSTALL.md`](claude/INSTALL.md) for hook setup.
+The auto-save mechanism is the **Stop hook** at `claude/hooks/rekall-observe.sh` (a Haiku judge gated by signal detection — keywords, new commits, or session length), not the slash commands. See [`claude/INSTALL.md`](claude/INSTALL.md) for hook setup.
 
 ---
 
@@ -166,17 +166,19 @@ The server binds `0.0.0.0` (required for Claude Code's port-mapped network) and 
 untrusted network, either bind loopback (`HOST=127.0.0.1`) or enable bearer auth:
 
 ```bash
-export MEMENTO_API_TOKEN=$(openssl rand -hex 32)   # on the server
+export REKALL_API_TOKEN=$(openssl rand -hex 32)   # on the server
 ```
+
+> Renamed from Memento: all `REKALL_*` env vars fall back to the old `MEMENTO_*` names, so existing configs keep working.
 
 When set, every request except `/health` requires the token. Point clients at it:
 
 ```bash
 # Claude Code
 claude mcp add --transport http --url http://localhost:8000 \
-  --header "Authorization: Bearer $MEMENTO_API_TOKEN" memory
+  --header "Authorization: Bearer $REKALL_API_TOKEN" rekall
 # Cockpit: ui/.env.local
-echo "NEXT_PUBLIC_MEMENTO_API_TOKEN=$MEMENTO_API_TOKEN" >> ui/.env.local
+echo "NEXT_PUBLIC_REKALL_API_TOKEN=$REKALL_API_TOKEN" >> ui/.env.local
 ```
 
 ---

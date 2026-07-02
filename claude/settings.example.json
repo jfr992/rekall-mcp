@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/memento-restore.sh"
+            "command": "~/.claude/hooks/rekall-restore.sh"
           }
         ]
       }
@@ -18,7 +18,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/.claude/hooks/memento-observe.sh"
+            "command": "~/.claude/hooks/rekall-observe.sh"
           }
         ]
       }
