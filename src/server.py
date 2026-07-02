@@ -8,7 +8,7 @@ Usage:
     python -m server
 
     # Enable all available tools via environment
-    TOOLS_ENABLED=memory,spectro python -m server
+    TOOLS_ENABLED=memory python -m server
 
     # Use a config file
     MCP_CONFIG=tools.yaml python -m server
