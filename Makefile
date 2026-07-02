@@ -18,7 +18,7 @@ help:
 	@echo ""
 	@echo "Memory Commands:"
 	@echo "  memory-stats   Show memory storage statistics"
-	@echo "  memory-clean   Clean up old memory files (interactive)"
+	@echo "  (cleanup: POST /api/memory/cleanup — see README REST table)"
 	@echo "  backup         Tarball ~/.claude/memory + Qdrant volume to ~/backups"
 	@echo "  qdrant         Start Qdrant vector database"
 	@echo "  qdrant-stop    Stop Qdrant"
@@ -83,20 +83,13 @@ pre-commit:
 # Show memory storage statistics
 memory-stats:
 	@echo "Memory storage statistics:"
-	@python -c "from pathlib import Path; import os; \
+	@python -c "from pathlib import Path; \
 	    mem_dir = Path.home() / '.claude' / 'memory'; \
-	    if mem_dir.exists(): \
-	        files = list(mem_dir.glob('*.yaml')); \
-	        total_size = sum(f.stat().st_size for f in files); \
-	        print(f'  Files: {len(files)}'); \
-	        print(f'  Size: {total_size / 1024:.1f} KB'); \
-	        print(f'  Location: {mem_dir}'); \
-	    else: \
-	        print(f'  No memory directory found at {mem_dir}');"
-
-# Clean up old memory files (interactive)
-memory-clean:
-	@python -m memory.cli cleanup --interactive
+	    files = list(mem_dir.rglob('*.yaml')) if mem_dir.exists() else []; \
+	    total_size = sum(f.stat().st_size for f in files); \
+	    print(f'  Files: {len(files)}'); \
+	    print(f'  Size: {total_size / 1024:.1f} KB'); \
+	    print(f'  Location: {mem_dir}')"
 
 # Start Qdrant vector database
 qdrant:
@@ -142,11 +135,11 @@ docker-clean:
 
 # Run server locally with stdio transport
 run:
-	python -m server
+	PYTHONPATH=src uv run python -m server
 
 # Run server with HTTP transport
 run-http:
-	MCP_TRANSPORT=streamable-http python -m server
+	MCP_TRANSPORT=streamable-http PYTHONPATH=src uv run python -m server
 
 # =============================================================================
 # CLEANUP
