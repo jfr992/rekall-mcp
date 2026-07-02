@@ -67,6 +67,34 @@ def _project_to_2d(vector: list[float]) -> tuple[float, float]:
     return (x / scale, y / scale)
 
 
+def _project_batch_to_2d(vectors: list[list[float]]) -> list[tuple[float, float]]:
+    """Project a batch of vectors to 2D via PCA, scaled to fill the unit disc.
+
+    Batch-relative geometry: similar vectors land near each other. Falls back
+    to the per-vector deterministic transform when numpy is unavailable or the
+    batch is too small/ragged for a meaningful decomposition.
+    """
+    if len(vectors) < 3 or len({len(v) for v in vectors}) != 1:
+        return [_project_to_2d(v) for v in vectors]
+
+    try:
+        import numpy as np
+    except ImportError:
+        return [_project_to_2d(v) for v in vectors]
+
+    matrix = np.asarray(vectors, dtype=float)
+    matrix -= matrix.mean(axis=0)
+    _, _, components = np.linalg.svd(matrix, full_matrices=False)
+    coords = matrix @ components[: min(2, components.shape[0])].T
+    if coords.shape[1] < 2:
+        coords = np.pad(coords, ((0, 0), (0, 2 - coords.shape[1])))
+
+    max_radius = float(np.max(np.linalg.norm(coords, axis=1)))
+    if max_radius > 0:
+        coords = coords / max_radius
+    return [(float(x), float(y)) for x, y in coords]
+
+
 def build_memory_graph(
     points: list[dict[str, Any]],
     neighbor_count: int = 5,
@@ -77,6 +105,7 @@ def build_memory_graph(
     nodes: list[dict[str, Any]] = []
     node_vectors: list[list[float]] = []
     seen_ids: set[str] = set()
+    kept_points: list[dict[str, Any]] = []
 
     for idx, point in enumerate(points):
         vector = _coerce_vector(point.get("vector"))
@@ -88,13 +117,17 @@ def build_memory_graph(
             continue
 
         seen_ids.add(memory_id)
-        x, y = _project_to_2d(vector)
-        content = point.get("content", "")
+        kept_points.append({"memory_id": memory_id, "point": point})
+        node_vectors.append(vector)
 
+    positions = _project_batch_to_2d(node_vectors)
+
+    for kept, (x, y) in zip(kept_points, positions, strict=True):
+        point = kept["point"]
         nodes.append(
             {
-                "id": str(memory_id),
-                "content": content,
+                "id": str(kept["memory_id"]),
+                "content": point.get("content", ""),
                 "project": point.get("project", "general"),
                 "type": point.get("type", "note"),
                 "date": point.get("date", ""),
@@ -102,7 +135,6 @@ def build_memory_graph(
                 "position": {"x": x, "y": y},
             }
         )
-        node_vectors.append(vector)
 
     if not nodes:
         return {"nodes": [], "links": [], "stats": {"nodes": 0, "links": 0}}
