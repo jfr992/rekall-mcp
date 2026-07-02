@@ -29,9 +29,10 @@ cd rekall-mcp
 docker compose up -d
 ```
 
-This starts:
-- **Qdrant** - Vector database for semantic search
-- **MCP Server** - Memory tools with embeddings + knowledge graph
+This starts three containers:
+- **Qdrant** (:6333) - Vector database for semantic search
+- **MCP Server** (:8000) - Memory tools with embeddings + knowledge graph
+- **Cockpit UI** (:3333) - Next.js web cockpit
 
 ### Step 2: Tell Claude About It
 
@@ -41,7 +42,7 @@ claude mcp add --transport http rekall http://localhost:8000
 
 Verify:
 ```bash
-claude mcp list  # Should show: memory (http) - http://localhost:8000
+claude mcp list  # Should show: rekall (http) - http://localhost:8000
 ```
 
 ### Step 3: Verify It's Working
@@ -299,7 +300,7 @@ curl -X POST http://localhost:8000/api/memory/graph/rebuild
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant endpoint |
 | `MEMORY_STORAGE_PATH` | `~/.claude/memory` | YAML storage path |
 | `EMBEDDING_PROVIDER` | `sentence-transformers` | Embedding backend |
-| `EMBEDDING_API_KEY` | (none) | For cloud providers |
+| `GEMINI_API_KEY` | (none) | Gemini provider API key |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
 | `MCP_TRANSPORT` | `streamable-http` | Protocol (stdio or streamable-http) |
 | `HOST` | `0.0.0.0` | Listen address |
