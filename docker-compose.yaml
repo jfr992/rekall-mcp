@@ -25,11 +25,13 @@ services:
       # Store on your machine, not in a Docker volume
       - ${QDRANT_DATA_PATH:-~/.claude/qdrant}:/qdrant/storage
     restart: unless-stopped
-    # healthcheck:
-    #   test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-    #   interval: 30s
-    #   timeout: 10s
-    #   retries: 3
+    healthcheck:
+      # Qdrant image has no curl/wget; TCP check via bash built-in
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
 
   # =========================================================================
   # MCP SERVER - Memory Tools (default)
@@ -52,7 +54,8 @@ services:
       # Store on your machine, not in a Docker volume
       - ${MEMORY_STORAGE_PATH:-~/.claude/memory}:/data/memory
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_healthy
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -112,7 +115,8 @@ services:
       - ./src:/app/src
       - ${MEMORY_STORAGE_PATH:-~/.claude/memory}:/data/memory
     depends_on:
-      - qdrant
+      qdrant:
+        condition: service_healthy
     profiles:
       - dev
 
@@ -126,6 +130,13 @@ services:
       - "6334:6333"
     tmpfs:
       - /qdrant/storage:size=1G
+    healthcheck:
+      # Qdrant image has no curl/wget; TCP check via bash built-in
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/127.0.0.1/6333' || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
     profiles:
       - test
     restart: "no"
@@ -143,7 +154,8 @@ services:
       - ./src:/app/src:ro
       - ./tests:/app/tests:ro
     depends_on:
-      - qdrant-test
+      qdrant-test:
+        condition: service_healthy
     profiles:
       - test
     entrypoint: ["pytest", "-v", "tests/"]

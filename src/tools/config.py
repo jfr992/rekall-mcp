@@ -23,8 +23,6 @@ class ToolConfig:
         tools:
           memory:
             enabled: true
-          spectro:
-            enabled: false
     """
 
     _enabled: dict[str, bool] = field(default_factory=dict)
@@ -84,7 +82,7 @@ class ToolConfig:
         - TOOLS_DISABLED: Comma-separated list of disabled tools
 
         Example:
-            TOOLS_ENABLED=memory,spectro
+            TOOLS_ENABLED=memory
             TOOLS_DISABLED=experimental
 
         Returns:
@@ -115,7 +113,6 @@ class ToolConfig:
         """Get default configuration.
 
         Memory is enabled by default.
-        Spectro is disabled by default.
 
         Returns:
             ToolConfig instance with defaults
@@ -124,9 +121,6 @@ class ToolConfig:
 
         # Memory always enabled by default
         config._enabled["memory"] = True
-
-        # Spectro disabled by default (requires API key)
-        config._enabled["spectro"] = False
 
         return config
 
