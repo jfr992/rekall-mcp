@@ -1,7 +1,8 @@
-import { SerifHeading } from "@/components/ui/serif-heading";
-import { Badge } from "@/components/ui/badge";
+"use client";
+
 import { MonoLabel } from "@/components/ui/mono-label";
 import { Empty } from "@/components/ui/empty";
+import { MemoryRow } from "@/components/continuity/memory-row";
 
 type ImportantItem = {
   memory_id: string;
@@ -12,29 +13,65 @@ type ImportantItem = {
   importance?: number;
 };
 
-export function ImportantSection({ items }: { items: ImportantItem[] }) {
+// Importance order — musts first, ambient context last
+const TYPE_ORDER = [
+  "requirement",
+  "decision",
+  "preference",
+  "learning",
+  "fact",
+  "note",
+  "session",
+  "summary",
+];
+
+export function ImportantSection({
+  items,
+  onSelect,
+}: {
+  items: ImportantItem[];
+  onSelect: (memoryId: string) => void;
+}) {
+  if (items.length === 0) {
+    return <Empty title="Nothing important yet" />;
+  }
+
+  const byType = new Map<string, ImportantItem[]>();
+  for (const item of items) {
+    const t = item.type ?? "note";
+    const bucket = byType.get(t) ?? [];
+    bucket.push(item);
+    byType.set(t, bucket);
+  }
+
+  const orderedTypes = [
+    ...TYPE_ORDER.filter((t) => byType.has(t)),
+    ...[...byType.keys()].filter((t) => !TYPE_ORDER.includes(t)),
+  ];
+
   return (
-    <section className="space-y-3">
-      <SerifHeading title="Important" size="section" eyebrow="HIGH-SIGNAL MEMORIES" />
-      {items.length === 0 ? (
-        <Empty title="Nothing important yet" />
-      ) : (
-        <ul className="space-y-2">
-          {items.map((item) => (
-            <li
-              key={item.memory_id}
-              className="rounded-md border border-[var(--border)] bg-[var(--bg-elevated)] p-4"
-            >
-              <div className="mb-2 flex items-center gap-2">
-                {item.type ? <Badge kind="type" value={item.type} /> : null}
-                {item.tier ? <Badge kind="tier" value={item.tier} /> : null}
-                <MonoLabel>{item.date ?? ""}</MonoLabel>
-              </div>
-              <p className="font-serif text-base leading-snug text-[var(--fg)]">{item.content}</p>
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <div className="space-y-4">
+      {orderedTypes.map((type) => (
+        <section key={type}>
+          <MonoLabel>
+            {type} · {byType.get(type)!.length}
+          </MonoLabel>
+          <ul className="mt-2 space-y-1.5">
+            {byType.get(type)!.map((item) => (
+              <li key={item.memory_id}>
+                <MemoryRow
+                  memoryId={item.memory_id}
+                  content={item.content}
+                  type={item.type}
+                  tier={item.tier}
+                  date={item.date}
+                  onSelect={onSelect}
+                />
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
+    </div>
   );
 }
