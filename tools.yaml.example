@@ -1,4 +1,4 @@
-# Memento MCP Server Tools Configuration
+# Rekall MCP Server Tools Configuration
 #
 # Copy this file to tools.yaml and customize for your setup.
 # Or use environment variables:

@@ -21,7 +21,7 @@ def integration_manager(tmp_path):
     """MemoryManager wired to the test Qdrant on :6334 with an isolated collection."""
     memory_dir = tmp_path / "memory"
     memory_dir.mkdir()
-    collection_name = f"memento_test_{uuid4().hex[:12]}"
+    collection_name = f"rekall_test_{uuid4().hex[:12]}"
 
     mgr = MemoryManager(
         memory_dir=memory_dir,
@@ -48,7 +48,7 @@ def test_full_lifecycle_observe_to_resume_to_prune(integration_manager):
     """Full chain: observe -> dedupe-reinforce -> recall -> resume -> prune-plan -> apply-rejection."""
     _PLAN_STORE.clear()
     mgr = integration_manager
-    project = "memento-it"
+    project = "rekall-it"
 
     # -------------------------------------------------------------------------
     # Step 1: observe a high-salience decision and verify it is persisted
@@ -157,7 +157,7 @@ def test_unknown_salience_never_in_plan_end_to_end(integration_manager):
     """Unknown-salience memories must never appear in a prune plan (regression: the bug test)."""
     _PLAN_STORE.clear()
     mgr = integration_manager
-    project = "memento-it-2"
+    project = "rekall-it-2"
 
     # Save directly via manager.save — bypasses observe so salience is absent from payload.
     memory_id = mgr.save(

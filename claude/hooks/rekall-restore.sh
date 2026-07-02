@@ -3,12 +3,12 @@
 # Fires on UserPromptSubmit. Loads memory context ONCE per session,
 # then silently exits on subsequent prompts to avoid wasting tokens.
 #
-# Kill switch: MEMENTO_AUTOSAVE=0
-# Backend URL: MEMENTO_API_URL (default http://localhost:8000)
+# Kill switch: REKALL_AUTOSAVE=0
+# Backend URL: REKALL_API_URL (default http://localhost:8000)
 set -euo pipefail
 
-API="${MEMENTO_API_URL:-http://localhost:8000}"
-[[ "${MEMENTO_AUTOSAVE:-1}" == "0" ]] && exit 0
+API="${REKALL_API_URL:-http://localhost:8000}"
+[[ "${REKALL_AUTOSAVE:-1}" == "0" ]] && exit 0
 
 # Session marker — skip if we already restored in this session.
 # Uses $CLAUDE_SESSION_ID if available, falls back to PID-based marker.

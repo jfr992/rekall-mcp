@@ -2,7 +2,7 @@
 
 # Default target
 help:
-	@echo "Memento MCP - Development Commands"
+	@echo "Rekall MCP - Development Commands"
 	@echo ""
 	@echo "Usage: make [target]"
 	@echo ""
