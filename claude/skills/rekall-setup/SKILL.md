@@ -15,7 +15,7 @@ Runs the bundled installer at `claude/setup/install.sh`. Safe to re-run; it back
 2. Starts Qdrant + backend (skip with `--skip-backend`)
 3. Copies `rekall-restore.sh` + `rekall-observe.sh` to `~/.claude/hooks/`
 4. Backs up + patches `~/.claude/settings.json` with `UserPromptSubmit` and `Stop` hook entries (deduped — won't add if already wired)
-5. Copies all 7 slash commands to `~/.claude/skills/`
+5. Copies all 9 slash commands to `~/.claude/skills/`
 6. Verifies backend health + reports memory count
 
 ## Run
@@ -37,4 +37,4 @@ bash claude/setup/install.sh --skip-backend
 
 ## Restart Claude Code
 
-Slash commands and hooks load at session start. After install, exit Claude Code and reopen for `/rekall-stats`, `/memory-recall`, etc. to become available.
+Slash commands and hooks load at session start. After install, exit Claude Code and reopen for `/memory-stats`, `/memory-recall`, etc. to become available.
