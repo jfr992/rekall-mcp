@@ -118,7 +118,7 @@ PLUGIN=$(jq -r '.enabledPlugins."test-plugin"' "$H2/.claude/settings.json")
 jq empty "$H2/.claude/settings.json" 2>/dev/null && pass "settings.json still valid JSON" || fail "settings.json corrupted"
 
 # ---- test 4: skills install -------------------------------------------------
-printf "\n[test 4] --skills-only installs all 8 slash commands\n"
+printf "\n[test 4] --skills-only installs all 9 slash commands\n"
 H3=$(with_isolated_home); TMP_HOMES="$TMP_HOMES $H3"
 
 if HOME="$H3" bash "$INSTALL_SH" --skills-only >"$H3/install.log" 2>&1; then
@@ -127,7 +127,7 @@ else
     fail "installer failed"
 fi
 
-EXPECTED=(rekall-setup memory-observe memory-recall memory-restore memory-stats memory-skills memory-rebuild memory-consolidate)
+EXPECTED=(rekall-setup rekall-publish memory-observe memory-recall memory-restore memory-stats memory-skills memory-rebuild memory-consolidate)
 for s in "${EXPECTED[@]}"; do
     [[ -f "$H3/.claude/skills/$s/SKILL.md" ]] && pass "$s/SKILL.md installed" || fail "$s/SKILL.md missing"
 done
