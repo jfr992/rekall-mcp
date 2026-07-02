@@ -117,14 +117,31 @@ Browse the knowledge graph at `http://localhost:3333/brain` — the Next.js cock
 
 ---
 
-## Slash command shortcuts (optional, manual)
+## Claude Code bundle (optional)
 
-`claude/skills/` ships seven user-invocable slash commands. They are NOT auto-triggering — type the slash command to invoke. Install once globally:
+The three-container stack above gives Claude memory via MCP tools. The `claude/` bundle adds the Claude Code integration layer — auto-save hooks, slash commands, and a recommended memory policy. All of it is opt-in; nothing auto-loads.
+
+### One-shot install
 
 ```bash
-mkdir -p ~/.claude/skills
-cp -r claude/skills/* ~/.claude/skills/
+bash claude/setup/install.sh
 ```
+
+Idempotent, backs up your existing `~/.claude/settings.json` first. It:
+
+- copies the two hooks to `~/.claude/hooks/`
+- merges `UserPromptSubmit` + `Stop` entries into `~/.claude/settings.json` (deduped)
+- copies all nine slash commands to `~/.claude/skills/`
+- verifies backend health
+
+**Restart your Claude Code session** afterward so the slash commands load. Re-run anytime from inside Claude Code via `/rekall-setup`. Full manual steps and flags (`--skills-only`, `--hooks-only`, `--skip-backend`) are in [`claude/INSTALL.md`](claude/INSTALL.md).
+
+### Hooks (the auto-save layer)
+
+- **`rekall-restore.sh`** (UserPromptSubmit) — once-per-session status line (`Rekall ready — N memories…`). No context injection.
+- **`rekall-observe.sh`** (Stop) — a Haiku judge that auto-saves durable observations, gated by cheap signal detection (durability keywords, new git commits, or session length) so it doesn't fire on every turn. Kill switch: `REKALL_AUTOSAVE=0`.
+
+### Slash commands (manual, not auto-triggering)
 
 | Slash command | What it does |
 |---------------|--------------|
@@ -135,8 +152,12 @@ cp -r claude/skills/* ~/.claude/skills/
 | `/memory-rebuild` | Rebuild the knowledge graph |
 | `/memory-consolidate` | Detect duplicate and contradictory memories |
 | `/memory-skills` | Show extracted skills from memory clusters |
+| `/rekall-publish` | Export memory to an OKF knowledge bundle |
+| `/rekall-setup` | Re-run the bundle installer from inside Claude Code |
 
-The auto-save mechanism is the **Stop hook** at `claude/hooks/rekall-observe.sh` (a Haiku judge gated by signal detection — keywords, new commits, or session length), not the slash commands. See [`claude/INSTALL.md`](claude/INSTALL.md) for hook setup.
+### Recommended CLAUDE.md policy
+
+For the agent to use memory well — recall at session start, save conservatively — copy the policy block from [`docs/CLAUDE_MEMORY_SETTINGS.md`](docs/CLAUDE_MEMORY_SETTINGS.md) into your `~/.claude/CLAUDE.md` (global) or a project `CLAUDE.md`. It tells Claude when to call `get_cached_context()`, what's worth an `observe()`, and how to tune recall.
 
 ---
 

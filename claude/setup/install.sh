@@ -223,7 +223,7 @@ echo "✓ Rekall setup complete."
 echo
 echo "Next steps:"
 echo "  • Restart your Claude Code session for the new hooks/skills to load."
-echo "  • Type /rekall-stats in a new session to verify slash commands work."
+echo "  • Type /memory-stats in a new session to verify slash commands work."
 [[ -n "$BACKUP" ]] && echo "  • If something's off, restore your settings: cp '$BACKUP' '$HOME/.claude/settings.json'"
 echo
 echo "Kill switches (env vars):"
