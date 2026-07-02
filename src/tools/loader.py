@@ -85,10 +85,6 @@ class ToolLoader:
             from .builtin import MemoryTools
 
             return MemoryTools()
-        elif name == "spectro":
-            from .builtin.spectro import SpectroTools
-
-            return SpectroTools()
         else:
             raise ValueError(f"Unknown tool: {name}")
 

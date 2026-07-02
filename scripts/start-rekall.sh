@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Start the Rekall stack: Qdrant (via docker-compose), backend, UI.
+# Start the Rekall stack: Qdrant (via docker compose), backend, UI.
 # Idempotent — safe to run multiple times.
 set -euo pipefail
 
@@ -11,7 +11,7 @@ if curl -sfo /dev/null http://localhost:6333/healthz; then
   echo "✓ Qdrant already running"
 else
   echo "→ Starting Qdrant…"
-  docker-compose up -d qdrant
+  docker compose up -d qdrant
   until curl -sfo /dev/null http://localhost:6333/healthz; do
     sleep 1
   done
@@ -30,6 +30,7 @@ else
     HOST="${REKALL_HOST:-0.0.0.0}" \
     PORT=8000 \
     QDRANT_URL=http://localhost:6333 \
+    PYTHONPATH=src \
     uv run python -m server \
     > /tmp/rekall-backend.log 2>&1 &
   until curl -sfo /dev/null http://localhost:8000/health; do

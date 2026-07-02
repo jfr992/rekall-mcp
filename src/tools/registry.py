@@ -28,7 +28,7 @@ class ToolRegistry:
     Usage:
         registry = ToolRegistry.get()
         available = registry.discover()
-        registry.enable("spectro")
+        registry.enable("memory")
         enabled = registry.get_enabled()
     """
 
@@ -86,15 +86,6 @@ class ToolRegistry:
             builtin=True,
             requires=[],
             enabled=True,  # Enabled by default
-        )
-
-        # Spectro tools - requires API key
-        self._tools["spectro"] = ToolInfo(
-            name="spectro",
-            description="Spectro Cloud Kubernetes management",
-            builtin=False,
-            requires=["SPECTRO_API_KEY"],
-            enabled=False,  # Disabled by default
         )
 
     def enable(self, name: str) -> None:
