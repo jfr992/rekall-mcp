@@ -93,7 +93,7 @@ def migrate_memories(
         logger.error(f"Storage path not found: {storage_path}")
         return {"error": "Storage path not found", "migrated": 0}
 
-    yaml_files = list(storage_path.glob("*.yaml"))
+    yaml_files = list(storage_path.rglob("*.yaml"))
     logger.info(f"Found {len(yaml_files)} daily memory files")
 
     # Count total memories across all files
