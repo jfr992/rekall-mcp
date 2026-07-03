@@ -45,9 +45,12 @@ export const GraphNodeSchema = z.object({
   id: z.string(),
   type: z.string().optional(),
   content: z.string().optional(),
-  tier: z.string().optional(),
-  durability: z.number().optional(),
+  tier: z.string().nullable().optional(),
+  durability: z.number().nullable().optional(),
   degree: z.number().optional(),
+  salience: z.number().nullable().optional(),
+  trust_boundary: z.string().nullable().optional(),
+  timestamp: z.string().nullable().optional(),
 }).passthrough();
 
 export const GraphLinkSchema = z.object({

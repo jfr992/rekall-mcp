@@ -157,3 +157,43 @@ def test_positions_cluster_and_fill_unit_disc():
     )
     inter = min(dist(pos[f"a{i}"], pos[f"b{j}"]) for i in range(5) for j in range(5))
     assert inter > intra * 3, f"clusters must separate (intra={intra:.3f}, inter={inter:.3f})"
+
+
+def test_graph_node_preserves_payload_fields():
+    """Graph node includes tier/durability/salience/trust_boundary/timestamp when present in payload."""
+    points = [
+        {
+            "memory_id": "rich",
+            "content": "rich memory",
+            "vector": [0.1, 0.2, 0.3],
+            "type": "decision",
+            "tier": "semantic",
+            "durability": 0.85,
+            "salience": 0.72,
+            "trust_boundary": "local",
+            "timestamp": "2026-07-01T10:00:00Z",
+        },
+        {
+            "memory_id": "sparse",
+            "content": "sparse memory",
+            "vector": [-0.1, 0.5, 0.2],
+            "type": "learning",
+            # tier/durability/salience/trust_boundary/timestamp absent — must be None
+        },
+    ]
+    result = _graph(points, min_similarity=0.1)
+    nodes = {n["id"]: n for n in result["nodes"]}
+
+    rich = nodes["rich"]
+    assert rich["tier"] == "semantic", "tier must be preserved"
+    assert rich["durability"] == 0.85, "durability must be preserved"
+    assert rich["salience"] == 0.72, "salience must be preserved"
+    assert rich["trust_boundary"] == "local", "trust_boundary must be preserved"
+    assert rich["timestamp"] == "2026-07-01T10:00:00Z", "timestamp must be preserved"
+
+    sparse = nodes["sparse"]
+    assert sparse["tier"] is None, "absent tier must be None, not missing key"
+    assert sparse["durability"] is None, "absent durability must be None"
+    assert sparse["salience"] is None, "absent salience must be None"
+    assert sparse["trust_boundary"] is None, "absent trust_boundary must be None"
+    assert sparse["timestamp"] is None, "absent timestamp must be None"
