@@ -1,7 +1,7 @@
 from unittest.mock import MagicMock
 
-import yaml
 import pytest
+import yaml
 
 
 def test_doctor_detects_yaml_qdrant_drift(tmp_path):

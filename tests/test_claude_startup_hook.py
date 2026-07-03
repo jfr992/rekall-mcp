@@ -6,7 +6,6 @@ from pathlib import Path
 
 import pytest
 
-
 REPO = Path(__file__).resolve().parent.parent
 HOOK = REPO / "claude" / "hooks" / "session-start-memory.sh"
 INSTALL = REPO / "claude" / "setup" / "install.sh"

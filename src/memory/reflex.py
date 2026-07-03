@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 _CUES = {
     "iac": {
         "terms": ("terraform", "terragrunt", "tofu"),
