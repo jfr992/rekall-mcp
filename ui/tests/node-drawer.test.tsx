@@ -1,10 +1,12 @@
+// Migrated from NodeDrawer to MemoryInspector (T6 integration).
+// NodeDrawer is removed; these scenarios are now covered by MemoryInspector.
 import { describe, test, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { NodeDrawer } from "@/components/brain/node-drawer";
-import type { DetailResponse } from "@/lib/schemas";
+import { MemoryInspector } from "@/components/memory-inspector/memory-inspector";
+import type { DetailResponseV2 } from "@/lib/schemas";
 
-const fakeDetail: DetailResponse = {
+const fakeDetail: DetailResponseV2 = {
   memory: {
     memory_id: "m1",
     content: "Use Go over Rust for the backend rewrite",
@@ -15,9 +17,18 @@ const fakeDetail: DetailResponse = {
     project: "test",
     reinforcement_count: 3,
   },
-  neighbors: [
+  neighbors: [],
+  scope: { project: "test", agent: "claude-code", repo_name: null },
+  relationships: [
     {
+      source_id: "m1",
+      target_id: "m2",
+      neighbor_id: "m2",
+      direction: "out",
       relation: "related_to",
+      weight: 0.7,
+      auto: true,
+      created: "2026-04-01",
       memory: {
         memory_id: "m2",
         content: "Go tooling is more mature",
@@ -26,24 +37,39 @@ const fakeDetail: DetailResponse = {
       },
     },
   ],
-  scope: { project: "test", agent: "claude-code", repo_name: null },
+  warnings: [],
 };
 
-describe("NodeDrawer", () => {
+describe("MemoryInspector (migrated from NodeDrawer)", () => {
   test("renders memory content, type/tier badges, and neighbor", () => {
-    render(<NodeDrawer open detail={fakeDetail} isLoading={false} onClose={vi.fn()} />);
-    // Badges
+    render(
+      <MemoryInspector
+        open
+        detail={fakeDetail}
+        isLoading={false}
+        currentProject="test"
+        onClose={vi.fn()}
+        onSelectMemory={vi.fn()}
+      />,
+    );
     expect(screen.getByText("decision")).toBeInTheDocument();
     expect(screen.getByText("semantic")).toBeInTheDocument();
-    // Memory ID
     expect(screen.getByText("m1")).toBeInTheDocument();
-    // Neighbor content
     expect(screen.getByText("Go tooling is more mature")).toBeInTheDocument();
   });
 
   test("closes on ESC", async () => {
     const onClose = vi.fn();
-    render(<NodeDrawer open detail={fakeDetail} isLoading={false} onClose={onClose} />);
+    render(
+      <MemoryInspector
+        open
+        detail={fakeDetail}
+        isLoading={false}
+        currentProject="test"
+        onClose={onClose}
+        onSelectMemory={vi.fn()}
+      />,
+    );
     await userEvent.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalled();
   });

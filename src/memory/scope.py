@@ -27,6 +27,13 @@ def _strip_creds(url: str | None) -> str:
     return _CRED_RE.sub(r"\1", url)
 
 
+def strip_remote_creds(url: str | None) -> str | None:
+    """Like _strip_creds but preserves None (does not coerce None to empty string)."""
+    if url is None:
+        return None
+    return _strip_creds(url)
+
+
 @dataclass(frozen=True, slots=True)
 class MemoryScope:
     """Identity envelope for a memory operation."""
