@@ -355,7 +355,7 @@ AI:  vector search finds the memory
 
 ### Team Memory Publishing
 
-Team memory publishing emits distilled project capsules and playbook summaries. It does not include `_events.jsonl`, raw session transcripts, private prompts, or raw hook payloads. Keep local memory as the default; publish only after reviewing the generated bundle.
+Team memory publishing emits distilled project capsules and playbook summaries. It strips known raw event-log, session transcript, private prompt, and hook payload fields from the generated bundle, but it is not a content redaction pass: review capsule/playbook text before sharing. Keep local memory as the default.
 
 ### REST API
 
