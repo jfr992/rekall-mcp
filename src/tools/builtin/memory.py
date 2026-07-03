@@ -9,7 +9,7 @@ Based on best practices from:
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from memory.scope import ScopeDetector
 
@@ -17,6 +17,121 @@ from ..base import BaseToolProvider, ToolDefinition
 
 if TYPE_CHECKING:
     from mcp.server.fastmcp import FastMCP
+
+
+# ==============================================================================
+# MEMORY DETAIL RENDERING
+# ==============================================================================
+
+_OUT_LABELS: dict[str, str] = {
+    "supersedes": "-> supersedes",
+    "depends_on": "-> depends on",
+    "led_to": "-> led to",
+    "related_to": "-> related to",
+    "contradicts": "-> contradicts",
+}
+
+_IN_LABELS: dict[str, str] = {
+    "supersedes": "<- superseded by",
+    "depends_on": "<- depended on by",
+    "led_to": "<- derived from",
+    "related_to": "<- related to",
+    "contradicts": "<- contradicted by",
+}
+
+
+def _render_memory_detail(result: dict[str, Any]) -> str:
+    """Render a get_memory_detail v2 result as compact structured text.
+
+    Null fields render as 'unknown'. Direction labels follow the UI convention:
+    '-> <relation>' for outgoing, '<- <inverted label>' for incoming.
+    """
+    memory = result.get("memory")
+    if not memory:
+        return ""
+
+    lines: list[str] = []
+
+    # Content block
+    lines.append(f"content: {memory.get('content', '')}")
+    lines.append("")
+
+    # Provenance
+    prov = result.get("provenance") or {}
+    lines.append("provenance:")
+    for k in (
+        "agent",
+        "source_tool",
+        "source_event",
+        "timestamp",
+        "session_id",
+        "repo_name",
+        "branch",
+        "trust_boundary",
+    ):
+        v = prov.get(k)
+        lines.append(f"  {k}: {v if v is not None else 'unknown'}")
+    lines.append("")
+
+    # Lifecycle
+    lc = result.get("lifecycle") or {}
+    lines.append("lifecycle:")
+    for k in ("tier", "durability", "retention_days", "lifecycle_reason"):
+        v = lc.get(k)
+        lines.append(f"  {k}: {v if v is not None else 'unknown'}")
+    lines.append("")
+
+    # Storage
+    storage = result.get("storage") or {}
+    lines.append("storage:")
+    lines.append(f"  qdrant: {'indexed' if storage.get('qdrant') else 'not indexed'}")
+    lines.append(f"  yaml: {'persisted' if storage.get('yaml') else 'not persisted'}")
+    lines.append("")
+
+    # Warnings
+    warnings = result.get("warnings") or []
+    if warnings:
+        lines.append("warnings:")
+        for w in warnings:
+            lines.append(f"  {w}")
+        lines.append("")
+
+    # Relationships
+    rels = result.get("relationships") or []
+    if rels:
+        lines.append("relationships:")
+        for rel in rels:
+            direction = rel.get("direction")
+            relation = rel.get("relation", "")
+            neighbor_id = rel.get("neighbor_id", "")
+            if direction == "out":
+                label = _OUT_LABELS.get(relation, f"-> {relation.replace('_', ' ')}")
+            else:
+                label = _IN_LABELS.get(relation, f"<- {relation.replace('_', ' ')}")
+            lines.append(f"  {label} {neighbor_id}")
+        lines.append("")
+
+    # Missing neighbors
+    missing = result.get("missing_neighbor_ids") or []
+    if missing:
+        lines.append(f"missing neighbors: {', '.join(missing)}")
+
+    return "\n".join(lines)
+
+
+def _make_memory_detail_fn(manager: Any):
+    """Return the memory_detail async callable wired to the given manager.
+
+    Extracted for testability — the MCP tool calls this internally.
+    """
+
+    async def _fn(memory_id: str) -> str:
+        result = manager.get_memory_detail(memory_id)
+        if not result.get("memory"):
+            return f"Memory not found: {memory_id}"
+        return _render_memory_detail(result)
+
+    return _fn
 
 
 # ==============================================================================
@@ -822,17 +937,16 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("memory_kb")
 
+        _detail_fn = _make_memory_detail_fn(self.manager)
+
         @mcp.tool(structured_output=False)
         async def memory_detail(memory_id: str) -> str:
-            """Fetch a single memory by id with its 1-hop graph neighbors.
+            """Fetch a single memory by id with relationships, provenance, lifecycle, and storage.
 
             Args:
                 memory_id: The memory id to fetch
             """
-            memory = self.manager.store.get_by_id(memory_id)
-            if not memory:
-                return f"Memory not found: {memory_id}"
-            return str(memory)
+            return await _detail_fn(memory_id)
 
         registered.append("memory_detail")
 

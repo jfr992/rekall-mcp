@@ -3,6 +3,7 @@
 import { useRef, useMemo, useCallback, useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { typeColor, tierColor } from "@/lib/theme";
+import { buildNodeTooltip } from "./tooltip";
 import type { GraphNode, GraphLink } from "@/lib/schemas";
 
 const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
@@ -259,21 +260,7 @@ export function BrainCanvas({ nodes, links, selectedId, onNodeClick }: Props) {
   );
 
   // ---------- TOOLTIP ----------
-  const nodeLabel = useCallback((node: any) => {
-    const type = node.type ?? "memory";
-    const tier = node.tier ?? "working";
-    const content = (node.content ?? "").slice(0, 90);
-    const deg = node.degree ?? 0;
-    return `<div style="background:rgba(8,12,28,0.95);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:10px 14px;max-width:300px;font-family:Inter,system-ui,sans-serif;box-shadow:0 8px 32px rgba(0,0,0,0.6);">
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px;">
-        <span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${typeColor(type)};box-shadow:0 0 8px ${typeColor(type)};"></span>
-        <span style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.1em;color:${typeColor(type)};">${type}</span>
-        <span style="font-size:10px;color:${tierColor(tier)};opacity:0.7;">${tier}</span>
-        <span style="font-size:10px;color:rgba(255,255,255,0.3);margin-left:auto;">${deg} links</span>
-      </div>
-      <div style="font-size:13px;color:rgba(234,240,255,0.9);line-height:1.5;">${content}</div>
-    </div>`;
-  }, []);
+  const nodeLabel = useCallback((node: any) => buildNodeTooltip(node), []);
 
   return (
     <div ref={containerRef} className="h-full w-full">

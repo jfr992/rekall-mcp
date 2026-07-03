@@ -37,3 +37,31 @@ export function SidebarNav() {
     </nav>
   );
 }
+
+/** Compact icon-only nav row for mobile top bar. */
+export function MobileNav() {
+  const pathname = usePathname();
+
+  return (
+    <nav aria-label="Primary" className="flex gap-1">
+      {navItems.map((item) => {
+        const active = pathname?.startsWith(item.href);
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-label={item.label}
+            className={`flex h-10 w-10 items-center justify-center rounded-md transition-colors duration-[150ms] ${
+              active
+                ? "bg-[var(--surface-1)] text-[var(--fg)]"
+                : "text-[var(--fg-muted)] hover:bg-[var(--surface-0)] hover:text-[var(--fg)]"
+            }`}
+          >
+            <Icon size={20} />
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}

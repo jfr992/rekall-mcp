@@ -133,6 +133,13 @@ def build_memory_graph(
                 "date": point.get("date", ""),
                 "memory_id": point.get("memory_id"),
                 "position": {"x": x, "y": y},
+                # Payload fields — None when absent so callers can distinguish
+                # "not present" from falsy values.
+                "tier": point.get("tier"),
+                "durability": point.get("durability"),
+                "salience": point.get("salience"),
+                "trust_boundary": point.get("trust_boundary"),
+                "timestamp": point.get("timestamp"),
             }
         )
 

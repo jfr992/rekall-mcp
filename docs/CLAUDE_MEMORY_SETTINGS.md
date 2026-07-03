@@ -118,6 +118,14 @@ Current compose defaults:
 2. **EXPAND**: 1-hop graph neighbors of seeds
 3. **RANK**: `vector(0.40) + importance(0.20) + proximity(0.15) + tier(0.15) + recency(0.10)`
 
+### Lifecycle metric semantics
+
+Read these as the agent-facing meaning — wrong interpretation leads to wrong pruning or recall decisions:
+
+- **durability** — retention strength (0.0–1.0). `null` means the memory pre-dates lifecycle assignment or is identity-protected; treat as unknown, not as low retention. `0.0` is a valid computed value, not the same as absent.
+- **salience** — the observation engine's save confidence at write time. `null` means the field was never written (legacy or hand-saved memory); treat as unknown, not as low confidence. The prune planner never selects memories with `null` salience.
+- **reinforcement_count** — how many times a near-duplicate observation triggered the dedupe path and was merged into this memory rather than saved separately. Not a popularity score.
+
 ## 4) Known hard constraints (code-level)
 
 - Project auto-detection in tool calls uses current working directory name.

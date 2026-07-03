@@ -1,0 +1,88 @@
+{
+  "memory": {
+    "memory_id": "2026-07-01_decision_abc1",
+    "content": "Use PostgreSQL for primary store",
+    "type": "decision",
+    "tier": "working",
+    "durability": 0.65,
+    "reinforcement_count": 0,
+    "lifecycle_reason": "default for decision",
+    "date": "2026-07-01",
+    "project": "rekall-mcp",
+    "salience": 0.7
+  },
+  "neighbors": [
+    {
+      "relation": "depends_on",
+      "memory": {
+        "memory_id": "2026-07-01_fact_bbb2",
+        "content": "Dependency fact",
+        "type": "fact",
+        "tier": "working",
+        "date": "2026-07-01",
+        "project": "rekall-mcp"
+      }
+    }
+  ],
+  "scope": {
+    "project": "rekall-mcp",
+    "agent": "claude-code",
+    "repo_name": "rekall-mcp"
+  },
+  "relationships": [
+    {
+      "source_id": "2026-07-01_decision_aaa1",
+      "target_id": "2026-07-01_decision_abc1",
+      "neighbor_id": "2026-07-01_decision_aaa1",
+      "direction": "in",
+      "relation": "supersedes",
+      "weight": 0.8,
+      "auto": true,
+      "created": "2026-07-01",
+      "memory": {
+        "memory_id": "2026-07-01_decision_aaa1",
+        "content": "Superseder decision",
+        "type": "decision",
+        "project": "rekall-mcp"
+      }
+    },
+    {
+      "source_id": "2026-07-01_decision_abc1",
+      "target_id": "2026-07-01_fact_bbb2",
+      "neighbor_id": "2026-07-01_fact_bbb2",
+      "direction": "out",
+      "relation": "depends_on",
+      "weight": 0.7,
+      "auto": true,
+      "created": "2026-07-01",
+      "memory": {
+        "memory_id": "2026-07-01_fact_bbb2",
+        "content": "Dependency fact",
+        "type": "fact",
+        "project": "rekall-mcp"
+      }
+    }
+  ],
+  "provenance": {
+    "agent": "claude-code",
+    "source_tool": "save_memory",
+    "source_event": "PostToolUse",
+    "timestamp": "2026-07-01T10:00:00",
+    "session_id": "sess-xyz",
+    "repo_name": "rekall-mcp",
+    "repo_remote": "https://github.com/example/rekall-mcp",
+    "branch": "main",
+    "trust_boundary": "public"
+  },
+  "lifecycle": {
+    "tier": "working",
+    "durability": 0.65,
+    "retention_days": 90,
+    "lifecycle_reason": "default for decision"
+  },
+  "storage": {
+    "qdrant": true,
+    "yaml": false
+  },
+  "warnings": []
+}
