@@ -171,7 +171,7 @@ REST endpoints above are mirrored as MCP tools (with one exception):
 - `backfill_lifecycle(project=None, dry_run=True)` → `/api/memory/lifecycle/backfill`
 - `resume_packet(project=None)` → `/api/memory/resume`
 - `handoff_summary(project=None)` → continuity summary
-- `agent_startup(project=None)` → unified startup payload (combines stats, recent, important, conflicts)
+- `agent_startup(project=None)` → unified startup payload (resume packet + project capsule + harness hints)
 - `memory_lifecycle()` → behavioral classifier output
 
 **`prune_apply` is REST-only on purpose.** It mutates state and the typed plan-id confirmation flow needs the cockpit's "type the plan id to confirm" gate to be safe. Don't expose destructive bulk delete to autonomous agents.

@@ -127,7 +127,7 @@ Kill switch: `REKALL_AUTOSAVE=0`. Re-entrancy guard: `REKALL_JUDGE_INFLIGHT=1`.
 
 Installs only when you pass `--install-startup-capsule`. It reads Claude Code's SessionStart JSON from stdin, infers the project from `cwd` or `project_dir`, calls `/api/memory/capsule` first, and falls back to `/api/memory/context/startup`.
 
-It prints a thin JSON packet with `hookSpecificOutput.hookEventName = "SessionStart"` and `additionalContext` containing the project capsule, any health warnings, and a short save instruction. It honors `REKALL_AUTOSAVE=0`.
+It prints a thin JSON packet with `hookSpecificOutput.hookEventName = "SessionStart"` and `additionalContext` containing the project capsule or startup summary plus a short save instruction. It honors `REKALL_AUTOSAVE=0`. Run `memory_doctor(project)` separately when you need a full trust check.
 
 ## Settings example
 
