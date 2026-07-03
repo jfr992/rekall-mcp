@@ -8,7 +8,7 @@ import yaml
 
 def _yaml_ids(memory_dir: Path, project: str | None) -> set[str]:
     ids: set[str] = set()
-    roots = [memory_dir / project] if project else [memory_dir]
+    roots = [memory_dir / project, memory_dir] if project else [memory_dir]
     for root in roots:
         if not root.exists():
             continue
@@ -19,7 +19,11 @@ def _yaml_ids(memory_dir: Path, project: str | None) -> set[str]:
             for value in data.values():
                 if isinstance(value, list):
                     for item in value:
-                        if isinstance(item, dict) and item.get("id"):
+                        if not isinstance(item, dict) or not item.get("id"):
+                            continue
+                        if project and item.get("project") != project:
+                            continue
+                        if item.get("id"):
                             ids.add(str(item["id"]))
     return ids
 

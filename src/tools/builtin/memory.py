@@ -599,8 +599,7 @@ class OptimizedMemoryTools(BaseToolProvider):
         @mcp.tool(structured_output=False)
         async def memory_doctor(project: str | None = None) -> str:
             """Use when checking whether Rekall memory recall is trustworthy."""
-            scope = self._get_current_scope(project=project)
-            report = self.manager.doctor(project=scope.project)
+            report = self.manager.doctor(project=project)
             lines = [
                 f"Memory doctor: {report['status']}",
                 f"YAML: {report['yaml_count']} | Qdrant: {report['qdrant_count']}",

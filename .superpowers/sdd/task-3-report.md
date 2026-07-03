@@ -192,3 +192,57 @@ Planned commit message:
 ```text
 feat: add memory doctor trust report
 ```
+
+---
+
+# Task 3 Review Follow-Up
+
+## Status
+
+DONE
+
+## Scope
+
+Fixed the review findings for `memory_doctor` without widening the surface:
+
+- `run_memory_doctor(manager, project="byte-edge")` now includes legacy flat YAML files and filters YAML entries by embedded `project`
+- MCP `memory_doctor(project=None)` now preserves `None` and calls `manager.doctor(project=None)`
+- Added regression coverage for both cases
+
+Files changed:
+- `src/memory/doctor.py`
+- `src/tools/builtin/memory.py`
+- `tests/test_memory_doctor.py`
+
+## Test Evidence
+
+Command:
+
+```bash
+uv run --extra dev pytest tests/test_memory_doctor.py tests/test_server_nervous_system.py tests/test_docs_parity.py -q
+```
+
+Result:
+
+```text
+8 passed in 0.19s
+```
+
+Command:
+
+```bash
+uv run --extra dev pytest tests/test_startup.py tests/test_server_startup.py -q
+```
+
+Result:
+
+```text
+2 passed in 0.20s
+```
+
+## Implementation Notes
+
+- `_yaml_ids(...)` now scans both nested project YAML and legacy flat YAML when a project is supplied, then filters entries by their embedded `project`.
+- `memory_doctor(...)` now passes its argument through directly, so omitted project values stay unscoped.
+- The new regression test covers a flat YAML file containing both `byte-edge` and another project to prove only the matching entry counts.
+- The MCP regression test registers the tool and asserts the async tool calls `manager.doctor(project=None)` when invoked without arguments.
