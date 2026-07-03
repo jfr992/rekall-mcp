@@ -41,7 +41,7 @@ from memory.linker import auto_link
 from memory.observe import ObservationCandidate, ObservationEngine, sanitize_observation_metadata
 from memory.representation import build_embedding_text, extract_entities
 from memory.resume import build_resume_packet
-from memory.scope import MemoryScope, ScopeDetector
+from memory.scope import MemoryScope, ScopeDetector, strip_remote_creds
 from memory.skills import extract_skills, render_skill_context
 from memory.startup import build_agent_startup
 
@@ -1464,6 +1464,152 @@ class MemoryManager:
         from memory.reflex import build_reflex_packet
 
         return build_reflex_packet(self, text=text, project=project, limit=limit)
+
+    def get_memory_detail(
+        self,
+        memory_id: str,
+        current_project: str | None = None,
+    ) -> dict[str, Any]:
+        """Enriched single-memory detail: relationships, provenance, lifecycle, storage.
+
+        Backward-compatible: memory, neighbors, scope keep their existing shapes.
+        Missing-memory contract: memory=None, neighbors=[], scope=None.
+        """
+        # 1. Qdrant lookup
+        memory = self.store.get_by_id(memory_id)
+        qdrant_hit = memory is not None
+        yaml_hit = False
+
+        # 2. YAML fallback (read-only) when Qdrant has no record
+        if not qdrant_hit:
+            memory = self._find_in_yaml(memory_id)
+            yaml_hit = memory is not None
+
+        storage: dict[str, bool] = {"qdrant": qdrant_hit, "yaml": yaml_hit}
+
+        # 3. Not found anywhere — preserve old contract exactly
+        if not memory:
+            return {
+                "memory": None,
+                "neighbors": [],
+                "scope": None,
+                "relationships": [],
+                "provenance": None,
+                "lifecycle": None,
+                "storage": storage,
+                "warnings": [],
+            }
+
+        # 4. Graph edges — both directions
+        graph = self.knowledge_graph
+        edges = (
+            graph.get_edges(memory_id, direction="both")
+            if graph.stats().get("nodes", 0) > 0
+            else []
+        )
+
+        relationships: list[dict[str, Any]] = []
+        missing_neighbor_ids: list[str] = []
+
+        for edge in edges:
+            if edge.source == memory_id:
+                direction = "out"
+                neighbor_id = edge.target
+            else:
+                direction = "in"
+                neighbor_id = edge.source
+
+            neighbor_memory = self.store.get_by_id(neighbor_id)
+            if neighbor_memory is None:
+                missing_neighbor_ids.append(neighbor_id)
+
+            relationships.append(
+                {
+                    "source_id": edge.source,
+                    "target_id": edge.target,
+                    "neighbor_id": neighbor_id,
+                    "direction": direction,
+                    "relation": edge.relation,
+                    "weight": edge.weight,
+                    "auto": edge.auto,
+                    "created": edge.created,
+                    "memory": neighbor_memory,
+                }
+            )
+
+        # 5. Backward-compat alias: neighbors = outgoing edges with resolved memories
+        neighbors = [
+            {"relation": r["relation"], "memory": r["memory"]}
+            for r in relationships
+            if r["direction"] == "out" and r["memory"] is not None
+        ]
+
+        # 6. Provenance (null for any missing field)
+        provenance: dict[str, Any] = {
+            "agent": memory.get("agent"),
+            "source_tool": memory.get("source_tool"),
+            "source_event": memory.get("source_event"),
+            "timestamp": memory.get("timestamp"),
+            "session_id": memory.get("session_id"),
+            "repo_name": memory.get("repo_name"),
+            "repo_remote": strip_remote_creds(memory.get("repo_remote")),
+            "branch": memory.get("branch"),
+            "trust_boundary": memory.get("trust_boundary"),
+        }
+
+        # 7. Lifecycle (null for any missing field)
+        lifecycle: dict[str, Any] = {
+            "tier": memory.get("tier"),
+            "durability": memory.get("durability"),
+            "retention_days": memory.get("retention_days"),
+            "lifecycle_reason": memory.get("lifecycle_reason"),
+        }
+
+        # 8. Warnings
+        warnings: list[str] = []
+        if current_project is not None and memory.get("project") != current_project:
+            warnings.append("scope_mismatch")
+        if all(memory.get(k) is None for k in ("agent", "source_tool", "source_event")):
+            warnings.append("missing_provenance")
+        if yaml_hit and not qdrant_hit:
+            warnings.append("missing_index")
+        if memory.get("durability") is None and memory.get("lifecycle_reason") is None:
+            warnings.append("missing_lifecycle")
+
+        result: dict[str, Any] = {
+            "memory": memory,
+            "neighbors": neighbors,
+            "scope": {
+                "project": memory.get("project"),
+                "agent": memory.get("agent"),
+                "repo_name": memory.get("repo_name"),
+            },
+            "relationships": relationships,
+            "provenance": provenance,
+            "lifecycle": lifecycle,
+            "storage": storage,
+            "warnings": warnings,
+        }
+        if missing_neighbor_ids:
+            result["missing_neighbor_ids"] = missing_neighbor_ids
+
+        return result
+
+    def _find_in_yaml(self, memory_id: str) -> dict[str, Any] | None:
+        """Search YAML files for a memory by memory_id. Read-only; never writes."""
+        for yaml_file in self.memory_dir.rglob("*.yaml"):
+            try:
+                with open(yaml_file) as f:
+                    data = yaml.safe_load(f) or {}
+                for entries in data.values():
+                    if not isinstance(entries, list):
+                        continue
+                    for entry in entries:
+                        if isinstance(entry, dict) and entry.get("memory_id") == memory_id:
+                            return entry
+            except Exception:
+                continue
+        return None
 
     def vector_health(self, sample_size: int = 256) -> dict[str, int]:
         """Sample stored vectors and count degenerate (all-zero) ones.
