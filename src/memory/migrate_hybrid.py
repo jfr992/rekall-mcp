@@ -58,11 +58,16 @@ def load_all_yaml_memories(memory_dir: Path | str) -> list[dict[str, Any]]:
             for item in items:
                 if not isinstance(item, dict):
                     continue
+                memory_id = item.get("id", "")
+                content = item.get("content", "")
+                if not memory_id or not content:
+                    continue
 
                 memories.append(
                     {
-                        "memory_id": item.get("id", ""),
-                        "content": item.get("content", ""),
+                        "id": memory_id,
+                        "memory_id": memory_id,
+                        "content": content,
                         "date": date,
                         "type": mem_type,
                         "project": item.get("project", "general"),
@@ -78,15 +83,20 @@ def load_all_yaml_memories(memory_dir: Path | str) -> list[dict[str, Any]]:
 
 
 def build_corpus(memories: list[dict[str, Any]]) -> list[str]:
-    """Extract non-empty content strings for BM25 training.
+    """Extract non-empty representation strings for BM25 training.
 
     Args:
         memories: List of memory dicts (output of load_all_yaml_memories)
 
     Returns:
-        List of content strings
+        List of embedding_text strings, falling back to raw content
     """
-    return [m["content"] for m in memories if m.get("content")]
+    corpus: list[str] = []
+    for memory in memories:
+        text = str(memory.get("embedding_text") or memory.get("content") or "").strip()
+        if text:
+            corpus.append(text)
+    return corpus
 
 
 def migrate_to_hybrid(

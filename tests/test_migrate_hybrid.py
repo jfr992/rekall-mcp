@@ -57,6 +57,28 @@ class TestLoadAllYamlMemories:
         assert memories[0]["content"] == "Nested note"
         assert memories[0]["project"] == "byte-edge"
 
+    def test_loads_nested_project_memory_ids(self, tmp_path):
+        """load_all_yaml_memories reads memories below project directories."""
+        from memory.migrate_hybrid import load_all_yaml_memories
+
+        project_dir = tmp_path / "byte-edge"
+        project_dir.mkdir()
+        (project_dir / "2026-07-03.yaml").write_text(
+            yaml.dump(
+                {
+                    "date": "2026-07-03",
+                    "facts": [
+                        {"id": "m1", "content": "Nested", "project": "byte-edge"},
+                    ],
+                }
+            )
+        )
+
+        memories = load_all_yaml_memories(tmp_path)
+
+        assert [memory["id"] for memory in memories] == ["m1"]
+        assert [memory["memory_id"] for memory in memories] == ["m1"]
+
     def test_loads_multiple_types(self, tmp_path):
         """load_all_yaml_memories reads multiple memory types."""
         from memory.migrate_hybrid import load_all_yaml_memories
@@ -102,6 +124,14 @@ class TestLoadAllYamlMemories:
 
         (tmp_path / "_bm25_vocab.json").write_text("{}")
         (tmp_path / "_graph.json").write_text("{}")
+        (tmp_path / "_metadata.yaml").write_text(
+            yaml.dump(
+                {
+                    "date": "2026-03-25",
+                    "notes": [{"id": "internal", "content": "Internal", "project": "p"}],
+                }
+            )
+        )
         (tmp_path / "2026-03-25.yaml").write_text(
             yaml.dump(
                 {
@@ -142,6 +172,27 @@ class TestLoadAllYamlMemories:
         assert memories[0]["embedding_text"] == "Project p. Claim Keep these fields."
         assert memories[0]["entities"] == ["Project", "Claim"]
 
+    def test_skips_entries_without_id_or_content(self, tmp_path):
+        """load_all_yaml_memories ignores malformed memory entries."""
+        from memory.migrate_hybrid import load_all_yaml_memories
+
+        (tmp_path / "2026-03-25.yaml").write_text(
+            yaml.dump(
+                {
+                    "date": "2026-03-25",
+                    "notes": [
+                        {"id": "n1", "content": "Real note", "project": "p"},
+                        {"content": "Missing id", "project": "p"},
+                        {"id": "n2", "content": "", "project": "p"},
+                    ],
+                }
+            )
+        )
+
+        memories = load_all_yaml_memories(tmp_path)
+
+        assert [memory["id"] for memory in memories] == ["n1"]
+
     def test_handles_empty_directory(self, tmp_path):
         """Empty directory returns empty list."""
         from memory.migrate_hybrid import load_all_yaml_memories
@@ -181,6 +232,20 @@ class TestBuildCorpus:
         corpus = build_corpus(memories)
 
         assert corpus == ["First memory", "Second memory"]
+
+    def test_prefers_embedding_text(self):
+        """build_corpus trains on deterministic embedding text when present."""
+        from memory.migrate_hybrid import build_corpus
+
+        memories = [
+            {
+                "content": "Raw phrasing",
+                "embedding_text": "Project rekall. Claim: canonical phrasing.",
+            },
+            {"content": "Only raw"},
+        ]
+
+        assert build_corpus(memories) == ["Project rekall. Claim: canonical phrasing.", "Only raw"]
 
     def test_skips_empty_content(self):
         """build_corpus skips entries with empty content."""

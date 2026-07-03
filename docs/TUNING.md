@@ -161,6 +161,19 @@ curl -X POST http://localhost:8000/api/memory/graph/rebuild
 
 Or via MCP tool: `rebuild_knowledge_graph()`
 
+## Hybrid Recall Reindex
+
+Run this only after backing up `~/.claude/memory` and `~/.claude/qdrant`.
+
+```bash
+uv run python -m memory.migrate_hybrid --dry-run
+uv run python -m memory.migrate_hybrid
+```
+
+The migration reads nested project YAML, builds `_bm25_vocab.json`, and indexes
+`embedding_text` when present. Dense vectors remain required; BM25 is an additional
+exact-cue path for project names, file paths, flags, ticket IDs, and tool names.
+
 ### Cleaning Up Duplicates
 
 Find superseded and contradictory pairs:
