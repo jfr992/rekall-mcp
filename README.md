@@ -336,6 +336,7 @@ AI:  vector search finds the memory
 | `resume_packet(project)` | Continuity resume |
 | `handoff_summary(project)` | Continuity summary |
 | `agent_startup(project)` | Unified startup payload |
+| `project_capsule(project)` | Thin project familiarity capsule |
 | `memory_lifecycle()` | Behavioral classifier output |
 | `memory_doctor(project)` | Trust report for YAML/Qdrant/vector/graph/provenance health |
 | `get_cached_context(project)` | Flat context (prompt-cache optimized) |
@@ -366,6 +367,7 @@ AI:  vector search finds the memory
 | `/api/memory/context/proactive` | GET | Top signals + conflict detection |
 | `/api/memory/context/skills` | GET | Inferred skill context from memory clusters |
 | `/api/memory/context/startup` | GET | Unified agent startup payload |
+| `/api/memory/capsule` | GET | Thin project familiarity capsule |
 | `/api/memory/detail/{id}` | GET | Full memory + neighbors + scope |
 | `/api/memory/kb` | GET | Typed slices |
 | `/api/memory/pressure` | GET | Pressure metrics + flagged candidates |

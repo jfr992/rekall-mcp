@@ -301,6 +301,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 handler=None,
             ),
             ToolDefinition(
+                name="project_capsule",
+                description="Get compact project familiarity for entering a repo",
+                handler=None,
+            ),
+            ToolDefinition(
                 name="prune_plan",
                 description="Build a safe prune plan (does not delete). Apply is REST-only.",
                 handler=None,
@@ -639,6 +644,15 @@ class OptimizedMemoryTools(BaseToolProvider):
             return payload["startup_summary"]
 
         registered.append("agent_startup")
+
+        @mcp.tool(structured_output=False)
+        async def project_capsule(project: str) -> str:
+            """Use when entering a repo and needing compact project familiarity."""
+            from memory.capsules import render_project_capsule
+
+            return render_project_capsule(self.manager.get_project_capsule(project=project))
+
+        registered.append("project_capsule")
 
         @mcp.tool(structured_output=False)
         async def prune_plan(project: str | None = None, limit: int = 200) -> str:

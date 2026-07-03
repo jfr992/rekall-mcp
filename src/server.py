@@ -918,6 +918,21 @@ async def api_agent_startup(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/capsule", methods=["GET"])
+async def api_project_capsule(request):
+    """REST API: Thin project familiarity capsule."""
+    try:
+        project = _safe_project(request.query_params.get("project")) or "general"
+        limit = _read_int(request.query_params, "limit", 300, lo=1, hi=2000)
+        manager = _get_memory_manager()
+        return _ok(manager.get_project_capsule(project=project, limit=limit))
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error building project capsule: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/context/proactive", methods=["GET"])
 async def api_proactive_context_summary(request):
     """REST API: Get proactive context summary by relevance."""
