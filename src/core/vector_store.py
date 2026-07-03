@@ -397,7 +397,14 @@ class VectorStore:
                 payload = dict(point.payload or {})
                 vector = point.vector
                 if isinstance(vector, dict):
-                    vector = next(iter(vector.values()), [])
+                    # Named vectors: hybrid points carry {"": dense, "bm25": sparse}.
+                    # Prefer the default entry; dict order is not stable per point.
+                    if "" in vector:
+                        vector = vector[""]
+                    else:
+                        vector = next(
+                            (v for v in vector.values() if isinstance(v, (list, tuple))), []
+                        )
                 payload["vector"] = list(vector or [])
                 merged.append(payload)
 
