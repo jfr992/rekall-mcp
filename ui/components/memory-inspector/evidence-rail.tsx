@@ -12,8 +12,13 @@ type Props = {
   durability: number | null | undefined;
   salience: number | undefined;
   reinforcement_count: number | null | undefined;
-  currentProject: string;
-  project: string | null | undefined;
+};
+
+const WARNING_LABELS: Record<string, string> = {
+  missing_provenance: "missing provenance",
+  scope_mismatch: "scope mismatch",
+  missing_index: "not indexed in Qdrant",
+  missing_lifecycle: "missing lifecycle data",
 };
 
 function Field({ label, value }: { label: string; value: string }) {
@@ -33,21 +38,9 @@ export function EvidenceRail({
   durability,
   salience,
   reinforcement_count,
-  currentProject,
-  project,
 }: Props) {
-  // Compute warnings beyond what the server sends
-  const extraWarnings: string[] = [];
-  if (!provenance?.agent) extraWarnings.push("missing provenance");
-  if (project && currentProject && project !== currentProject) {
-    extraWarnings.push(
-      `scope mismatch: memory is in "${project}", viewing from "${currentProject}"`,
-    );
-  }
-  if (!lifecycle) extraWarnings.push("missing lifecycle");
-  if (storage && !storage.qdrant) extraWarnings.push("not indexed in Qdrant");
-
-  const allWarnings = [...(warnings ?? []), ...extraWarnings];
+  // Backend is the single source of truth for warnings — map codes to human labels
+  const allWarnings = (warnings ?? []).map((w) => WARNING_LABELS[w] ?? w);
 
   // Null/undefined → "unknown"; explicit 0 → "0.00"
   const durabilityDisplay = durability == null ? "unknown" : durability.toFixed(2);
@@ -63,31 +56,45 @@ export function EvidenceRail({
   return (
     <div className="space-y-4 border-t border-[var(--border)] pt-4 font-mono text-xs">
       {/* Source */}
-      {provenance && (
-        <section>
-          <MonoLabel className="mb-2 block">Source</MonoLabel>
-          <div className="space-y-1">
-            {provenance.agent && (
-              <Field label="agent" value={provenance.agent} />
+      {provenance && (() => {
+        const hasAnyField = !!(
+          provenance.agent ||
+          provenance.source_tool ||
+          provenance.source_event ||
+          provenance.repo_name ||
+          provenance.branch ||
+          provenance.trust_boundary
+        );
+        return (
+          <section>
+            <MonoLabel className="mb-2 block">Source</MonoLabel>
+            {hasAnyField ? (
+              <div className="space-y-1">
+                {provenance.agent && (
+                  <Field label="agent" value={provenance.agent} />
+                )}
+                {provenance.source_tool && (
+                  <Field label="tool" value={provenance.source_tool} />
+                )}
+                {provenance.source_event && (
+                  <Field label="event" value={provenance.source_event} />
+                )}
+                {provenance.repo_name && (
+                  <Field label="repo" value={provenance.repo_name} />
+                )}
+                {provenance.branch && (
+                  <Field label="branch" value={provenance.branch} />
+                )}
+                {provenance.trust_boundary && (
+                  <Field label="trust" value={provenance.trust_boundary} />
+                )}
+              </div>
+            ) : (
+              <p className="text-xs text-[var(--fg-muted)]">no provenance recorded (legacy memory)</p>
             )}
-            {provenance.source_tool && (
-              <Field label="tool" value={provenance.source_tool} />
-            )}
-            {provenance.source_event && (
-              <Field label="event" value={provenance.source_event} />
-            )}
-            {provenance.repo_name && (
-              <Field label="repo" value={provenance.repo_name} />
-            )}
-            {provenance.branch && (
-              <Field label="branch" value={provenance.branch} />
-            )}
-            {provenance.trust_boundary && (
-              <Field label="trust" value={provenance.trust_boundary} />
-            )}
-          </div>
-        </section>
-      )}
+          </section>
+        );
+      })()}
 
       {/* Lifecycle */}
       <section>

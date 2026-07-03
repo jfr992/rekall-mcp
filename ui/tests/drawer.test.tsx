@@ -153,5 +153,8 @@ describe("Drawer (accessible foundation)", () => {
     const closeBtn = screen.getByLabelText("Close drawer");
     expect(closeBtn.className).toMatch(/h-11/);
     expect(closeBtn.className).toMatch(/w-11/);
+    // Enforce via min-* so border-box / SVG padding can't shrink below 44px
+    expect(closeBtn.className).toMatch(/min-h-\[44px\]/);
+    expect(closeBtn.className).toMatch(/min-w-\[44px\]/);
   });
 });

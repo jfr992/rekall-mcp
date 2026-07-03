@@ -138,7 +138,7 @@ export function Drawer({
                 ref={closeBtnRef}
                 onClick={onClose}
                 aria-label="Close drawer"
-                className="flex h-11 w-11 items-center justify-center rounded-md text-[var(--fg-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--fg)]"
+                className="flex h-11 w-11 min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-[var(--fg-muted)] hover:bg-[var(--surface-1)] hover:text-[var(--fg)]"
               >
                 <X size={18} />
               </button>

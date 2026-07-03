@@ -292,6 +292,52 @@ describe("MemoryInspector", () => {
     expect(onSelectMemory).not.toHaveBeenCalled();
   });
 
+  // --- Fix T9: deduped warnings ---
+
+  test("warnings ['missing_provenance'] renders exactly one 'missing provenance' line", () => {
+    const warnDetail: DetailResponseV2 = {
+      ...detail,
+      warnings: ["missing_provenance"],
+      provenance: {
+        agent: null,
+        source_tool: null,
+        source_event: null,
+        timestamp: null,
+        session_id: null,
+        repo_name: null,
+        repo_remote: null,
+        branch: null,
+        trust_boundary: null,
+      },
+    };
+    render(<MemoryInspector {...defaultProps} detail={warnDetail} />);
+    const items = screen.getAllByText("missing provenance");
+    expect(items).toHaveLength(1);
+  });
+
+  // --- Fix T9: legacy source fallback ---
+
+  test("all-null provenance renders 'no provenance recorded (legacy memory)'", () => {
+    const legacyDetail: DetailResponseV2 = {
+      ...detail,
+      provenance: {
+        agent: null,
+        source_tool: null,
+        source_event: null,
+        timestamp: null,
+        session_id: null,
+        repo_name: null,
+        repo_remote: null,
+        branch: null,
+        trust_boundary: null,
+      },
+    };
+    render(<MemoryInspector {...defaultProps} detail={legacyDetail} />);
+    expect(
+      screen.getByText("no provenance recorded (legacy memory)"),
+    ).toBeInTheDocument();
+  });
+
   // --- IMPORTANT: status badge ---
 
   test("status badge shows 'superseded' when in-edge supersedes relationship present", () => {
