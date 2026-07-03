@@ -85,6 +85,66 @@ export const DetailResponseSchema = z.object({
     .nullable(),
 });
 
+// ----- Detail V2 -----------------------------------------------------------
+
+export const RelationshipSchema = z.object({
+  source_id: z.string(),
+  target_id: z.string(),
+  neighbor_id: z.string(),
+  direction: z.enum(["in", "out"]),
+  relation: z.string(),
+  weight: z.number().optional(),
+  auto: z.boolean().optional(),
+  created: z.string().optional(),
+  memory: MemorySchema.nullable(),
+});
+
+export const ProvenanceSchema = z
+  .object({
+    agent: z.string().nullable(),
+    source_tool: z.string().nullable(),
+    source_event: z.string().nullable(),
+    timestamp: z.string().nullable(),
+    session_id: z.string().nullable(),
+    repo_name: z.string().nullable(),
+    repo_remote: z.string().nullable(),
+    branch: z.string().nullable(),
+    trust_boundary: z.string().nullable(),
+  })
+  .passthrough();
+
+export const LifecycleSchema = z
+  .object({
+    tier: z.string().nullable(),
+    durability: z.number().nullable(),
+    retention_days: z.number().nullable(),
+    lifecycle_reason: z.string().nullable(),
+  })
+  .passthrough();
+
+export const StorageSchema = z.object({
+  qdrant: z.boolean(),
+  yaml: z.boolean(),
+});
+
+export const DetailResponseV2Schema = z.object({
+  memory: MemorySchema.nullable(),
+  neighbors: z.array(MemoryNeighborSchema),
+  scope: z
+    .object({
+      project: z.string().nullable().optional(),
+      agent: z.string().nullable().optional(),
+      repo_name: z.string().nullable().optional(),
+    })
+    .nullable(),
+  relationships: z.array(RelationshipSchema).optional(),
+  provenance: ProvenanceSchema.nullable().optional(),
+  lifecycle: LifecycleSchema.nullable().optional(),
+  storage: StorageSchema.optional(),
+  warnings: z.array(z.string()).optional(),
+  missing_neighbor_ids: z.array(z.string()).optional(),
+});
+
 // ----- KB ------------------------------------------------------------------
 
 export const KbEntrySchema = z.object({
@@ -201,6 +261,11 @@ export type GraphNode = z.infer<typeof GraphNodeSchema>;
 export type GraphLink = z.infer<typeof GraphLinkSchema>;
 export type GraphResponse = z.infer<typeof GraphResponseSchema>;
 export type DetailResponse = z.infer<typeof DetailResponseSchema>;
+export type Relationship = z.infer<typeof RelationshipSchema>;
+export type Provenance = z.infer<typeof ProvenanceSchema>;
+export type Lifecycle = z.infer<typeof LifecycleSchema>;
+export type Storage = z.infer<typeof StorageSchema>;
+export type DetailResponseV2 = z.infer<typeof DetailResponseV2Schema>;
 export type KbEntry = z.infer<typeof KbEntrySchema>;
 export type KbResponse = z.infer<typeof KbResponseSchema>;
 export type PressureResponse = z.infer<typeof PressureResponseSchema>;

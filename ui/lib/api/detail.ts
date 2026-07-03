@@ -1,8 +1,16 @@
 import { fetchJson } from "./client";
-import { DetailResponseSchema, type DetailResponse } from "@/lib/schemas";
+import { DetailResponseV2Schema, type DetailResponseV2 } from "@/lib/schemas";
 
-export function getMemoryDetail(memoryId: string): Promise<DetailResponse> {
-  return fetchJson(`/api/memory/detail/${encodeURIComponent(memoryId)}`, undefined, (d) =>
-    DetailResponseSchema.parse(d)
+export function getMemoryDetail(
+  memoryId: string,
+  currentProject?: string,
+): Promise<DetailResponseV2> {
+  const qs = currentProject
+    ? `?current_project=${encodeURIComponent(currentProject)}`
+    : "";
+  return fetchJson(
+    `/api/memory/detail/${encodeURIComponent(memoryId)}${qs}`,
+    undefined,
+    (d) => DetailResponseV2Schema.parse(d),
   );
 }
