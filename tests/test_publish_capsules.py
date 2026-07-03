@@ -8,9 +8,7 @@ def _capsule(project: str = "byte-edge") -> dict:
     return {
         "project": project,
         "entities": ["Longhorn"],
-        "standing_context": [
-            {"content": "Use tuned Longhorn settings.", "date": "2026-07-01"}
-        ],
+        "standing_context": [{"content": "Use tuned Longhorn settings.", "date": "2026-07-01"}],
         "active_workstreams": [],
         "operating_rules": [],
         "danger_zones": [],
@@ -67,7 +65,9 @@ def test_team_publish_strips_private_keys_from_inputs():
     assert "private transcript" not in serialized
     assert "secret prompt" not in serialized
     assert '"raw_hook_payloads"' not in serialized
-    assert bundle["playbooks"] == [{"title": "Safe runbook", "steps": ["Review known danger zones"]}]
+    assert bundle["playbooks"] == [
+        {"title": "Safe runbook", "steps": ["Review known danger zones"]}
+    ]
 
 
 @pytest.mark.asyncio

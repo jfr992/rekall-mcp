@@ -355,9 +355,7 @@ class TestVectorStore:
 
         mock_qdrant.create_collection.assert_called_once()
 
-    def test_recreate_collection_creates_after_delete_with_stale_listing(
-        self, store, mock_qdrant
-    ):
+    def test_recreate_collection_creates_after_delete_with_stale_listing(self, store, mock_qdrant):
         """recreate_collection() creates even if list still shows deleted collection."""
         mock_qdrant.get_collections.return_value = MagicMock(
             collections=[SimpleNamespace(name="test_collection")]
@@ -365,9 +363,7 @@ class TestVectorStore:
 
         store.recreate_collection()
 
-        mock_qdrant.delete_collection.assert_called_once_with(
-            collection_name="test_collection"
-        )
+        mock_qdrant.delete_collection.assert_called_once_with(collection_name="test_collection")
         mock_qdrant.create_collection.assert_called_once()
 
 

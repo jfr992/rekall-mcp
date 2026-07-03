@@ -297,9 +297,7 @@ def test_installer_opt_in_installs_startup_capsule_and_backs_up_existing_hook(tm
     assert os.access(installed, os.X_OK)
     assert "api/memory/capsule" in installed.read_text(encoding="utf-8")
     backups = list(
-        (home / ".claude" / "backups").glob(
-            "rekall-live-config-*/hooks/session-start-memory.sh"
-        )
+        (home / ".claude" / "backups").glob("rekall-live-config-*/hooks/session-start-memory.sh")
     )
     assert len(backups) == 1
     assert "old-session-start" in backups[0].read_text(encoding="utf-8")

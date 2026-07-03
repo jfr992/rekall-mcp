@@ -22,7 +22,9 @@ def test_doctor_detects_yaml_qdrant_drift(tmp_path):
 
     class Store:
         def scroll(self, filters=None, limit=10000, with_vectors=False):
-            return [{"memory_id": "m_qdrant_only", "content": "Only in Qdrant", "project": "byte-edge"}]
+            return [
+                {"memory_id": "m_qdrant_only", "content": "Only in Qdrant", "project": "byte-edge"}
+            ]
 
     manager = type(
         "Manager",

@@ -56,7 +56,9 @@ def test_capsule_groups_project_familiarity():
     assert capsule["project"] == "byte-edge"
     assert "Longhorn" in capsule["entities"]
     assert any("two-node k3s" in item["content"] for item in capsule["standing_context"])
-    assert any("Back up live Claude files" in item["content"] for item in capsule["operating_rules"])
+    assert any(
+        "Back up live Claude files" in item["content"] for item in capsule["operating_rules"]
+    )
 
 
 def test_capsule_scans_beyond_small_limit_for_recent_high_priority_items():

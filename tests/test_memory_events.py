@@ -67,7 +67,10 @@ def test_manager_records_memory_saved_event(tmp_path, monkeypatch):
             "save": lambda *args, **kwargs: None,
         },
     )()
-    monkeypatch.setattr("memory.manager.auto_link", lambda **kwargs: type("R", (), {"edges_created": 0, "relations": {}})())
+    monkeypatch.setattr(
+        "memory.manager.auto_link",
+        lambda **kwargs: type("R", (), {"edges_created": 0, "relations": {}})(),
+    )
 
     memory_id = manager.save("Use capsules for startup", type="decision", project="rekall-mcp")
 
