@@ -8,7 +8,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -148,7 +147,7 @@ def test_mcp_tool_delegates_to_get_memory_detail():
     """memory_detail MCP tool must call manager.get_memory_detail, not store.get_by_id."""
     import asyncio
 
-    from tools.builtin.memory import _render_memory_detail, _make_memory_detail_fn
+    from tools.builtin.memory import _make_memory_detail_fn
 
     manager = MagicMock()
     manager.get_memory_detail.return_value = _FULL_RESULT
