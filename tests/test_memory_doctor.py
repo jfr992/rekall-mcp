@@ -103,8 +103,13 @@ def test_doctor_filters_legacy_flat_yaml_by_embedded_project(tmp_path):
     assert report["missing_from_yaml"] == []
 
 
-def test_doctor_flags_missing_provenance(tmp_path):
+def test_doctor_provenance_note_when_synced(tmp_path):
+    """Synced corpus with no provenance must be healthy with missing_provenance note, not a finding."""
     from memory.doctor import run_memory_doctor
+
+    # Write YAML so yaml_ids matches qdrant_ids — no sync mismatch
+    memories = [{"id": "m1", "content": "No provenance", "project": "rekall-mcp"}]
+    (tmp_path / "2026-07-01.yaml").write_text(yaml.dump({"date": "2026-07-01", "notes": memories}))
 
     class Store:
         def scroll(self, filters=None, limit=10000, with_vectors=False):
@@ -123,11 +128,153 @@ def test_doctor_flags_missing_provenance(tmp_path):
         },
     )()
 
-    report = run_memory_doctor(manager)
+    result = run_memory_doctor(manager)
 
-    assert report["status"] == "degraded"
-    assert report["provenance"]["missing_agent"] == 1
-    assert report["provenance"]["missing_source_tool"] == 1
+    assert result["status"] == "healthy"
+    assert "missing_provenance" in result["notes"]
+    assert "missing_provenance" not in result["findings"]
+
+
+def test_doctor_legacy_provenance_is_note_not_degraded(tmp_path):
+    """Synced corpus (yaml+qdrant match) with no provenance must be healthy + note."""
+    from memory.doctor import run_memory_doctor
+
+    # Write YAML so yaml_ids matches qdrant_ids (no sync mismatch)
+    memories = [{"id": f"m{i}", "content": "legacy", "project": "rekall-mcp"} for i in range(3)]
+    (tmp_path / "2026-07-01.yaml").write_text(yaml.dump({"date": "2026-07-01", "notes": memories}))
+
+    class Store:
+        def scroll(self, filters=None, limit=10000, with_vectors=False):
+            # No agent/source_tool/cwd on any point
+            return [
+                {"memory_id": f"m{i}", "content": "legacy", "project": "rekall-mcp"}
+                for i in range(3)
+            ]
+
+    manager = type(
+        "Manager",
+        (),
+        {
+            "memory_dir": tmp_path,
+            "store": Store(),
+            "knowledge_graph": type(
+                "Graph", (), {"stats": lambda self: {"nodes": 3, "edges": 0, "relations": {}}}
+            )(),
+            "vector_health": lambda self: {"sampled": 3, "zero_vectors": 0},
+        },
+    )()
+
+    result = run_memory_doctor(manager)
+
+    assert result["status"] == "healthy"
+    assert "missing_provenance" in result["notes"]
+    assert "missing_provenance" not in result["findings"]
+
+
+def test_doctor_zero_vectors_still_degrades(tmp_path):
+    """Zero-vector finding still causes degraded status after provenance split."""
+    from memory.doctor import run_memory_doctor
+
+    memories = [{"id": "m1", "content": "bad vector", "project": "rekall-mcp"}]
+    (tmp_path / "2026-07-01.yaml").write_text(yaml.dump({"date": "2026-07-01", "notes": memories}))
+
+    class Store:
+        def scroll(self, filters=None, limit=10000, with_vectors=False):
+            return [{"memory_id": "m1", "content": "bad vector", "project": "rekall-mcp"}]
+
+    manager = type(
+        "Manager",
+        (),
+        {
+            "memory_dir": tmp_path,
+            "store": Store(),
+            "knowledge_graph": type(
+                "Graph", (), {"stats": lambda self: {"nodes": 1, "edges": 0, "relations": {}}}
+            )(),
+            "vector_health": lambda self: {"sampled": 1, "zero_vectors": 1},
+        },
+    )()
+
+    result = run_memory_doctor(manager)
+
+    assert result["status"] == "degraded"
+    assert "zero_vectors" in result["findings"]
+
+
+def test_doctor_counts_unknown_agent_as_missing(tmp_path):
+    """agent='unknown' (ScopeDetector default) must increment missing_agent count."""
+    from memory.doctor import run_memory_doctor
+
+    memories = [{"id": "m1", "content": "saved with unknown agent", "project": "rekall-mcp"}]
+    (tmp_path / "2026-07-01.yaml").write_text(yaml.dump({"date": "2026-07-01", "notes": memories}))
+
+    class Store:
+        def scroll(self, filters=None, limit=10000, with_vectors=False):
+            return [
+                {
+                    "memory_id": "m1",
+                    "content": "saved with unknown agent",
+                    "project": "rekall-mcp",
+                    "agent": "unknown",
+                    "source_tool": "save_memory",
+                    "cwd": "/tmp/proj",
+                }
+            ]
+
+    manager = type(
+        "Manager",
+        (),
+        {
+            "memory_dir": tmp_path,
+            "store": Store(),
+            "knowledge_graph": type(
+                "Graph", (), {"stats": lambda self: {"nodes": 1, "edges": 0, "relations": {}}}
+            )(),
+            "vector_health": lambda self: {"sampled": 1, "zero_vectors": 0},
+        },
+    )()
+
+    result = run_memory_doctor(manager)
+
+    assert result["provenance"]["missing_agent"] == 1
+
+
+def test_doctor_counts_empty_agent_as_missing(tmp_path):
+    """agent='' (empty string) must increment missing_agent count."""
+    from memory.doctor import run_memory_doctor
+
+    memories = [{"id": "m1", "content": "saved with empty agent", "project": "rekall-mcp"}]
+    (tmp_path / "2026-07-01.yaml").write_text(yaml.dump({"date": "2026-07-01", "notes": memories}))
+
+    class Store:
+        def scroll(self, filters=None, limit=10000, with_vectors=False):
+            return [
+                {
+                    "memory_id": "m1",
+                    "content": "saved with empty agent",
+                    "project": "rekall-mcp",
+                    "agent": "",
+                    "source_tool": "save_memory",
+                    "cwd": "/tmp/proj",
+                }
+            ]
+
+    manager = type(
+        "Manager",
+        (),
+        {
+            "memory_dir": tmp_path,
+            "store": Store(),
+            "knowledge_graph": type(
+                "Graph", (), {"stats": lambda self: {"nodes": 1, "edges": 0, "relations": {}}}
+            )(),
+            "vector_health": lambda self: {"sampled": 1, "zero_vectors": 0},
+        },
+    )()
+
+    result = run_memory_doctor(manager)
+
+    assert result["provenance"]["missing_agent"] == 1
 
 
 @pytest.mark.asyncio

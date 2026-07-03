@@ -38,7 +38,9 @@ def run_memory_doctor(manager, project: str | None = None, limit: int = 10000) -
     missing_from_yaml = sorted(qdrant_ids - yaml_ids)
 
     provenance = {
-        "missing_agent": sum(1 for point in qdrant_points if not point.get("agent")),
+        "missing_agent": sum(
+            1 for point in qdrant_points if point.get("agent") in (None, "", "unknown")
+        ),
         "missing_source_tool": sum(1 for point in qdrant_points if not point.get("source_tool")),
         "missing_cwd": sum(1 for point in qdrant_points if not point.get("cwd")),
     }
@@ -46,6 +48,7 @@ def run_memory_doctor(manager, project: str | None = None, limit: int = 10000) -
     graph_stats = manager.knowledge_graph.stats()
 
     findings = []
+    notes: list[str] = []
     if missing_from_qdrant:
         findings.append("yaml_not_indexed")
     if missing_from_yaml:
@@ -53,7 +56,7 @@ def run_memory_doctor(manager, project: str | None = None, limit: int = 10000) -
     if vector_health.get("zero_vectors", 0):
         findings.append("zero_vectors")
     if any(provenance.values()):
-        findings.append("missing_provenance")
+        notes.append("missing_provenance")
 
     return {
         "status": "healthy" if not findings else "degraded",
@@ -66,4 +69,5 @@ def run_memory_doctor(manager, project: str | None = None, limit: int = 10000) -
         "graph": graph_stats,
         "provenance": provenance,
         "findings": findings,
+        "notes": notes,
     }
