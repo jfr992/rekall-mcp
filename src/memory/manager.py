@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from core import Embedder, Telemetry, VectorStore
+from memory.events import EventLog, MemoryEvent
 from memory.lifecycle import summarize_lifecycle
 from memory.linker import auto_link
 from memory.observe import ObservationCandidate, ObservationEngine
@@ -157,6 +158,7 @@ class MemoryManager:
         # BM25 sparse encoder for hybrid search
         self._sparse_encoder = None
         self._bm25_path = self.memory_dir / "_bm25_vocab.json"
+        self._event_log: EventLog | None = None
 
         self._knowledge_graph: KnowledgeGraph | None = None
 
@@ -211,6 +213,31 @@ class MemoryManager:
 
             self._knowledge_graph = KnowledgeGraph(self.memory_dir / "_graph.json")
         return self._knowledge_graph
+
+    @property
+    def event_log(self) -> EventLog:
+        if self._event_log is None:
+            self._event_log = EventLog(self.memory_dir / "_events.jsonl")
+        return self._event_log
+
+    def record_event(
+        self,
+        *,
+        event_type: str,
+        project: str,
+        agent: str = "unknown",
+        source: str = "memory_manager",
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        self.event_log.append(
+            MemoryEvent(
+                event_type=event_type,
+                project=project,
+                agent=agent,
+                source=source,
+                payload=payload or {},
+            )
+        )
 
     # -------------------------------------------------------------------------
     # SAVE: Store memories
@@ -282,6 +309,24 @@ class MemoryManager:
             # Save to vector store (searchability)
             vector = self.embedder.encode(content)
             self.store.save(id=memory_id, vector=vector, payload=payload, content=content)
+
+            self.record_event(
+                event_type="memory_saved",
+                project=project_name,
+                agent=str(payload.get("agent") or scope.agent or "unknown"),
+                source=str(
+                    payload.get("source_tool")
+                    or payload.get("source_event")
+                    or "memory_manager.save"
+                ),
+                payload={
+                    "memory_id": memory_id,
+                    "type": type,
+                    "tier": payload.get("tier"),
+                    "cwd": payload.get("cwd"),
+                    "repo_name": payload.get("repo_name"),
+                },
+            )
 
             # Build/refresh graph node for this memory
             self.knowledge_graph.add_node(
