@@ -11,7 +11,7 @@ import { RecentSection } from "@/components/continuity/recent-section";
 import { NextStepsList } from "@/components/continuity/next-steps-list";
 import { ConflictsPanel } from "@/components/continuity/conflicts-panel";
 import { TruncatedWarning } from "@/components/continuity/truncated-warning";
-import { NodeDrawer } from "@/components/brain/node-drawer";
+import { MemoryInspector } from "@/components/memory-inspector/memory-inspector";
 import { useResume } from "@/lib/queries/use-resume";
 import { useMemoryDetail } from "@/lib/queries/use-memory-detail";
 import { useProjectStore } from "@/lib/project-store";
@@ -20,11 +20,14 @@ export default function ContinuityPage() {
   const project = useProjectStore((s) => s.project);
   const { data, isLoading, isError } = useResume(project);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const detail = useMemoryDetail(selectedId);
+  const detail = useMemoryDetail(selectedId, project || undefined);
+
+  // Empty string is the all-scope sentinel; render human-readable label in heading
+  const headingProject = project || "all memories";
 
   return (
     <div className="mx-auto max-w-4xl space-y-4 p-6">
-      <SerifHeading eyebrow="WHAT TO LOAD ON SESSION START" title={`Continuity · ${project}`} />
+      <SerifHeading eyebrow="WHAT TO LOAD ON SESSION START" title={`Continuity · ${headingProject}`} />
 
       {isLoading ? (
         <div className="space-y-4">
@@ -66,11 +69,13 @@ export default function ContinuityPage() {
             <NextStepsList steps={data.next_steps} />
           </SectionGroup>
 
-          <NodeDrawer
+          <MemoryInspector
             open={selectedId !== null}
             detail={detail.data}
             isLoading={detail.isLoading}
+            currentProject={project}
             onClose={() => setSelectedId(null)}
+            onSelectMemory={setSelectedId}
           />
         </>
       )}
