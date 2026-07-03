@@ -1,15 +1,36 @@
 """Pytest configuration and fixtures for Rekall MCP tests."""
 
+import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 
 import pytest
 import yaml
 
 from memory import MemoryManager
 
-TEST_QDRANT_URL = "http://localhost:6334"
+HOST_TEST_QDRANT_URL = "http://localhost:6334"
+
+
+def _is_production_qdrant_url(url: str) -> bool:
+    parsed = urlparse(url)
+    port = parsed.port or 6333
+    return port == 6333 and parsed.hostname not in {
+        "qdrant-test",
+        "rekall-qdrant-test",
+    }
+
+
+def _resolve_test_qdrant_url() -> str:
+    configured = os.environ.get("QDRANT_URL")
+    if configured and not _is_production_qdrant_url(configured):
+        return configured
+    return HOST_TEST_QDRANT_URL
+
+
+TEST_QDRANT_URL = _resolve_test_qdrant_url()
 
 
 @pytest.fixture(autouse=True)
@@ -25,10 +46,13 @@ def _qdrant_isolation(monkeypatch):
     original_connect = VectorStore._connect
 
     def guarded_connect(self):
-        if ":6333" in self.url:
+        if self.url in {HOST_TEST_QDRANT_URL, "http://127.0.0.1:6334"}:
+            self.url = TEST_QDRANT_URL
+        if _is_production_qdrant_url(self.url):
             raise RuntimeError(
                 f"Test attempted to reach production Qdrant ({self.url}). "
-                "Tests must use :6334 — start it with: docker compose --profile test up -d qdrant-test"
+                "Tests must use disposable Qdrant: localhost:6334 on the host "
+                "or qdrant-test:6333 inside docker compose."
             )
         return original_connect(self)
 

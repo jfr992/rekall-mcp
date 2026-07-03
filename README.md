@@ -6,6 +6,12 @@ Rekall MCP is a persistent memory system with a **knowledge graph** layer. It st
 
 ---
 
+## Local-First Agent Nervous System
+
+Rekall gives local agents durable, inspectable, cross-session and cross-project memory for software work. Harness memory stores assistant preferences; Rekall stores what the work has taught the agent: decisions, root causes, procedures, danger zones, and project familiarity with provenance.
+
+---
+
 ## Install
 
 ### 1. Download and Start

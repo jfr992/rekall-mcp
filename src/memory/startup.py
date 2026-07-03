@@ -37,14 +37,30 @@ def build_agent_startup(
         capsule = manager.get_project_capsule(scope.project, limit=300)
     except Exception:
         capsule = {}
+    try:
+        doctor = manager.doctor(project=scope.project)
+    except Exception as e:
+        doctor = {
+            "status": "unavailable",
+            "project": scope.project,
+            "findings": ["doctor_unavailable"],
+            "error": str(e),
+        }
 
     hints = SYSTEM_HINTS.get(scope.agent, SYSTEM_HINTS["unknown"])
 
     return {
         "scope": packet["scope"],
-        "startup_summary": render_agent_startup(scope, packet, hints, capsule=capsule),
+        "startup_summary": render_agent_startup(
+            scope,
+            packet,
+            hints,
+            capsule=capsule,
+            doctor=doctor,
+        ),
         "resume_packet": packet,
         "project_capsule": capsule,
+        "doctor": doctor,
         "system_hints": hints,
     }
 
@@ -54,6 +70,7 @@ def render_agent_startup(
     packet: dict[str, Any],
     hints: list[str],
     capsule: dict[str, Any] | None = None,
+    doctor: dict[str, Any] | None = None,
 ) -> str:
     lines = [f"# Agent Startup: {scope.project}", ""]
     lines.append(f"- agent: {scope.agent}")
@@ -73,6 +90,16 @@ def render_agent_startup(
 
         lines.append("## Familiarity Capsule")
         lines.append(render_project_capsule(capsule).strip())
+        lines.append("")
+
+    if doctor and doctor.get("status") != "healthy":
+        findings = doctor.get("findings") or []
+        lines.append("## Memory Doctor")
+        lines.append(f"- status: {doctor.get('status', 'unknown')}")
+        if findings:
+            lines.append(f"- findings: {', '.join(str(item) for item in findings)}")
+        if doctor.get("error"):
+            lines.append(f"- error: {doctor['error']}")
         lines.append("")
 
     if packet.get("next_steps"):

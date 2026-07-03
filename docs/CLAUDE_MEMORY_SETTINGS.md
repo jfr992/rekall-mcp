@@ -9,9 +9,10 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 ## Memory Policy
 
 ### Session start
-- Always call `get_cached_context(project)` once per project at session start.
+- Prefer `agent_startup(project?, agent="claude-code")` once per project at session start.
+- Read the project capsule and any memory doctor warnings before deciding what to recall.
+- If the optional `SessionStart` capsule hook is installed, treat its injected context as familiarity only; still use targeted recall for the user's actual task.
 - If this is a new project or ambiguous context, pass explicit `project`.
-- For richer context, use `get_hierarchical_context(project)` — returns topic-grouped tree with relationships.
 
 ### Save policy (conservative default)
 - Call `observe(summary)` for:
@@ -27,6 +28,8 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 
 ### Recall policy
 - Use `recall_memories(query, limit=5)` for targeted questions.
+- Use `recall_across_projects(query, current_project)` when a lesson from another repo may apply.
+- Use `reflex_recall(text, project)` before risky infrastructure, hook, Qdrant/memory, or deployment work.
 - Recall is graph-enhanced: results include 1-hop neighbors from the knowledge graph.
 - Scoring: 50% vector similarity, 20% importance, 15% recency, 15% graph proximity.
 - If results are sparse, retry with `limit=8..12`.
@@ -38,7 +41,7 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 - Use `proactive_context_summary()` for top signals ranked by importance × recency.
 
 ### Failsafe
-- If memory seems stale, call `memory_stats()` and check graph node/edge counts.
+- If memory seems stale, call `memory_doctor(project)` first, then `memory_stats()` for counts.
 - Cockpit UI at `http://localhost:3333/brain` for visual graph exploration (ships as a container via `docker compose up -d`).
 ```
 

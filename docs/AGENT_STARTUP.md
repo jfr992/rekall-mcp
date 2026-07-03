@@ -10,6 +10,15 @@ Call **one** of these at session start:
 2. `resume_packet` (structured continuity)
 3. `handoff_summary` (shorter human-readable momentum summary)
 
+## Startup Contract
+
+Startup order:
+
+1. Resolve current project from the harness cwd.
+2. Load the project capsule.
+3. Add memory doctor warnings when degraded.
+4. Defer targeted recall until the user prompt or command supplies a cue.
+
 ## Best default
 
 ### Claude Code
