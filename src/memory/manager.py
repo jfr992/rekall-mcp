@@ -927,6 +927,46 @@ class MemoryManager:
 
             return scored[:limit]
 
+    def recall_cross_project(
+        self,
+        query: str,
+        *,
+        current_project: str,
+        limit: int = 8,
+        related_limit: int = 8,
+    ) -> dict[str, Any]:
+        """Recall relevant memories from the current project, related projects, and global memory."""
+        same_project = [
+            {**item, "scope": "same_project"}
+            for item in self.recall(query=query, project=current_project, limit=limit)
+        ]
+        same_ids = {item.get("memory_id") for item in same_project if item.get("memory_id")}
+
+        related_projects: list[dict[str, Any]] = []
+        global_hits: list[dict[str, Any]] = []
+
+        for item in self.recall(query=query, project=None, limit=related_limit):
+            memory_id = item.get("memory_id")
+            project = item.get("project") or "general"
+            if memory_id in same_ids:
+                continue
+
+            enriched = {**item}
+            if project == "general":
+                enriched["scope"] = "global"
+                global_hits.append(enriched)
+            elif project != current_project:
+                enriched["scope"] = "related_project"
+                related_projects.append(enriched)
+
+        return {
+            "query": query,
+            "current_project": current_project,
+            "same_project": same_project,
+            "related_projects": related_projects[:limit],
+            "global": global_hits[:limit],
+        }
+
     def recall_formatted(
         self,
         query: str,

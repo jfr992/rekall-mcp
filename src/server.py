@@ -432,6 +432,37 @@ async def api_recall_memories(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/recall/cross-project", methods=["POST"])
+async def api_cross_project_recall(request):
+    """REST API: Search current-project, related-project, and global memories."""
+    try:
+        body = await request.json()
+        query = (body.get("query") or "").strip()
+        current_project = _safe_project(body.get("current_project")) or _safe_project(
+            body.get("project")
+        )
+        limit = _body_int(body, "limit", 8, lo=1, hi=50)
+
+        if not query:
+            return _bad_request("query is required")
+        if not current_project:
+            return _bad_request("current_project is required")
+
+        manager = _get_memory_manager()
+        return _ok(
+            manager.recall_cross_project(
+                query=query,
+                current_project=current_project,
+                limit=limit,
+            )
+        )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error in cross-project recall: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/context", methods=["GET"])
 async def api_get_context(request):
     """REST API: Get cached context for a project."""

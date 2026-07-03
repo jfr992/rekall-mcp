@@ -236,6 +236,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 handler=None,
             ),
             ToolDefinition(
+                name="recall_across_projects",
+                description="Recall lessons from the current repo, related repos, and global memory",
+                handler=None,
+            ),
+            ToolDefinition(
                 name="save_memory",
                 description="Manually save a memory for future recall",
                 handler=None,
@@ -421,6 +426,37 @@ class OptimizedMemoryTools(BaseToolProvider):
             )
 
         registered.append("recall_memories")
+
+        @mcp.tool(structured_output=False)
+        async def recall_across_projects(
+            query: str,
+            current_project: str,
+            limit: int = 8,
+        ) -> str:
+            """Use when a lesson from another repo may apply to the current repo."""
+            result = self.manager.recall_cross_project(
+                query=query,
+                current_project=current_project,
+                limit=limit,
+            )
+
+            lines = [f"# Cross-Project Recall: {query}", ""]
+            for title, key in [
+                ("Same Project", "same_project"),
+                ("Related Projects", "related_projects"),
+                ("Global", "global"),
+            ]:
+                items = result.get(key) or []
+                if not items:
+                    continue
+                lines.append(f"## {title}")
+                for item in items:
+                    lines.append(f"- [{item.get('project', 'unknown')}] {item.get('content', '')}")
+                lines.append("")
+
+            return "\n".join(lines).strip() or "No cross-project memories found."
+
+        registered.append("recall_across_projects")
 
         @mcp.tool(structured_output=False)
         async def save_memory(

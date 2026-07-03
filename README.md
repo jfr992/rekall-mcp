@@ -326,6 +326,7 @@ AI:  vector search finds the memory
 |------|---------|
 | `observe(summary)` | Auto-classify and save (accepts caller `cwd` for project scope) |
 | `recall_memories(query)` | Graph-enhanced semantic search |
+| `recall_across_projects(query, current_project)` | Cross-project transfer recall across current, related, and global memory |
 | `save_memory(content, type)` | Manual save with explicit type |
 | `memory_detail(memory_id)` | Single memory + neighbors + scope |
 | `memory_kb(project)` | Typed slices (decisions / requirements / preferences / learnings) |
@@ -357,6 +358,7 @@ AI:  vector search finds the memory
 | `/health` | GET | Health check |
 | `/api/memory/save` | POST | Save a memory |
 | `/api/memory/recall` | POST | Graph-enhanced search |
+| `/api/memory/recall/cross-project` | POST | Cross-project transfer recall |
 | `/api/memory/observe` | POST | Auto-classify and save (accepts `cwd` for scope) |
 | `/api/memory/stats` | GET | Statistics + graph metrics |
 | `/api/memory/doctor` | GET | Trust report for YAML/Qdrant/vector/graph/provenance health |
