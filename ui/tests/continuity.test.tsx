@@ -63,6 +63,16 @@ describe("Continuity — MemoryRow", () => {
     fireEvent.click(screen.getByRole("button"));
     expect(onSelect).toHaveBeenCalledWith("2026-07-02_note_abc");
   });
+
+  test("has aria-haspopup='dialog' for screen readers", () => {
+    render(<MemoryRow memoryId="m1" content="accessible memory" onSelect={() => {}} />);
+    expect(screen.getByRole("button")).toHaveAttribute("aria-haspopup", "dialog");
+  });
+
+  test("has focus-visible ring class", () => {
+    render(<MemoryRow memoryId="m1" content="focusable memory" onSelect={() => {}} />);
+    expect(screen.getByRole("button").className).toMatch(/focus-visible/);
+  });
 });
 
 describe("Continuity — ImportantSection", () => {

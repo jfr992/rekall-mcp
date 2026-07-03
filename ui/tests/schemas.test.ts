@@ -11,6 +11,7 @@ import {
   PruneApplyResponseSchema,
   BackfillReportSchema,
   DetailResponseSchema,
+  DetailResponseV2Schema,
   ResumeResponseSchema,
 } from "@/lib/schemas";
 
@@ -66,5 +67,39 @@ describe("schemas parse real fixtures", () => {
 
   test("ResumeResponseSchema", () => {
     expect(ResumeResponseSchema.parse(load("resume.json")).truncated).toBe(false);
+  });
+
+  test("DetailResponseV2Schema parses v2 fixture with all new fields", () => {
+    const parsed = DetailResponseV2Schema.parse(load("detail-v2.json"));
+    expect(parsed.memory?.memory_id).toBe("2026-07-01_decision_abc1");
+    // relationships: both directions
+    expect(parsed.relationships?.length).toBe(2);
+    const directions = parsed.relationships?.map((r) => r.direction);
+    expect(directions).toContain("in");
+    expect(directions).toContain("out");
+    // neighbors compat alias: outgoing only
+    expect(parsed.neighbors.length).toBe(1);
+    expect(parsed.neighbors[0].relation).toBe("depends_on");
+    // provenance
+    expect(parsed.provenance?.agent).toBe("claude-code");
+    expect(parsed.provenance?.trust_boundary).toBe("public");
+    // lifecycle
+    expect(parsed.lifecycle?.tier).toBe("working");
+    expect(parsed.lifecycle?.retention_days).toBe(90);
+    // storage
+    expect(parsed.storage?.qdrant).toBe(true);
+    expect(parsed.storage?.yaml).toBe(false);
+    // warnings
+    expect(parsed.warnings).toEqual([]);
+  });
+
+  test("DetailResponseV2Schema also parses v1 fixture (backward compat)", () => {
+    const parsed = DetailResponseV2Schema.parse(load("detail.json"));
+    expect(parsed.memory?.memory_id).toBe("2026-04-01_decision_abc12345");
+    expect(parsed.neighbors.length).toBe(1);
+    // v2-only fields absent in v1 fixture are undefined
+    expect(parsed.relationships).toBeUndefined();
+    expect(parsed.provenance).toBeUndefined();
+    expect(parsed.lifecycle).toBeUndefined();
   });
 });

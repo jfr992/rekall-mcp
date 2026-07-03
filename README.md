@@ -383,7 +383,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/context/skills` | GET | Inferred skill context from memory clusters |
 | `/api/memory/context/startup` | GET | Unified agent startup payload |
 | `/api/memory/capsule` | GET | Thin project familiarity capsule |
-| `/api/memory/detail/{id}` | GET | Full memory + neighbors + scope |
+| `/api/memory/detail/{id}` | GET | Full memory + v2 blocks: relationships (both in/out directions), provenance, lifecycle, storage, warnings; `neighbors` alias for backward compat |
 | `/api/memory/kb` | GET | Typed slices |
 | `/api/memory/pressure` | GET | Pressure metrics + flagged candidates |
 | `/api/memory/resume` | GET | Resume packet for continuity |
