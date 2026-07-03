@@ -39,7 +39,8 @@ def _item(point: dict[str, Any], importance: float) -> dict[str, Any]:
 
 
 def build_project_capsule(manager, project: str, limit: int = 300) -> dict[str, Any]:
-    points = manager.store.scroll(filters={"project": project}, limit=limit)
+    scan_limit = max(limit, 2000)
+    points = manager.store.scroll(filters={"project": project}, limit=scan_limit)
     enriched: list[tuple[dict[str, Any], float]] = []
     entity_counts: Counter[str] = Counter()
 

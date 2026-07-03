@@ -4,7 +4,7 @@ def test_capsule_groups_project_familiarity():
     class Store:
         def scroll(self, filters=None, limit=300):
             assert filters == {"project": "byte-edge"}
-            assert limit == 300
+            assert limit == 2000
             return [
                 {
                     "memory_id": "m1",
@@ -57,6 +57,47 @@ def test_capsule_groups_project_familiarity():
     assert "Longhorn" in capsule["entities"]
     assert any("two-node k3s" in item["content"] for item in capsule["standing_context"])
     assert any("Back up live Claude files" in item["content"] for item in capsule["operating_rules"])
+
+
+def test_capsule_scans_beyond_small_limit_for_recent_high_priority_items():
+    from memory.capsules import build_project_capsule
+
+    points = [
+        {
+            "memory_id": f"m{i}",
+            "type": "decision",
+            "tier": "semantic",
+            "date": f"2026-06-{(i % 28) + 1:02d}",
+            "content": f"Filler decision {i}.",
+            "entities": ["Filler"],
+        }
+        for i in range(320)
+    ]
+    points[319] = {
+        "memory_id": "m319",
+        "type": "decision",
+        "tier": "semantic",
+        "date": "2026-07-02",
+        "content": "Ship the high priority startup capsule fix.",
+        "entities": ["Startup"],
+    }
+
+    class Store:
+        def scroll(self, filters=None, limit=300):
+            assert filters == {"project": "byte-edge"}
+            assert limit == 2000
+            return points[:limit]
+
+    class Graph:
+        def get_importance(self, memory_id):
+            return 0.99 if memory_id == "m319" else 0.1
+
+    manager = type("Manager", (), {"store": Store(), "knowledge_graph": Graph()})()
+
+    capsule = build_project_capsule(manager, "byte-edge", limit=300)
+
+    assert any(item["memory_id"] == "m319" for item in capsule["standing_context"])
+    assert len(capsule["standing_context"]) <= 8
 
 
 def test_render_project_capsule_is_thin():

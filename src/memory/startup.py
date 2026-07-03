@@ -33,7 +33,10 @@ def build_agent_startup(
 ) -> dict[str, Any]:
     scope = ScopeDetector.detect(project=project, agent=agent)
     packet = manager.get_resume_packet(project=scope.project, scope=scope, limit=limit)
-    capsule = manager.get_project_capsule(scope.project, limit=300)
+    try:
+        capsule = manager.get_project_capsule(scope.project, limit=300)
+    except Exception:
+        capsule = {}
 
     hints = SYSTEM_HINTS.get(scope.agent, SYSTEM_HINTS["unknown"])
 
