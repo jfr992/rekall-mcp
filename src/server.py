@@ -437,7 +437,10 @@ async def api_cross_project_recall(request):
     """REST API: Search current-project, related-project, and global memories."""
     try:
         body = await request.json()
-        query = (body.get("query") or "").strip()
+        raw_query = body.get("query")
+        if not isinstance(raw_query, str):
+            return _bad_request("query is required")
+        query = raw_query.strip()
         current_project = _safe_project(body.get("current_project")) or _safe_project(
             body.get("project")
         )

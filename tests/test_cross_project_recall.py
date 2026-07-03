@@ -102,6 +102,16 @@ def test_cross_project_recall_endpoint_requires_current_project(client, fake_man
     fake_manager.recall_cross_project.assert_not_called()
 
 
+def test_cross_project_recall_endpoint_rejects_non_string_query(client, fake_manager):
+    response = client.post(
+        "/api/memory/recall/cross-project",
+        json={"query": 123, "current_project": "byte-edge"},
+    )
+
+    assert response.status_code == 400
+    fake_manager.recall_cross_project.assert_not_called()
+
+
 @pytest.mark.asyncio
 async def test_recall_across_projects_tool_formats_sections(tool_registry):
     from tools.builtin.memory import OptimizedMemoryTools
