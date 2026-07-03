@@ -54,10 +54,6 @@ config.yaml
 # Data (stored in ~/.claude/)
 data/
 *.jsonl
-.superpowers/
-
-# Superpowers workflow artifacts (local-only specs/plans)
-docs/superpowers/
 
 # Audit/debug screenshots — never commit
 brain-*.png

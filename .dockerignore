@@ -14,5 +14,4 @@ ui/.next
 
 # Local data / scratch never belongs in an image
 digest/
-docs/superpowers
 *.log

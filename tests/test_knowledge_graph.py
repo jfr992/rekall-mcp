@@ -107,6 +107,20 @@ def test_no_duplicate_edges(tmp_path):
     assert kg.stats()["edges"] == 1
 
 
+def test_existing_edge_can_be_upgraded_to_supersedes(tmp_path):
+    kg = _tmp_graph(tmp_path)
+    kg.add_node("new")
+    kg.add_node("old")
+
+    kg.add_edge("new", "old", "related_to", 0.5)
+    kg.add_edge("new", "old", "supersedes", 0.9)
+
+    edges = kg.get_edges("new", direction="out")
+    assert len(edges) == 1
+    assert edges[0].relation == "supersedes"
+    assert edges[0].weight == 0.9
+
+
 def test_invalid_relation_raises(tmp_path):
     kg = _tmp_graph(tmp_path)
     kg.add_node("a")

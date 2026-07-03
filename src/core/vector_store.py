@@ -127,18 +127,22 @@ class VectorStore:
 
         if self.collection not in collections:
             logger.info(f"Creating collection: {self.collection}")
-            sparse_config = None
-            if self.sparse_encoder is not None:
-                # SparseVectorsConfig is a Dict alias — use plain dict
-                sparse_config = {"bm25": SparseVectorParams()}
-            self._client.create_collection(
-                collection_name=self.collection,
-                vectors_config=VectorParams(
-                    size=self.embedding_dim,
-                    distance=Distance.COSINE,
-                ),
-                sparse_vectors_config=sparse_config,
-            )
+            self._create_collection()
+
+    def _create_collection(self) -> None:
+        """Create the configured collection without checking for existence."""
+        sparse_config = None
+        if self.sparse_encoder is not None:
+            # SparseVectorsConfig is a Dict alias — use plain dict
+            sparse_config = {"bm25": SparseVectorParams()}
+        self._client.create_collection(
+            collection_name=self.collection,
+            vectors_config=VectorParams(
+                size=self.embedding_dim,
+                distance=Distance.COSINE,
+            ),
+            sparse_vectors_config=sparse_config,
+        )
 
     def create_index(self, field: str, field_type: str = "keyword") -> None:
         """Create an index for faster filtering.
@@ -487,8 +491,9 @@ class VectorStore:
                 self.client.delete_collection(collection_name=self.collection)
                 logger.info(f"Deleted collection: {self.collection}")
 
-            # Create fresh
-            self._ensure_collection()
+            # Create fresh. Do not route through _ensure_collection(); Qdrant may
+            # briefly return a stale collection listing immediately after delete.
+            self._create_collection()
             logger.info(f"Recreated collection: {self.collection}")
 
     # -------------------------------------------------------------------------

@@ -1,5 +1,7 @@
 """Guard tests: the suite must be physically unable to reach production Qdrant."""
 
+import os
+
 import pytest
 
 from core.vector_store import VectorStore
@@ -7,9 +9,9 @@ from memory.manager import MemoryManager
 
 
 def test_manager_default_url_is_test_qdrant(tmp_path):
-    """With no explicit qdrant_url, a manager built inside a test must point at :6334."""
+    """With no explicit qdrant_url, a manager built inside a test must use test Qdrant."""
     manager = MemoryManager(memory_dir=tmp_path)
-    assert "6334" in manager._qdrant_url, (
+    assert manager._qdrant_url == os.environ["QDRANT_URL"], (
         f"MemoryManager defaulted to {manager._qdrant_url} — test isolation is broken"
     )
 

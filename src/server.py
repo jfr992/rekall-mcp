@@ -432,6 +432,68 @@ async def api_recall_memories(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/recall/cross-project", methods=["POST"])
+async def api_cross_project_recall(request):
+    """REST API: Search current-project, related-project, and global memories."""
+    try:
+        body = await request.json()
+        raw_query = body.get("query")
+        if not isinstance(raw_query, str):
+            return _bad_request("query is required")
+        query = raw_query.strip()
+        current_project = _safe_project(body.get("current_project")) or _safe_project(
+            body.get("project")
+        )
+        limit = _body_int(body, "limit", 8, lo=1, hi=50)
+
+        if not query:
+            return _bad_request("query is required")
+        if not current_project:
+            return _bad_request("current_project is required")
+
+        manager = _get_memory_manager()
+        return _ok(
+            manager.recall_cross_project(
+                query=query,
+                current_project=current_project,
+                limit=limit,
+            )
+        )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error in cross-project recall: {e}")
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/memory/reflex", methods=["POST"])
+async def api_memory_reflex(request):
+    """REST API: Build an action-aware reflex recall packet."""
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return _bad_request("body must be an object")
+
+        raw_text = body.get("text")
+        if not isinstance(raw_text, str):
+            return _bad_request("text is required")
+
+        text = raw_text.strip()
+        project = _safe_project(body.get("project"))
+        limit = _body_int(body, "limit", 4, lo=1, hi=12)
+
+        if not text:
+            return _bad_request("text is required")
+
+        manager = _get_memory_manager()
+        return _ok(manager.reflex(text=text, project=project, limit=limit))
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error building reflex packet: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/context", methods=["GET"])
 async def api_get_context(request):
     """REST API: Get cached context for a project."""
@@ -578,6 +640,19 @@ async def api_memory_stats(request):
     except Exception as e:
         logger.error(f"Error getting stats: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/doctor", methods=["GET"])
+async def api_memory_doctor(request):
+    try:
+        project = _safe_project(request.query_params.get("project"))
+        manager = _get_memory_manager()
+        return _ok(manager.doctor(project=project))
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error running memory doctor: {e}")
+        return _server_error(str(e))
 
 
 @mcp.custom_route("/api/memory/{memory_id}", methods=["DELETE"])
@@ -903,6 +978,21 @@ async def api_agent_startup(request):
     except Exception as e:
         logger.error(f"Error building agent startup payload: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/capsule", methods=["GET"])
+async def api_project_capsule(request):
+    """REST API: Thin project familiarity capsule."""
+    try:
+        project = _safe_project(request.query_params.get("project")) or "general"
+        limit = _read_int(request.query_params, "limit", 300, lo=1, hi=2000)
+        manager = _get_memory_manager()
+        return _ok(manager.get_project_capsule(project=project, limit=limit))
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error building project capsule: {e}")
+        return _server_error(str(e))
 
 
 @mcp.custom_route("/api/memory/context/proactive", methods=["GET"])

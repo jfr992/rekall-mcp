@@ -161,6 +161,42 @@ curl -X POST http://localhost:8000/api/memory/graph/rebuild
 
 Or via MCP tool: `rebuild_knowledge_graph()`
 
+## Hybrid Recall Reindex
+
+Run this only after backing up the memory YAML directory and Qdrant volume you
+actually use. The bundled Codex install uses `~/.Codex`; Claude Code installs
+often use `~/.claude`.
+
+```bash
+# Codex-local default stack
+tar czf ~/backups/pre-hybrid-memory.tar.gz -C ~ .Codex/memory
+tar czf ~/backups/pre-hybrid-qdrant.tar.gz -C ~ .Codex/qdrant
+uv run python -m memory.migrate_hybrid --memory-dir ~/.Codex/memory --dry-run
+uv run python -m memory.migrate_hybrid --memory-dir ~/.Codex/memory
+
+# Claude Code-local stack
+tar czf ~/backups/pre-hybrid-claude-memory.tar.gz -C ~ .claude/memory
+tar czf ~/backups/pre-hybrid-claude-qdrant.tar.gz -C ~ .claude/qdrant
+uv run python -m memory.migrate_hybrid --memory-dir ~/.claude/memory --dry-run
+uv run python -m memory.migrate_hybrid --memory-dir ~/.claude/memory
+```
+
+The migration reads nested project YAML, backfills missing `entities`,
+`embedding_text`, and lifecycle fields into YAML, builds `_bm25_vocab.json`, and
+reindexes Qdrant from `embedding_text`. Dense vectors remain required; BM25 is
+an additional exact-cue path for project names, file paths, flags, ticket IDs,
+and tool names.
+
+## Nervous-System Recall Surfaces
+
+- Use `project_capsule(project)` or `agent_startup(agent="claude-code")` once at session start for broad familiarity.
+- Use `recall_memories(query)` only after the prompt supplies a concrete topic.
+- Use `recall_across_projects(query, current_project)` when a lesson from another repo may transfer.
+- Use `reflex_recall(text, project)` before risky infrastructure, memory-data, hook, or deployment work.
+- Use `memory_doctor(project)` before trusting recall completeness after migrations, compaction, or Qdrant repairs.
+
+Do not turn every turn into proactive recall. The nervous-system model is familiarity first, targeted recall second, save only durable lessons third.
+
 ### Cleaning Up Duplicates
 
 Find superseded and contradictory pairs:
