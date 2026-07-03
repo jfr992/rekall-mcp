@@ -69,3 +69,46 @@ def test_manager_saves_embedding_text_and_uses_it_for_vector(tmp_path, monkeypat
     assert captured["encoded_text"].startswith("Project byte-edge.")
     assert captured["payload"]["embedding_text"] == captured["encoded_text"]
     assert "Longhorn" in captured["payload"]["entities"]
+
+
+def test_manager_uses_embedding_text_for_duplicate_search_before_save(tmp_path, monkeypatch):
+    from memory.manager import MemoryManager
+
+    events = []
+    captured = {}
+
+    class Store:
+        def search(self, *args, **kwargs):
+            events.append(("search", kwargs["query_text"]))
+            return []
+
+        def save(self, **kwargs):
+            events.append(("save", kwargs["content"]))
+            captured.update(kwargs)
+
+    class Embedder:
+        def encode(self, text):
+            events.append(("encode", text))
+            return [0.1] * 384
+
+    manager = MemoryManager(memory_dir=tmp_path, qdrant_url="http://localhost:6334")
+    manager._store = Store()
+    manager._embedder = Embedder()
+    manager._knowledge_graph = type(
+        "Graph",
+        (),
+        {"add_node": lambda *args, **kwargs: None, "save": lambda *args, **kwargs: None},
+    )()
+    monkeypatch.setattr(
+        "memory.manager.auto_link",
+        lambda **kwargs: type("R", (), {"edges_created": 0, "relations": {}})(),
+    )
+
+    manager.save("Longhorn settings matter", type="learning", project="byte-edge")
+
+    assert events[0][0] == "encode"
+    assert events[0][1].startswith("Project byte-edge.")
+    assert events[1] == ("search", events[0][1])
+    assert events[2] == ("encode", events[0][1])
+    assert events[3][0] == "save"
+    assert captured["payload"]["content"] == "Longhorn settings matter"

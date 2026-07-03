@@ -275,8 +275,21 @@ class MemoryManager:
             if "/" in project_name or "\\" in project_name or ".." in project_name:
                 raise ValueError(f"Invalid project name: {project_name!r}")
 
+            payload = {
+                "content": content,
+                "type": type,
+                "project": project_name,
+                "reinforcement_count": 0,
+                **scope.to_metadata(),
+                **metadata,
+            }
+            payload.update(summarize_lifecycle(payload))
+            payload["entities"] = extract_entities(content)
+            payload["embedding_text"] = build_embedding_text(content, payload)
+
             existing_memory_id = self._find_duplicate_memory_id(
                 content=content,
+                query_text=payload["embedding_text"],
                 project=project_name,
                 memory_type=type,
             )
@@ -293,18 +306,10 @@ class MemoryManager:
 
             payload = {
                 "memory_id": memory_id,
-                "content": content,
+                **payload,
                 "date": date,
                 "timestamp": timestamp,
-                "type": type,
-                "project": project_name,
-                "reinforcement_count": 0,
-                **scope.to_metadata(),
-                **metadata,
             }
-            payload.update(summarize_lifecycle(payload))
-            payload["entities"] = extract_entities(content)
-            payload["embedding_text"] = build_embedding_text(content, payload)
 
             # Save to file (durability)
             self._save_to_file(memory_id, content, payload, type, date)
@@ -397,17 +402,18 @@ class MemoryManager:
         self,
         *,
         content: str,
+        query_text: str | None = None,
         project: str,
         memory_type: str,
     ) -> str | None:
         """Return existing memory id for near-identical memories in same project/type."""
         try:
             matches = self.store.search(
-                vector=self.embedder.encode(content),
+                vector=self.embedder.encode(query_text or content),
                 limit=3,
                 filters={"project": project, "type": memory_type},
                 score_threshold=0.97,
-                query_text=content,
+                query_text=query_text or content,
             )
         except Exception:
             return None
