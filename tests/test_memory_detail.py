@@ -724,3 +724,154 @@ def test_manager_lifecycle_both_none_warns():
     result = MemoryManager.get_memory_detail(mgr, memory_id)
 
     assert "missing_lifecycle" in result["warnings"]
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: _find_in_yaml key matching — production shape uses "id", not "memory_id"
+# ---------------------------------------------------------------------------
+
+
+def test_find_in_yaml_matches_production_id_key():
+    """_find_in_yaml finds entries stored with 'id' key (production shape from _save_to_file)."""
+    import tempfile
+    from pathlib import Path
+
+    import yaml
+
+    from memory.manager import MemoryManager
+
+    memory_id = "2026-07-01_decision_idkey1"
+    # Production shape: _save_to_file stores "id" not "memory_id"
+    yaml_entry = {
+        "id": memory_id,
+        "content": "production shape entry",
+        "type": "decision",
+        "project": "rekall-mcp",
+    }
+
+    mgr = MagicMock(spec=MemoryManager)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yaml_path = Path(tmpdir) / "2026-07-01.yaml"
+        yaml_path.write_text(
+            yaml.dump({"date": "2026-07-01", "decisions": [yaml_entry]}),
+            encoding="utf-8",
+        )
+        mgr.memory_dir = MagicMock()
+        mgr.memory_dir.rglob.return_value = [yaml_path]
+
+        found = MemoryManager._find_in_yaml(mgr, memory_id)
+
+    assert found is not None, "_find_in_yaml must find entries stored with 'id' key"
+    assert found.get("id") == memory_id or found.get("memory_id") == memory_id
+
+
+def test_find_in_yaml_tolerates_legacy_memory_id_key():
+    """_find_in_yaml also finds entries stored with legacy 'memory_id' key."""
+    import tempfile
+    from pathlib import Path
+
+    import yaml
+
+    from memory.manager import MemoryManager
+
+    memory_id = "2026-07-01_note_legacykey1"
+    # Legacy shape: stored with "memory_id" key
+    yaml_entry = {
+        "memory_id": memory_id,
+        "content": "legacy shape entry",
+        "type": "note",
+        "project": "rekall-mcp",
+    }
+
+    mgr = MagicMock(spec=MemoryManager)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yaml_path = Path(tmpdir) / "2026-07-01.yaml"
+        yaml_path.write_text(
+            yaml.dump({"date": "2026-07-01", "notes": [yaml_entry]}),
+            encoding="utf-8",
+        )
+        mgr.memory_dir = MagicMock()
+        mgr.memory_dir.rglob.return_value = [yaml_path]
+
+        found = MemoryManager._find_in_yaml(mgr, memory_id)
+
+    assert found is not None, "_find_in_yaml must still find entries with 'memory_id' key"
+
+
+# ---------------------------------------------------------------------------
+# Fix 2: storage.yaml must reflect YAML presence even when Qdrant hit
+# ---------------------------------------------------------------------------
+
+
+def test_manager_get_memory_detail_yaml_true_when_qdrant_hit_and_yaml_present():
+    """storage.yaml=True when memory is found in both Qdrant and YAML."""
+    import tempfile
+    from pathlib import Path
+
+    import yaml
+
+    from memory.manager import MemoryManager
+
+    memory_id = "2026-07-01_decision_both1"
+    memory = {
+        "id": memory_id,
+        "content": "both stores present",
+        "type": "decision",
+        "project": "rekall-mcp",
+        "agent": "claude-code",
+        "durability": 0.7,
+        "lifecycle_reason": "test",
+    }
+
+    mgr = MagicMock(spec=MemoryManager)
+    # Qdrant has the memory
+    mgr.store = _make_mock_store({memory_id: memory})
+    mgr.knowledge_graph = _make_mock_graph([])
+    mgr._find_in_yaml = lambda mid: MemoryManager._find_in_yaml(mgr, mid)
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        yaml_path = Path(tmpdir) / "2026-07-01.yaml"
+        yaml_path.write_text(
+            yaml.dump({"date": "2026-07-01", "decisions": [memory]}),
+            encoding="utf-8",
+        )
+        mgr.memory_dir = MagicMock()
+        mgr.memory_dir.rglob.return_value = [yaml_path]
+
+        result = MemoryManager.get_memory_detail(mgr, memory_id)
+
+    # Both stores present — yaml must be True even though qdrant hit
+    assert result["storage"]["qdrant"] is True, "qdrant must be True"
+    assert result["storage"]["yaml"] is True, "yaml must be True when memory exists in YAML"
+    assert "missing_index" not in result["warnings"], "no missing_index when qdrant also has it"
+
+
+def test_manager_get_memory_detail_yaml_false_when_qdrant_hit_not_in_yaml():
+    """storage.yaml=False when memory is in Qdrant but not in any YAML file."""
+    from memory.manager import MemoryManager
+
+    memory_id = "2026-07-01_decision_qdrantonly1"
+    memory = {
+        "id": memory_id,
+        "content": "qdrant only",
+        "type": "decision",
+        "project": "rekall-mcp",
+        "agent": "claude-code",
+        "durability": 0.7,
+        "lifecycle_reason": "test",
+    }
+
+    mgr = MagicMock(spec=MemoryManager)
+    mgr.store = _make_mock_store({memory_id: memory})
+    mgr.knowledge_graph = _make_mock_graph([])
+    mgr._find_in_yaml = lambda mid: MemoryManager._find_in_yaml(mgr, mid)
+    # No YAML files
+    mgr.memory_dir = MagicMock()
+    mgr.memory_dir.rglob.return_value = []
+
+    result = MemoryManager.get_memory_detail(mgr, memory_id)
+
+    assert result["storage"]["qdrant"] is True
+    assert result["storage"]["yaml"] is False

@@ -1478,12 +1478,14 @@ class MemoryManager:
         # 1. Qdrant lookup
         memory = self.store.get_by_id(memory_id)
         qdrant_hit = memory is not None
-        yaml_hit = False
 
-        # 2. YAML fallback (read-only) when Qdrant has no record
-        if not qdrant_hit:
-            memory = self._find_in_yaml(memory_id)
-            yaml_hit = memory is not None
+        # 2. YAML presence — always check (date-scoped for performance)
+        yaml_entry = self._find_in_yaml(memory_id)
+        yaml_hit = yaml_entry is not None
+
+        # 3. YAML fallback when not in Qdrant
+        if not qdrant_hit and yaml_hit:
+            memory = yaml_entry
 
         storage: dict[str, bool] = {"qdrant": qdrant_hit, "yaml": yaml_hit}
 
@@ -1596,8 +1598,18 @@ class MemoryManager:
         return result
 
     def _find_in_yaml(self, memory_id: str) -> dict[str, Any] | None:
-        """Search YAML files for a memory by memory_id. Read-only; never writes."""
-        for yaml_file in self.memory_dir.rglob("*.yaml"):
+        """Search YAML files for a memory by id. Date-scoped when id follows YYYY-MM-DD_ format.
+
+        Accepts both production shape ('id' key from _save_to_file) and legacy shape
+        ('memory_id' key). Read-only; never writes.
+        """
+        date_match = re.match(r"^(\d{4}-\d{2}-\d{2})_", memory_id)
+        if date_match:
+            candidates = self.memory_dir.rglob(f"{date_match.group(1)}.yaml")
+        else:
+            candidates = self.memory_dir.rglob("*.yaml")
+
+        for yaml_file in candidates:
             try:
                 with open(yaml_file) as f:
                     data = yaml.safe_load(f) or {}
@@ -1605,7 +1617,10 @@ class MemoryManager:
                     if not isinstance(entries, list):
                         continue
                     for entry in entries:
-                        if isinstance(entry, dict) and entry.get("memory_id") == memory_id:
+                        if (
+                            isinstance(entry, dict)
+                            and (entry.get("id") or entry.get("memory_id")) == memory_id
+                        ):
                             return entry
             except Exception:
                 continue
