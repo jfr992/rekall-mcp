@@ -319,7 +319,7 @@ def test_no_memory_in_two_buckets(capsule_manager):
         _mem("p1", "learning", "The migration failed unexpectedly."),
         _mem("p2", "fact", "Database corruption detected during upgrade."),
         _mem("p3", "decision", "Do not disable auth even in dev."),
-        _mem("p4", "requirement", "All incidents must be escalated immediately."),
+        _mem("p4", "requirement", "Incident response: escalate immediately."),
         # open_loops: recent + open pattern (not danger)
         _mem("p5", "note", "TODO: update Helm chart.", date_delta_days=5),
         _mem("p6", "note", "Blocked: waiting on infra team.", date_delta_days=10),
@@ -364,6 +364,10 @@ def test_no_memory_in_two_buckets(capsule_manager):
         + [item["memory_id"] for item in capsule["open_loops"]]
         + [item["memory_id"] for item in capsule["standing_context"]]
     )
+    assert all_ids, "corpus must route"
+    assert capsule["danger_zones"], "danger_zones must be non-empty for this corpus"
+    assert capsule["open_loops"], "open_loops must be non-empty for this corpus"
+    assert capsule["standing_context"], "standing_context must be non-empty for this corpus"
     assert len(all_ids) == len(set(all_ids)), (
         f"Duplicate memory_ids across buckets: {[mid for mid in all_ids if all_ids.count(mid) > 1]}"
     )

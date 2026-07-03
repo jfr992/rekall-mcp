@@ -65,8 +65,6 @@ def _render_capsule(data):
 
     sections = [
         ("Standing Context", "standing_context"),
-        ("Active Workstreams", "active_workstreams"),
-        ("Operating Rules", "operating_rules"),
         ("Danger Zones", "danger_zones"),
         ("Open Loops", "open_loops"),
     ]
