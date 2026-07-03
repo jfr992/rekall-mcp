@@ -24,6 +24,7 @@ CAPSULE="$(curl -fsS --max-time 2 "$MEMORY_API/api/memory/capsule?project=$PROJE
 if [[ -z "$CAPSULE" ]]; then
   CAPSULE="$(curl -fsS --max-time 2 "$MEMORY_API/api/memory/context/startup?project=$PROJECT_ENCODED&agent=claude-code&limit=8" 2>/dev/null || true)"
 fi
+[[ -z "$CAPSULE" ]] && exit 0
 
 python3 - "$PROJECT" "$CAPSULE" <<'PY'
 import json
@@ -82,11 +83,11 @@ def _render_capsule(data):
         lines.append("")
 
     if not lines:
-        return json.dumps(data, indent=2)[:3500]
-    return "\n".join(lines).strip()[:3500]
+        return json.dumps(data, indent=2)
+    return "\n".join(lines).strip()
 
 
-text = _render_capsule(payload)
+text = _render_capsule(payload)[:3500]
 instruction = (
     "Use Rekall for targeted recall. Save durable decisions, requirements, "
     "root causes, and user preferences."

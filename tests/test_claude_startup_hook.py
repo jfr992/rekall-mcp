@@ -32,6 +32,9 @@ if [[ "$url" == *"/api/memory/capsule"* ]]; then
 fi
 
 if [[ "$url" == *"/api/memory/context/startup"* ]]; then
+  if [[ "${FAKE_STARTUP_FAIL:-0}" == "1" ]]; then
+    exit 22
+  fi
   printf '%s' '{"startup_summary":"# Agent Startup\\nFallback startup context loaded."}'
   exit 0
 fi
@@ -44,11 +47,29 @@ exit 99
     return fakebin, calls
 
 
+def _fake_blocking_curl(tmp_path: Path) -> tuple[Path, Path]:
+    fakebin = tmp_path / "installer-fakebin"
+    fakebin.mkdir()
+    calls = tmp_path / "installer-curl-calls.log"
+    curl = fakebin / "curl"
+    curl.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "$FAKE_CURL_CALLS"
+exit 7
+""",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+    return fakebin, calls
+
+
 def _run_hook(
     tmp_path: Path,
     payload: dict,
     *,
     capsule_fail: bool = False,
+    startup_fail: bool = False,
     extra_env: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     fakebin, calls = _fake_curl(tmp_path)
@@ -62,6 +83,8 @@ def _run_hook(
     )
     if capsule_fail:
         env["FAKE_CAPSULE_FAIL"] = "1"
+    if startup_fail:
+        env["FAKE_STARTUP_FAIL"] = "1"
     if extra_env:
         env.update(extra_env)
 
@@ -86,16 +109,19 @@ def _settings_commands(settings: dict, event: str) -> list[str]:
     ]
 
 
-def _run_install(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
+def _run_install(home: Path, *args: str) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     if not shutil.which("jq"):
         pytest.skip("jq is required by claude/setup/install.sh")
     if not shutil.which("curl"):
         pytest.skip("curl is required by claude/setup/install.sh")
 
     (home / ".claude").mkdir(parents=True, exist_ok=True)
+    fakebin, calls = _fake_blocking_curl(home)
     env = os.environ.copy()
     env["HOME"] = str(home)
-    return subprocess.run(
+    env["PATH"] = f"{fakebin}:{env['PATH']}"
+    env["FAKE_CURL_CALLS"] = str(calls)
+    result = subprocess.run(
         ["bash", str(INSTALL), *args],
         text=True,
         capture_output=True,
@@ -103,6 +129,8 @@ def _run_install(home: Path, *args: str) -> subprocess.CompletedProcess[str]:
         cwd=REPO,
         check=False,
     )
+    urls = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
+    return result, urls
 
 
 def test_session_start_hook_prefers_capsule_endpoint(tmp_path):
@@ -133,6 +161,68 @@ def test_session_start_hook_falls_back_to_startup_context(tmp_path):
     assert "Fallback startup context loaded." in packet["hookSpecificOutput"]["additionalContext"]
 
 
+def test_session_start_hook_silent_when_backend_down(tmp_path):
+    result, urls = _run_hook(
+        tmp_path,
+        {"cwd": "/workspaces/rekall-mcp"},
+        capsule_fail=True,
+        startup_fail=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert result.stdout == ""
+    assert urls == [
+        "http://rekall.test/api/memory/capsule?project=rekall-mcp",
+        "http://rekall.test/api/memory/context/startup?project=rekall-mcp&agent=claude-code&limit=8",
+    ]
+
+
+def test_session_start_hook_caps_startup_summary(tmp_path):
+    fakebin, calls = _fake_curl(tmp_path)
+    curl = fakebin / "curl"
+    curl.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+url="${@: -1}"
+printf '%s\\n' "$url" >> "$FAKE_CURL_CALLS"
+if [[ "$url" == *"/api/memory/capsule"* ]]; then
+  exit 22
+fi
+python3 - <<'PY'
+import json
+print(json.dumps({"startup_summary": "A" * 12000}))
+PY
+""",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fakebin}:{env['PATH']}",
+            "FAKE_CURL_CALLS": str(calls),
+            "REKALL_API_URL": "http://rekall.test",
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", str(HOOK)],
+        input=json.dumps({"cwd": "/workspaces/rekall-mcp"}),
+        text=True,
+        capture_output=True,
+        env=env,
+        cwd=tmp_path,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    packet = json.loads(result.stdout)
+    additional_context = packet["hookSpecificOutput"]["additionalContext"]
+    assert len(additional_context) < 3800
+    assert "A" * 3500 in additional_context
+    assert "A" * 3600 not in additional_context
+
+
 def test_session_start_hook_infers_project_from_project_dir(tmp_path):
     result, urls = _run_hook(tmp_path, {"project_dir": "/Users/test/Agent Project"})
 
@@ -159,9 +249,11 @@ def test_installer_default_does_not_install_startup_capsule(tmp_path):
     (home / ".claude").mkdir(parents=True)
     (home / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
 
-    result = _run_install(home, "--hooks-only")
+    result, curls = _run_install(home, "--hooks-only")
 
     assert result.returncode == 0, result.stderr + result.stdout
+    assert any("localhost:8000/health" in call for call in curls)
+    assert "backend not reachable" in result.stdout
     assert (home / ".claude" / "hooks" / "rekall-restore.sh").exists()
     assert (home / ".claude" / "hooks" / "rekall-observe.sh").exists()
     assert not (home / ".claude" / "hooks" / "session-start-memory.sh").exists()
@@ -196,9 +288,11 @@ def test_installer_opt_in_installs_startup_capsule_and_backs_up_existing_hook(tm
         encoding="utf-8",
     )
 
-    result = _run_install(home, "--hooks-only", "--install-startup-capsule")
+    result, curls = _run_install(home, "--hooks-only", "--install-startup-capsule")
 
     assert result.returncode == 0, result.stderr + result.stdout
+    assert any("localhost:8000/health" in call for call in curls)
+    assert "backend not reachable" in result.stdout
     installed = hooks / "session-start-memory.sh"
     assert installed.exists()
     assert os.access(installed, os.X_OK)
