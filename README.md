@@ -6,6 +6,12 @@ Rekall MCP is a persistent memory system with a **knowledge graph** layer. It st
 
 ---
 
+## Local-First Agent Nervous System
+
+Rekall gives local agents durable, inspectable, cross-session and cross-project memory for software work. Harness memory stores assistant preferences; Rekall stores what the work has taught the agent: decisions, root causes, procedures, danger zones, and project familiarity with provenance.
+
+---
+
 ## Install
 
 ### 1. Download and Start
@@ -326,6 +332,7 @@ AI:  vector search finds the memory
 |------|---------|
 | `observe(summary)` | Auto-classify and save (accepts caller `cwd` for project scope) |
 | `recall_memories(query)` | Graph-enhanced semantic search |
+| `recall_across_projects(query, current_project)` | Cross-project transfer recall across current, related, and global memory |
 | `save_memory(content, type)` | Manual save with explicit type |
 | `memory_detail(memory_id)` | Single memory + neighbors + scope |
 | `memory_kb(project)` | Typed slices (decisions / requirements / preferences / learnings) |
@@ -336,7 +343,11 @@ AI:  vector search finds the memory
 | `resume_packet(project)` | Continuity resume |
 | `handoff_summary(project)` | Continuity summary |
 | `agent_startup(project)` | Unified startup payload |
+| `project_capsule(project)` | Thin project familiarity capsule |
+| `publish_team_memory(project)` | Team-safe bundle of distilled project capsule and playbooks |
+| `reflex_recall(text, project)` | Cue-triggered recall before risky commands or edits |
 | `memory_lifecycle()` | Behavioral classifier output |
+| `memory_doctor(project)` | Trust report for YAML/Qdrant/vector/graph/provenance health |
 | `get_cached_context(project)` | Flat context (prompt-cache optimized) |
 | `get_hierarchical_context(project)` | Topic-grouped context tree |
 | `skill_context()` | Extracted skills from memory clusters |
@@ -348,6 +359,10 @@ AI:  vector search finds the memory
 | `list_available_tools()` | List registered tool providers and status |
 | `get_telemetry_summary()` | Tool-call telemetry summary |
 
+### Team Memory Publishing
+
+Team memory publishing emits distilled project capsules and playbook summaries. It strips known raw event-log, session transcript, private prompt, and hook payload fields from the generated bundle, but it is not a content redaction pass: review capsule/playbook text before sharing. Keep local memory as the default.
+
 ### REST API
 
 | Endpoint | Method | Purpose |
@@ -355,8 +370,11 @@ AI:  vector search finds the memory
 | `/health` | GET | Health check |
 | `/api/memory/save` | POST | Save a memory |
 | `/api/memory/recall` | POST | Graph-enhanced search |
+| `/api/memory/recall/cross-project` | POST | Cross-project transfer recall |
+| `/api/memory/reflex` | POST | Cue-triggered recall packet for risky commands or edits |
 | `/api/memory/observe` | POST | Auto-classify and save (accepts `cwd` for scope) |
 | `/api/memory/stats` | GET | Statistics + graph metrics |
+| `/api/memory/doctor` | GET | Trust report for YAML/Qdrant/vector/graph/provenance health |
 | `/api/memory/projects` | GET | List of projects + memory counts |
 | `/api/memory/context` | GET | Flat project context |
 | `/api/memory/context/hierarchy` | GET | Topic-grouped (`?days=N` for date filter) |
@@ -364,6 +382,7 @@ AI:  vector search finds the memory
 | `/api/memory/context/proactive` | GET | Top signals + conflict detection |
 | `/api/memory/context/skills` | GET | Inferred skill context from memory clusters |
 | `/api/memory/context/startup` | GET | Unified agent startup payload |
+| `/api/memory/capsule` | GET | Thin project familiarity capsule |
 | `/api/memory/detail/{id}` | GET | Full memory + neighbors + scope |
 | `/api/memory/kb` | GET | Typed slices |
 | `/api/memory/pressure` | GET | Pressure metrics + flagged candidates |

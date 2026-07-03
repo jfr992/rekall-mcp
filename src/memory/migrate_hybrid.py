@@ -10,12 +10,137 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
+import tempfile
+from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+from memory.lifecycle import summarize_lifecycle
+from memory.representation import build_embedding_text, extract_entities
+
 logger = logging.getLogger(__name__)
+
+_INTERNAL_KEYS = {"_yaml_file", "_type_key", "_index", "_schema_changed"}
+_SCHEMA_BACKFILL_FIELDS = (
+    "reinforcement_count",
+    "tier",
+    "durability",
+    "lifecycle_reason",
+    "retention_days",
+    "entities",
+    "embedding_text",
+)
+
+
+def _first_nonblank(*values: Any) -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def _public_memory(memory: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in memory.items() if key not in _INTERNAL_KEYS}
+
+
+def _age_days(date_str: str) -> int:
+    try:
+        memory_date = datetime.strptime(date_str, "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return 0
+    return max(0, (datetime.now() - memory_date).days)
+
+
+def _normalize_schema(memory: dict[str, Any]) -> dict[str, Any]:
+    normalized = dict(memory)
+    changed = False
+    content = str(normalized.get("content") or "")
+
+    if normalized.get("reinforcement_count") is None:
+        normalized["reinforcement_count"] = 0
+        changed = True
+
+    entities = normalized.get("entities")
+    if not isinstance(entities, list):
+        normalized["entities"] = extract_entities(content)
+        changed = True
+
+    if not _first_nonblank(normalized.get("embedding_text")):
+        normalized["embedding_text"] = build_embedding_text(content, normalized)
+        changed = True
+
+    lifecycle = summarize_lifecycle(
+        {
+            **normalized,
+            "age_days": _age_days(str(normalized.get("date") or "")),
+        }
+    )
+    for key, value in lifecycle.items():
+        if normalized.get(key) != value:
+            normalized[key] = value
+            changed = True
+
+    normalized["_schema_changed"] = changed
+    return normalized
+
+
+def _write_schema_backfill(memories: list[dict[str, Any]]) -> int:
+    by_file: dict[Path, list[dict[str, Any]]] = defaultdict(list)
+    for memory in memories:
+        if not memory.get("_schema_changed") or not memory.get("_yaml_file"):
+            continue
+        by_file[Path(memory["_yaml_file"])].append(memory)
+
+    updated = 0
+    for yaml_file, file_memories in by_file.items():
+        data = yaml.safe_load(yaml_file.read_text()) or {}
+        file_changed = False
+
+        for memory in file_memories:
+            type_key = memory.get("_type_key")
+            index = memory.get("_index")
+            if not isinstance(type_key, str) or not isinstance(index, int):
+                continue
+            items = data.get(type_key)
+            if not isinstance(items, list) or index >= len(items):
+                continue
+            item = items[index]
+            if not isinstance(item, dict):
+                continue
+            item_id = _first_nonblank(item.get("memory_id"), item.get("id"))
+            if item_id != memory.get("memory_id"):
+                continue
+
+            item_changed = False
+            for field in _SCHEMA_BACKFILL_FIELDS:
+                if item.get(field) != memory.get(field):
+                    item[field] = memory.get(field)
+                    item_changed = True
+            if item_changed:
+                updated += 1
+                file_changed = True
+
+        if not file_changed:
+            continue
+
+        fd, tmp_path = tempfile.mkstemp(dir=yaml_file.parent, suffix=".yaml.tmp")
+        try:
+            with os.fdopen(fd, "w") as f:
+                yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
+            os.replace(tmp_path, yaml_file)
+        except BaseException:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+    return updated
 
 
 def load_all_yaml_memories(memory_dir: Path | str) -> list[dict[str, Any]]:
@@ -28,12 +153,12 @@ def load_all_yaml_memories(memory_dir: Path | str) -> list[dict[str, Any]]:
         memory_dir: Directory containing dated YAML memory files
 
     Returns:
-        List of memory dicts with keys: memory_id, content, date, type, project
+        List of memory dicts with normalized identity fields and preserved metadata.
     """
     memory_dir = Path(memory_dir)
     memories: list[dict[str, Any]] = []
 
-    for yaml_file in sorted(memory_dir.glob("*.yaml")):
+    for yaml_file in sorted(memory_dir.rglob("*.yaml")):
         if yaml_file.name.startswith("_"):
             continue
 
@@ -53,34 +178,49 @@ def load_all_yaml_memories(memory_dir: Path | str) -> list[dict[str, Any]]:
             # "decisions" -> "decision", "learnings" -> "learning"
             mem_type = key.rstrip("s")
 
-            for item in items:
+            for index, item in enumerate(items):
                 if not isinstance(item, dict):
                     continue
+                yaml_id = _first_nonblank(item.get("id"), item.get("memory_id"))
+                memory_id = _first_nonblank(item.get("memory_id"), item.get("id"))
+                content = item.get("content", "")
+                if not memory_id or not str(content or "").strip():
+                    continue
 
-                memories.append(
+                memory = dict(item)
+                memory.update(
                     {
-                        "memory_id": item.get("id", ""),
-                        "content": item.get("content", ""),
+                        "id": yaml_id,
+                        "memory_id": memory_id,
+                        "content": content,
                         "date": date,
                         "type": mem_type,
                         "project": item.get("project", "general"),
-                        "timestamp": item.get("timestamp", ""),
+                        "_yaml_file": str(yaml_file),
+                        "_type_key": key,
+                        "_index": index,
                     }
                 )
+                memories.append(memory)
 
     return memories
 
 
 def build_corpus(memories: list[dict[str, Any]]) -> list[str]:
-    """Extract non-empty content strings for BM25 training.
+    """Extract non-empty representation strings for BM25 training.
 
     Args:
         memories: List of memory dicts (output of load_all_yaml_memories)
 
     Returns:
-        List of content strings
+        List of embedding_text strings, falling back to raw content
     """
-    return [m["content"] for m in memories if m.get("content")]
+    corpus: list[str] = []
+    for memory in memories:
+        text = _first_nonblank(memory.get("embedding_text"), memory.get("content"))
+        if text:
+            corpus.append(text)
+    return corpus
 
 
 def migrate_to_hybrid(
@@ -106,7 +246,7 @@ def migrate_to_hybrid(
     memory_dir = Path(memory_dir).expanduser()
 
     logger.info("Loading memories from YAML...")
-    memories = load_all_yaml_memories(memory_dir)
+    memories = [_normalize_schema(memory) for memory in load_all_yaml_memories(memory_dir)]
 
     if not memories:
         return {"status": "no_memories", "count": 0}
@@ -125,7 +265,10 @@ def migrate_to_hybrid(
             "status": "dry_run",
             "memories": len(memories),
             "vocab_size": len(encoder.vocab),
+            "schema_updates": sum(1 for memory in memories if memory.get("_schema_changed")),
         }
+
+    schema_updates = _write_schema_backfill(memories)
 
     # Save BM25 vocabulary
     bm25_path = memory_dir / "_bm25_vocab.json"
@@ -149,12 +292,15 @@ def migrate_to_hybrid(
         if not mem.get("content"):
             continue
 
-        vector = embedder.encode(mem["content"])
+        payload = _public_memory(mem)
+        embedding_text = payload["embedding_text"]
+
+        vector = embedder.encode(embedding_text)
         store.save(
-            id=mem["memory_id"],
+            id=payload["memory_id"],
             vector=vector,
-            payload=mem,
-            content=mem["content"],
+            payload=payload,
+            content=embedding_text,
         )
 
         if (i + 1) % 100 == 0:
@@ -166,6 +312,7 @@ def migrate_to_hybrid(
         "status": "complete",
         "memories": len(memories),
         "vocab_size": len(encoder.vocab),
+        "schema_updates": schema_updates,
     }
 
 

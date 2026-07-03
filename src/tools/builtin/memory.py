@@ -236,6 +236,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 handler=None,
             ),
             ToolDefinition(
+                name="recall_across_projects",
+                description="Recall lessons from the current repo, related repos, and global memory",
+                handler=None,
+            ),
+            ToolDefinition(
                 name="save_memory",
                 description="Manually save a memory for future recall",
                 handler=None,
@@ -258,6 +263,11 @@ class OptimizedMemoryTools(BaseToolProvider):
             ToolDefinition(
                 name="memory_stats",
                 description="Get memory system statistics",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="memory_doctor",
+                description="Check whether YAML, Qdrant, vectors, graph, and provenance agree",
                 handler=None,
             ),
             ToolDefinition(
@@ -293,6 +303,21 @@ class OptimizedMemoryTools(BaseToolProvider):
             ToolDefinition(
                 name="agent_startup",
                 description="Get a single startup payload for Claude Code or Codex sessions",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="project_capsule",
+                description="Get compact project familiarity for entering a repo",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="publish_team_memory",
+                description="Publish distilled project memory for a team-safe handoff bundle",
+                handler=None,
+            ),
+            ToolDefinition(
+                name="reflex_recall",
+                description="Recall prior lessons before risky commands or edits",
                 handler=None,
             ),
             ToolDefinition(
@@ -411,6 +436,37 @@ class OptimizedMemoryTools(BaseToolProvider):
             )
 
         registered.append("recall_memories")
+
+        @mcp.tool(structured_output=False)
+        async def recall_across_projects(
+            query: str,
+            current_project: str,
+            limit: int = 8,
+        ) -> str:
+            """Use when a lesson from another repo may apply to the current repo."""
+            result = self.manager.recall_cross_project(
+                query=query,
+                current_project=current_project,
+                limit=limit,
+            )
+
+            lines = [f"# Cross-Project Recall: {query}", ""]
+            for title, key in [
+                ("Same Project", "same_project"),
+                ("Related Projects", "related_projects"),
+                ("Global", "global"),
+            ]:
+                items = result.get(key) or []
+                if not items:
+                    continue
+                lines.append(f"## {title}")
+                for item in items:
+                    lines.append(f"- [{item.get('project', 'unknown')}] {item.get('content', '')}")
+                lines.append("")
+
+            return "\n".join(lines).strip() or "No cross-project memories found."
+
+        registered.append("recall_across_projects")
 
         @mcp.tool(structured_output=False)
         async def save_memory(
@@ -592,6 +648,19 @@ class OptimizedMemoryTools(BaseToolProvider):
         registered.append("memory_lifecycle")
 
         @mcp.tool(structured_output=False)
+        async def memory_doctor(project: str | None = None) -> str:
+            """Use when checking whether Rekall memory recall is trustworthy."""
+            report = self.manager.doctor(project=project)
+            lines = [
+                f"Memory doctor: {report['status']}",
+                f"YAML: {report['yaml_count']} | Qdrant: {report['qdrant_count']}",
+                f"Findings: {', '.join(report['findings']) if report['findings'] else 'none'}",
+            ]
+            return "\n".join(lines)
+
+        registered.append("memory_doctor")
+
+        @mcp.tool(structured_output=False)
         async def handoff_summary(project: str | None = None, limit: int = 12) -> str:
             """Return a momentum-oriented handoff summary for session startup."""
             scope = self._get_current_scope(project=project)
@@ -621,6 +690,42 @@ class OptimizedMemoryTools(BaseToolProvider):
             return payload["startup_summary"]
 
         registered.append("agent_startup")
+
+        @mcp.tool(structured_output=False)
+        async def project_capsule(project: str) -> str:
+            """Use when entering a repo and needing compact project familiarity."""
+            from memory.capsules import render_project_capsule
+
+            return render_project_capsule(self.manager.get_project_capsule(project=project))
+
+        registered.append("project_capsule")
+
+        @mcp.tool(structured_output=False)
+        async def publish_team_memory(project: str) -> str:
+            """Use when publishing distilled project memory for a team."""
+            import json
+
+            from memory.publish import build_team_memory_bundle
+
+            capsule = self.manager.get_project_capsule(project=project)
+            bundle = build_team_memory_bundle(capsule=capsule, playbooks=[])
+            return json.dumps(bundle, indent=2, sort_keys=True)
+
+        registered.append("publish_team_memory")
+
+        @mcp.tool(structured_output=False)
+        async def reflex_recall(text: str, project: str | None = None) -> str:
+            """Use before risky commands or edits that may match prior failures."""
+            packet = self.manager.reflex(text=text, project=project)
+            if not packet["cues"]:
+                return "No reflex cues matched."
+
+            lines = [f"Reflex cues: {', '.join(packet['cues'])}", ""]
+            for memory in packet["memories"]:
+                lines.append(f"- [{memory['reason']}] {memory.get('content', '')}")
+            return "\n".join(lines).strip()
+
+        registered.append("reflex_recall")
 
         @mcp.tool(structured_output=False)
         async def prune_plan(project: str | None = None, limit: int = 200) -> str:

@@ -35,6 +35,7 @@ _TYPE_DEFAULT_TIER: dict[str, Tier] = {
     "preference": "semantic",  # identity only via explicit_tier
     "learning": "episodic",
     "session": "episodic",
+    "summary": "episodic",
     "note": "working",
 }
 

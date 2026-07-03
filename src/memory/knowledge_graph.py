@@ -33,6 +33,15 @@ RELATION_TYPES = frozenset(
     }
 )
 
+_RELATION_PRIORITY = {
+    "related_to": 0,
+    "part_of": 1,
+    "led_to": 1,
+    "depends_on": 1,
+    "contradicts": 2,
+    "supersedes": 2,
+}
+
 TYPE_WEIGHTS: dict[str, float] = {
     "requirement": 1.0,
     "decision": 0.85,
@@ -183,6 +192,16 @@ class KnowledgeGraph:
         if source == target:
             return
         if self._graph.has_edge(source, target):
+            existing = self._graph.edges[source, target]
+            existing_relation = existing.get("relation")
+            if _RELATION_PRIORITY[relation] > _RELATION_PRIORITY.get(existing_relation, -1):
+                existing.update(
+                    relation=relation,
+                    weight=weight,
+                    auto=auto,
+                    created=date.today().isoformat(),
+                )
+                self._dirty = True
             return
 
         self._graph.add_edge(

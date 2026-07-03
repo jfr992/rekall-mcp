@@ -36,8 +36,6 @@ claude/                      Shippable Claude Code bundle (NOT auto-loaded)
 docs/                        User-facing docs (SETUP, MIGRATION, ARCHITECTURE, ...)
 ```
 
-(`docs/superpowers/` holds local-only workflow specs/plans — gitignored, not part of the repo.)
-
 ## Adding a new REST endpoint
 
 Pattern (in order):
