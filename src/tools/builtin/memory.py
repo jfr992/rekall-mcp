@@ -311,6 +311,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 handler=None,
             ),
             ToolDefinition(
+                name="publish_team_memory",
+                description="Publish distilled project memory for a team-safe handoff bundle",
+                handler=None,
+            ),
+            ToolDefinition(
                 name="reflex_recall",
                 description="Recall prior lessons before risky commands or edits",
                 handler=None,
@@ -694,6 +699,19 @@ class OptimizedMemoryTools(BaseToolProvider):
             return render_project_capsule(self.manager.get_project_capsule(project=project))
 
         registered.append("project_capsule")
+
+        @mcp.tool(structured_output=False)
+        async def publish_team_memory(project: str) -> str:
+            """Use when publishing distilled project memory for a team."""
+            import json
+
+            from memory.publish import build_team_memory_bundle
+
+            capsule = self.manager.get_project_capsule(project=project)
+            bundle = build_team_memory_bundle(capsule=capsule, playbooks=[])
+            return json.dumps(bundle, indent=2, sort_keys=True)
+
+        registered.append("publish_team_memory")
 
         @mcp.tool(structured_output=False)
         async def reflex_recall(text: str, project: str | None = None) -> str:

@@ -338,6 +338,7 @@ AI:  vector search finds the memory
 | `handoff_summary(project)` | Continuity summary |
 | `agent_startup(project)` | Unified startup payload |
 | `project_capsule(project)` | Thin project familiarity capsule |
+| `publish_team_memory(project)` | Team-safe bundle of distilled project capsule and playbooks |
 | `reflex_recall(text, project)` | Cue-triggered recall before risky commands or edits |
 | `memory_lifecycle()` | Behavioral classifier output |
 | `memory_doctor(project)` | Trust report for YAML/Qdrant/vector/graph/provenance health |
@@ -351,6 +352,10 @@ AI:  vector search finds the memory
 | `publish_memory(project, format)` | Export memory to an OKF knowledge bundle |
 | `list_available_tools()` | List registered tool providers and status |
 | `get_telemetry_summary()` | Tool-call telemetry summary |
+
+### Team Memory Publishing
+
+Team memory publishing emits distilled project capsules and playbook summaries. It does not include `_events.jsonl`, raw session transcripts, private prompts, or raw hook payloads. Keep local memory as the default; publish only after reviewing the generated bundle.
 
 ### REST API
 
