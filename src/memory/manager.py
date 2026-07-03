@@ -1572,7 +1572,11 @@ class MemoryManager:
         if current_project is not None and memory.get("project") != current_project:
             warnings.append("scope_mismatch")
         _agent_absent = memory.get("agent") in (None, "", "unknown")
-        if _agent_absent and memory.get("source_tool") is None and memory.get("source_event") is None:
+        if (
+            _agent_absent
+            and memory.get("source_tool") is None
+            and memory.get("source_event") is None
+        ):
             warnings.append("missing_provenance")
         if yaml_hit and not qdrant_hit:
             warnings.append("missing_index")
