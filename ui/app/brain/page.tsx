@@ -3,10 +3,11 @@
 import { useMemo, useState } from "react";
 import { BrainScene } from "@/components/brain/brain-scene";
 import { BrainCanvas } from "@/components/brain/brain-canvas";
-import { NodeDrawer } from "@/components/brain/node-drawer";
+import { BrainNodeList } from "@/components/brain/brain-node-list";
 import { TypeLegend } from "@/components/brain/type-legend";
 import { TierLegend } from "@/components/brain/tier-legend";
 import { GraphStats } from "@/components/brain/graph-stats";
+import { MemoryInspector } from "@/components/memory-inspector/memory-inspector";
 import { Empty } from "@/components/ui/empty";
 import { useBrainGraph } from "@/lib/queries/use-brain-graph";
 import { useMemoryDetail } from "@/lib/queries/use-memory-detail";
@@ -17,7 +18,7 @@ export default function BrainPage() {
   const project = useProjectStore((s) => s.project);
   const { data, dataUpdatedAt, isLoading } = useBrainGraph(project);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const detail = useMemoryDetail(selectedId);
+  const detail = useMemoryDetail(selectedId, project || undefined);
 
   const nodes = (data?.graph?.nodes ?? []) as GraphNode[];
   const rawLinks = (data?.graph?.links ?? []) as GraphLink[];
@@ -86,6 +87,17 @@ export default function BrainPage() {
         </div>
       </div>
 
+      {/* Keyboard-accessible fallback — lets users select nodes without canvas pointer */}
+      <div className="pointer-events-none absolute bottom-6 right-6 flex flex-col items-end gap-2">
+        <div className="pointer-events-auto">
+          <BrainNodeList
+            nodes={nodes}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+          />
+        </div>
+      </div>
+
       <div className="pointer-events-none absolute bottom-6 left-6 flex flex-col gap-2">
         <div className="pointer-events-auto">
           <TypeLegend />
@@ -95,11 +107,13 @@ export default function BrainPage() {
         </div>
       </div>
 
-      <NodeDrawer
+      <MemoryInspector
         open={selectedId !== null}
         detail={detail.data}
         isLoading={detail.isLoading}
+        currentProject={project}
         onClose={() => setSelectedId(null)}
+        onSelectMemory={setSelectedId}
       />
     </div>
   );
