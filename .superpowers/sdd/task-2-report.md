@@ -26,6 +26,44 @@ Kept compatibility constraints intact:
 
 Command:
 
+---
+
+## Task 2 Re-Review Fix
+
+### Changes
+
+- fixed case-sensitive stopword filtering in `src/memory/representation.py` so lowercase boilerplate tokens no longer leak into `entities`
+- added regression coverage for:
+  - lowercase boilerplate stopwords being excluded from extracted entities
+  - nested per-project YAML discovery in `load_all_yaml_memories()`
+  - preserving existing `embedding_text` and `entities` fields during migration loading
+
+### Verification
+
+Command:
+
+```bash
+uv run --extra dev pytest tests/test_memory_representation.py tests/test_migrate_hybrid.py -q
+```
+
+Result:
+
+```text
+18 passed in 0.21s
+```
+
+Command:
+
+```bash
+uv run --extra dev pytest tests/test_startup.py tests/test_server_startup.py -q
+```
+
+Result:
+
+```text
+2 passed in 0.27s
+```
+
 ```bash
 uv run --extra dev pytest tests/test_memory_representation.py -q
 ```

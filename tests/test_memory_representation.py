@@ -12,6 +12,19 @@ def test_extract_entities_preserves_software_identifiers():
     assert "TOPE-123" in entities
 
 
+def test_extract_entities_filters_lowercase_boilerplate_stopwords():
+    from memory.representation import extract_entities
+
+    entities = extract_entities("project type claim this that Longhorn")
+
+    assert "project" not in entities
+    assert "type" not in entities
+    assert "claim" not in entities
+    assert "this" not in entities
+    assert "that" not in entities
+    assert entities == ["Longhorn"]
+
+
 def test_build_embedding_text_adds_scope_and_entities():
     from memory.representation import build_embedding_text
 

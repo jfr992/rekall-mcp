@@ -25,7 +25,7 @@ def extract_entities(text: str, limit: int = 24) -> list[str]:
     entities: list[str] = []
     for match in _ENTITY_RE.finditer(text):
         entity = match.group(0).strip(".,:;()[]{}")
-        if len(entity) < 2 or entity in _STOP or entity.lower() in _STOP:
+        if len(entity) < 2 or entity in _STOP or entity.lower().capitalize() in _STOP:
             continue
         key = entity.lower()
         if key in seen:

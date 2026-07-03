@@ -34,6 +34,29 @@ class TestLoadAllYamlMemories:
         assert memories[0]["type"] == "decision"
         assert memories[0]["project"] == "rekall"
 
+    def test_loads_memories_from_nested_project_directory(self, tmp_path):
+        """load_all_yaml_memories discovers nested per-project YAML files."""
+        from memory.migrate_hybrid import load_all_yaml_memories
+
+        nested_file = tmp_path / "byte-edge" / "2026-07-03.yaml"
+        nested_file.parent.mkdir()
+        nested_file.write_text(
+            yaml.dump(
+                {
+                    "date": "2026-07-03",
+                    "notes": [
+                        {"id": "n1", "content": "Nested note", "project": "byte-edge"},
+                    ],
+                }
+            )
+        )
+
+        memories = load_all_yaml_memories(tmp_path)
+
+        assert len(memories) == 1
+        assert memories[0]["content"] == "Nested note"
+        assert memories[0]["project"] == "byte-edge"
+
     def test_loads_multiple_types(self, tmp_path):
         """load_all_yaml_memories reads multiple memory types."""
         from memory.migrate_hybrid import load_all_yaml_memories
@@ -91,6 +114,33 @@ class TestLoadAllYamlMemories:
         memories = load_all_yaml_memories(tmp_path)
 
         assert len(memories) == 1
+
+    def test_preserves_embedding_text_and_entities(self, tmp_path):
+        """load_all_yaml_memories keeps embedding_text and entities fields."""
+        from memory.migrate_hybrid import load_all_yaml_memories
+
+        (tmp_path / "2026-03-25.yaml").write_text(
+            yaml.dump(
+                {
+                    "date": "2026-03-25",
+                    "notes": [
+                        {
+                            "id": "n1",
+                            "content": "Keep these fields",
+                            "project": "p",
+                            "embedding_text": "Project p. Claim Keep these fields.",
+                            "entities": ["Project", "Claim"],
+                        }
+                    ],
+                }
+            )
+        )
+
+        memories = load_all_yaml_memories(tmp_path)
+
+        assert len(memories) == 1
+        assert memories[0]["embedding_text"] == "Project p. Claim Keep these fields."
+        assert memories[0]["entities"] == ["Project", "Claim"]
 
     def test_handles_empty_directory(self, tmp_path):
         """Empty directory returns empty list."""
