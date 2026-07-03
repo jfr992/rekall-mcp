@@ -15,6 +15,8 @@ from typing import Any
 
 import yaml
 
+from memory.representation import build_embedding_text, extract_entities
+
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +35,7 @@ def load_all_yaml_memories(memory_dir: Path | str) -> list[dict[str, Any]]:
     memory_dir = Path(memory_dir)
     memories: list[dict[str, Any]] = []
 
-    for yaml_file in sorted(memory_dir.glob("*.yaml")):
+    for yaml_file in sorted(memory_dir.rglob("*.yaml")):
         if yaml_file.name.startswith("_"):
             continue
 
@@ -65,6 +67,10 @@ def load_all_yaml_memories(memory_dir: Path | str) -> list[dict[str, Any]]:
                         "type": mem_type,
                         "project": item.get("project", "general"),
                         "timestamp": item.get("timestamp", ""),
+                        "tier": item.get("tier"),
+                        "repo_name": item.get("repo_name"),
+                        "embedding_text": item.get("embedding_text"),
+                        "entities": item.get("entities"),
                     }
                 )
 
@@ -149,12 +155,20 @@ def migrate_to_hybrid(
         if not mem.get("content"):
             continue
 
-        vector = embedder.encode(mem["content"])
+        entities = mem.get("entities") or extract_entities(mem["content"])
+        embedding_text = mem.get("embedding_text") or build_embedding_text(
+            mem["content"],
+            {**mem, "entities": entities},
+        )
+        mem["entities"] = entities
+        mem["embedding_text"] = embedding_text
+
+        vector = embedder.encode(embedding_text)
         store.save(
             id=mem["memory_id"],
             vector=vector,
             payload=mem,
-            content=mem["content"],
+            content=embedding_text,
         )
 
         if (i + 1) % 100 == 0:

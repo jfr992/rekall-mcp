@@ -39,6 +39,7 @@ from memory.events import EventLog, MemoryEvent
 from memory.lifecycle import summarize_lifecycle
 from memory.linker import auto_link
 from memory.observe import ObservationCandidate, ObservationEngine
+from memory.representation import build_embedding_text, extract_entities
 from memory.resume import build_resume_packet
 from memory.scope import MemoryScope, ScopeDetector
 from memory.skills import extract_skills, render_skill_context
@@ -302,13 +303,21 @@ class MemoryManager:
                 **metadata,
             }
             payload.update(summarize_lifecycle(payload))
+            payload["entities"] = extract_entities(content)
+            payload["embedding_text"] = build_embedding_text(content, payload)
 
             # Save to file (durability)
             self._save_to_file(memory_id, content, payload, type, date)
 
             # Save to vector store (searchability)
-            vector = self.embedder.encode(content)
-            self.store.save(id=memory_id, vector=vector, payload=payload, content=content)
+            embedding_text = payload["embedding_text"]
+            vector = self.embedder.encode(embedding_text)
+            self.store.save(
+                id=memory_id,
+                vector=vector,
+                payload=payload,
+                content=embedding_text,
+            )
 
             self.record_event(
                 event_type="memory_saved",

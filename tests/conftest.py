@@ -77,6 +77,13 @@ def sample_memory_entry() -> dict:
         "content": "Decided to use PostgreSQL for its JSON support",
         "project": "test-project",
         "timestamp": "2026-02-01T14:33:22.789012",
+        "type": "decision",
+        "tier": "working",
+        "embedding_text": (
+            "Project test-project. Type decision. Tier working. "
+            "Entities: PostgreSQL. Claim: Decided to use PostgreSQL for its JSON support"
+        ),
+        "entities": ["PostgreSQL"],
     }
 
 
