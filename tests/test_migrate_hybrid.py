@@ -79,6 +79,55 @@ class TestLoadAllYamlMemories:
         assert [memory["id"] for memory in memories] == ["m1"]
         assert [memory["memory_id"] for memory in memories] == ["m1"]
 
+    def test_loads_memory_id_only_entries(self, tmp_path):
+        """YAML exports with memory_id but no id are still valid memories."""
+        from memory.migrate_hybrid import load_all_yaml_memories
+
+        (tmp_path / "2026-03-25.yaml").write_text(
+            yaml.dump(
+                {
+                    "date": "2026-03-25",
+                    "notes": [
+                        {
+                            "memory_id": "mid-only",
+                            "content": "Payload-style memory",
+                            "project": "rekall",
+                        }
+                    ],
+                }
+            )
+        )
+
+        memories = load_all_yaml_memories(tmp_path)
+
+        assert [memory["id"] for memory in memories] == ["mid-only"]
+        assert [memory["memory_id"] for memory in memories] == ["mid-only"]
+
+    def test_preserves_distinct_id_and_memory_id_when_present(self, tmp_path):
+        """Loader should not collapse explicit id/memory_id fields when both exist."""
+        from memory.migrate_hybrid import load_all_yaml_memories
+
+        (tmp_path / "2026-03-25.yaml").write_text(
+            yaml.dump(
+                {
+                    "date": "2026-03-25",
+                    "notes": [
+                        {
+                            "id": "yaml-id",
+                            "memory_id": "payload-id",
+                            "content": "Both ids exist",
+                            "project": "rekall",
+                        }
+                    ],
+                }
+            )
+        )
+
+        memories = load_all_yaml_memories(tmp_path)
+
+        assert memories[0]["id"] == "yaml-id"
+        assert memories[0]["memory_id"] == "payload-id"
+
     def test_loads_multiple_types(self, tmp_path):
         """load_all_yaml_memories reads multiple memory types."""
         from memory.migrate_hybrid import load_all_yaml_memories
@@ -246,6 +295,14 @@ class TestBuildCorpus:
         ]
 
         assert build_corpus(memories) == ["Project rekall. Claim: canonical phrasing.", "Only raw"]
+
+    def test_blank_embedding_text_falls_back_to_content(self):
+        """Whitespace-only embedding text should not hide raw content."""
+        from memory.migrate_hybrid import build_corpus
+
+        memories = [{"content": "Raw fallback", "embedding_text": "   "}]
+
+        assert build_corpus(memories) == ["Raw fallback"]
 
     def test_skips_empty_content(self):
         """build_corpus skips entries with empty content."""

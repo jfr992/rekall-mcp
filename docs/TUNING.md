@@ -163,11 +163,22 @@ Or via MCP tool: `rebuild_knowledge_graph()`
 
 ## Hybrid Recall Reindex
 
-Run this only after backing up `~/.claude/memory` and `~/.claude/qdrant`.
+Run this only after backing up the memory YAML directory and Qdrant volume you
+actually use. The bundled Codex install uses `~/.Codex`; Claude Code installs
+often use `~/.claude`.
 
 ```bash
-uv run python -m memory.migrate_hybrid --dry-run
-uv run python -m memory.migrate_hybrid
+# Codex-local default stack
+tar czf ~/backups/pre-hybrid-memory.tar.gz -C ~ .Codex/memory
+tar czf ~/backups/pre-hybrid-qdrant.tar.gz -C ~ .Codex/qdrant
+uv run python -m memory.migrate_hybrid --memory-dir ~/.Codex/memory --dry-run
+uv run python -m memory.migrate_hybrid --memory-dir ~/.Codex/memory
+
+# Claude Code-local stack
+tar czf ~/backups/pre-hybrid-claude-memory.tar.gz -C ~ .claude/memory
+tar czf ~/backups/pre-hybrid-claude-qdrant.tar.gz -C ~ .claude/qdrant
+uv run python -m memory.migrate_hybrid --memory-dir ~/.claude/memory --dry-run
+uv run python -m memory.migrate_hybrid --memory-dir ~/.claude/memory
 ```
 
 The migration reads nested project YAML, builds `_bm25_vocab.json`, and indexes

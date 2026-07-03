@@ -20,6 +20,14 @@ from memory.representation import build_embedding_text, extract_entities
 logger = logging.getLogger(__name__)
 
 
+def _first_nonblank(*values: Any) -> str:
+    for value in values:
+        text = str(value or "").strip()
+        if text:
+            return text
+    return ""
+
+
 def load_all_yaml_memories(memory_dir: Path | str) -> list[dict[str, Any]]:
     """Load all memories from YAML files in the given directory.
 
@@ -58,14 +66,15 @@ def load_all_yaml_memories(memory_dir: Path | str) -> list[dict[str, Any]]:
             for item in items:
                 if not isinstance(item, dict):
                     continue
-                memory_id = item.get("id", "")
+                yaml_id = _first_nonblank(item.get("id"), item.get("memory_id"))
+                memory_id = _first_nonblank(item.get("memory_id"), item.get("id"))
                 content = item.get("content", "")
-                if not memory_id or not content:
+                if not memory_id or not str(content or "").strip():
                     continue
 
                 memories.append(
                     {
-                        "id": memory_id,
+                        "id": yaml_id,
                         "memory_id": memory_id,
                         "content": content,
                         "date": date,
@@ -93,7 +102,7 @@ def build_corpus(memories: list[dict[str, Any]]) -> list[str]:
     """
     corpus: list[str] = []
     for memory in memories:
-        text = str(memory.get("embedding_text") or memory.get("content") or "").strip()
+        text = _first_nonblank(memory.get("embedding_text"), memory.get("content"))
         if text:
             corpus.append(text)
     return corpus
@@ -166,7 +175,7 @@ def migrate_to_hybrid(
             continue
 
         entities = mem.get("entities") or extract_entities(mem["content"])
-        embedding_text = mem.get("embedding_text") or build_embedding_text(
+        embedding_text = _first_nonblank(mem.get("embedding_text")) or build_embedding_text(
             mem["content"],
             {**mem, "entities": entities},
         )
