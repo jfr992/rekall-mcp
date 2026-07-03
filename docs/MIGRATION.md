@@ -1,3 +1,14 @@
+# Migration Guide — v1.8.0 → v1.9.0 (Smarter reads)
+
+**No data migration.** Upgrade in place.
+
+- **Capsule dict shape change (breaking for direct `/api/memory/capsule` consumers).** The `operating_rules` and `active_workstreams` keys are gone. Routing is now exclusive (elif-chain, first match wins) with three buckets: `danger_zones`, `open_loops` (word-boundary patterns, 90-day recency gate), and `standing_context` (absorbs former `operating_rules`). If you read either removed key by name, update to `standing_context`.
+- **Entities no longer rendered.** The `Entities:` line is dropped from both the Python capsule renderer and the `session-start-memory.sh` hook fallback. The `entities` field is still computed and stored — it still feeds embedding text. Display was suppressed; the field is intact.
+- **Doctor `degraded` semantics narrowed.** Legacy memories without provenance (`missing_provenance: N`) now appear in `notes`, not `findings`. Doctor `degraded` is reserved for real failures: zero vectors, sync mismatch, graph absent. If you script against `status: degraded`, legacy-provenance gaps no longer trigger it.
+- **`agent="unknown"` counts as missing provenance.** `memory_detail` warning predicate now fires when `agent` is `None` or `"unknown"` and `source_tool`/`source_event` are absent — closes the gap where `ScopeDetector` defaulting to `"unknown"` silently passed as provenanced.
+
+---
+
 # Migration Guide — v1.7.0 → v1.8.0 (Parity + hardening + agent nervous system)
 
 **Required data migration for existing memory stores. One env-var behavior change, additive APIs.**
