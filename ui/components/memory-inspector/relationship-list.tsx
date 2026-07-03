@@ -95,13 +95,19 @@ export function RelationshipList({ relationships, onSelectMemory }: Props) {
                         <MonoLabel>{mem.project}</MonoLabel>
                       ) : null}
                     </div>
-                    {mem?.content ? (
-                      <span
-                        className={`break-words text-xs text-[var(--fg-muted)] ${isExpanded ? "" : "line-clamp-2"}`}
-                      >
-                        {mem.content}
+                    {mem ? (
+                      mem.content ? (
+                        <span
+                          className={`break-words text-xs text-[var(--fg-muted)] ${isExpanded ? "" : "line-clamp-2"}`}
+                        >
+                          {mem.content}
+                        </span>
+                      ) : null
+                    ) : (
+                      <span className="text-xs italic text-[var(--fg-muted)]">
+                        memory unavailable
                       </span>
-                    ) : null}
+                    )}
                     {mem?.memory_id ? (
                       <span className="break-all font-mono text-[10px] text-[var(--fg-muted)]">
                         {mem.memory_id}

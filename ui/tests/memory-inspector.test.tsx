@@ -346,6 +346,51 @@ describe("MemoryInspector", () => {
     expect(screen.getByText("superseded")).toBeInTheDocument();
   });
 
+  // --- Fix 4: missing_neighbor_ids + null-memory relationship ---
+
+  test("missing_neighbor_ids renders warning line with count and ids", () => {
+    const detailWithMissing: DetailResponseV2 = {
+      ...detail,
+      relationships: [
+        {
+          source_id: "2026-07-01_decision_aaa1",
+          target_id: detail.memory!.memory_id,
+          neighbor_id: "2026-07-01_decision_aaa1",
+          direction: "in" as const,
+          relation: "supersedes",
+          weight: 0.8,
+          auto: true,
+          created: "2026-07-01",
+          memory: null,
+        },
+      ],
+      missing_neighbor_ids: ["2026-07-01_decision_aaa1"],
+    };
+    render(<MemoryInspector {...defaultProps} detail={detailWithMissing} />);
+    expect(screen.getByText(/graph edges point to 1 missing/i)).toBeInTheDocument();
+  });
+
+  test("null-memory relationship row renders 'memory unavailable' note", () => {
+    const detailWithNullMem: DetailResponseV2 = {
+      ...detail,
+      relationships: [
+        {
+          source_id: "2026-07-01_decision_aaa1",
+          target_id: detail.memory!.memory_id,
+          neighbor_id: "2026-07-01_decision_aaa1",
+          direction: "in" as const,
+          relation: "supersedes",
+          weight: 0.8,
+          auto: true,
+          created: "2026-07-01",
+          memory: null,
+        },
+      ],
+    };
+    render(<MemoryInspector {...defaultProps} detail={detailWithNullMem} />);
+    expect(screen.getByText("memory unavailable")).toBeInTheDocument();
+  });
+
   test("status badge shows 'current' when no contradicts, no incoming supersedes, no legacy warnings", () => {
     const currentDetail: DetailResponseV2 = {
       ...detail,

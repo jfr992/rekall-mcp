@@ -12,6 +12,7 @@ type Props = {
   durability: number | null | undefined;
   salience: number | undefined;
   reinforcement_count: number | null | undefined;
+  missingNeighborIds?: string[] | null;
 };
 
 const WARNING_LABELS: Record<string, string> = {
@@ -38,6 +39,7 @@ export function EvidenceRail({
   durability,
   salience,
   reinforcement_count,
+  missingNeighborIds,
 }: Props) {
   // Backend is the single source of truth for warnings — map codes to human labels
   const allWarnings = (warnings ?? []).map((w) => WARNING_LABELS[w] ?? w);
@@ -125,7 +127,7 @@ export function EvidenceRail({
       )}
 
       {/* Warnings */}
-      {allWarnings.length > 0 && (
+      {(allWarnings.length > 0 || (missingNeighborIds?.length ?? 0) > 0) && (
         <section>
           <MonoLabel className="mb-2 block">Warnings</MonoLabel>
           <ul className="space-y-1">
@@ -138,6 +140,18 @@ export function EvidenceRail({
                 <span className="text-xs text-[var(--fg-muted)]">{w}</span>
               </li>
             ))}
+            {missingNeighborIds && missingNeighborIds.length > 0 && (
+              <li key="missing-neighbors" className="flex items-start gap-2">
+                <AlertTriangle
+                  size={12}
+                  className="mt-0.5 shrink-0 text-[var(--accent-warning)]"
+                />
+                <span className="text-xs text-[var(--fg-muted)]">
+                  graph edges point to {missingNeighborIds.length} missing memorie(s):{" "}
+                  {missingNeighborIds.join(", ")}
+                </span>
+              </li>
+            )}
           </ul>
         </section>
       )}

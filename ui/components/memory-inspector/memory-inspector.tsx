@@ -171,6 +171,7 @@ export function MemoryInspector({
             durability={detail?.lifecycle?.durability}
             salience={memory.salience}
             reinforcement_count={memory.reinforcement_count}
+            missingNeighborIds={detail?.missing_neighbor_ids}
           />
 
           {/* Relationship list */}
