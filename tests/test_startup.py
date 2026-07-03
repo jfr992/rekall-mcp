@@ -1,4 +1,7 @@
-from memory.startup import build_agent_startup
+from unittest.mock import MagicMock
+
+from memory.scope import MemoryScope
+from memory.startup import build_agent_startup, render_agent_startup
 
 
 def test_build_agent_startup_returns_summary():
@@ -20,23 +23,20 @@ def test_build_agent_startup_returns_summary():
         "danger_zones": [],
         "open_loops": [],
     }
-    manager.doctor = lambda project=None: {
-        "status": "healthy",
-        "project": project,
-        "findings": [],
-    }
+    manager.doctor = MagicMock(side_effect=AssertionError("doctor should be on-demand"))
 
     startup = build_agent_startup(manager, project="brain", agent="claude-code")
 
     assert startup["scope"]["project"] == "brain"
     assert "startup_summary" in startup
     assert "project_capsule" in startup
-    assert startup["doctor"]["status"] == "healthy"
+    assert startup["doctor"] == {}
     assert "system_hints" in startup
     assert "Agent Startup" in startup["startup_summary"]
     assert "Familiarity Capsule" in startup["startup_summary"]
     assert "Memory Doctor" not in startup["startup_summary"]
     assert "Codex startup adapter is planned" in startup["startup_summary"]
+    manager.doctor.assert_not_called()
 
 
 def test_build_agent_startup_degrades_when_capsule_fails():
@@ -52,11 +52,7 @@ def test_build_agent_startup_degrades_when_capsule_fails():
         raise RuntimeError("capsule unavailable")
 
     manager.get_project_capsule = _boom
-    manager.doctor = lambda project=None: {
-        "status": "healthy",
-        "project": project,
-        "findings": [],
-    }
+    manager.doctor = MagicMock(side_effect=AssertionError("doctor should be on-demand"))
 
     startup = build_agent_startup(manager, project="brain", agent="claude-code")
 
@@ -66,26 +62,28 @@ def test_build_agent_startup_degrades_when_capsule_fails():
     assert "system_hints" in startup
     assert "Agent Startup" in startup["startup_summary"]
     assert "Familiarity Capsule" not in startup["startup_summary"]
+    manager.doctor.assert_not_called()
 
 
-def test_build_agent_startup_includes_doctor_warning_when_degraded():
-    manager = type("Manager", (), {})()
-    manager.get_resume_packet = lambda **kwargs: {
+def test_render_agent_startup_includes_doctor_warning_when_supplied():
+    packet = {
         "scope": {"project": "brain", "agent": "claude-code"},
         "next_steps": [],
         "handoff": "## Handoff Summary\n",
         "summary": "# Resume Packet: brain\n",
     }
-    manager.get_project_capsule = lambda project, limit=300: {}
-    manager.doctor = lambda project=None: {
+    doctor = {
         "status": "degraded",
-        "project": project,
+        "project": "brain",
         "findings": ["yaml_not_indexed", "missing_provenance"],
     }
 
-    startup = build_agent_startup(manager, project="brain", agent="claude-code")
+    summary = render_agent_startup(
+        MemoryScope(project="brain", agent="claude-code"),
+        packet,
+        [],
+        doctor=doctor,
+    )
 
-    assert startup["doctor"]["status"] == "degraded"
-    assert startup["doctor"]["findings"] == ["yaml_not_indexed", "missing_provenance"]
-    assert "Memory Doctor" in startup["startup_summary"]
-    assert "yaml_not_indexed, missing_provenance" in startup["startup_summary"]
+    assert "Memory Doctor" in summary
+    assert "yaml_not_indexed, missing_provenance" in summary

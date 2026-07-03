@@ -16,7 +16,7 @@ Startup order:
 
 1. Resolve current project from the harness cwd.
 2. Load the project capsule.
-3. Add memory doctor warnings when degraded.
+3. Skip full doctor scans; call `memory_doctor(project)` on demand when recall trust is in question.
 4. Defer targeted recall until the user prompt or command supplies a cue.
 
 ## Best default
@@ -42,6 +42,7 @@ Returns:
 - scope
 - startup_summary
 - resume_packet
+- project_capsule
 - system_hints
 
 ### `resume_packet`

@@ -61,6 +61,29 @@ def test_reflex_packet_deduplicates_memories_and_respects_limit():
     assert [memory["memory_id"] for memory in packet["memories"]].count("shared") == 1
 
 
+def test_reflex_packet_allocates_slots_across_matched_cues():
+    from memory.reflex import build_reflex_packet
+
+    class Manager:
+        def recall(self, query, limit=4, project=None, score_threshold=0.45, **kwargs):
+            return [
+                {"memory_id": f"{query}-1", "content": f"{query} first"},
+                {"memory_id": f"{query}-2", "content": f"{query} second"},
+                {"memory_id": f"{query}-3", "content": f"{query} third"},
+            ]
+
+    packet = build_reflex_packet(
+        Manager(),
+        text="terraform apply touches qdrant memory sync and claude hooks",
+        project="rekall-mcp",
+        limit=4,
+    )
+
+    reasons = [memory["reason"] for memory in packet["memories"]]
+    assert len(reasons) == 4
+    assert {"iac", "memory_data", "hooks"}.issubset(set(reasons))
+
+
 class JsonRequest:
     def __init__(self, payload):
         self._payload = payload

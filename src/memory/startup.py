@@ -37,15 +37,7 @@ def build_agent_startup(
         capsule = manager.get_project_capsule(scope.project, limit=300)
     except Exception:
         capsule = {}
-    try:
-        doctor = manager.doctor(project=scope.project)
-    except Exception as e:
-        doctor = {
-            "status": "unavailable",
-            "project": scope.project,
-            "findings": ["doctor_unavailable"],
-            "error": str(e),
-        }
+    doctor: dict[str, Any] = {}
 
     hints = SYSTEM_HINTS.get(scope.agent, SYSTEM_HINTS["unknown"])
 

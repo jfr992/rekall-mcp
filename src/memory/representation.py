@@ -4,19 +4,22 @@ import re
 from typing import Any
 
 _ENTITY_RE = re.compile(
-    r"\b(?:[A-Z][A-Za-z0-9]+(?:-[A-Za-z0-9]+)*|[a-z0-9]+(?:-[a-z0-9]+)+|[a-zA-Z_][a-zA-Z0-9_]*|[A-Z]+-\d+)\b"
+    r"\b(?:[A-Z]+-\d+|[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+|[a-z0-9]+(?:-[a-z0-9]+)+|[A-Z]{2,}|(?=[a-z0-9]*\d)[a-z][a-z0-9]+|[A-Z][A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\b"
 )
 
 _STOP = {
-    "Project",
-    "Type",
-    "Tier",
-    "Claim",
-    "Context",
-    "Use",
-    "The",
-    "This",
-    "That",
+    "claim",
+    "context",
+    "decided",
+    "fixed",
+    "learned",
+    "project",
+    "that",
+    "the",
+    "this",
+    "tier",
+    "type",
+    "use",
 }
 
 
@@ -25,7 +28,7 @@ def extract_entities(text: str, limit: int = 24) -> list[str]:
     entities: list[str] = []
     for match in _ENTITY_RE.finditer(text):
         entity = match.group(0).strip(".,:;()[]{}")
-        if len(entity) < 2 or entity in _STOP or entity.lower().capitalize() in _STOP:
+        if len(entity) < 2 or entity.lower() in _STOP:
             continue
         key = entity.lower()
         if key in seen:

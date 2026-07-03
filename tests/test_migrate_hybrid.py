@@ -221,6 +221,38 @@ class TestLoadAllYamlMemories:
         assert memories[0]["embedding_text"] == "Project p. Claim Keep these fields."
         assert memories[0]["entities"] == ["Project", "Claim"]
 
+    def test_preserves_existing_metadata_fields(self, tmp_path):
+        """Loader keeps provenance/lifecycle fields instead of whitelisting them away."""
+        from memory.migrate_hybrid import load_all_yaml_memories
+
+        (tmp_path / "2026-03-25.yaml").write_text(
+            yaml.dump(
+                {
+                    "date": "2026-03-25",
+                    "notes": [
+                        {
+                            "id": "n1",
+                            "content": "Keep metadata",
+                            "project": "p",
+                            "agent": "claude-code",
+                            "source_tool": "rekall-observe",
+                            "cwd": "/repo/p",
+                            "tier": "semantic",
+                            "durability": 0.91,
+                        }
+                    ],
+                }
+            )
+        )
+
+        memories = load_all_yaml_memories(tmp_path)
+
+        assert memories[0]["agent"] == "claude-code"
+        assert memories[0]["source_tool"] == "rekall-observe"
+        assert memories[0]["cwd"] == "/repo/p"
+        assert memories[0]["tier"] == "semantic"
+        assert memories[0]["durability"] == 0.91
+
     def test_skips_entries_without_id_or_content(self, tmp_path):
         """load_all_yaml_memories ignores malformed memory entries."""
         from memory.migrate_hybrid import load_all_yaml_memories
@@ -377,3 +409,77 @@ class TestMigrateToHybridDryRun:
         migrate_to_hybrid(memory_dir=tmp_path, qdrant_url="http://localhost:6334", dry_run=True)
 
         assert not (tmp_path / "_bm25_vocab.json").exists()
+
+
+class TestMigrateToHybridWrite:
+    """Test non-dry-run migration side effects without a live Qdrant."""
+
+    def test_migration_backfills_schema_fields_to_yaml(self, tmp_path, monkeypatch):
+        from memory.migrate_hybrid import migrate_to_hybrid
+
+        project_dir = tmp_path / "byte-edge"
+        project_dir.mkdir()
+        yaml_file = project_dir / "2026-07-03.yaml"
+        yaml_file.write_text(
+            yaml.dump(
+                {
+                    "date": "2026-07-03",
+                    "decisions": [
+                        {
+                            "id": "d1",
+                            "content": "Decided to use PostgreSQL for JSON support",
+                            "project": "byte-edge",
+                            "source_tool": "legacy-import",
+                        }
+                    ],
+                }
+            )
+        )
+
+        saved = []
+
+        class FakeBM25Encoder:
+            vocab = {"postgresql": 1}
+
+            def fit(self, corpus):
+                self.corpus = corpus
+
+            def save(self, path):
+                (tmp_path / "_bm25_vocab.json").write_text("{}")
+
+            def encode(self, content):
+                return {1: 1.0}
+
+        class FakeEmbedder:
+            def encode(self, text):
+                return [0.1] * 384
+
+        class FakeVectorStore:
+            def __init__(self, **kwargs):
+                self.kwargs = kwargs
+
+            def recreate_collection(self):
+                return None
+
+            def save(self, **kwargs):
+                saved.append(kwargs)
+
+        monkeypatch.setattr("core.BM25Encoder", FakeBM25Encoder)
+        monkeypatch.setattr("core.Embedder", FakeEmbedder)
+        monkeypatch.setattr("core.VectorStore", FakeVectorStore)
+
+        result = migrate_to_hybrid(
+            memory_dir=tmp_path,
+            qdrant_url="http://localhost:6334",
+            dry_run=False,
+        )
+
+        data = yaml.safe_load(yaml_file.read_text())
+        entry = data["decisions"][0]
+        assert result["schema_updates"] == 1
+        assert entry["entities"] == ["PostgreSQL", "JSON"]
+        assert entry["embedding_text"].startswith("Project byte-edge.")
+        assert entry["tier"] == "semantic"
+        assert entry["reinforcement_count"] == 0
+        assert saved[0]["payload"]["embedding_text"] == entry["embedding_text"]
+        assert saved[0]["payload"]["source_tool"] == "legacy-import"

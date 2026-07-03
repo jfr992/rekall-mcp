@@ -38,7 +38,7 @@ from core import Embedder, Telemetry, VectorStore
 from memory.events import EventLog, MemoryEvent
 from memory.lifecycle import summarize_lifecycle
 from memory.linker import auto_link
-from memory.observe import ObservationCandidate, ObservationEngine
+from memory.observe import ObservationCandidate, ObservationEngine, sanitize_observation_metadata
 from memory.representation import build_embedding_text, extract_entities
 from memory.resume import build_resume_packet
 from memory.scope import MemoryScope, ScopeDetector
@@ -388,6 +388,7 @@ class MemoryManager:
         if not candidate.should_save:
             return candidate
 
+        metadata = sanitize_observation_metadata(metadata)
         content = candidate.content if not context else f"{candidate.content}\n\nContext: {context}"
         return self.save(
             content=content,
@@ -407,22 +408,35 @@ class MemoryManager:
         memory_type: str,
     ) -> str | None:
         """Return existing memory id for near-identical memories in same project/type."""
-        try:
-            matches = self.store.search(
-                vector=self.embedder.encode(query_text or content),
-                limit=3,
-                filters={"project": project, "type": memory_type},
-                score_threshold=0.97,
-                query_text=query_text or content,
-            )
-        except Exception:
-            return None
+        search_texts = [query_text or content]
+        if query_text and query_text != content:
+            search_texts.append(content)
 
         normalized = " ".join(content.split()).strip().lower()
-        for match in matches:
-            existing = " ".join((match.get("content") or "").split()).strip().lower()
-            if existing == normalized:
-                return match.get("memory_id")
+
+        def _match_exact(matches: list[dict[str, Any]]) -> str | None:
+            for match in matches:
+                existing = " ".join((match.get("content") or "").split()).strip().lower()
+                if existing == normalized:
+                    return match.get("memory_id")
+            return None
+
+        for search_text in search_texts:
+            try:
+                matches = self.store.search(
+                    vector=self.embedder.encode(search_text),
+                    limit=3,
+                    filters={"project": project, "type": memory_type},
+                    score_threshold=0.97,
+                    query_text=search_text,
+                )
+            except Exception:
+                continue
+
+            duplicate_id = _match_exact(matches)
+            if duplicate_id:
+                return duplicate_id
+
         return None
 
     def _reinforce_existing_memory(self, memory_id: str) -> None:

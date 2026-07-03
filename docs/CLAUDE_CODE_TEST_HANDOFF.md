@@ -36,8 +36,6 @@ Before touching Claude Code, confirm the new API shape:
 curl -s 'http://localhost:8000/api/memory/context/startup?project=byte-edge&agent=claude-code&limit=8' \
   | jq '{
       project: .scope.project,
-      doctor: .doctor.status,
-      findings: .doctor.findings,
       has_capsule: (.project_capsule.project != null),
       summary: .startup_summary[0:700]
     }'
@@ -46,8 +44,6 @@ curl -s 'http://localhost:8000/api/memory/context/startup?project=byte-edge&agen
 Expected:
 
 - `project` is `byte-edge`
-- `doctor` exists
-- `findings` is an array
 - `has_capsule` is `true` when memories exist for the project
 - `summary` is short enough to read, not a raw memory dump
 
@@ -95,7 +91,7 @@ Expected output starts with:
 
 It should contain a thin project capsule and the save instruction. It should not dump a large wall of raw memories.
 
-Note: the hook prefers `/api/memory/capsule` first. Full doctor status is guaranteed through `agent_startup` / `memory_doctor`.
+Note: the hook prefers `/api/memory/capsule` first. Full doctor status is available through `memory_doctor`.
 
 ## 6. Test Inside Claude Code
 
@@ -109,7 +105,7 @@ claude
 Use these prompts:
 
 ```text
-Use Rekall agent_startup for this project. Summarize the startup_summary and any doctor findings.
+Use Rekall agent_startup for this project. Summarize the startup_summary.
 ```
 
 ```text
@@ -165,4 +161,3 @@ export REKALL_AUTOSAVE=0
 ```
 
 To make the kill switch persistent, add it to your shell profile or Claude Code launch environment.
-

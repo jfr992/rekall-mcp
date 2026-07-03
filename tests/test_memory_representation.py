@@ -25,6 +25,14 @@ def test_extract_entities_filters_lowercase_boilerplate_stopwords():
     assert entities == ["Longhorn"]
 
 
+def test_extract_entities_does_not_capture_plain_english_words():
+    from memory.representation import extract_entities
+
+    entities = extract_entities("Decided to use PostgreSQL for its JSON support")
+
+    assert entities == ["PostgreSQL", "JSON"]
+
+
 def test_build_embedding_text_adds_scope_and_entities():
     from memory.representation import build_embedding_text
 
@@ -122,6 +130,42 @@ def test_manager_uses_embedding_text_for_duplicate_search_before_save(tmp_path, 
     assert events[0][0] == "encode"
     assert events[0][1].startswith("Project byte-edge.")
     assert events[1] == ("search", events[0][1])
-    assert events[2] == ("encode", events[0][1])
-    assert events[3][0] == "save"
+    assert events[2] == ("encode", "Longhorn settings matter")
+    assert events[3] == ("search", "Longhorn settings matter")
+    assert events[4] == ("encode", events[0][1])
+    assert events[5][0] == "save"
     assert captured["payload"]["content"] == "Longhorn settings matter"
+
+
+def test_duplicate_search_falls_back_to_raw_content_for_legacy_vectors(tmp_path):
+    from memory.manager import MemoryManager
+
+    queries = []
+
+    class Store:
+        def search(self, *args, **kwargs):
+            queries.append(kwargs["query_text"])
+            if kwargs["query_text"] == "Longhorn settings matter":
+                return [{"memory_id": "legacy", "content": "Longhorn settings matter"}]
+            return []
+
+    class Embedder:
+        def encode(self, text):
+            return [0.1] * 384
+
+    manager = MemoryManager(memory_dir=tmp_path, qdrant_url="http://localhost:6334")
+    manager._store = Store()
+    manager._embedder = Embedder()
+
+    memory_id = manager._find_duplicate_memory_id(
+        content="Longhorn settings matter",
+        query_text="Project byte-edge. Claim: Longhorn settings matter",
+        project="byte-edge",
+        memory_type="learning",
+    )
+
+    assert memory_id == "legacy"
+    assert queries == [
+        "Project byte-edge. Claim: Longhorn settings matter",
+        "Longhorn settings matter",
+    ]

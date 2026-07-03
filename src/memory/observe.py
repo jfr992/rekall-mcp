@@ -34,6 +34,7 @@ LOW_SIGNAL_PHRASES = (
 )
 
 _HEDGE_WORD_RE = re.compile(r"\b(maybe|possibly|probably|might)\b", re.IGNORECASE)
+_AUTO_REPRESENTATION_FIELDS = frozenset({"embedding_text", "entities"})
 
 
 def _is_low_signal(text: str) -> bool:
@@ -54,6 +55,11 @@ def _is_low_signal(text: str) -> bool:
         return True
     hedge_count = sum(1 for t in tokens if _HEDGE_WORD_RE.fullmatch(t))
     return hedge_count >= 2 and len(tokens) < 20
+
+
+def sanitize_observation_metadata(metadata: dict) -> dict:
+    """Drop generated representation fields from observation metadata."""
+    return {key: value for key, value in metadata.items() if key not in _AUTO_REPRESENTATION_FIELDS}
 
 
 @dataclass(frozen=True, slots=True)
