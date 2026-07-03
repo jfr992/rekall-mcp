@@ -338,6 +338,7 @@ AI:  vector search finds the memory
 | `handoff_summary(project)` | Continuity summary |
 | `agent_startup(project)` | Unified startup payload |
 | `project_capsule(project)` | Thin project familiarity capsule |
+| `reflex_recall(text, project)` | Cue-triggered recall before risky commands or edits |
 | `memory_lifecycle()` | Behavioral classifier output |
 | `memory_doctor(project)` | Trust report for YAML/Qdrant/vector/graph/provenance health |
 | `get_cached_context(project)` | Flat context (prompt-cache optimized) |
@@ -359,6 +360,7 @@ AI:  vector search finds the memory
 | `/api/memory/save` | POST | Save a memory |
 | `/api/memory/recall` | POST | Graph-enhanced search |
 | `/api/memory/recall/cross-project` | POST | Cross-project transfer recall |
+| `/api/memory/reflex` | POST | Cue-triggered recall packet for risky commands or edits |
 | `/api/memory/observe` | POST | Auto-classify and save (accepts `cwd` for scope) |
 | `/api/memory/stats` | GET | Statistics + graph metrics |
 | `/api/memory/doctor` | GET | Trust report for YAML/Qdrant/vector/graph/provenance health |

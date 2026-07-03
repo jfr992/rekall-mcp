@@ -1440,6 +1440,17 @@ class MemoryManager:
 
         return run_memory_doctor(self, project=project)
 
+    def reflex(
+        self,
+        *,
+        text: str,
+        project: str | None = None,
+        limit: int = 4,
+    ) -> dict[str, Any]:
+        from memory.reflex import build_reflex_packet
+
+        return build_reflex_packet(self, text=text, project=project, limit=limit)
+
     def vector_health(self, sample_size: int = 256) -> dict[str, int]:
         """Sample stored vectors and count degenerate (all-zero) ones.
 

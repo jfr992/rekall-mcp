@@ -466,6 +466,34 @@ async def api_cross_project_recall(request):
         return _server_error(str(e))
 
 
+@mcp.custom_route("/api/memory/reflex", methods=["POST"])
+async def api_memory_reflex(request):
+    """REST API: Build an action-aware reflex recall packet."""
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return _bad_request("body must be an object")
+
+        raw_text = body.get("text")
+        if not isinstance(raw_text, str):
+            return _bad_request("text is required")
+
+        text = raw_text.strip()
+        project = _safe_project(body.get("project"))
+        limit = _body_int(body, "limit", 4, lo=1, hi=12)
+
+        if not text:
+            return _bad_request("text is required")
+
+        manager = _get_memory_manager()
+        return _ok(manager.reflex(text=text, project=project, limit=limit))
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error building reflex packet: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/context", methods=["GET"])
 async def api_get_context(request):
     """REST API: Get cached context for a project."""

@@ -311,6 +311,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 handler=None,
             ),
             ToolDefinition(
+                name="reflex_recall",
+                description="Recall prior lessons before risky commands or edits",
+                handler=None,
+            ),
+            ToolDefinition(
                 name="prune_plan",
                 description="Build a safe prune plan (does not delete). Apply is REST-only.",
                 handler=None,
@@ -689,6 +694,20 @@ class OptimizedMemoryTools(BaseToolProvider):
             return render_project_capsule(self.manager.get_project_capsule(project=project))
 
         registered.append("project_capsule")
+
+        @mcp.tool(structured_output=False)
+        async def reflex_recall(text: str, project: str | None = None) -> str:
+            """Use before risky commands or edits that may match prior failures."""
+            packet = self.manager.reflex(text=text, project=project)
+            if not packet["cues"]:
+                return "No reflex cues matched."
+
+            lines = [f"Reflex cues: {', '.join(packet['cues'])}", ""]
+            for memory in packet["memories"]:
+                lines.append(f"- [{memory['reason']}] {memory.get('content', '')}")
+            return "\n".join(lines).strip()
+
+        registered.append("reflex_recall")
 
         @mcp.tool(structured_output=False)
         async def prune_plan(project: str | None = None, limit: int = 200) -> str:
