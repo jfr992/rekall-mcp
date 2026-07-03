@@ -488,6 +488,26 @@ which is deliberately REST-only.
 | `/api/memory/lifecycle/backfill` | POST | One-shot backfill for existing memories | `backfill_lifecycle` |
 | `/api/memory/resume` | GET | Bounded-scroll resume packet with `truncated` flag | `resume_packet` |
 
+#### Memory detail contract (v2)
+
+`GET /api/memory/detail/{id}` returns seven top-level blocks:
+
+| Block | Type | Notes |
+|-------|------|-------|
+| `memory` | object \| null | Raw memory payload; null when not found |
+| `relationships` | array | All graph edges — incoming and outgoing (see direction semantics below) |
+| `provenance` | object \| null | Origin fields (`agent`, `source_tool`, `source_event`, `repo_remote`, etc.); any absent field is `null`, never omitted |
+| `lifecycle` | object \| null | `tier`, `durability`, `retention_days`, `lifecycle_reason` |
+| `storage` | object | `{"qdrant": bool, "yaml": bool}` — which stores hold this memory |
+| `warnings` | array | Strings: `scope_mismatch`, `missing_provenance`, `missing_index`, `missing_lifecycle` |
+| `neighbors` | array | Backward-compat alias: outgoing edges with resolved peer memories only |
+
+**Relationship direction semantics.** Each entry in `relationships` carries `direction: "out" | "in"`. `"out"` means the selected memory is the source of the edge; `"in"` means it is the target. Example: `direction="in", relation="supersedes"` means another memory supersedes this one (i.e. this memory was superseded). Edge fields: `source_id`, `target_id`, `neighbor_id` (always the peer), `direction`, `relation`, `weight`, `auto`, `created`, `memory` (peer payload or null when the peer is missing from both stores).
+
+**Warnings.** `missing_lifecycle` fires only when both `durability` and `lifecycle_reason` are `null` — `durability=0.0` is a valid computed value and does not trigger it. `missing_index` means the memory was found only in YAML; Qdrant has no record and semantic recall is degraded for it.
+
+**Backward compat.** `neighbors` and `scope` keep their existing shapes. Callers that only read `memory`, `neighbors`, and `scope` need no changes.
+
 ### Migration
 
 Existing installations with memories saved before this branch need a one-shot
