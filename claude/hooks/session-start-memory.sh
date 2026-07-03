@@ -60,9 +60,6 @@ def _render_capsule(data):
 
     if data.get("project"):
         lines.append(f"Project Capsule: {data['project']}")
-    entities = data.get("entities") or []
-    if entities:
-        lines.append("Entities: " + ", ".join(map(str, entities[:12])))
     if lines:
         lines.append("")
 

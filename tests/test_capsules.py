@@ -175,7 +175,7 @@ def test_render_project_capsule_is_thin():
     )
 
     assert text.startswith("# Project Capsule: byte-edge")
-    assert "Entities: Longhorn, Helm" in text
+    assert "Entities:" not in text
     assert len(text) < 2000
 
 
@@ -384,3 +384,34 @@ def test_empty_corpus_renders(capsule_manager_empty):
     rendered = render_project_capsule(capsule)
     assert isinstance(rendered, str)
     assert "## " not in rendered, "Empty corpus must produce no section headers"
+
+
+def test_render_capsule_no_entities_line():
+    """render_project_capsule must not emit an Entities: line even when entities are present."""
+    from memory.capsules import render_project_capsule
+
+    rendered = render_project_capsule(
+        {
+            "project": "byte-edge",
+            "entities": ["Longhorn", "k3s", "Helm"],
+            "standing_context": [{"content": "Use Longhorn tuned settings.", "date": "2026-07-01"}],
+            "danger_zones": [],
+            "open_loops": [],
+        }
+    )
+
+    assert "Entities:" not in rendered
+
+
+def test_build_capsule_retains_entities_field(capsule_manager):
+    """build_project_capsule dict must still carry the entities key."""
+    from memory.capsules import build_project_capsule
+
+    manager = capsule_manager(
+        [
+            _mem("e1", "decision", "Use Longhorn for storage.", entities=["Longhorn"]),
+        ]
+    )
+    capsule = build_project_capsule(manager, "test")
+
+    assert "entities" in capsule, "entities field must survive in capsule dict"

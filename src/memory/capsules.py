@@ -108,11 +108,6 @@ def build_project_capsule(manager, project: str, limit: int = 300) -> dict[str, 
 def render_project_capsule(capsule: dict[str, Any]) -> str:
     lines = [f"# Project Capsule: {capsule['project']}", ""]
 
-    entities = capsule.get("entities") or []
-    if entities:
-        lines.append("Entities: " + ", ".join(entities[:16]))
-        lines.append("")
-
     sections = [
         ("Standing Context", "standing_context"),
         ("Danger Zones", "danger_zones"),
