@@ -197,3 +197,18 @@ def test_graph_node_preserves_payload_fields():
     assert sparse["salience"] is None, "absent salience must be None"
     assert sparse["trust_boundary"] is None, "absent trust_boundary must be None"
     assert sparse["timestamp"] is None, "absent timestamp must be None"
+
+
+def test_coerce_vector_handles_hybrid_named_shape():
+    """Hybrid points carry {'': dense, 'bm25': sparse} — dense must be extracted."""
+    from memory.graph import _coerce_vector
+
+    dense = [0.1, 0.2, 0.3]
+    hybrid = {"": dense, "bm25": {"indices": [1, 5], "values": [0.4, 0.6]}}
+    assert _coerce_vector(hybrid) == dense
+
+    named_only = {"dense": dense}
+    assert _coerce_vector(named_only) == dense
+
+    sparse_only = {"bm25": {"indices": [1], "values": [0.4]}}
+    assert _coerce_vector(sparse_only) == []
