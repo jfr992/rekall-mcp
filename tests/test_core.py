@@ -400,3 +400,29 @@ class TestCoreIntegration:
         assert Embedder is not None
         assert VectorStore is not None
         assert Telemetry is not None
+
+
+def test_scroll_unwraps_hybrid_named_vectors_any_order():
+    """Hybrid points return named dicts; dense must win regardless of key order."""
+    from unittest.mock import MagicMock
+
+    from core.vector_store import VectorStore
+
+    store = VectorStore.__new__(VectorStore)
+    store.collection = "test_collection"
+    store._telemetry = MagicMock()
+    store._telemetry.track.return_value.__enter__ = lambda s: None
+    store._telemetry.track.return_value.__exit__ = lambda s, *a: None
+    client = MagicMock()
+    store._client = client
+
+    dense = [0.1, 0.2, 0.3]
+    sparse = MagicMock()  # SparseVector-like, not a list
+    p1 = MagicMock(payload={"memory_id": "a"}, vector={"bm25": sparse, "": dense})
+    p2 = MagicMock(payload={"memory_id": "b"}, vector={"": dense, "bm25": sparse})
+    p3 = MagicMock(payload={"memory_id": "c"}, vector=dense)
+    client.scroll.return_value = ([p1, p2, p3], None)
+
+    out = store.scroll(with_vectors=True)
+
+    assert [p["vector"] for p in out] == [dense, dense, dense]
