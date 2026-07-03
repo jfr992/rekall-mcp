@@ -17,6 +17,7 @@ Call **one** of these at session start:
 - Read `startup_summary`
 - Use `observe()` for durable decisions, learnings, preferences, and requirements
 - Use `memory_pressure` periodically, not every turn
+- Optional: install the `SessionStart` capsule hook with `bash claude/setup/install.sh --install-startup-capsule`
 
 ### Codex
 - Call `agent_startup(project?, agent="codex")`
@@ -72,3 +73,15 @@ Do not save:
 
 Prefer `agent_startup` once per session, not every turn.
 That keeps startup coherent and avoids turning memory into prompt spam.
+
+## Claude Code SessionStart Capsule
+
+The shippable `claude/hooks/session-start-memory.sh` hook is opt-in. It prefers `/api/memory/capsule`, falls back to `/api/memory/context/startup`, infers project scope from Claude Code's `cwd` or `project_dir` JSON fields, and emits only a thin `SessionStart` `additionalContext` packet.
+
+Default install preserves the existing `UserPromptSubmit` status line and `Stop` autosave behavior. Add the capsule only when you explicitly want startup injection:
+
+```bash
+bash claude/setup/install.sh --install-startup-capsule
+```
+
+Before changing live files under `~/.claude`, copy the current files into `~/.claude/backups/rekall-live-config-<timestamp>/`. The shippable installer does not overwrite live hook files without preserving the previous copy.
