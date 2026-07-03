@@ -54,6 +54,8 @@ config.yaml
 # Data (stored in ~/.claude/)
 data/
 *.jsonl
+.superpowers/
+docs/superpowers/
 
 # Audit/debug screenshots — never commit
 brain-*.png
