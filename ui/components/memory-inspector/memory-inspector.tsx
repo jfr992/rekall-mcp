@@ -81,6 +81,7 @@ export function MemoryInspector({
     <Drawer
       open={open}
       onClose={onClose}
+      ariaLabel="Memory details"
       title={
         isLoading || !memory ? (
           <Skeleton className="h-6 w-48" />
