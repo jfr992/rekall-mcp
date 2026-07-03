@@ -1,6 +1,6 @@
 # Claude Code Memory Reliability Implementation Plan
 
-> **For Claude:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
+> Historical implementation plan. Execute task-by-task with branch/PR discipline and the verification commands in the repo instructions.
 
 **Goal:** Harden the Rekall system already used by Claude Code into a reliable agent nervous system.
 
@@ -715,8 +715,7 @@ Expected: commits map to the tasks above.
 
 **Step 3: Decide integration path**
 
-Use `superpowers:finishing-a-development-branch`. Open a PR when the branch is
-ready. Do not push to `main`.
+Open a PR when the branch is ready. Do not push to `main`.
 
 ## Execution Options
 
@@ -724,5 +723,5 @@ After this plan is approved:
 
 1. **Subagent-Driven in this session**: dispatch one fresh implementation
    subagent per task and review between tasks.
-2. **Parallel Session**: open a separate session in this branch and execute
-   with `superpowers:executing-plans`.
+2. **Separate Session**: open a separate session in this branch and execute the
+   plan task-by-task with the verification commands above.

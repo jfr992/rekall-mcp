@@ -1,6 +1,6 @@
 # Memory Quality Upgrade Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Historical implementation plan. Execute task-by-task with branch/PR discipline and the verification commands in the repo instructions. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Make memory retrieval work like a human brain — hybrid search (BM25 + dense), smart context injection, progressive disclosure, auto-compaction.
 

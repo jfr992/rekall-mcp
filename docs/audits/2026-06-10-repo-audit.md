@@ -102,7 +102,7 @@ Hooks (claude/hooks/*.sh) ──▶ /api/memory/observe (Haiku-judged capture)
 
 **M6. Silent truncation on scroll-backed endpoints.** `scroll()` (`vector_store.py:354`) fetches one page; `/api/memory/kb` caps at 2000 (`server.py:888`), `/projects` at 5000 (`server.py:815`), graph rebuild at 10000 (`knowledge_graph.py:373`) — no `truncated` flag, no pagination. At memory-count growth these quietly lie.
 
-**M7. Two config systems + stale compose file + doc drift.** `src/config.py` (372 lines, pydantic, `${VAR}` substitution) vs `src/tools/config.py` + `server.py:get_config()` — overlapping `TOOLS_ENABLED` handling, different load priorities. The untracked `docs/superpowers/plans/2026-05-08-memento-config-merge.md` already plans the fix. `docker-compose.yml` (15-line stub) shadows the real `docker-compose.yaml`. Docs drift: README's ranking formula (`README.md:105`, "vector 50%") doesn't match code (`manager.py:827–833`: 40/20/10/15/15 incl. tier); `docs/SETUP.md:39` omits the `/mcp` URL suffix so the install command fails; README's REST table is missing ~3 live endpoints; `qdrant/qdrant:latest` unpinned (`docker-compose.yaml:20`).
+**M7. Two config systems + stale compose file + doc drift.** `src/config.py` (372 lines, pydantic, `${VAR}` substitution) vs `src/tools/config.py` + `server.py:get_config()` — overlapping `TOOLS_ENABLED` handling, different load priorities. An old local config-merge plan covered the fix, but it was never part of the tracked repo. `docker-compose.yml` (15-line stub) shadows the real `docker-compose.yaml`. Docs drift: README's ranking formula (`README.md:105`, "vector 50%") doesn't match code (`manager.py:827–833`: 40/20/10/15/15 incl. tier); `docs/SETUP.md:39` omits the `/mcp` URL suffix so the install command fails; README's REST table is missing ~3 live endpoints; `qdrant/qdrant:latest` unpinned (`docker-compose.yaml:20`).
 
 **M8. UI: `z.any()` holes in the resume schema.** `ui/lib/schemas.ts:156–162` types `important/recent/unresolved/next_steps` as `z.any()`, forcing `as any` casts in `ui/app/continuity/page.tsx:39–41` — the one surface with zero contract protection while every other endpoint is properly Zod-parsed. Plus unscoped `qc.invalidateQueries()` on project switch (`ui/components/shell/project-switcher.tsx:19`).
 
@@ -187,7 +187,7 @@ Principle: DRY applies to configs and docs, not just code. Target: execute the e
 | **2.1** De-block the event loop | Wrap manager calls in `asyncio.to_thread` + a per-manager lock for graph writes | `/health` responds <50ms during concurrent recalls (add perf test) | L | Medium — concurrency; lock discipline needed | 0.2 |
 | **2.2** Kill the N+1 | `memory_id` payload index; replace per-neighbor search with one `client.retrieve` batch of `stable_hash_id`s | Recall issues ≤2 Qdrant calls regardless of neighbor count | M | Low | 0.2 |
 | **2.3** Read-only recall | Batch `record_access`, debounce `graph.save()` (dirty-flush on save/delete only, or periodic) | Recall produces zero writes to `_graph.json` | M | Medium — access counts become eventually-consistent | 2.1 |
-| **2.4** Config merge | Execute `docs/superpowers/plans/2026-05-08-memento-config-merge.md` | One loader; `tools/config.py` deleted or thin shim; docs updated | XL — already broken down in that plan | Medium | 0.2 |
+| **2.4** Config merge | Write and execute a fresh config-merge plan from the current codebase state | One loader; `tools/config.py` deleted or thin shim; docs updated | XL | Medium | 0.2 |
 | **2.5** Endpoint consolidation | Delete duplicate `/api/memory/resume` twin; migrate all routes to `_ok/_bad_request/_server_error`; move pytest-detection out of import path | One resume route; uniform error shape asserted in tests | S | Low | — |
 
 ### Milestone 3 — Quality & polish
@@ -216,7 +216,7 @@ Principle: DRY applies to configs and docs, not just code. Target: execute the e
 1. **Is LAN access to the cockpit/API ever intended** (e.g., browsing the UI from another machine)? Determines whether 1.1 is "loopback, period" or "loopback + documented opt-in + shared-secret header."
 2. **Is importance decay supposed to be live?** `decay_importance` is implemented and tested but never called — README implies dynamic importance. Wire it into a maintenance job, or delete and de-advertise.
 3. **Crawler/indexer (`src/crawler/`, `src/indexer/`)** — product or appendix? Untested and isolated; if it's not part of the memory story, consider extracting or explicitly marking it experimental.
-4. **`implementation-plan.md` (45KB, tracked at root)** — keep as living doc, or move to `docs/superpowers/plans/` with the others?
+4. **`implementation-plan.md` (45KB, tracked at root)** — keep as living doc, or archive under `docs/plans/` with the others?
 5. **Target scale** — at <5k memories the silent scroll caps (M6) and N+1 are tolerable; if you intend tens of thousands (bulk imports, LongMemEval-scale), M6 and pagination move up to High.
 
 ---
