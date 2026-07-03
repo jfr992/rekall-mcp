@@ -12,11 +12,14 @@ def _coerce_vector(value: Any) -> list[float]:
         return []
 
     if isinstance(value, dict):
-        # Qdrant can occasionally return a dict when named vectors are enabled.
-        if len(value) == 1:
-            value = next(iter(value.values()))
+        # Named vectors: hybrid points carry {"": dense, "bm25": sparse}.
+        # Prefer the default entry, else the first dense (list-shaped) one.
+        if "" in value:
+            value = value[""]
         else:
-            return []
+            value = next((v for v in value.values() if isinstance(v, (list, tuple))), None)
+            if value is None:
+                return []
 
     if isinstance(value, (list, tuple)):
         try:
