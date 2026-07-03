@@ -580,6 +580,19 @@ async def api_memory_stats(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+@mcp.custom_route("/api/memory/doctor", methods=["GET"])
+async def api_memory_doctor(request):
+    try:
+        project = _safe_project(request.query_params.get("project"))
+        manager = _get_memory_manager()
+        return _ok(manager.doctor(project=project))
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error running memory doctor: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/{memory_id}", methods=["DELETE"])
 async def api_delete_memory(request):
     """REST API: Delete a single memory by ID."""

@@ -261,6 +261,11 @@ class OptimizedMemoryTools(BaseToolProvider):
                 handler=None,
             ),
             ToolDefinition(
+                name="memory_doctor",
+                description="Check whether YAML, Qdrant, vectors, graph, and provenance agree",
+                handler=None,
+            ),
+            ToolDefinition(
                 name="consolidate_memories",
                 description="Find superseded or contradictory memories and return consolidation hints",
                 handler=None,
@@ -590,6 +595,20 @@ class OptimizedMemoryTools(BaseToolProvider):
             return "\n".join(lines)
 
         registered.append("memory_lifecycle")
+
+        @mcp.tool(structured_output=False)
+        async def memory_doctor(project: str | None = None) -> str:
+            """Use when checking whether Rekall memory recall is trustworthy."""
+            scope = self._get_current_scope(project=project)
+            report = self.manager.doctor(project=scope.project)
+            lines = [
+                f"Memory doctor: {report['status']}",
+                f"YAML: {report['yaml_count']} | Qdrant: {report['qdrant_count']}",
+                f"Findings: {', '.join(report['findings']) if report['findings'] else 'none'}",
+            ]
+            return "\n".join(lines)
+
+        registered.append("memory_doctor")
 
         @mcp.tool(structured_output=False)
         async def handoff_summary(project: str | None = None, limit: int = 12) -> str:

@@ -1390,6 +1390,11 @@ class MemoryManager:
         """Return a single startup payload for agent clients."""
         return build_agent_startup(self, project=project, agent=agent, limit=limit)
 
+    def doctor(self, project: str | None = None) -> dict[str, Any]:
+        from memory.doctor import run_memory_doctor
+
+        return run_memory_doctor(self, project=project)
+
     def vector_health(self, sample_size: int = 256) -> dict[str, int]:
         """Sample stored vectors and count degenerate (all-zero) ones.
 
