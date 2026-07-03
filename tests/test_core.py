@@ -7,6 +7,7 @@ Tests are organized to read like documentation:
 """
 
 import time
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -352,6 +353,17 @@ class TestVectorStore:
         store = VectorStore(collection="new_collection", url="http://localhost:6334")
         _ = store.client  # Triggers connection
 
+        mock_qdrant.create_collection.assert_called_once()
+
+    def test_recreate_collection_creates_after_delete_with_stale_listing(self, store, mock_qdrant):
+        """recreate_collection() creates even if list still shows deleted collection."""
+        mock_qdrant.get_collections.return_value = MagicMock(
+            collections=[SimpleNamespace(name="test_collection")]
+        )
+
+        store.recreate_collection()
+
+        mock_qdrant.delete_collection.assert_called_once_with(collection_name="test_collection")
         mock_qdrant.create_collection.assert_called_once()
 
 

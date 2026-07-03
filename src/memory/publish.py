@@ -19,6 +19,51 @@ from memory.publish_types import Bundle, Concept
 
 GROUPING_RELATIONS = frozenset({"related_to", "led_to", "depends_on", "part_of", "supersedes"})
 MAX_CLUSTER = 15  # ponytail: split at 15, tune if docs read badly
+_PRIVATE_TEAM_BUNDLE_KEYS = frozenset(
+    {
+        "_events",
+        "_events.jsonl",
+        "events",
+        "private_prompt",
+        "private_prompts",
+        "raw_event_log",
+        "raw_event_logs",
+        "raw_hook_payload",
+        "raw_hook_payloads",
+        "raw_session",
+        "raw_session_transcripts",
+        "raw_sessions",
+    }
+)
+
+
+def _strip_private_team_keys(value):
+    if isinstance(value, dict):
+        return {
+            key: _strip_private_team_keys(item)
+            for key, item in value.items()
+            if str(key) not in _PRIVATE_TEAM_BUNDLE_KEYS
+        }
+    if isinstance(value, list):
+        return [_strip_private_team_keys(item) for item in value]
+    return value
+
+
+def build_team_memory_bundle(*, capsule: dict, playbooks: list[dict]) -> dict:
+    """Build a team-safe bundle from distilled memory surfaces only."""
+    safe_capsule = _strip_private_team_keys(capsule)
+    return {
+        "schema": "rekall.team-memory.v1",
+        "project": safe_capsule["project"],
+        "capsule": safe_capsule,
+        "playbooks": _strip_private_team_keys(playbooks),
+        "privacy": {
+            "raw_event_log_included": False,
+            "raw_session_transcripts_included": False,
+            "private_prompts_included": False,
+            "raw_hook_payloads_included": False,
+        },
+    }
 
 
 def _mid(m: dict) -> str:

@@ -35,9 +35,11 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from core import Embedder, Telemetry, VectorStore
+from memory.events import EventLog, MemoryEvent
 from memory.lifecycle import summarize_lifecycle
 from memory.linker import auto_link
-from memory.observe import ObservationCandidate, ObservationEngine
+from memory.observe import ObservationCandidate, ObservationEngine, sanitize_observation_metadata
+from memory.representation import build_embedding_text, extract_entities
 from memory.resume import build_resume_packet
 from memory.scope import MemoryScope, ScopeDetector
 from memory.skills import extract_skills, render_skill_context
@@ -157,6 +159,7 @@ class MemoryManager:
         # BM25 sparse encoder for hybrid search
         self._sparse_encoder = None
         self._bm25_path = self.memory_dir / "_bm25_vocab.json"
+        self._event_log: EventLog | None = None
 
         self._knowledge_graph: KnowledgeGraph | None = None
 
@@ -212,6 +215,31 @@ class MemoryManager:
             self._knowledge_graph = KnowledgeGraph(self.memory_dir / "_graph.json")
         return self._knowledge_graph
 
+    @property
+    def event_log(self) -> EventLog:
+        if self._event_log is None:
+            self._event_log = EventLog(self.memory_dir / "_events.jsonl")
+        return self._event_log
+
+    def record_event(
+        self,
+        *,
+        event_type: str,
+        project: str,
+        agent: str = "unknown",
+        source: str = "memory_manager",
+        payload: dict[str, Any] | None = None,
+    ) -> None:
+        self.event_log.append(
+            MemoryEvent(
+                event_type=event_type,
+                project=project,
+                agent=agent,
+                source=source,
+                payload=payload or {},
+            )
+        )
+
     # -------------------------------------------------------------------------
     # SAVE: Store memories
     # -------------------------------------------------------------------------
@@ -247,8 +275,21 @@ class MemoryManager:
             if "/" in project_name or "\\" in project_name or ".." in project_name:
                 raise ValueError(f"Invalid project name: {project_name!r}")
 
+            payload = {
+                "content": content,
+                "type": type,
+                "project": project_name,
+                "reinforcement_count": 0,
+                **scope.to_metadata(),
+                **metadata,
+            }
+            payload.update(summarize_lifecycle(payload))
+            payload["entities"] = extract_entities(content)
+            payload["embedding_text"] = build_embedding_text(content, payload)
+
             existing_memory_id = self._find_duplicate_memory_id(
                 content=content,
+                query_text=payload["embedding_text"],
                 project=project_name,
                 memory_type=type,
             )
@@ -265,23 +306,41 @@ class MemoryManager:
 
             payload = {
                 "memory_id": memory_id,
-                "content": content,
+                **payload,
                 "date": date,
                 "timestamp": timestamp,
-                "type": type,
-                "project": project_name,
-                "reinforcement_count": 0,
-                **scope.to_metadata(),
-                **metadata,
             }
-            payload.update(summarize_lifecycle(payload))
 
             # Save to file (durability)
             self._save_to_file(memory_id, content, payload, type, date)
 
             # Save to vector store (searchability)
-            vector = self.embedder.encode(content)
-            self.store.save(id=memory_id, vector=vector, payload=payload, content=content)
+            embedding_text = payload["embedding_text"]
+            vector = self.embedder.encode(embedding_text)
+            self.store.save(
+                id=memory_id,
+                vector=vector,
+                payload=payload,
+                content=embedding_text,
+            )
+
+            self.record_event(
+                event_type="memory_saved",
+                project=project_name,
+                agent=str(payload.get("agent") or scope.agent or "unknown"),
+                source=str(
+                    payload.get("source_tool")
+                    or payload.get("source_event")
+                    or "memory_manager.save"
+                ),
+                payload={
+                    "memory_id": memory_id,
+                    "type": type,
+                    "tier": payload.get("tier"),
+                    "cwd": payload.get("cwd"),
+                    "repo_name": payload.get("repo_name"),
+                },
+            )
 
             # Build/refresh graph node for this memory
             self.knowledge_graph.add_node(
@@ -329,6 +388,7 @@ class MemoryManager:
         if not candidate.should_save:
             return candidate
 
+        metadata = sanitize_observation_metadata(metadata)
         content = candidate.content if not context else f"{candidate.content}\n\nContext: {context}"
         return self.save(
             content=content,
@@ -343,26 +403,40 @@ class MemoryManager:
         self,
         *,
         content: str,
+        query_text: str | None = None,
         project: str,
         memory_type: str,
     ) -> str | None:
         """Return existing memory id for near-identical memories in same project/type."""
-        try:
-            matches = self.store.search(
-                vector=self.embedder.encode(content),
-                limit=3,
-                filters={"project": project, "type": memory_type},
-                score_threshold=0.97,
-                query_text=content,
-            )
-        except Exception:
-            return None
+        search_texts = [query_text or content]
+        if query_text and query_text != content:
+            search_texts.append(content)
 
         normalized = " ".join(content.split()).strip().lower()
-        for match in matches:
-            existing = " ".join((match.get("content") or "").split()).strip().lower()
-            if existing == normalized:
-                return match.get("memory_id")
+
+        def _match_exact(matches: list[dict[str, Any]]) -> str | None:
+            for match in matches:
+                existing = " ".join((match.get("content") or "").split()).strip().lower()
+                if existing == normalized:
+                    return match.get("memory_id")
+            return None
+
+        for search_text in search_texts:
+            try:
+                matches = self.store.search(
+                    vector=self.embedder.encode(search_text),
+                    limit=3,
+                    filters={"project": project, "type": memory_type},
+                    score_threshold=0.97,
+                    query_text=search_text,
+                )
+            except Exception:
+                continue
+
+            duplicate_id = _match_exact(matches)
+            if duplicate_id:
+                return duplicate_id
+
         return None
 
     def _reinforce_existing_memory(self, memory_id: str) -> None:
@@ -867,6 +941,46 @@ class MemoryManager:
 
             return scored[:limit]
 
+    def recall_cross_project(
+        self,
+        query: str,
+        *,
+        current_project: str,
+        limit: int = 8,
+        related_limit: int = 8,
+    ) -> dict[str, Any]:
+        """Recall relevant memories from the current project, related projects, and global memory."""
+        same_project = [
+            {**item, "scope": "same_project"}
+            for item in self.recall(query=query, project=current_project, limit=limit)
+        ]
+        same_ids = {item.get("memory_id") for item in same_project if item.get("memory_id")}
+
+        related_projects: list[dict[str, Any]] = []
+        global_hits: list[dict[str, Any]] = []
+
+        for item in self.recall(query=query, project=None, limit=related_limit):
+            memory_id = item.get("memory_id")
+            project = item.get("project") or "general"
+            if memory_id in same_ids:
+                continue
+
+            enriched = {**item}
+            if project == "general":
+                enriched["scope"] = "global"
+                global_hits.append(enriched)
+            elif project != current_project:
+                enriched["scope"] = "related_project"
+                related_projects.append(enriched)
+
+        return {
+            "query": query,
+            "current_project": current_project,
+            "same_project": same_project,
+            "related_projects": related_projects[:limit],
+            "global": global_hits[:limit],
+        }
+
     def recall_formatted(
         self,
         query: str,
@@ -1329,6 +1443,27 @@ class MemoryManager:
     ) -> dict[str, Any]:
         """Return a single startup payload for agent clients."""
         return build_agent_startup(self, project=project, agent=agent, limit=limit)
+
+    def get_project_capsule(self, project: str, limit: int = 300) -> dict[str, Any]:
+        from memory.capsules import build_project_capsule
+
+        return build_project_capsule(self, project=project, limit=limit)
+
+    def doctor(self, project: str | None = None) -> dict[str, Any]:
+        from memory.doctor import run_memory_doctor
+
+        return run_memory_doctor(self, project=project)
+
+    def reflex(
+        self,
+        *,
+        text: str,
+        project: str | None = None,
+        limit: int = 4,
+    ) -> dict[str, Any]:
+        from memory.reflex import build_reflex_packet
+
+        return build_reflex_packet(self, text=text, project=project, limit=limit)
 
     def vector_health(self, sample_size: int = 256) -> dict[str, int]:
         """Sample stored vectors and count degenerate (all-zero) ones.

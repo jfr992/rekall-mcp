@@ -23,6 +23,7 @@ async def test_api_agent_startup(monkeypatch):
         "scope": {"project": "brain", "agent": "claude-code"},
         "startup_summary": "# Agent Startup: brain\n",
         "resume_packet": {},
+        "project_capsule": {"project": "brain", "entities": []},
         "system_hints": [],
     }
     monkeypatch.setattr("server._get_memory_manager", lambda: manager)
@@ -36,3 +37,28 @@ async def test_api_agent_startup(monkeypatch):
     payload = json.loads(response.body)
     assert payload["scope"]["project"] == "brain"
     manager.get_agent_startup.assert_called_once_with(project="brain", agent="claude-code", limit=7)
+
+
+@pytest.mark.asyncio
+async def test_api_project_capsule(monkeypatch):
+    from server import api_project_capsule
+
+    manager = MagicMock()
+    manager.get_project_capsule.return_value = {
+        "project": "brain",
+        "entities": ["Codex"],
+        "standing_context": [],
+        "active_workstreams": [],
+        "operating_rules": [],
+        "danger_zones": [],
+        "open_loops": [],
+    }
+    monkeypatch.setattr("server._get_memory_manager", lambda: manager)
+
+    request = SimpleNamespace(query_params=QueryParams({"project": "brain", "limit": "9"}))
+    response = await api_project_capsule(request)
+
+    assert isinstance(response, JSONResponse)
+    payload = json.loads(response.body)
+    assert payload["project"] == "brain"
+    manager.get_project_capsule.assert_called_once_with(project="brain", limit=9)

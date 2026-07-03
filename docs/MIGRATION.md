@@ -1,6 +1,25 @@
-# Migration Guide — v1.7.0 → v1.8.0 (Parity + hardening)
+# Migration Guide — v1.7.0 → v1.8.0 (Parity + hardening + agent nervous system)
 
-**No data migration. One env-var behavior change, one API addition.**
+**Required data migration for existing memory stores. One env-var behavior change, additive APIs.**
+
+Run the hybrid/representation migration after backing up the memory YAML directory
+and Qdrant volume you actually use. This backfills `entities`, `embedding_text`,
+and lifecycle fields into YAML, rebuilds `_bm25_vocab.json`, and reindexes Qdrant
+from the same deterministic representation new saves use.
+
+```bash
+# Claude Code default
+tar czf ~/backups/pre-v1.8-memory.tar.gz -C ~ .claude/memory
+tar czf ~/backups/pre-v1.8-qdrant.tar.gz -C ~ .claude/qdrant
+uv run python -m memory.migrate_hybrid --memory-dir ~/.claude/memory --dry-run
+uv run python -m memory.migrate_hybrid --memory-dir ~/.claude/memory
+
+# Codex-local stack, if that is where your live memories are
+tar czf ~/backups/pre-v1.8-codex-memory.tar.gz -C ~ .Codex/memory
+tar czf ~/backups/pre-v1.8-codex-qdrant.tar.gz -C ~ .Codex/qdrant
+uv run python -m memory.migrate_hybrid --memory-dir ~/.Codex/memory --dry-run
+uv run python -m memory.migrate_hybrid --memory-dir ~/.Codex/memory
+```
 
 - **Spectro subsystem removed.** It never shipped a working implementation
   (enabling it raised ImportError). `TOOLS_ENABLED=spectro` and `SPECTRO_*`
@@ -152,7 +171,7 @@ REST endpoints above are mirrored as MCP tools (with one exception):
 - `backfill_lifecycle(project=None, dry_run=True)` → `/api/memory/lifecycle/backfill`
 - `resume_packet(project=None)` → `/api/memory/resume`
 - `handoff_summary(project=None)` → continuity summary
-- `agent_startup(project=None)` → unified startup payload (combines stats, recent, important, conflicts)
+- `agent_startup(project=None)` → unified startup payload (resume packet + project capsule + harness hints)
 - `memory_lifecycle()` → behavioral classifier output
 
 **`prune_apply` is REST-only on purpose.** It mutates state and the typed plan-id confirmation flow needs the cockpit's "type the plan id to confirm" gate to be safe. Don't expose destructive bulk delete to autonomous agents.

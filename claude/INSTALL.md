@@ -12,7 +12,8 @@ claude/
 │   └── install.sh          ← one-shot installer (idempotent, with backup)
 ├── hooks/
 │   ├── rekall-restore.sh       UserPromptSubmit — once-per-session "Rekall ready" status line
-│   └── rekall-observe.sh       Stop — gated Haiku judge that auto-saves durable observations
+│   ├── rekall-observe.sh       Stop — gated Haiku judge that auto-saves durable observations
+│   └── session-start-memory.sh SessionStart — optional thin project capsule injection
 └── skills/
     ├── rekall-setup/SKILL.md       /rekall-setup             — re-run installer from inside Claude Code
     ├── rekall-publish/SKILL.md     /rekall-publish           — export memory to an OKF knowledge bundle
@@ -34,7 +35,7 @@ bash claude/setup/install.sh
 What it does (all idempotent):
 - Preflight: checks `docker`, `jq`, `curl`, `python3`
 - Starts Qdrant + backend if not already running
-- Copies the 2 hooks to `~/.claude/hooks/`
+- Copies the 2 default hooks to `~/.claude/hooks/`
 - Backs up `~/.claude/settings.json` then merges in `UserPromptSubmit` + `Stop` entries (deduped — won't duplicate if already wired)
 - Copies all 9 slash commands to `~/.claude/skills/`
 - Verifies backend health + reports memory count
@@ -45,16 +46,32 @@ Flags:
 - `--skip-backend` — only do Layer 1 wiring (skip docker + python startup)
 - `--skills-only` — only copy slash commands
 - `--hooks-only` — only install hooks + patch settings.json
+- `--install-startup-capsule` — opt in to the `SessionStart` capsule hook and settings entry
+
+The `SessionStart` capsule hook is **not installed by default**. It injects a small `additionalContext` packet at session start, so it is explicit opt-in:
+
+```bash
+bash claude/setup/install.sh --install-startup-capsule
+```
+
+Before changing live files under `~/.claude`, copy the current files into `~/.claude/backups/rekall-live-config-<timestamp>/`. The shippable installer does not overwrite live hook files without preserving the previous copy.
 
 After install, you can re-run from inside Claude Code via `/rekall-setup`.
 
 ## Install — manual (if you prefer to see every step)
 
 ```bash
-# 1. Hooks
+# 1. Default hooks
 mkdir -p ~/.claude/hooks
-cp claude/hooks/*.sh ~/.claude/hooks/
-chmod +x ~/.claude/hooks/*.sh
+cp claude/hooks/rekall-restore.sh ~/.claude/hooks/
+cp claude/hooks/rekall-observe.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/rekall-restore.sh ~/.claude/hooks/rekall-observe.sh
+
+# Optional: SessionStart capsule hook
+cp claude/hooks/session-start-memory.sh ~/.claude/hooks/
+chmod +x ~/.claude/hooks/session-start-memory.sh
+# Then add a SessionStart command entry for ~/.claude/hooks/session-start-memory.sh
+# to ~/.claude/settings.json.
 
 # 2. Settings — see claude/settings.example.json for the snippet to merge into
 #    ~/.claude/settings.json (or copy it directly if you have no existing settings)
@@ -106,9 +123,15 @@ When Haiku does fire, it returns strict JSON `{observe, type, content}` and POST
 
 Kill switch: `REKALL_AUTOSAVE=0`. Re-entrancy guard: `REKALL_JUDGE_INFLIGHT=1`.
 
+### `session-start-memory.sh` — SessionStart (opt-in)
+
+Installs only when you pass `--install-startup-capsule`. It reads Claude Code's SessionStart JSON from stdin, infers the project from `cwd` or `project_dir`, calls `/api/memory/capsule` first, and falls back to `/api/memory/context/startup`.
+
+It prints a thin JSON packet with `hookSpecificOutput.hookEventName = "SessionStart"` and `additionalContext` containing the project capsule or startup summary plus a short save instruction. It honors `REKALL_AUTOSAVE=0`. Run `memory_doctor(project)` separately when you need a full trust check.
+
 ## Settings example
 
-See `claude/settings.example.json` for a copy-pastable JSON snippet wiring both hooks. `Stop` and `UserPromptSubmit` don't need a matcher.
+See `claude/settings.example.json` for a copy-pastable JSON snippet wiring the default hooks. `Stop`, `UserPromptSubmit`, and the opt-in `SessionStart` hook don't need a matcher.
 
 ## Uninstall
 

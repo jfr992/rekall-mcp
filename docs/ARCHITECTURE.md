@@ -40,6 +40,25 @@ How the system is built and why.
 
 ---
 
+## Nervous-System Flow
+
+```mermaid
+flowchart LR
+  A["Agent Events"] --> B["Append-Only Event Log"]
+  B --> C["YAML Archive"]
+  C --> D["Qdrant Hybrid Index"]
+  C --> E["Knowledge Graph"]
+  D --> F["Targeted Recall"]
+  E --> F
+  C --> G["Project Capsule"]
+  F --> H["Reflex Recall"]
+  G --> I["Session Startup"]
+```
+
+The event log records how a memory entered the system; YAML remains the inspectable source of truth; Qdrant and the graph are recall indexes that can be rebuilt. Capsules and reflex recall are thin agent-facing views over the same local data, not separate stores.
+
+---
+
 ## Core Principle: DRY
 
 All shared functionality lives in `core/`:

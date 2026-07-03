@@ -33,18 +33,37 @@ def build_agent_startup(
 ) -> dict[str, Any]:
     scope = ScopeDetector.detect(project=project, agent=agent)
     packet = manager.get_resume_packet(project=scope.project, scope=scope, limit=limit)
+    try:
+        capsule = manager.get_project_capsule(scope.project, limit=300)
+    except Exception:
+        capsule = {}
+    doctor: dict[str, Any] = {}
 
     hints = SYSTEM_HINTS.get(scope.agent, SYSTEM_HINTS["unknown"])
 
     return {
         "scope": packet["scope"],
-        "startup_summary": render_agent_startup(scope, packet, hints),
+        "startup_summary": render_agent_startup(
+            scope,
+            packet,
+            hints,
+            capsule=capsule,
+            doctor=doctor,
+        ),
         "resume_packet": packet,
+        "project_capsule": capsule,
+        "doctor": doctor,
         "system_hints": hints,
     }
 
 
-def render_agent_startup(scope: MemoryScope, packet: dict[str, Any], hints: list[str]) -> str:
+def render_agent_startup(
+    scope: MemoryScope,
+    packet: dict[str, Any],
+    hints: list[str],
+    capsule: dict[str, Any] | None = None,
+    doctor: dict[str, Any] | None = None,
+) -> str:
     lines = [f"# Agent Startup: {scope.project}", ""]
     lines.append(f"- agent: {scope.agent}")
     if scope.repo_name:
@@ -57,6 +76,23 @@ def render_agent_startup(scope: MemoryScope, packet: dict[str, Any], hints: list
     for hint in hints:
         lines.append(f"- {hint}")
     lines.append("")
+
+    if capsule:
+        from memory.capsules import render_project_capsule
+
+        lines.append("## Familiarity Capsule")
+        lines.append(render_project_capsule(capsule).strip())
+        lines.append("")
+
+    if doctor and doctor.get("status") != "healthy":
+        findings = doctor.get("findings") or []
+        lines.append("## Memory Doctor")
+        lines.append(f"- status: {doctor.get('status', 'unknown')}")
+        if findings:
+            lines.append(f"- findings: {', '.join(str(item) for item in findings)}")
+        if doctor.get("error"):
+            lines.append(f"- error: {doctor['error']}")
+        lines.append("")
 
     if packet.get("next_steps"):
         lines.append("## Next Steps")

@@ -7,6 +7,7 @@
 #        bash claude/setup/install.sh --skip-backend     (skip docker + python startup)
 #        bash claude/setup/install.sh --skills-only       (only install slash commands)
 #        bash claude/setup/install.sh --hooks-only        (only install hooks + settings)
+#        bash claude/setup/install.sh --install-startup-capsule
 
 set -euo pipefail
 
@@ -14,14 +15,17 @@ set -euo pipefail
 SKIP_BACKEND=0
 SKILLS_ONLY=0
 HOOKS_ONLY=0
+INSTALL_STARTUP_CAPSULE=0
 BACKUP=""  # set by the settings.json patch path; referenced unconditionally in the final report
+LIVE_BACKUP_DIR=""
 for arg in "$@"; do
     case "$arg" in
         --skip-backend) SKIP_BACKEND=1 ;;
         --skills-only)  SKILLS_ONLY=1; SKIP_BACKEND=1 ;;
         --hooks-only)   HOOKS_ONLY=1; SKIP_BACKEND=1 ;;
+        --install-startup-capsule) INSTALL_STARTUP_CAPSULE=1 ;;
         --help|-h)
-            sed -n '1,12p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
         *) echo "unknown arg: $arg (see --help)" >&2; exit 2 ;;
@@ -43,6 +47,30 @@ step() { printf "\n→ %s\n" "$*"; }
 ok()   { printf "  ✓ %s\n" "$*"; }
 warn() { printf "  ⚠ %s\n" "$*"; }
 fail() { printf "  ✗ %s\n" "$*" >&2; exit 1; }
+
+ensure_live_backup_dir() {
+    if [[ -z "$LIVE_BACKUP_DIR" ]]; then
+        LIVE_BACKUP_DIR="$HOME/.claude/backups/rekall-live-config-$(date +%Y%m%d-%H%M%S)"
+        mkdir -p "$LIVE_BACKUP_DIR"
+    fi
+}
+
+backup_live_file() {
+    local path="$1"
+    [[ -e "$path" ]] || return 0
+
+    local root="$HOME/.claude"
+    local rel
+    rel="${path#$root/}"
+    ensure_live_backup_dir
+    local backup_root
+    backup_root="$LIVE_BACKUP_DIR"
+    local backup_parent
+    backup_parent="$backup_root/$(dirname "$rel")"
+    mkdir -p "$backup_parent"
+    cp -p "$path" "$backup_parent/"
+    ok "backed up $rel to ${backup_root#$root/}/$rel"
+}
 
 # ---------------------------------------------------------------- preflight
 step "Preflight checks"
@@ -107,12 +135,18 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     step "Installing hooks → ~/.claude/hooks/"
     mkdir -p "$HOME/.claude/hooks"
 
-    for hook in rekall-restore.sh rekall-observe.sh; do
+    HOOKS=(rekall-restore.sh rekall-observe.sh)
+    if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
+        HOOKS+=(session-start-memory.sh)
+    fi
+
+    for hook in "${HOOKS[@]}"; do
         src="$CLAUDE_BUNDLE/hooks/$hook"
         dst="$HOME/.claude/hooks/$hook"
         if [[ -f "$dst" ]] && cmp -s "$src" "$dst"; then
             ok "$hook already up-to-date"
         else
+            backup_live_file "$dst"
             cp "$src" "$dst"
             chmod +x "$dst"
             ok "$hook installed"
@@ -132,18 +166,24 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     jq empty "$SETTINGS" 2>/dev/null || fail "$SETTINGS is not valid JSON. Fix it manually."
 
     # Backup
+    backup_live_file "$SETTINGS"
     BACKUP="$SETTINGS.bak-$(date +%Y%m%d-%H%M%S)"
     cp "$SETTINGS" "$BACKUP"
     ok "backed up to $(basename "$BACKUP")"
 
     # Merge: add UserPromptSubmit (rekall-restore) + Stop (rekall-observe) hooks.
+    # SessionStart is intentionally opt-in because it injects additionalContext.
     # Idempotent — checks if the command path already exists in the array.
     REST_CMD="$HOME/.claude/hooks/rekall-restore.sh"
     OBS_CMD="$HOME/.claude/hooks/rekall-observe.sh"
+    START_CMD=""
+    if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
+        START_CMD="$HOME/.claude/hooks/session-start-memory.sh"
+    fi
 
-    /usr/bin/python3 - "$SETTINGS" "$REST_CMD" "$OBS_CMD" <<'PY'
+    /usr/bin/python3 - "$SETTINGS" "$REST_CMD" "$OBS_CMD" "$START_CMD" <<'PY'
 import json, sys
-path, rest_cmd, obs_cmd = sys.argv[1], sys.argv[2], sys.argv[3]
+path, rest_cmd, obs_cmd, start_cmd = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
 with open(path) as f: d = json.load(f)
 d.setdefault("hooks", {})
 
@@ -166,6 +206,8 @@ if ensure_event_hook("UserPromptSubmit", rest_cmd):
     added.append("UserPromptSubmit → rekall-restore.sh")
 if ensure_event_hook("Stop", obs_cmd):
     added.append("Stop → rekall-observe.sh")
+if start_cmd and ensure_event_hook("SessionStart", start_cmd):
+    added.append("SessionStart → session-start-memory.sh")
 
 with open(path, "w") as f:
     json.dump(d, f, indent=2)
@@ -216,6 +258,9 @@ fi
 if [[ "$SKILLS_ONLY" == "0" ]]; then
     [[ -f "$HOME/.claude/hooks/rekall-restore.sh" ]] && ok "rekall-restore.sh in place" || warn "rekall-restore.sh missing"
     [[ -f "$HOME/.claude/hooks/rekall-observe.sh" ]] && ok "rekall-observe.sh in place" || warn "rekall-observe.sh missing"
+    if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
+        [[ -f "$HOME/.claude/hooks/session-start-memory.sh" ]] && ok "session-start-memory.sh in place" || warn "session-start-memory.sh missing"
+    fi
 fi
 
 echo
@@ -225,6 +270,7 @@ echo "Next steps:"
 echo "  • Restart your Claude Code session for the new hooks/skills to load."
 echo "  • Type /memory-stats in a new session to verify slash commands work."
 [[ -n "$BACKUP" ]] && echo "  • If something's off, restore your settings: cp '$BACKUP' '$HOME/.claude/settings.json'"
+[[ -n "$LIVE_BACKUP_DIR" ]] && echo "  • Live file backups: $LIVE_BACKUP_DIR"
 echo
 echo "Kill switches (env vars):"
-echo "  REKALL_AUTOSAVE=0   disables both restore status line and Stop-hook auto-save"
+echo "  REKALL_AUTOSAVE=0   disables restore status, SessionStart capsule, and Stop-hook auto-save"
