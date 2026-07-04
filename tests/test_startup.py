@@ -18,8 +18,6 @@ def test_build_agent_startup_returns_summary():
         "standing_context": [
             {"date": "2026-07-03", "content": "Codex startup adapter is planned."}
         ],
-        "active_workstreams": [],
-        "operating_rules": [],
         "danger_zones": [],
         "open_loops": [],
     }

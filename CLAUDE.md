@@ -119,6 +119,7 @@ Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/h
 - **Per-turn LLM judge without a gate.** Cost cliff. See hook discipline above.
 - **Synthesizing rules into CLAUDE.md from imagined sources.** Real incident — a rule about commit footers got fabricated and almost shipped. Verbatim source or explicit author intent only.
 - **BM25 hybrid on main.** Lives on `feat/hybrid-search-bm25` until the migrate_hybrid.py glob→rglob fix and the compact.py asyncio.run→await fix land. Don't merge without those.
+- **More reads over smarter reads.** A new context surface ships only with evidence it reduces duplicate memory_ids across capsule buckets (test-asserted) or feeds the recall-utility loop (event emitted + consumed by the utility report). No evidence, no merge.
 
 ## Deferred work (with reason)
 

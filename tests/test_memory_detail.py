@@ -875,3 +875,62 @@ def test_manager_get_memory_detail_yaml_false_when_qdrant_hit_not_in_yaml():
 
     assert result["storage"]["qdrant"] is True
     assert result["storage"]["yaml"] is False
+
+
+# ---------------------------------------------------------------------------
+# 9. Provenance predicate honesty — agent="unknown" counts as absent
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("agent_value", ["unknown", ""])
+def test_warning_fires_for_unknown_agent(agent_value):
+    """missing_provenance warning fires when agent='unknown' or agent='' (empty string)."""
+    from memory.manager import MemoryManager
+
+    memory_id = "2026-07-01_note_unk1"
+    memory = {
+        "memory_id": memory_id,
+        "content": "saved by scope detector default",
+        "type": "note",
+        "project": "rekall-mcp",
+        "agent": agent_value,
+        # source_tool and source_event absent
+        "durability": 0.5,
+        "lifecycle_reason": "default",
+    }
+
+    mgr = MagicMock(spec=MemoryManager)
+    mgr.store = _make_mock_store({memory_id: memory})
+    mgr.knowledge_graph = _make_mock_graph([])
+    mgr.memory_dir = MagicMock()
+    mgr.memory_dir.rglob.return_value = []
+
+    result = MemoryManager.get_memory_detail(mgr, memory_id)
+
+    assert "missing_provenance" in result["warnings"]
+
+
+def test_warning_absent_for_real_agent():
+    """missing_provenance warning does NOT fire when a real agent is present."""
+    from memory.manager import MemoryManager
+
+    memory_id = "2026-07-01_note_realagent"
+    memory = {
+        "memory_id": memory_id,
+        "content": "saved by real agent",
+        "type": "note",
+        "project": "rekall-mcp",
+        "agent": "claude-code",
+        "durability": 0.5,
+        "lifecycle_reason": "default",
+    }
+
+    mgr = MagicMock(spec=MemoryManager)
+    mgr.store = _make_mock_store({memory_id: memory})
+    mgr.knowledge_graph = _make_mock_graph([])
+    mgr.memory_dir = MagicMock()
+    mgr.memory_dir.rglob.return_value = []
+
+    result = MemoryManager.get_memory_detail(mgr, memory_id)
+
+    assert "missing_provenance" not in result["warnings"]

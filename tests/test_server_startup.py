@@ -48,8 +48,6 @@ async def test_api_project_capsule(monkeypatch):
         "project": "brain",
         "entities": ["Codex"],
         "standing_context": [],
-        "active_workstreams": [],
-        "operating_rules": [],
         "danger_zones": [],
         "open_loops": [],
     }

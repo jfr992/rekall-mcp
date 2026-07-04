@@ -9,8 +9,6 @@ def _capsule(project: str = "byte-edge") -> dict:
         "project": project,
         "entities": ["Longhorn"],
         "standing_context": [{"content": "Use tuned Longhorn settings.", "date": "2026-07-01"}],
-        "active_workstreams": [],
-        "operating_rules": [],
         "danger_zones": [],
         "open_loops": [],
     }

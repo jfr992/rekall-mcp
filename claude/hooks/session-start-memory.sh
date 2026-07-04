@@ -60,16 +60,11 @@ def _render_capsule(data):
 
     if data.get("project"):
         lines.append(f"Project Capsule: {data['project']}")
-    entities = data.get("entities") or []
-    if entities:
-        lines.append("Entities: " + ", ".join(map(str, entities[:12])))
     if lines:
         lines.append("")
 
     sections = [
         ("Standing Context", "standing_context"),
-        ("Active Workstreams", "active_workstreams"),
-        ("Operating Rules", "operating_rules"),
         ("Danger Zones", "danger_zones"),
         ("Open Loops", "open_loops"),
     ]
