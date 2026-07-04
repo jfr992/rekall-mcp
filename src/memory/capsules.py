@@ -1,27 +1,50 @@
 from __future__ import annotations
 
+import re
 from collections import Counter
+from datetime import datetime, timedelta
 from typing import Any
 
-_DANGER_TERMS = (
-    "backup",
-    "delete",
-    "cleanup",
-    "qdrant",
-    "terraform",
-    "terragrunt",
-    "tofu",
-    "secret",
-    "production",
+_DANGER_PATTERNS = tuple(
+    re.compile(p)
+    for p in (
+        r"\bnever\b",
+        r"\bgotcha\b",
+        r"\bcorrupt(?:ed|ion)?\b",
+        r"data loss",
+        r"\boutage\b",
+        r"\bincident\b",
+        r"race condition",
+        r"\bbroken\b",
+        r"\bfailed\b",
+        r"migration failed",
+        r"failed migration",
+        r"security vulnerability",
+        r"\bcve-",
+        r"\bbreach\b",
+        r"\bdo not\b",
+        r"\bdon't\b",
+    )
 )
-_OPEN_LOOP_TERMS = ("next", "follow up", "open", "blocked", "remaining")
-_SECTION_LIMITS = {
-    "standing_context": 8,
-    "active_workstreams": 6,
-    "operating_rules": 6,
-    "danger_zones": 6,
-    "open_loops": 6,
-}
+_OPEN_LOOP_PATTERNS = tuple(
+    re.compile(p)
+    for p in (
+        r"\bpending\b",
+        r"\btodo\b",
+        r"next step",
+        r"\bunmerged\b",
+        r"\bblocked\b",
+        r"follow-up",
+        r"follow up",
+        r"waiting on",
+        r"not yet",
+        r"restart needed",
+    )
+)
+_DANGER_TYPES = {"learning", "fact", "requirement", "decision"}
+_STANDING_TYPES = {"decision", "requirement", "preference"}
+_OPEN_LOOP_MAX_AGE_DAYS = 90
+_SECTION_LIMITS = {"standing_context": 8, "danger_zones": 6, "open_loops": 6}
 _MAX_CONTENT_CHARS = 240
 _MAX_RENDER_CHARS = 1800
 
@@ -53,34 +76,30 @@ def build_project_capsule(manager, project: str, limit: int = 300) -> dict[str, 
 
     enriched.sort(key=lambda pair: (pair[0].get("date", ""), pair[1]), reverse=True)
 
-    standing_context = []
-    active_workstreams = []
-    operating_rules = []
-    danger_zones = []
-    open_loops = []
+    standing_context: list[dict[str, Any]] = []
+    danger_zones: list[dict[str, Any]] = []
+    open_loops: list[dict[str, Any]] = []
+
+    cutoff = (datetime.now() - timedelta(days=_OPEN_LOOP_MAX_AGE_DAYS)).strftime("%Y-%m-%d")
 
     for point, importance in enriched:
         content = (point.get("content") or "").lower()
         memory_type = point.get("type")
         row = _item(point, importance)
 
-        if memory_type in {"requirement", "preference"}:
-            operating_rules.append(row)
-        if memory_type in {"decision", "learning", "fact"}:
-            standing_context.append(row)
-        if memory_type in {"note", "summary", "session"} or "workstream" in content:
-            active_workstreams.append(row)
-        if any(term in content for term in _DANGER_TERMS):
+        if memory_type in _DANGER_TYPES and any(p.search(content) for p in _DANGER_PATTERNS):
             danger_zones.append(row)
-        if any(term in content for term in _OPEN_LOOP_TERMS):
+        elif (point.get("date", "") >= cutoff) and any(
+            p.search(content) for p in _OPEN_LOOP_PATTERNS
+        ):
             open_loops.append(row)
+        elif memory_type in _STANDING_TYPES:
+            standing_context.append(row)
 
     return {
         "project": project,
         "entities": [entity for entity, _count in entity_counts.most_common(16)],
         "standing_context": standing_context[: _SECTION_LIMITS["standing_context"]],
-        "active_workstreams": active_workstreams[: _SECTION_LIMITS["active_workstreams"]],
-        "operating_rules": operating_rules[: _SECTION_LIMITS["operating_rules"]],
         "danger_zones": danger_zones[: _SECTION_LIMITS["danger_zones"]],
         "open_loops": open_loops[: _SECTION_LIMITS["open_loops"]],
     }
@@ -89,15 +108,8 @@ def build_project_capsule(manager, project: str, limit: int = 300) -> dict[str, 
 def render_project_capsule(capsule: dict[str, Any]) -> str:
     lines = [f"# Project Capsule: {capsule['project']}", ""]
 
-    entities = capsule.get("entities") or []
-    if entities:
-        lines.append("Entities: " + ", ".join(entities[:16]))
-        lines.append("")
-
     sections = [
         ("Standing Context", "standing_context"),
-        ("Active Workstreams", "active_workstreams"),
-        ("Operating Rules", "operating_rules"),
         ("Danger Zones", "danger_zones"),
         ("Open Loops", "open_loops"),
     ]

@@ -1571,7 +1571,12 @@ class MemoryManager:
         warnings: list[str] = []
         if current_project is not None and memory.get("project") != current_project:
             warnings.append("scope_mismatch")
-        if all(memory.get(k) is None for k in ("agent", "source_tool", "source_event")):
+        _agent_absent = memory.get("agent") in (None, "", "unknown")
+        if (
+            _agent_absent
+            and memory.get("source_tool") is None
+            and memory.get("source_event") is None
+        ):
             warnings.append("missing_provenance")
         if yaml_hit and not qdrant_hit:
             warnings.append("missing_index")
