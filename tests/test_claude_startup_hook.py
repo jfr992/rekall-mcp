@@ -313,3 +313,48 @@ def test_docs_document_startup_capsule_opt_in_and_live_backup_rule():
         text = path.read_text(encoding="utf-8")
         assert "--install-startup-capsule" in text
         assert "~/.claude/backups/rekall-live-config-<timestamp>/" in text
+
+
+def test_hook_capsule_path_does_not_render_entities(tmp_path):
+    """Hook must suppress Entities: from capsule output even when the JSON contains entities."""
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    calls = tmp_path / "curl-calls.log"
+    curl = fakebin / "curl"
+    curl.write_text(
+        f"""#!/usr/bin/env bash
+set -euo pipefail
+url="${{@: -1}}"
+printf '%s\\n' "$url" >> "{calls}"
+if [[ "$url" == *"/api/memory/capsule"* ]]; then
+  printf '%s' '{{"project":"rekall-mcp","entities":["Longhorn","k3s"],"danger_zones":[{{"date":"2026-07-03","content":"Back up live files before touching Claude hooks."}}]}}'
+  exit 0
+fi
+exit 99
+""",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fakebin}:{env['PATH']}",
+            "FAKE_CURL_CALLS": str(calls),
+            "REKALL_API_URL": "http://rekall.test",
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", str(HOOK)],
+        input=json.dumps({"cwd": "/workspaces/rekall-mcp"}),
+        text=True,
+        capture_output=True,
+        env=env,
+        cwd=tmp_path,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    packet = json.loads(result.stdout)
+    additional_context = packet["hookSpecificOutput"]["additionalContext"]
+    assert "Entities:" not in additional_context
