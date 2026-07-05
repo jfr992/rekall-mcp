@@ -382,7 +382,9 @@ class TestBackupDockerContract:
             if call_count[0] == 1:
                 _make_fake_tarball(dest)
             else:
-                raise RuntimeError("simulated tarfile mid-write failure")
+                # BaseException-adjacent: KeyboardInterrupt is NOT caught by the
+                # inner `except Exception`, so only a real finally runs cleanup.
+                raise KeyboardInterrupt("simulated interrupt mid-tar")
 
         with (
             patch("memory.cli.subprocess.run", recorder),
@@ -783,3 +785,91 @@ class TestCheckDockerContainerUnit:
         assert result.exit_code == 1
         assert "failed to restart" in result.output
         assert "simulated qdrant tar write failure" in result.output
+
+
+# ---------------------------------------------------------------------------
+# install-claude verb (T3)
+# ---------------------------------------------------------------------------
+
+
+class TestInstallClaude:
+    def test_install_claude_command_registered(self):
+        """install-claude must be registered as a sub-command on the memory group."""
+        runner = CliRunner()
+        result = runner.invoke(memory, ["install-claude", "--help"])
+        assert result.exit_code == 0, result.output
+
+    def test_missing_exit1_with_message(self):
+        """Not in a repo checkout -> exit 1, exact helpful message."""
+        runner = CliRunner()
+        with patch("memory.cli._find_install_sh", return_value=None):
+            result = runner.invoke(memory, ["install-claude"])
+        assert result.exit_code == 1
+        assert "install-claude requires a rekall-mcp repo checkout" in result.output
+        assert "bash <repo>/claude/setup/install.sh" in result.output
+
+    def test_flags_pass_through(self, tmp_path):
+        """--skills-only, --hooks-only, --skip-backend are forwarded to bash."""
+        fake_sh = tmp_path / "claude" / "setup" / "install.sh"
+        fake_sh.parent.mkdir(parents=True)
+        fake_sh.write_text("#!/bin/bash\necho done")
+        with (
+            patch("memory.cli._find_install_sh", return_value=fake_sh),
+            patch("memory.cli.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0)
+            result = CliRunner().invoke(
+                memory,
+                ["install-claude", "--skills-only", "--hooks-only", "--skip-backend"],
+            )
+        assert result.exit_code == 0, result.output
+        cmd = mock_run.call_args[0][0]
+        assert cmd[0] == "bash"
+        assert "--skills-only" in cmd
+        assert "--hooks-only" in cmd
+        assert "--skip-backend" in cmd
+
+    def test_exit_code_propagates(self, tmp_path):
+        """Exit code from install.sh is propagated."""
+        fake_sh = tmp_path / "install.sh"
+        with (
+            patch("memory.cli._find_install_sh", return_value=fake_sh),
+            patch("memory.cli.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=42)
+            result = CliRunner().invoke(memory, ["install-claude"])
+        assert result.exit_code == 42
+
+    def test_no_flags_minimal_cmd(self, tmp_path):
+        """With no flags, only bash + script path are passed to subprocess."""
+        fake_sh = tmp_path / "install.sh"
+        with (
+            patch("memory.cli._find_install_sh", return_value=fake_sh),
+            patch("memory.cli.subprocess.run") as mock_run,
+        ):
+            mock_run.return_value = MagicMock(returncode=0)
+            CliRunner().invoke(memory, ["install-claude"])
+        cmd = mock_run.call_args[0][0]
+        assert cmd == ["bash", str(fake_sh)]
+
+    def test_walk_up_from_nested_cwd_finds_script(self, tmp_path):
+        """_find_install_sh walks up from a nested cwd to find the script."""
+        from memory.cli import _find_install_sh
+
+        nested = tmp_path / "a" / "b" / "c"
+        nested.mkdir(parents=True)
+        install_sh = tmp_path / "claude" / "setup" / "install.sh"
+        install_sh.parent.mkdir(parents=True)
+        install_sh.write_text("#!/bin/bash\necho done")
+
+        found = _find_install_sh(start_dir=nested)
+        assert found == install_sh
+
+    def test_walk_up_not_found_returns_none(self, tmp_path):
+        """_find_install_sh returns None when no install.sh exists in ancestors."""
+        from memory.cli import _find_install_sh
+
+        nested = tmp_path / "x" / "y"
+        nested.mkdir(parents=True)
+        found = _find_install_sh(start_dir=nested)
+        assert found is None

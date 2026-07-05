@@ -522,6 +522,45 @@ def migrate(dry_run: bool, no_backup: bool):
         sys.exit(1)
 
 
+def _find_install_sh(start_dir: Path | None = None) -> Path | None:
+    """Walk up from start_dir (default: cwd) to locate claude/setup/install.sh."""
+    cur = start_dir if start_dir is not None else Path.cwd()
+    while True:
+        candidate = cur / "claude" / "setup" / "install.sh"
+        if candidate.is_file():
+            return candidate
+        parent = cur.parent
+        if parent == cur:
+            break
+        cur = parent
+    return None
+
+
+@memory.command("install-claude")
+@click.option("--skills-only", is_flag=True, default=False)
+@click.option("--hooks-only", is_flag=True, default=False)
+@click.option("--skip-backend", is_flag=True, default=False)
+def install_claude(skills_only: bool, hooks_only: bool, skip_backend: bool):
+    """Install the Claude Code bundle (hooks, slash commands, settings)."""
+    install_sh = _find_install_sh()
+    if install_sh is None:
+        click.echo(
+            "install-claude requires a rekall-mcp repo checkout."
+            " Run: bash <repo>/claude/setup/install.sh",
+            err=True,
+        )
+        sys.exit(1)
+    cmd = ["bash", str(install_sh)]
+    if skills_only:
+        cmd.append("--skills-only")
+    if hooks_only:
+        cmd.append("--hooks-only")
+    if skip_backend:
+        cmd.append("--skip-backend")
+    proc = subprocess.run(cmd)
+    sys.exit(proc.returncode)
+
+
 def main():
     """Entry point."""
     memory()
