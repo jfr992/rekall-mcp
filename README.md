@@ -86,6 +86,19 @@ python -m memory.cli recall "recent work" --limit 3 --days 7
 python -m memory.cli stats
 ```
 
+#### Operations
+
+| Verb | What it does |
+|------|-------------|
+| `rekall doctor [--project P] [--json]` | Health check — exit 0 healthy, 1 degraded, 3 unreachable |
+| `rekall backup [--out DIR]` | Tarball memory + Qdrant; streams artifact paths |
+| `rekall migrate [--dry-run] [--no-backup]` | Migrate to hybrid schema; backs up first by default |
+| `rekall startup-preview [--project P]` | Preview what the SessionStart hook would inject (approximates hook output; exit 3 if backend unreachable) |
+| `rekall install-claude [--skills-only] [--hooks-only] [--skip-backend]` | Install Claude Code bundle from a repo checkout |
+
+Software evals: `uv run --extra dev pytest tests/test_software_evals.py`
+Utility report: `uv run python scripts/utility_report.py`
+
 ---
 
 ## Knowledge Graph
