@@ -365,6 +365,7 @@ class MemoryManager:
                     project=project_name,
                     embedder=self.embedder,
                     store=self.store,
+                    embedding_text=embedding_text,
                 )
                 self.knowledge_graph.save()
                 if link_result.edges_created:

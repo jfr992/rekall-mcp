@@ -90,9 +90,13 @@ def auto_link(
     project: str,
     embedder: Embedder,
     store: VectorStore,
+    embedding_text: str | None = None,
 ) -> LinkResult:
     """Find and persist likely relationships for a new memory."""
-    vector = embedder.encode(content)
+    # Use embedding_text when available so the search vector matches the stored
+    # vector format (encode(embedding_text)); falling back to content keeps
+    # existing call-sites and unit tests unaffected.
+    vector = embedder.encode(embedding_text if embedding_text is not None else content)
 
     candidates = store.search(
         vector=vector,
