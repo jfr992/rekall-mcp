@@ -56,6 +56,7 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 - `EMBEDDING_PROVIDER` sets embedding backend (`sentence-transformers`, `ollama`, `gemini`).
 - `LOG_LEVEL` for diagnostics.
 - `OLLAMA_URL`, `GEMINI_API_KEY` as provider-specific settings.
+- `REKALL_MARKER_DIR` — directory where the restore and observe hooks write/read the per-session restore marker file (default `/tmp`).
 
 Current compose defaults:
 - service: `rekall-mcp` on port `8000`

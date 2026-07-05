@@ -7,6 +7,14 @@
 - **Doctor `degraded` semantics narrowed.** Legacy memories without provenance (`missing_provenance: N`) now appear in `notes`, not `findings`. Doctor `degraded` is reserved for real failures: zero vectors, sync mismatch, graph absent. If you script against `status: degraded`, legacy-provenance gaps no longer trigger it.
 - **`agent="unknown"` or `agent=""` counts as missing provenance.** `memory_detail` warning predicate now fires when `agent` is `None`, `"unknown"`, or an empty string and `source_tool`/`source_event` are absent — closes the gap where `ScopeDetector` defaulting to `"unknown"` or an empty string silently passed as provenanced.
 
+### Shadow instrumentation (post-v1.9.0, additive)
+
+**No breaking changes. No migration steps required.**
+
+- **Event log.** The server now emits `memory_recalled` and `memory_surfaced` events into `~/.claude/memory/_events.jsonl`. `memory_recalled` fires on recall, reflex, and cross-project calls; `memory_surfaced` fires at capsule/startup build for coverage auditing only (excluded from utility scoring — surfaced ≠ seen).
+- **Session-summary correlation.** The Stop hook (`rekall-observe.sh`) now has an ungated, LLM-free section that posts one `session_summary` event per session that used recall. It captures recalled memory IDs, edit count after first recall, and test-pass count — no tool payload contents transmitted. Runtime: ≤1 s curl, fail-open on any error. Kill switch: `REKALL_AUTOSAVE=0`. Marker dir configurable via `REKALL_MARKER_DIR` (default `/tmp`).
+- **Ranking is frozen.** No recall ranking changes ship until the exit criterion is met: ≥500 recall→outcome session pairs across ≥20 distinct sessions and ≥3 projects, AND top-10 utility memories exceed the null-hypothesis baseline by >2σ. Check progress with `scripts/utility_report.py` (reads `~/.claude/memory/_events.jsonl`).
+
 ---
 
 # Migration Guide — v1.7.0 → v1.8.0 (Parity + hardening + agent nervous system)
