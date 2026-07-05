@@ -106,7 +106,7 @@ def build_universe(events: list[dict]) -> list[str]:
 
 def progress_line(summaries: list[dict]) -> str:
     """Build the exit-criterion progress line."""
-    pairs = sum(1 for ss in summaries if ss["recalled_ids"])
+    pairs = sum(len(ss["recalled_ids"]) for ss in summaries)
     sessions = len({ss["session_id"] for ss in summaries if ss["session_id"]})
     projects = len({ss["project"] for ss in summaries if ss["project"]})
     return f"pairs={pairs} sessions={sessions} projects={projects} (need 500/20/3)"

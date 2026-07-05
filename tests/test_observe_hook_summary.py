@@ -9,8 +9,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import pytest
-
 REPO = Path(__file__).resolve().parent.parent
 HOOK = REPO / "claude" / "hooks" / "rekall-observe.sh"
 
@@ -226,7 +224,7 @@ def _run_hook(
     _make_fake_git(fakebin)
     _make_fake_claude(fakebin)
 
-    # Marker file: hook uses ${TMPDIR:-/tmp}/rekall-restored-<sess_id>
+    # Marker file: hook uses ${REKALL_MARKER_DIR:-/tmp}/rekall-restored-<sess_id>
     # We set TMPDIR=tmp_path so the hook reads from there.
     if create_marker:
         (tmp_path / f"rekall-restored-{SESSION_ID}").touch()
@@ -363,7 +361,7 @@ def test_summary_malformed_transcript_exits_clean(tmp_path):
     """Corrupted JSONL → Python extractor bails gracefully → no POST, exit 0."""
     t = tmp_path / f"{SESSION_ID}.jsonl"
     t.write_text(
-        "not json\n{\"type\": \"assistant\", bad\n\x00\x01\x02\n",
+        'not json\n{"type": "assistant", bad\n\x00\x01\x02\n',
         encoding="utf-8",
     )
     result, url_lines, bodies = _run_hook(tmp_path, t)
@@ -404,8 +402,8 @@ def test_marker_path_expression_consistent_across_hooks():
     observe_text = (REPO / "claude" / "hooks" / "rekall-observe.sh").read_text(encoding="utf-8")
     restore_text = (REPO / "claude" / "hooks" / "rekall-restore.sh").read_text(encoding="utf-8")
 
-    observe_marker_lines = [l for l in observe_text.splitlines() if "rekall-restored-" in l]
-    restore_marker_lines = [l for l in restore_text.splitlines() if "rekall-restored-" in l]
+    observe_marker_lines = [ln for ln in observe_text.splitlines() if "rekall-restored-" in ln]
+    restore_marker_lines = [ln for ln in restore_text.splitlines() if "rekall-restored-" in ln]
 
     assert observe_marker_lines, "rekall-observe.sh has no line referencing rekall-restored-"
     assert restore_marker_lines, "rekall-restore.sh has no line referencing rekall-restored-"

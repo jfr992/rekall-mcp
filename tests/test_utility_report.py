@@ -106,7 +106,7 @@ def test_progress_line_format():
         {
             "session_id": "s1",
             "project": "proj-a",
-            "recalled_ids": ["mem-x"],
+            "recalled_ids": ["mem-x", "mem-y"],
             "edits_after_recall": 1,
             "test_passes_after_recall": 0,
         },
@@ -126,7 +126,8 @@ def test_progress_line_format():
         },
     ]
     line = progress_line(summaries)
-    assert "pairs=3" in line
+    # pairs = (session, memory) pairs: s1 contributes 2
+    assert "pairs=4" in line
     assert "sessions=3" in line
     assert "projects=1" in line
     assert "need 500/20/3" in line
