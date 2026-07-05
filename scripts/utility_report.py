@@ -60,6 +60,41 @@ def build_session_summaries(events: list[dict]) -> list[dict]:
     return summaries
 
 
+def collapse_sessions(summaries: list[dict]) -> list[dict]:
+    """Collapse repeated summaries for the same session_id into one.
+
+    The Stop hook fires per turn; multiple summaries per session are expected.
+    Per group: recalled_ids = sorted union, edits/test_passes = max across group.
+    Empty/None session_ids group together, preserving current pseudo-session behaviour.
+    """
+    groups: dict[str, list[dict]] = {}
+    order: list[str] = []
+    for ss in summaries:
+        key = ss["session_id"] or ""
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(ss)
+
+    collapsed = []
+    for key in order:
+        group = groups[key]
+        first = group[0]
+        all_ids: set[str] = set()
+        for s in group:
+            all_ids.update(s["recalled_ids"])
+        collapsed.append(
+            {
+                "session_id": first["session_id"],
+                "project": next((s["project"] for s in group if s["project"]), first["project"]),
+                "recalled_ids": sorted(all_ids),
+                "edits_after_recall": max(s["edits_after_recall"] for s in group),
+                "test_passes_after_recall": max(s["test_passes_after_recall"] for s in group),
+            }
+        )
+    return collapsed
+
+
 def compute_utility_map(summaries: list[dict]) -> dict[str, float]:
     """Per-memory utility = sessions_with_outcome / sessions_recalled.
 
@@ -220,12 +255,13 @@ def main(argv=None) -> None:
     args = parser.parse_args(argv)
 
     events = parse_events(args.events_file)
-    summaries = build_session_summaries(events)
+    raw_summaries = build_session_summaries(events)
 
-    if not summaries:
+    if not raw_summaries:
         print("no event data yet")
         sys.exit(0)
 
+    summaries = collapse_sessions(raw_summaries)
     surfaced_counts = build_surfaced_counts(events)
     universe = build_universe(events)
     utility_map = compute_utility_map(summaries)

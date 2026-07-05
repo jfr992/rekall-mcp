@@ -280,3 +280,139 @@ def test_main_missing_file_clean_exit(tmp_path, capsys):
 
     assert exc.value.code == 0
     assert "no event data" in capsys.readouterr().out.lower()
+
+
+def test_collapse_merges_repeated_session_summaries():
+    """Two summaries sharing session_id collapse to one with union ids and max outcomes."""
+    from scripts.utility_report import collapse_sessions
+
+    summaries = [
+        {
+            "session_id": "s1",
+            "project": "proj-a",
+            "recalled_ids": ["mem-x"],
+            "edits_after_recall": 0,
+            "test_passes_after_recall": 0,
+        },
+        {
+            "session_id": "s1",
+            "project": "proj-a",
+            "recalled_ids": ["mem-x", "mem-y"],
+            "edits_after_recall": 0,
+            "test_passes_after_recall": 1,
+        },
+    ]
+
+    result = collapse_sessions(summaries)
+
+    assert len(result) == 1
+    assert result[0]["session_id"] == "s1"
+    assert result[0]["recalled_ids"] == ["mem-x", "mem-y"]
+    assert result[0]["edits_after_recall"] == 0
+    assert result[0]["test_passes_after_recall"] == 1
+
+
+def test_progress_pairs_not_inflated_by_repeated_stop_fires():
+    """Repeated Stop fires for the same session must not inflate the pairs count.
+
+    Without collapse: sum of len(recalled_ids) = 1+2+1 = 4 (the bug).
+    With collapse: distinct (session_id, memory_id) pairs = 2+1 = 3.
+    """
+    from scripts.utility_report import collapse_sessions, progress_line
+
+    summaries = [
+        {
+            "session_id": "s1",
+            "project": "proj-a",
+            "recalled_ids": ["mem-x"],
+            "edits_after_recall": 0,
+            "test_passes_after_recall": 0,
+        },
+        {
+            "session_id": "s1",
+            "project": "proj-a",
+            "recalled_ids": ["mem-x", "mem-y"],
+            "edits_after_recall": 0,
+            "test_passes_after_recall": 1,
+        },
+        {
+            "session_id": "s2",
+            "project": "proj-a",
+            "recalled_ids": ["mem-x"],
+            "edits_after_recall": 0,
+            "test_passes_after_recall": 0,
+        },
+    ]
+
+    # Demonstrate the bug: raw uncollapsed count is 4
+    raw_line = progress_line(summaries)
+    assert "pairs=4" in raw_line, "raw (uncollapsed) inflated count must equal 4"
+
+    # After collapse: s1 has 2 distinct ids, s2 has 1 → 3 pairs
+    collapsed_line = progress_line(collapse_sessions(summaries))
+    assert "pairs=3" in collapsed_line
+    assert "sessions=2" in collapsed_line
+
+
+def test_utility_uses_collapsed_outcomes():
+    """Outcome from any Stop fire in a session counts for the whole session.
+
+    s1 fires twice: first with no outcome, then with test_passes=1.
+    After collapse s1 has outcome; s2 has no outcome.
+    mem-x appears in s1 + s2 → utility = 1/2 = 0.5.
+    mem-y appears only in s1    → utility = 1/1 = 1.0.
+    """
+    from scripts.utility_report import collapse_sessions, compute_utility_map
+
+    summaries = [
+        {
+            "session_id": "s1",
+            "project": "proj-a",
+            "recalled_ids": ["mem-x"],
+            "edits_after_recall": 0,
+            "test_passes_after_recall": 0,
+        },
+        {
+            "session_id": "s1",
+            "project": "proj-a",
+            "recalled_ids": ["mem-x", "mem-y"],
+            "edits_after_recall": 0,
+            "test_passes_after_recall": 1,
+        },
+        {
+            "session_id": "s2",
+            "project": "proj-a",
+            "recalled_ids": ["mem-x"],
+            "edits_after_recall": 0,
+            "test_passes_after_recall": 0,
+        },
+    ]
+
+    utility = compute_utility_map(collapse_sessions(summaries))
+
+    # s1 outcome yes (test_passes=1 via second Stop fire), s2 outcome no
+    assert abs(utility["mem-x"] - 0.5) < 0.001
+    assert abs(utility["mem-y"] - 1.0) < 0.001
+
+
+def test_main_pairs_collapsed_in_output(tmp_path, capsys):
+    """End-to-end: repeated Stop fires → stdout shows pairs=3, not pairs=4."""
+    from scripts.utility_report import main
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(
+        "\n".join(
+            [
+                _ss("s1", "proj-a", ["mem-x"], edits=0, test_passes=0, eid="e1"),
+                _ss("s1", "proj-a", ["mem-x", "mem-y"], edits=0, test_passes=1, eid="e2"),
+                _ss("s2", "proj-a", ["mem-x"], edits=0, test_passes=0, eid="e3"),
+            ]
+        )
+        + "\n"
+    )
+
+    main(["--events-file", str(f)])
+
+    out = capsys.readouterr().out
+    assert "pairs=3" in out
+    assert "sessions=2" in out
