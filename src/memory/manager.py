@@ -228,17 +228,23 @@ class MemoryManager:
         project: str,
         agent: str = "unknown",
         source: str = "memory_manager",
+        memory_ids: list[str] | None = None,
         payload: dict[str, Any] | None = None,
     ) -> None:
-        self.event_log.append(
-            MemoryEvent(
-                event_type=event_type,
-                project=project,
-                agent=agent,
-                source=source,
-                payload=payload or {},
+        try:
+            merged: dict[str, Any] = dict(payload or {})
+            merged.setdefault("memory_ids", list(memory_ids or []))
+            self.event_log.append(
+                MemoryEvent(
+                    event_type=event_type,
+                    project=project,
+                    agent=agent,
+                    source=source,
+                    payload=merged,
+                )
             )
-        )
+        except Exception:
+            logger.warning("record_event failed silently", exc_info=True)
 
     # -------------------------------------------------------------------------
     # SAVE: Store memories

@@ -424,6 +424,17 @@ async def api_recall_memories(request):
         manager = _get_memory_manager()
         results = manager.recall(query, limit=limit, project=project, type=mem_type)
 
+        try:
+            ids = [m["memory_id"] for m in results if m.get("memory_id")]
+            manager.record_event(
+                event_type="memory_recalled",
+                project=project or "general",
+                memory_ids=ids,
+                source="recall",
+            )
+        except Exception:
+            logger.debug("event emission skipped", exc_info=True)
+
         return JSONResponse({"query": query, "count": len(results), "memories": results})
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -452,13 +463,29 @@ async def api_cross_project_recall(request):
             return _bad_request("current_project is required")
 
         manager = _get_memory_manager()
-        return _ok(
-            manager.recall_cross_project(
-                query=query,
-                current_project=current_project,
-                limit=limit,
-            )
+        result = manager.recall_cross_project(
+            query=query,
+            current_project=current_project,
+            limit=limit,
         )
+
+        try:
+            ids = [
+                m["memory_id"]
+                for bucket in ("same_project", "related_projects", "global")
+                for m in (result.get(bucket) or [])
+                if m.get("memory_id")
+            ]
+            manager.record_event(
+                event_type="memory_recalled",
+                project=current_project,
+                memory_ids=ids,
+                source="cross_project",
+            )
+        except Exception:
+            logger.debug("event emission skipped", exc_info=True)
+
+        return _ok(result)
     except RequestValidationError as e:
         return _bad_request(str(e))
     except Exception as e:
@@ -486,11 +513,79 @@ async def api_memory_reflex(request):
             return _bad_request("text is required")
 
         manager = _get_memory_manager()
-        return _ok(manager.reflex(text=text, project=project, limit=limit))
+        result = manager.reflex(text=text, project=project, limit=limit)
+
+        try:
+            ids = [m["memory_id"] for m in (result.get("memories") or []) if m.get("memory_id")]
+            manager.record_event(
+                event_type="memory_recalled",
+                project=project or "general",
+                memory_ids=ids,
+                source="reflex",
+            )
+        except Exception:
+            logger.debug("event emission skipped", exc_info=True)
+
+        return _ok(result)
     except RequestValidationError as e:
         return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building reflex packet: {e}")
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/memory/events", methods=["POST"])
+async def api_record_events(request):
+    """REST API: Append a client-side event (e.g. session_summary) to the event log."""
+    _ALLOWED_EVENT_TYPES = frozenset({"session_summary"})
+
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return _bad_request("body must be an object")
+
+        event_type = body.get("event_type")
+        if event_type not in _ALLOWED_EVENT_TYPES:
+            return _bad_request(f"event_type must be one of {sorted(_ALLOWED_EVENT_TYPES)}")
+
+        session_id = body.get("session_id")
+        project = _safe_project(body.get("project"))
+        recalled_ids = body.get("recalled_ids", [])
+        edits_after_recall = body.get("edits_after_recall", 0)
+        test_passes_after_recall = body.get("test_passes_after_recall", 0)
+
+        if not isinstance(recalled_ids, list) or not all(isinstance(i, str) for i in recalled_ids):
+            return _bad_request("recalled_ids must be a list of strings")
+        if (
+            isinstance(edits_after_recall, bool)
+            or not isinstance(edits_after_recall, int)
+            or edits_after_recall < 0
+        ):
+            return _bad_request("edits_after_recall must be a non-negative integer")
+        if (
+            isinstance(test_passes_after_recall, bool)
+            or not isinstance(test_passes_after_recall, int)
+            or test_passes_after_recall < 0
+        ):
+            return _bad_request("test_passes_after_recall must be a non-negative integer")
+
+        manager = _get_memory_manager()
+        manager.record_event(
+            event_type=event_type,
+            project=project or "general",
+            memory_ids=recalled_ids,
+            source="client",
+            payload={
+                "session_id": session_id,
+                "edits_after_recall": edits_after_recall,
+                "test_passes_after_recall": test_passes_after_recall,
+            },
+        )
+        return _ok({"status": "recorded"})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error recording event: {e}")
         return _server_error(str(e))
 
 
@@ -972,6 +1067,24 @@ async def api_agent_startup(request):
 
         manager = _get_memory_manager()
         payload = manager.get_agent_startup(project=project, agent=agent, limit=limit)
+
+        try:
+            capsule = payload.get("project_capsule") or {}
+            ids = [
+                m["memory_id"]
+                for bucket in ("standing_context", "danger_zones", "open_loops")
+                for m in (capsule.get(bucket) or [])
+                if m.get("memory_id")
+            ]
+            manager.record_event(
+                event_type="memory_surfaced",
+                project=project or "general",
+                memory_ids=ids,
+                source="startup",
+            )
+        except Exception:
+            logger.debug("event emission skipped", exc_info=True)
+
         return JSONResponse(payload)
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -987,7 +1100,25 @@ async def api_project_capsule(request):
         project = _safe_project(request.query_params.get("project")) or "general"
         limit = _read_int(request.query_params, "limit", 300, lo=1, hi=2000)
         manager = _get_memory_manager()
-        return _ok(manager.get_project_capsule(project=project, limit=limit))
+        result = manager.get_project_capsule(project=project, limit=limit)
+
+        try:
+            ids = [
+                m["memory_id"]
+                for bucket in ("standing_context", "danger_zones", "open_loops")
+                for m in (result.get(bucket) or [])
+                if m.get("memory_id")
+            ]
+            manager.record_event(
+                event_type="memory_surfaced",
+                project=project,
+                memory_ids=ids,
+                source="capsule",
+            )
+        except Exception:
+            logger.debug("event emission skipped", exc_info=True)
+
+        return _ok(result)
     except RequestValidationError as e:
         return _bad_request(str(e))
     except Exception as e:

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2016  # sed patterns use literal $ (end-anchor) and backticks inside single quotes — not shell expansions
 # ~/.claude/hooks/rekall-observe.sh
 # Fires on Stop. Uses a cheap LLM judge (haiku) to decide whether the last
 # exchange contains something worth remembering. If yes, POSTs to rekall.
@@ -37,6 +38,123 @@ caller_cwd="$(jq -r '.cwd // ""' <<<"$payload")"
 # but belt-and-suspenders).
 [[ "$stop_hook_active" == "true" ]] && exit 0
 [[ -z "$transcript_path" || ! -f "$transcript_path" ]] && exit 0
+
+# ============================================================
+# UNGATED: session-summary utility event (no LLM, fail-open)
+# Runs before the gated Haiku section. One python3 pass over the
+# full transcript extracts recalled memory ids and outcome counts,
+# then emits one POST /api/memory/events. All paths fail-open.
+# ============================================================
+{
+  _sess_id="$(jq -r '.session_id // ""' <<<"$payload" 2>/dev/null || true)"
+  [[ -z "$_sess_id" ]] && _sess_id="${CLAUDE_SESSION_ID:-$(basename "$transcript_path" .jsonl)}"
+  # Use restore-hook marker as backend-alive signal; skip POST if absent.
+  _marker="${REKALL_MARKER_DIR:-/tmp}/rekall-restored-${_sess_id}"
+  if [[ -f "$_marker" ]]; then
+    _proj="$(basename "$caller_cwd")"
+    _sess_json="$(python3 - "$transcript_path" "$_proj" "$_sess_id" 2>/dev/null <<'_PYEOF'
+import sys, json, re
+
+tp, proj, sess = sys.argv[1], sys.argv[2], sys.argv[3]
+MID = re.compile(r'\d{4}-\d{2}-\d{2}_[a-z]+_[0-9a-f]+')
+
+tool_names = {}
+entries = []
+try:
+    with open(tp) as fh:
+        for line in fh:
+            try:
+                e = json.loads(line)
+            except Exception:
+                continue
+            entries.append(e)
+            if e.get("type") == "assistant":
+                for b in e.get("message", {}).get("content", []):
+                    if isinstance(b, dict) and b.get("type") == "tool_use":
+                        _bid = b.get("id")
+                        if _bid:
+                            tool_names[_bid] = b.get("name", "")
+except Exception:
+    sys.exit(0)
+
+recall_tids = {
+    tid for tid, n in tool_names.items()
+    if "recall" in n.lower() or "reflex" in n.lower()
+}
+
+recalled = set()
+first_recall_idx = None
+
+for idx, e in enumerate(entries):
+    if e.get("type") != "user":
+        continue
+    for b in e.get("message", {}).get("content", []):
+        if not (isinstance(b, dict) and b.get("type") == "tool_result"):
+            continue
+        if b.get("tool_use_id", "") not in recall_tids:
+            continue
+        raw = b.get("content", "")
+        text = raw if isinstance(raw, str) else "".join(
+            c.get("text", "") for c in (raw if isinstance(raw, list) else [])
+            if isinstance(c, dict) and c.get("type") == "text"
+        )
+        recalled.update(MID.findall(text))
+        if first_recall_idx is None:
+            first_recall_idx = idx
+
+if not recalled:
+    sys.exit(0)
+
+edits = 0
+test_passes = 0
+bash_test_ids = set()
+
+for idx, e in enumerate(entries):
+    if first_recall_idx is not None and idx <= first_recall_idx:
+        continue
+    if e.get("type") == "assistant":
+        for b in e.get("message", {}).get("content", []):
+            if not (isinstance(b, dict) and b.get("type") == "tool_use"):
+                continue
+            name = b.get("name", "")
+            if name in ("Edit", "Write"):
+                edits += 1
+            elif name == "Bash":
+                cmd = b.get("input", {}).get("command", "")
+                if re.search(r'pytest|go test|npm test', cmd):
+                    bash_test_ids.add(b.get("id", ""))
+    elif e.get("type") == "user":
+        for b in e.get("message", {}).get("content", []):
+            if not (isinstance(b, dict) and b.get("type") == "tool_result"):
+                continue
+            if b.get("tool_use_id", "") not in bash_test_ids:
+                continue
+            raw = b.get("content", "")
+            text = raw if isinstance(raw, str) else "".join(
+                c.get("text", "") for c in (raw if isinstance(raw, list) else [])
+                if isinstance(c, dict) and c.get("type") == "text"
+            )
+            if re.search(r'\bpassed\b|\bok\b', text, re.IGNORECASE):
+                test_passes += 1
+
+print(json.dumps({
+    "event_type": "session_summary",
+    "session_id": sess,
+    "project": proj,
+    "recalled_ids": sorted(recalled),
+    "edits_after_recall": edits,
+    "test_passes_after_recall": test_passes,
+}))
+_PYEOF
+    )" || true
+    if [[ -n "$_sess_json" ]]; then
+      curl -sfo /dev/null --max-time 1 -X POST "$API/api/memory/events" \
+        -H "Content-Type: application/json" \
+        -d "$_sess_json" 2>/dev/null || true
+    fi
+  fi
+} || true
+# ============================================================
 
 # Backend alive?
 curl -sfo /dev/null --max-time 1 "$API/health" 2>/dev/null || exit 0
