@@ -13,7 +13,7 @@ API="${REKALL_API_URL:-http://localhost:8000}"
 # Session marker — skip if we already restored in this session.
 # Uses $CLAUDE_SESSION_ID if available, falls back to PID-based marker.
 SESSION_ID="${CLAUDE_SESSION_ID:-$$}"
-MARKER="/tmp/rekall-restored-${SESSION_ID}"
+MARKER="${REKALL_MARKER_DIR:-/tmp}/rekall-restored-${SESSION_ID}"
 
 if [[ -f "$MARKER" ]]; then
   # Already restored this session. Exit silently — no output = no tokens.
