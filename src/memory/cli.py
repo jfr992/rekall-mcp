@@ -219,6 +219,9 @@ def doctor(project: str | None, as_json: bool):
         req = urllib.request.Request(endpoint)
         with urllib.request.urlopen(req, timeout=2) as resp:
             data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        click.echo(f"ERROR: /api/memory/doctor returned HTTP {exc.code}", err=True)
+        sys.exit(1)
     except (urllib.error.URLError, OSError):
         storage_path = os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory")
         qdrant_url = os.environ.get("QDRANT_URL", "http://localhost:6333")
@@ -281,6 +284,9 @@ def startup_preview(project: str | None, agent: str | None):
         req = urllib.request.Request(endpoint)
         with urllib.request.urlopen(req, timeout=2) as resp:
             data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as exc:
+        click.echo(f"ERROR: capsule endpoint returned HTTP {exc.code}", err=True)
+        sys.exit(1)
     except (urllib.error.URLError, OSError):
         click.echo("backend unreachable — cannot preview a dead backend", err=True)
         sys.exit(3)

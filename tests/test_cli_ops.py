@@ -52,13 +52,13 @@ _CAPSULE = {
 class TestDoctorCommand:
     def test_doctor_rest_success_healthy(self):
         runner = CliRunner()
-        with patch(
-            "memory.cli.urllib.request.urlopen",
-            return_value=_urlopen_mock(_HEALTHY),
-        ):
+        mock_urlopen = MagicMock(return_value=_urlopen_mock(_HEALTHY))
+        with patch("memory.cli.urllib.request.urlopen", mock_urlopen):
             result = runner.invoke(memory, ["doctor"])
         assert result.exit_code == 0, result.output
         assert "healthy" in result.output
+        called_url = mock_urlopen.call_args[0][0].full_url
+        assert "/api/memory/doctor" in called_url
 
     def test_doctor_rest_success_degraded(self):
         runner = CliRunner()
@@ -95,6 +95,19 @@ class TestDoctorCommand:
         ):
             result = runner.invoke(memory, ["doctor"])
         assert result.exit_code == 3, result.output
+        assert "unreachable" in result.output
+
+    def test_doctor_http_error_not_treated_as_unreachable(self):
+        """HTTP 5xx from backend should give HTTP error message, not 'backend unreachable' fallback."""
+        runner = CliRunner()
+        http_err = urllib.error.HTTPError(
+            url=None, code=500, msg="Internal Server Error", hdrs=None, fp=None
+        )
+        with patch("memory.cli.urllib.request.urlopen", side_effect=http_err):
+            result = runner.invoke(memory, ["doctor"])
+        assert result.exit_code == 1
+        assert "HTTP 500" in result.output
+        assert "WARNING" not in result.output
 
     def test_doctor_bad_flag_exit2(self):
         runner = CliRunner()
@@ -117,13 +130,13 @@ class TestDoctorCommand:
 class TestStartupPreviewCommand:
     def test_startup_preview_success(self):
         runner = CliRunner()
-        with patch(
-            "memory.cli.urllib.request.urlopen",
-            return_value=_urlopen_mock(_CAPSULE),
-        ):
+        mock_urlopen = MagicMock(return_value=_urlopen_mock(_CAPSULE))
+        with patch("memory.cli.urllib.request.urlopen", mock_urlopen):
             result = runner.invoke(memory, ["startup-preview", "--project", "myproject"])
         assert result.exit_code == 0, result.output
         assert "approximate preview via /api/memory/capsule" in result.output.splitlines()[0]
+        called_url = mock_urlopen.call_args[0][0].full_url
+        assert "/api/memory/capsule?project=" in called_url
 
     def test_startup_preview_backend_down_exit3(self):
         runner = CliRunner()
@@ -133,6 +146,32 @@ class TestStartupPreviewCommand:
         ):
             result = runner.invoke(memory, ["startup-preview", "--project", "myproject"])
         assert result.exit_code == 3
+        assert "unreachable" in result.output
+
+    def test_startup_preview_http_error_not_treated_as_unreachable(self):
+        """HTTP 5xx from backend should give HTTP error message, not 'backend unreachable'."""
+        runner = CliRunner()
+        http_err = urllib.error.HTTPError(
+            url=None, code=500, msg="Internal Server Error", hdrs=None, fp=None
+        )
+        with patch("memory.cli.urllib.request.urlopen", side_effect=http_err):
+            result = runner.invoke(memory, ["startup-preview", "--project", "myproject"])
+        assert result.exit_code == 1
+        assert "HTTP 500" in result.output
+        assert "unreachable" not in result.output
+
+    def test_startup_preview_accepts_agent_flag(self):
+        """--agent is accepted for parity with the hook but must not appear in the URL."""
+        runner = CliRunner()
+        mock_urlopen = MagicMock(return_value=_urlopen_mock(_CAPSULE))
+        with patch("memory.cli.urllib.request.urlopen", mock_urlopen):
+            result = runner.invoke(
+                memory,
+                ["startup-preview", "--project", "myproject", "--agent", "claude-code"],
+            )
+        assert result.exit_code == 0, result.output
+        called_url = mock_urlopen.call_args[0][0].full_url
+        assert "agent=" not in called_url
 
     def test_startup_preview_honesty_header(self):
         runner = CliRunner()
