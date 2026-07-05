@@ -120,6 +120,7 @@ Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/h
 - **Synthesizing rules into CLAUDE.md from imagined sources.** Real incident — a rule about commit footers got fabricated and almost shipped. Verbatim source or explicit author intent only.
 - **BM25 hybrid on main.** Lives on `feat/hybrid-search-bm25` until the migrate_hybrid.py glob→rglob fix and the compact.py asyncio.run→await fix land. Don't merge without those.
 - **More reads over smarter reads.** A new context surface ships only with evidence it reduces duplicate memory_ids across capsule buckets (test-asserted) or feeds the recall-utility loop (event emitted + consumed by the utility report). No evidence, no merge.
+- **Eval corpus and scenario queries in `tests/test_software_evals.py` may not be edited in the same PR as ranking/routing changes, except to add scenarios.**
 
 ## Deferred work (with reason)
 
