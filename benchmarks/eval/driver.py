@@ -262,6 +262,9 @@ def run(
             cwd=str(cwd),
             timeout=timeout_s,
             env=env,
+            # claude -p appends piped stdin to the prompt — an inherited stdin
+            # (pytest, heredocs) silently contaminates the eval question.
+            stdin=subprocess.DEVNULL,
         )
     finally:
         if _tmpdir:
