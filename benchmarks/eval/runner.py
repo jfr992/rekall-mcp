@@ -222,7 +222,8 @@ def main(argv: list[str] | None = None) -> int:
     with EphemeralBackend(storage_path=workdir / "store") as backend:
         mcp_config.write_text(
             json.dumps(
-                {"mcpServers": {"rekall": {"type": "http", "url": f"{backend.base_url}/mcp"}}}
+                # Server mounts MCP at root /, not /mcp — use base_url directly.
+                {"mcpServers": {"rekall": {"type": "http", "url": backend.base_url}}}
             )
         )
 
@@ -310,22 +311,34 @@ def _judge_client(provider: str):
 
     class _ClaudeJudge:
         def complete(self, prompt: str) -> str:
-            p = sp.run(
-                [
-                    "claude",
-                    "-p",
-                    prompt,
-                    "--bare",
-                    "--model",
-                    "claude-haiku-4-5-20251001",
-                    "--strict-mcp-config",
-                    "--mcp-config",
-                    "/dev/null",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
+            import tempfile
+            from pathlib import Path as _Path
+
+            # No --bare (breaks OAuth auth); use empty config + --strict-mcp-config.
+            # /dev/null is rejected as "not valid JSON" by the CLI.
+            _d = tempfile.mkdtemp(prefix="claude-judge-nomcp-")
+            _cfg = _Path(_d) / "empty.json"
+            _cfg.write_text('{"mcpServers":{}}')
+            try:
+                p = sp.run(
+                    [
+                        "claude",
+                        "-p",
+                        prompt,
+                        "--strict-mcp-config",
+                        "--mcp-config",
+                        str(_cfg),
+                        "--model",
+                        "claude-haiku-4-5-20251001",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                )
+            finally:
+                import shutil
+
+                shutil.rmtree(_d, ignore_errors=True)
             return p.stdout
 
     return _ClaudeJudge()
