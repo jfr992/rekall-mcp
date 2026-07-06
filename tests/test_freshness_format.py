@@ -196,6 +196,29 @@ def test_recall_annotates_outdated_on_conflict_pair():
     assert "_outdated" not in by_id["new"], "newer member must not be flagged"
 
 
+def test_detect_groups_via_supersedes_edge_without_cosine():
+    """Graph-edge path: a supersedes edge unions a same-type pair even when
+    vectors are absent (no cosine hit possible). A led_to edge must NOT union."""
+    import networkx as nx
+
+    from memory.freshness import detect_conflict_groups
+
+    class FakeGraph:
+        def __init__(self):
+            self._graph = nx.DiGraph()
+
+    g = FakeGraph()
+    g._graph.add_edge("new", "old", relation="supersedes")
+    g._graph.add_edge("new", "other", relation="led_to")
+    mems = [
+        {"memory_id": "old", "type": "fact"},
+        {"memory_id": "new", "type": "fact"},
+        {"memory_id": "other", "type": "fact"},
+    ]
+    groups = detect_conflict_groups(mems, graph=g, vectors=None)
+    assert groups == [{"old", "new"}]
+
+
 def test_outdated_label_rendered():
     mems = [
         {
