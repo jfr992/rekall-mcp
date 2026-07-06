@@ -87,6 +87,54 @@ def test_make_workspace_creates_claude_settings_json(tmp_path):
     )
 
 
+def test_start_refuses_stale_port(tmp_path):
+    """F2a: start() must refuse without spawning if the port is already occupied."""
+    import socket
+
+    from benchmarks.eval.env import EphemeralBackend
+
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+    try:
+        b = EphemeralBackend(port=port, storage_path=tmp_path / "store")
+        with pytest.raises(RuntimeError, match="already in use"):
+            b.start()
+        assert b._proc is None, "start() must not spawn when port is occupied"
+    finally:
+        listener.close()
+
+
+def test_start_raises_on_dead_process(tmp_path, monkeypatch):
+    """F2b: start() must raise immediately if the spawned process exits during startup."""
+    import subprocess
+
+    from benchmarks.eval.env import EphemeralBackend
+
+    class _DeadProc:
+        returncode = 1
+
+        def poll(self):
+            return 1
+
+        def terminate(self):
+            pass
+
+        def wait(self, timeout=None):
+            pass
+
+        def kill(self):
+            pass
+
+    monkeypatch.setattr(subprocess, "Popen", lambda *a, **k: _DeadProc())
+
+    b = EphemeralBackend(storage_path=tmp_path / "store")
+    with pytest.raises(RuntimeError, match="exited"):
+        b.start(timeout_s=5.0)
+
+
 @pytest.mark.integration
 def test_seed_then_recall_with_project_filter(tmp_path):
     """Regression guard for the red-team seeding CRITICAL + cwd side door."""

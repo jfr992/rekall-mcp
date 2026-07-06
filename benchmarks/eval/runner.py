@@ -180,7 +180,7 @@ def _load_items(args: argparse.Namespace) -> list[dict]:
     for e in data:
         from benchmarks.dataset import build_session_corpus
 
-        docs = build_session_corpus(e)
+        docs = build_session_corpus(e, include_assistant=True)
         items.append(
             {
                 "item_id": e["question_id"],
@@ -246,7 +246,7 @@ def main(argv: list[str] | None = None) -> int:
                 )
             if arm == "fullcontext":
                 return driver.run(
-                    driver.build_fullcontext_prompt(item["entry"]),
+                    driver.build_fullcontext_prompt(item["entry"], include_assistant=True),
                     None,
                     args.agent_model,
                     cwd=ws,
@@ -358,11 +358,18 @@ def _judge_client(provider: str):
                     text=True,
                     timeout=60,
                     env=env,
+                    stdin=sp.DEVNULL,
                 )
             finally:
                 import shutil
 
                 shutil.rmtree(_d, ignore_errors=True)
+            if p.returncode != 0:
+                raise RuntimeError(
+                    f"judge process failed (rc={p.returncode}): {(p.stderr or '')[-300:]}"
+                )
+            if not p.stdout.strip():
+                raise RuntimeError("judge returned empty response")
             return p.stdout
 
     return _ClaudeJudge()

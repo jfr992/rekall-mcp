@@ -1,5 +1,8 @@
 """Runner: arm selection, tier guardrails, aggregation with fake deps."""
 
+import argparse
+import json
+
 import pytest
 from benchmarks.eval.runner import arms_for, delta_claim_allowed
 
@@ -206,3 +209,100 @@ def test_aggregate_uses_prompt_tokens_for_fullcontext_ratio():
     rep2 = aggregate(records_no_pt, n_items=200)
     pg2 = rep2["primary_endpoints"]["parity_gap"]
     assert pg2["token_ratio_fullcontext_over_seeded"] == pytest.approx(9000.0 / 50.0, rel=1e-6)
+
+
+def test_lme_assistant_turns_in_seeded_and_fullcontext(tmp_path):
+    """F1 regression: build_session_corpus(e) defaulted include_assistant=False,
+    making single-session-assistant questions structurally unanswerable in the
+    seeded arm and the fullcontext arm."""
+    from benchmarks.eval.driver import build_fullcontext_prompt
+    from benchmarks.eval.runner import _load_items
+
+    GOLD = "unicorn_token_42"  # only in an assistant turn
+
+    entry = {
+        "question_id": "q-assist-01",
+        "question_type": "single-session-assistant",
+        "question": "What is the special token?",
+        "haystack_sessions": [
+            [
+                {"role": "user", "content": "Tell me a special token."},
+                {"role": "assistant", "content": f"The token is {GOLD}."},
+            ]
+        ],
+        "haystack_session_ids": ["sess-01"],
+        "haystack_dates": ["2024-01-01"],
+        "answer_session_ids": ["sess-01"],
+        "answer": GOLD,
+    }
+    corpus = tmp_path / "data.json"
+    corpus.write_text(json.dumps([entry]))
+
+    args = argparse.Namespace(dataset="longmemeval", corpus=str(corpus), subset=None, items=0)
+    items = _load_items(args)
+    assert len(items) == 1
+
+    seed_texts = " ".join(m["summary"] for m in items[0]["seed_memories"])
+    assert GOLD in seed_texts, (
+        f"Assistant turn absent from seeded corpus; '{GOLD}' not in {seed_texts!r}"
+    )
+
+    fc = build_fullcontext_prompt(items[0]["entry"], include_assistant=True)
+    assert GOLD in fc, f"Assistant turn absent from fullcontext prompt; '{GOLD}' not in prompt"
+
+
+def test_claude_judge_raises_on_nonzero_exit(monkeypatch):
+    """F3a: _ClaudeJudge.complete() must raise RuntimeError (with stderr) on rc!=0."""
+    import subprocess
+
+    from benchmarks.eval.runner import _judge_client
+
+    class _FailResult:
+        returncode = 1
+        stdout = ""
+        stderr = "auth failure: token expired" * 20  # >300 chars
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _FailResult())
+
+    judge = _judge_client("anthropic")
+    with pytest.raises(RuntimeError) as exc_info:
+        judge.complete("Is this answer correct? Yes or No.")
+    assert "auth failure" in str(exc_info.value), (
+        f"RuntimeError should include stderr text; got: {exc_info.value}"
+    )
+
+
+def test_claude_judge_raises_on_empty_stdout(monkeypatch):
+    """F3b: _ClaudeJudge.complete() must raise RuntimeError on empty stdout."""
+    import subprocess
+
+    from benchmarks.eval.runner import _judge_client
+
+    class _EmptyResult:
+        returncode = 0
+        stdout = "   \n"
+        stderr = ""
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _EmptyResult())
+
+    judge = _judge_client("anthropic")
+    with pytest.raises(RuntimeError, match="empty"):
+        judge.complete("Is this answer correct? Yes or No.")
+
+
+def test_claude_judge_returns_stdout_on_success(monkeypatch):
+    """F3c: _ClaudeJudge.complete() must return stdout when rc=0 and output is non-empty."""
+    import subprocess
+
+    from benchmarks.eval.runner import _judge_client
+
+    class _OkResult:
+        returncode = 0
+        stdout = "Yes\n"
+        stderr = ""
+
+    monkeypatch.setattr(subprocess, "run", lambda *a, **k: _OkResult())
+
+    judge = _judge_client("anthropic")
+    result = judge.complete("Is this answer correct? Yes or No.")
+    assert result == "Yes\n"

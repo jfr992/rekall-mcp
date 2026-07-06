@@ -97,6 +97,14 @@ class EphemeralBackend:
         return env
 
     def start(self, timeout_s: float = 60.0) -> None:
+        import socket as _socket
+
+        try:
+            with _socket.create_connection(("127.0.0.1", self.port), timeout=0.5):
+                raise RuntimeError(f"port :{self.port} already in use — stale server?")
+        except (ConnectionRefusedError, OSError):
+            pass  # port is free
+
         self.storage_path.mkdir(parents=True, exist_ok=True)
         repo_root = Path(__file__).resolve().parents[2]
         self._proc = subprocess.Popen(
@@ -108,6 +116,10 @@ class EphemeralBackend:
         )
         deadline = time.monotonic() + timeout_s
         while time.monotonic() < deadline:
+            if self._proc.poll() is not None:
+                raise RuntimeError(
+                    f"server process exited during startup (rc={self._proc.returncode})"
+                )
             try:
                 if httpx.get(f"{self.base_url}/health", timeout=1.0).status_code == 200:
                     return
