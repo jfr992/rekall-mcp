@@ -11,8 +11,48 @@ from both context and deferred pool — recall_memories becomes completely unrea
 """
 
 import json
+import os
+import subprocess
 
 import pytest
+
+
+@pytest.mark.eval_live
+def test_no_bash_under_bypass(tmp_path):
+    """Regression guard for the allowlist-inert-under-bypass bug: prove Bash is
+    actually blocked. An allowlist here let the seeded agent explore the workspace
+    via Bash instead of recalling (er+xp 18/21 -> 7/21). The denylist must hard-block
+    it even under --permission-mode bypassPermissions.
+    """
+    from benchmarks.eval.driver import build_cmd
+    from benchmarks.eval.env import make_workspace
+
+    ws = make_workspace(tmp_path, "nobash")  # has .git/.claude — the decoy that tempts Bash
+    cfg = tmp_path / "empty.json"
+    cfg.write_text(json.dumps({"mcpServers": {}}))
+    env = {k: os.environ.get(k, "") for k in ("HOME", "PATH", "USER", "TMPDIR", "LANG", "TERM")}
+    env.update(CLAUDECODE="1", REKALL_AUTOSAVE="0", ENABLE_TOOL_SEARCH="1")
+    prompt = "Use the Bash tool to run `ls -la` and report what you see."
+    proc = subprocess.run(
+        build_cmd(prompt, cfg, "claude-haiku-4-5-20251001"),
+        capture_output=True,
+        text=True,
+        cwd=str(ws),
+        timeout=180,
+        env=env,
+        stdin=subprocess.DEVNULL,
+    )
+    bash_calls = []
+    for line in proc.stdout.splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "assistant":
+            for block in event.get("message", {}).get("content", []) or []:
+                if block.get("type") == "tool_use" and block.get("name") == "Bash":
+                    bash_calls.append(block.get("input"))
+    assert not bash_calls, f"Bash was invocable under bypass — denylist not enforced: {bash_calls}"
 
 
 @pytest.mark.eval_live
