@@ -42,6 +42,13 @@ def recall_any_at_k(retrieved: list[str], ground_truth: set[str], k: int) -> flo
     return 1.0 if top_k & ground_truth else 0.0
 
 
+def precision_at_k(retrieved: list[str], ground_truth: set[str], k: int) -> float:
+    """Fraction of top-k retrieved that are relevant. Noise detector."""
+    if k <= 0:
+        return 0.0
+    return len(set(retrieved[:k]) & ground_truth) / k
+
+
 def score_question(
     retrieved_ids: list[str],
     ground_truth_ids: set[str],
@@ -70,7 +77,14 @@ def aggregate_by_type(
 def print_results(results: list[dict], mode: str) -> None:
     """Print formatted results table to console."""
     n = len(results)
-    metrics = ["recall_any_at_5", "recall_at_5", "ndcg_at_5", "recall_any_at_10", "recall_at_10", "ndcg_at_10"]
+    metrics = [
+        "recall_any_at_5",
+        "recall_at_5",
+        "ndcg_at_5",
+        "recall_any_at_10",
+        "recall_at_10",
+        "ndcg_at_10",
+    ]
 
     print(f"\n{'=' * 70}")
     print(f"  Mode: {mode}  |  Questions: {n}")
