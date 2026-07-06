@@ -38,6 +38,7 @@ dev = [
     "ruff>=0.4.0",
     "mypy>=1.10.0",
     "pre-commit>=3.7.0",
+    "tiktoken>=0.7",
 ]
 
 [project.scripts]
@@ -57,6 +58,7 @@ testpaths = ["tests"]
 addopts = "-v"
 markers = [
     "integration: real Qdrant on :6334 required",
+    "eval_live: real claude -p invocations, costs money",
 ]
 
 [tool.ruff]
