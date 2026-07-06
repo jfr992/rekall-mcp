@@ -24,12 +24,14 @@ def test_build_cmd_no_bare_mcp_difference(tmp_path):
     --bare disables macOS Keychain OAuth auth. Arms now differ only in which
     --mcp-config file they point at; absent arm caller passes an empty config.
 
-    --disallowedTools Agent Skill on both arms: both spawn child processes whose traffic
-    is invisible to parse_stream, silently zeroing rekall_tool_calls and rekall_payload_tokens.
-    Agent delegates via subagent spawn; Skill runs forked execution. Blocking both keeps the
-    eval in a single-agent measurement model where all rekall traffic stays in the parent.
+    DISALLOWED_TOOLS blocks all non-MCP tools on both arms (contamination channels):
+    - Bash/Read/Grep/Glob: absent arm could read seeded YAML from disk, destroying causal delta.
+    - Write/Edit/NotebookEdit: pointless side effects in a read-only eval.
+    - WebFetch/WebSearch: any arm could look up the answer externally.
+    - Agent/Skill: spawn child processes whose mcp__rekall__* traffic is invisible to parse_stream.
+    ToolSearch remains allowed: it only loads deferred MCP schemas, no disk/web access.
     """
-    from benchmarks.eval.driver import build_cmd
+    from benchmarks.eval.driver import DISALLOWED_TOOLS, build_cmd
 
     cfg = tmp_path / "arm.json"
     empty = tmp_path / "empty.json"
@@ -39,10 +41,13 @@ def test_build_cmd_no_bare_mcp_difference(tmp_path):
     assert "--bare" not in seeded and "--bare" not in absent
     assert str(cfg) in seeded and str(empty) in absent
     assert seeded.index("-p") + 1 == seeded.index("q")
-    # --disallowedTools Agent Skill present on both arms (single-agent measurement model).
-    # Agent spawns subagents; Skill runs forked execution — both hide mcp__rekall__* traffic.
-    assert "--disallowedTools" in seeded and "Agent" in seeded and "Skill" in seeded
-    assert "--disallowedTools" in absent and "Agent" in absent and "Skill" in absent
+    # All contamination tools must be blocked on both arms
+    assert "--disallowedTools" in seeded and "--disallowedTools" in absent
+    for tool in DISALLOWED_TOOLS:
+        assert tool in seeded, f"missing disallowed tool {tool!r} in seeded arm"
+        assert tool in absent, f"missing disallowed tool {tool!r} in absent arm"
+    # ToolSearch must NOT be blocked
+    assert "ToolSearch" not in seeded and "ToolSearch" not in absent
     # Arms differ only in the mcp-config path
     diffs = [(a, b) for a, b in zip(seeded, absent, strict=False) if a != b]
     assert len(diffs) == 1

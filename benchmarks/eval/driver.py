@@ -25,6 +25,29 @@ import tiktoken
 
 from benchmarks.dataset import build_session_corpus
 
+# Arms are pure Q&A — only MCP memory tools (seeded) or no tools (absent/fullcontext).
+# Every other tool is a contamination channel:
+#   - Bash/Read/Grep/Glob: the absent arm could find the seeded YAML on disk (seeding happens
+#     before the arms loop), silently destroying the causal delta.
+#   - Write/Edit/NotebookEdit: pointless side effects in a read-only eval.
+#   - WebFetch/WebSearch: any arm could look up the answer externally.
+#   - Agent/Skill: spawn child processes whose mcp__rekall__* traffic is invisible to
+#     parse_stream, causing rekall_tool_calls=0 even when memory IS used.
+# ToolSearch is allowed: needed to load deferred MCP tool schemas at init.
+DISALLOWED_TOOLS: tuple[str, ...] = (
+    "Agent",
+    "Skill",
+    "Bash",
+    "Read",
+    "Grep",
+    "Glob",
+    "Write",
+    "Edit",
+    "NotebookEdit",
+    "WebFetch",
+    "WebSearch",
+)
+
 _ENC = tiktoken.get_encoding("cl100k_base")
 _REKALL_PREFIX = "mcp__rekall__"
 
@@ -50,11 +73,10 @@ def build_cmd(prompt: str, mcp_config: Path, model: str) -> list[str]:
     The absent arm passes an empty {"mcpServers":{}} file — handled by run().
     No --bare: it disables macOS Keychain OAuth auth in this environment.
 
-    --disallowedTools Agent Skill: both spawn child processes whose tool traffic is invisible
-    to parse_stream, causing rekall_tool_calls=0 and rekall_payload_tokens=0 even when memory
-    IS used. Agent delegates via subagent spawn; Skill runs forked execution via the skills
-    harness. Blocking both keeps all rekall tool traffic in the parent transcript.
-    This eval measures a single agent.
+    Arms are pure Q&A — only MCP memory tools (seeded) or no tools (absent/fullcontext);
+    every other tool is a contamination channel (disk access to the seeded store, web lookup,
+    delegation). See DISALLOWED_TOOLS for the full list. ToolSearch is allowed: it only
+    loads deferred MCP tool schemas and cannot access the seeded YAML store directly.
     """
     return [
         "claude",
@@ -71,8 +93,7 @@ def build_cmd(prompt: str, mcp_config: Path, model: str) -> list[str]:
         "--permission-mode",
         "bypassPermissions",
         "--disallowedTools",
-        "Agent",
-        "Skill",
+        *DISALLOWED_TOOLS,
     ]
 
 
