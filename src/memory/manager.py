@@ -1070,8 +1070,9 @@ class MemoryManager:
             by_type.setdefault(t, []).append(mem)
 
         def _line(m: dict) -> str:
-            prefix = "[OUTDATED — the entry above replaces this] " if m.get("_outdated") else ""
-            return f"- {prefix}{m['content']} ({m.get('date', 'unknown date')})"
+            if m.get("_outdated"):
+                return "- [outdated — replaced by the newer entry above]"
+            return f"- {m['content']} ({m.get('date', 'unknown date')})"
 
         sections = []
 

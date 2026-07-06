@@ -220,6 +220,9 @@ def test_detect_groups_via_supersedes_edge_without_cosine():
 
 
 def test_outdated_label_rendered():
+    # Stage C supersedes the Stage B label: outdated entries render as a stub,
+    # no content visible. This test is updated to match the pre-authorized Stage C
+    # rendering (operator approval 2026-07-06).
     mems = [
         {
             "content": "pinned to Terraform 1.4.x",
@@ -238,4 +241,29 @@ def test_outdated_label_rendered():
         },
     ]
     out = _fmt(mems)
-    assert "[OUTDATED — the entry above replaces this] pinned to Terraform 1.4.x" in out
+    assert "1.4.x" not in out
+    assert "[outdated — replaced by the newer entry above]" in out
+
+
+def test_stage_c_stubs_outdated_content():
+    mems = [
+        {
+            "content": "pinned to Terraform 1.4.x",
+            "type": "decision",
+            "date": "2026-03-01",
+            "timestamp": "2026-03-01T00:00:00",
+            "memory_id": "old",
+            "_outdated": True,
+        },
+        {
+            "content": "upgraded pin to Terraform 1.9.4",
+            "type": "decision",
+            "date": "2026-07-01",
+            "timestamp": "2026-07-01T00:00:00",
+            "memory_id": "new",
+        },
+    ]
+    out = _fmt(mems)
+    assert "1.4.x" not in out  # old content suppressed at render
+    assert "[outdated — replaced by the newer entry above]" in out
+    assert "1.9.4" in out
