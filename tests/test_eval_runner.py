@@ -1,7 +1,6 @@
 """Runner: arm selection, tier guardrails, aggregation with fake deps."""
 
 import pytest
-
 from benchmarks.eval.runner import arms_for, delta_claim_allowed
 
 
