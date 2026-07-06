@@ -24,14 +24,16 @@ def test_build_cmd_no_bare_mcp_difference(tmp_path):
     --bare disables macOS Keychain OAuth auth. Arms now differ only in which
     --mcp-config file they point at; absent arm caller passes an empty config.
 
-    DISALLOWED_TOOLS blocks all non-MCP tools on both arms (contamination channels):
-    - Bash/Read/Grep/Glob: absent arm could read seeded YAML from disk, destroying causal delta.
-    - Write/Edit/NotebookEdit: pointless side effects in a read-only eval.
-    - WebFetch/WebSearch: any arm could look up the answer externally.
-    - Agent/Skill: spawn child processes whose mcp__rekall__* traffic is invisible to parse_stream.
-    ToolSearch remains allowed: it only loads deferred MCP schemas, no disk/web access.
+    ALLOWED_TOOLS is an allowlist (not denylist): only ToolSearch and mcp__rekall__* are
+    permitted on both arms. This is strictly narrower than the old denylist and eliminates
+    the coverage gap where delegation tools (Workflow, SendMessage, EnterWorktree, Monitor,
+    etc.) were never enumerated and could be invoked to side-step the eval.
+    - ToolSearch: needed to load deferred MCP tool schemas at init.
+    - mcp__rekall__*: the memory tools we're actually measuring.
+    All other tools (Bash, Read, Grep, Glob, Write, Edit, WebFetch, Agent, etc.) are
+    implicitly denied — contamination channels that would destroy the causal delta.
     """
-    from benchmarks.eval.driver import DISALLOWED_TOOLS, build_cmd
+    from benchmarks.eval.driver import ALLOWED_TOOLS, build_cmd
 
     cfg = tmp_path / "arm.json"
     empty = tmp_path / "empty.json"
@@ -41,13 +43,15 @@ def test_build_cmd_no_bare_mcp_difference(tmp_path):
     assert "--bare" not in seeded and "--bare" not in absent
     assert str(cfg) in seeded and str(empty) in absent
     assert seeded.index("-p") + 1 == seeded.index("q")
-    # All contamination tools must be blocked on both arms
-    assert "--disallowedTools" in seeded and "--disallowedTools" in absent
-    for tool in DISALLOWED_TOOLS:
-        assert tool in seeded, f"missing disallowed tool {tool!r} in seeded arm"
-        assert tool in absent, f"missing disallowed tool {tool!r} in absent arm"
-    # ToolSearch must NOT be blocked
-    assert "ToolSearch" not in seeded and "ToolSearch" not in absent
+    # Allowlist (not denylist) — both arms must use --allowedTools
+    assert "--allowedTools" in seeded and "--allowedTools" in absent
+    assert "--disallowedTools" not in seeded and "--disallowedTools" not in absent
+    for tool in ALLOWED_TOOLS:
+        assert tool in seeded, f"missing allowed tool {tool!r} in seeded arm"
+        assert tool in absent, f"missing allowed tool {tool!r} in absent arm"
+    # ToolSearch and mcp__rekall__* must both be in the allowlist
+    assert "ToolSearch" in ALLOWED_TOOLS
+    assert any("mcp__rekall__" in t for t in ALLOWED_TOOLS)
     # Arms differ only in the mcp-config path
     diffs = [(a, b) for a, b in zip(seeded, absent, strict=False) if a != b]
     assert len(diffs) == 1
@@ -301,5 +305,45 @@ def test_seeded_prompt_carries_product_preamble():
 
     p = build_seeded_prompt({"question": "What port?"}, n_memories=3)
     assert p.startswith("Rekall ready — 3 memories")
+    assert "nodes" in p
+    assert "edges" in p
     assert "recall_memories() on demand" in p
     assert p.endswith("What port?")
+
+
+def test_preamble_matches_hook_echo_line_shape():
+    """Regression: eval preamble must render the same shape as the shipped hook's echo line.
+
+    Parses the actual echo statement from claude/hooks/rekall-restore.sh so future
+    hook edits break this test — keeping eval == product.
+    """
+    import re
+    from pathlib import Path
+
+    import pytest  # noqa: PLC0415
+    from benchmarks.eval.driver import REKALL_SESSION_PREAMBLE
+
+    hook = Path(__file__).parent.parent / "claude" / "hooks" / "rekall-restore.sh"
+    if not hook.exists():
+        pytest.skip(f"rekall-restore.sh not found at {hook}")
+
+    text = hook.read_text()
+    m = re.search(r'echo "(Rekall ready[^"]+)"', text)
+    assert m, "echo 'Rekall ready ...' line not found in rekall-restore.sh"
+
+    hook_template = m.group(1)
+    # Simulate what the hook would print for known stats/vectors values.
+    # stats = "5 memories · 3 nodes · 2 edges"  (from jq -r '"\(.total...) · \(.nodes) · \(.edges)"')
+    # vectors = " · vectors OK"  (from jq when .vectors.zero_vectors == 0)
+    hook_rendered = hook_template.replace("${stats}", "5 memories · 3 nodes · 2 edges").replace(
+        "${vectors}", " · vectors OK"
+    )
+
+    eval_rendered = REKALL_SESSION_PREAMBLE.format(n=5, nodes=3, edges=2)
+
+    assert eval_rendered == hook_rendered, (
+        f"Eval preamble does not match the hook's echo line.\n"
+        f"  Hook:  {hook_rendered!r}\n"
+        f"  Eval:  {eval_rendered!r}\n"
+        f"  Update REKALL_SESSION_PREAMBLE in benchmarks/eval/driver.py to match."
+    )

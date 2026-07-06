@@ -25,27 +25,21 @@ import tiktoken
 
 from benchmarks.dataset import build_session_corpus
 
-# Arms are pure Q&A — only MCP memory tools (seeded) or no tools (absent/fullcontext).
-# Every other tool is a contamination channel:
-#   - Bash/Read/Grep/Glob: the absent arm could find the seeded YAML on disk (seeding happens
-#     before the arms loop), silently destroying the causal delta.
+# Arms are pure Q&A — only ToolSearch (schema loading) and mcp__rekall__* (memory retrieval)
+# are permitted. An allowlist is strictly narrower than a denylist: it eliminates the
+# coverage gap where delegation tools (Workflow, SendMessage, EnterWorktree, Monitor, etc.)
+# were never enumerated and could be invoked to side-step the eval.
+#   - ToolSearch: loads deferred MCP tool schemas at init; no disk/web access.
+#   - mcp__rekall__*: the memory tools under measurement.
+# All other tools are implicitly denied:
+#   - Bash/Read/Grep/Glob: absent arm could read the seeded YAML on disk, destroying Δ.
 #   - Write/Edit/NotebookEdit: pointless side effects in a read-only eval.
 #   - WebFetch/WebSearch: any arm could look up the answer externally.
-#   - Agent/Skill: spawn child processes whose mcp__rekall__* traffic is invisible to
-#     parse_stream, causing rekall_tool_calls=0 even when memory IS used.
-# ToolSearch is allowed: needed to load deferred MCP tool schemas at init.
-DISALLOWED_TOOLS: tuple[str, ...] = (
-    "Agent",
-    "Skill",
-    "Bash",
-    "Read",
-    "Grep",
-    "Glob",
-    "Write",
-    "Edit",
-    "NotebookEdit",
-    "WebFetch",
-    "WebSearch",
+#   - Agent/Skill/Workflow/SendMessage/Monitor/EnterWorktree: spawn child processes
+#     whose mcp__rekall__* traffic is invisible to parse_stream.
+ALLOWED_TOOLS: tuple[str, ...] = (
+    "ToolSearch",
+    "mcp__rekall__*",
 )
 
 _ENC = tiktoken.get_encoding("cl100k_base")
@@ -74,10 +68,9 @@ def build_cmd(prompt: str, mcp_config: Path, model: str) -> list[str]:
     The absent arm passes an empty {"mcpServers":{}} file — handled by run().
     No --bare: it disables macOS Keychain OAuth auth in this environment.
 
-    Arms are pure Q&A — only MCP memory tools (seeded) or no tools (absent/fullcontext);
-    every other tool is a contamination channel (disk access to the seeded store, web lookup,
-    delegation). See DISALLOWED_TOOLS for the full list. ToolSearch is allowed: it only
-    loads deferred MCP tool schemas and cannot access the seeded YAML store directly.
+    Arms use --allowedTools (not --disallowedTools): only ToolSearch and mcp__rekall__* are
+    permitted. This closes the gap where delegation tools (Workflow, SendMessage, etc.) were
+    never enumerated in the old denylist. See ALLOWED_TOOLS for the full list.
     """
     return [
         "claude",
@@ -93,8 +86,8 @@ def build_cmd(prompt: str, mcp_config: Path, model: str) -> list[str]:
         "--verbose",
         "--permission-mode",
         "bypassPermissions",
-        "--disallowedTools",
-        *DISALLOWED_TOOLS,
+        "--allowedTools",
+        *ALLOWED_TOOLS,
     ]
 
 
@@ -195,14 +188,33 @@ def build_question_prompt(entry: dict) -> str:
 # The line rekall-restore.sh injects at session start in a real deployment.
 # The seeded arm measures the product AS SHIPPED — without it, agents never
 # reach for memory tools (measured: 2% accuracy, ~4 tokens/query).
+# Format matches the hook's jq output: stats="N memories · M nodes · K edges"
+# plus vectors=" · vectors OK", giving: "Rekall ready — N · M · K · vectors OK. ..."
 REKALL_SESSION_PREAMBLE = (
-    "Rekall ready — {n} memories · vectors OK. Use recall_memories() on demand."
+    "Rekall ready — {n} memories · {nodes} nodes · {edges} edges"
+    " · vectors OK. Use recall_memories() on demand."
 )
 
 
-def build_seeded_prompt(entry: dict, n_memories: int) -> str:
-    """Product-as-deployed prompt: restore-hook preamble + the question."""
-    return f"{REKALL_SESSION_PREAMBLE.format(n=n_memories)}\n\n{build_question_prompt(entry)}"
+def build_seeded_prompt(
+    entry: dict,
+    n_memories: int,
+    nodes: int | None = None,
+    edges: int | None = None,
+) -> str:
+    """Product-as-deployed prompt: restore-hook preamble + the question.
+
+    nodes defaults to n_memories (an ephemeral per-item store has ~n nodes).
+    edges defaults to 0 (no cross-session links in a freshly seeded store).
+    """
+    if nodes is None:
+        nodes = n_memories
+    if edges is None:
+        edges = 0
+    return (
+        f"{REKALL_SESSION_PREAMBLE.format(n=n_memories, nodes=nodes, edges=edges)}"
+        f"\n\n{build_question_prompt(entry)}"
+    )
 
 
 def build_fullcontext_prompt(entry: dict, include_assistant: bool = False) -> str:

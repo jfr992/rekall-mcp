@@ -236,9 +236,12 @@ def main(argv: list[str] | None = None) -> int:
 
         def run_arm(arm: str, item: dict, ws: Path):
             if arm == "seeded":
+                n = len(item["seed_memories"])
                 return driver.run(
                     driver.build_seeded_prompt(
-                        item.get("entry") or item, len(item["seed_memories"])
+                        item.get("entry") or item,
+                        n_memories=n,
+                        nodes=n,
                     ),
                     mcp_config,
                     args.agent_model,
