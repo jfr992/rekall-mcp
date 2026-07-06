@@ -135,3 +135,84 @@ def test_recall_result_includes_timestamp():
     results = mgr.recall("billing database")
     assert results, "expected at least one result"
     assert "timestamp" in results[0], "recall result must carry timestamp for freshness sort"
+
+
+def test_detect_groups_same_type_high_sim_only():
+    from memory.freshness import detect_conflict_groups
+
+    mems = [
+        {"memory_id": "old", "type": "fact"},
+        {"memory_id": "new", "type": "fact"},
+        {"memory_id": "other", "type": "decision"},
+    ]
+    v = {"old": [1.0, 0.0], "new": [0.96, 0.28], "other": [1.0, 0.0]}
+    groups = detect_conflict_groups(mems, graph=None, vectors=v, theta=0.9)
+    assert groups == [{"old", "new"}]
+
+
+def test_mark_outdated_flags_all_but_newest():
+    from memory.freshness import mark_outdated
+
+    mems = [
+        {"memory_id": "old", "type": "fact", "timestamp": "2026-03-01T00:00:00"},
+        {"memory_id": "new", "type": "fact", "timestamp": "2026-07-01T00:00:00"},
+    ]
+    mark_outdated(mems, [{"old", "new"}])
+    assert mems[0].get("_outdated") is True and "_outdated" not in mems[1]
+
+
+def test_recall_annotates_outdated_on_conflict_pair():
+    """recall() sets _outdated on older member of a detected conflict group."""
+    mems = [
+        {
+            "memory_id": "old",
+            "content": "pinned to Terraform 1.4.x",
+            "type": "decision",
+            "date": "2026-03-01",
+            "timestamp": "2026-03-01T00:00:00",
+            "project": "api",
+            "score": 0.95,
+        },
+        {
+            "memory_id": "new",
+            "content": "upgraded pin to Terraform 1.9.4",
+            "type": "decision",
+            "date": "2026-07-01",
+            "timestamp": "2026-07-01T00:00:00",
+            "project": "api",
+            "score": 0.92,
+        },
+    ]
+    mgr = _make_manager_with_fake_store(mems)
+    # Two unit-norm vectors with cosine >= 0.9 (both decision type → will group)
+    mgr._store.get_many.return_value = [
+        {"memory_id": "old", "_vector": [1.0] + [0.0] * 383},
+        {"memory_id": "new", "_vector": [0.96, 0.28] + [0.0] * 382},
+    ]
+
+    results = mgr.recall("terraform version")
+    by_id = {r["memory_id"]: r for r in results}
+    assert by_id["old"].get("_outdated") is True, "older member must be flagged"
+    assert "_outdated" not in by_id["new"], "newer member must not be flagged"
+
+
+def test_outdated_label_rendered():
+    mems = [
+        {
+            "content": "pinned to Terraform 1.4.x",
+            "type": "decision",
+            "date": "2026-03-01",
+            "timestamp": "2026-03-01T00:00:00",
+            "memory_id": "old",
+            "_outdated": True,
+        },
+        {
+            "content": "upgraded pin to Terraform 1.9.4",
+            "type": "decision",
+            "date": "2026-07-01",
+            "timestamp": "2026-07-01T00:00:00",
+            "memory_id": "new",
+        },
+    ]
+    out = _fmt(mems)
+    assert "[OUTDATED — the entry above replaces this] pinned to Terraform 1.4.x" in out

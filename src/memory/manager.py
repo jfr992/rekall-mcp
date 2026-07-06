@@ -943,7 +943,24 @@ class MemoryManager:
             if cutoff_date:
                 scored = [r for r in scored if (r.get("date") or "") >= cutoff_date]
 
-            return scored[:limit]
+            results = scored[:limit]
+
+            # Stage B freshness annotation (read-only; spec 2026-07-06)
+            try:
+                from memory.freshness import detect_conflict_groups, mark_outdated
+
+                top_ids = [m["memory_id"] for m in results if m.get("memory_id")]
+                vecs = {
+                    r.get("memory_id"): r.get("_vector")
+                    for r in self.store.get_many(top_ids, with_vectors=True)
+                    if r.get("memory_id")
+                }
+                groups = detect_conflict_groups(results, self.knowledge_graph, vecs)
+                mark_outdated(results, groups)
+            except Exception:
+                logger.debug("freshness annotation skipped", exc_info=True)
+
+            return results
 
     def recall_cross_project(
         self,
@@ -1052,6 +1069,10 @@ class MemoryManager:
             t = mem.get("type", "note")
             by_type.setdefault(t, []).append(mem)
 
+        def _line(m: dict) -> str:
+            prefix = "[OUTDATED — the entry above replaces this] " if m.get("_outdated") else ""
+            return f"- {prefix}{m['content']} ({m.get('date', 'unknown date')})"
+
         sections = []
 
         # Preferences - explicitly mark as flexible
@@ -1060,7 +1081,7 @@ class MemoryManager:
             lines = ["## User Preferences (suggestions, not requirements)"]
             lines.append("*Show these as the default, but always offer alternatives.*\n")
             for p in prefs:
-                lines.append(f"- {p['content']} ({p.get('date', 'unknown date')})")
+                lines.append(_line(p))
             sections.append("\n".join(lines))
 
         # Decisions - these are more fixed but can be revisited
@@ -1069,7 +1090,7 @@ class MemoryManager:
             lines = ["## Past Decisions (established, but can be changed)"]
             lines.append("*Reference these but ask if user wants to reconsider.*\n")
             for d in decisions:
-                lines.append(f"- {d['content']} ({d.get('date', 'unknown date')})")
+                lines.append(_line(d))
             sections.append("\n".join(lines))
 
         # Requirements - these are hard constraints
@@ -1078,7 +1099,7 @@ class MemoryManager:
             lines = ["## Requirements (must follow)"]
             lines.append("*These are constraints that must be respected.*\n")
             for r in reqs:
-                lines.append(f"- {r['content']} ({r.get('date', 'unknown date')})")
+                lines.append(_line(r))
             sections.append("\n".join(lines))
 
         # Facts/context - informational
@@ -1086,14 +1107,14 @@ class MemoryManager:
             facts = by_type.pop("fact")
             lines = ["## Known Facts (context)"]
             for f in facts:
-                lines.append(f"- {f['content']}")
+                lines.append(_line(f))
             sections.append("\n".join(lines))
 
         # Everything else (notes, learnings, etc.)
         for mem_type, mems in by_type.items():
             lines = [f"## {mem_type.title()}s"]
             for m in mems:
-                lines.append(f"- {m['content']} ({m.get('date', 'unknown date')})")
+                lines.append(_line(m))
             sections.append("\n".join(lines))
 
         return header + "\n\n".join(sections)

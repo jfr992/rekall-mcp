@@ -56,7 +56,11 @@ def test_recall_includes_graph_neighbors(tmp_path):
 
     ids = {r["memory_id"] for r in results}
     assert ids == {"decision_pg", "learning_pool"}
-    store.get_many.assert_called_once()
+    # Two get_many calls are expected: one for graph expansion (batch, not N+1),
+    # one for Stage B freshness vector fetch. Both are single-roundtrip batches.
+    assert store.get_many.call_count == 2
+    first_call_ids = store.get_many.call_args_list[0][0][0]
+    assert first_call_ids == ["learning_pool"], "graph expansion must batch-fetch expanded ids"
 
 
 def test_recall_falls_back_without_graph(tmp_path):
