@@ -1,0 +1,65 @@
+[
+  {"id": "er-01", "question": "What port does our internal metrics proxy listen on?", "question_type": "exact-recall",
+   "seed_memories": [{"summary": "Decided the internal metrics proxy listens on port 9741 to avoid the 9090 Prometheus clash.", "type": "decision"}],
+   "oracle_regex": "9741"},
+  {"id": "er-02", "question": "Which S3 bucket do our nightly pgdump backups land in?", "question_type": "exact-recall",
+   "seed_memories": [{"summary": "Nightly pgdump backups land in the s3 bucket velvet-otter-backups, lifecycle 35 days.", "type": "fact"}],
+   "oracle_regex": "velvet-otter-backups"},
+  {"id": "er-03", "question": "What was the root cause of the JWT refresh loop incident?", "question_type": "exact-recall",
+   "seed_memories": [{"summary": "JWT refresh loop root cause: clock skew of 4.7 minutes on worker-12 made exp checks fail before refresh.", "type": "learning"}],
+   "oracle_regex": "clock skew|worker-12"},
+  {"id": "er-04", "question": "What is the feature flag that gates the new checkout flow?", "question_type": "exact-recall",
+   "seed_memories": [{"summary": "New checkout flow is gated behind feature flag chk_glacier_v3.", "type": "fact"}],
+   "oracle_regex": "chk_glacier_v3"},
+  {"id": "pr-01", "question": "How do I prefer error handling in Go services?", "question_type": "preference",
+   "seed_memories": [{"summary": "Prefers wrapped sentinel errors with %w and errors.Is over panic/recover in Go services.", "type": "preference"}],
+   "oracle_regex": "%w|errors\\.Is|wrap"},
+  {"id": "pr-02", "question": "What is my preferred format for database migration filenames?", "question_type": "preference",
+   "seed_memories": [{"summary": "Migration filenames must be epoch-prefixed snake_case like 1719412800_add_orders_index.sql, never sequential integers.", "type": "preference"}],
+   "oracle_regex": "epoch|1719412800|snake_case"},
+  {"id": "pr-03", "question": "Which diagram tool do I want for architecture docs?", "question_type": "preference",
+   "seed_memories": [{"summary": "Architecture docs use D2 diagrams checked into docs/diagrams, not Mermaid or draw.io exports.", "type": "preference"}],
+   "oracle_regex": "\\bD2\\b"},
+  {"id": "tm-01", "question": "Which message broker did we settle on most recently?", "question_type": "temporal",
+   "seed_memories": [
+     {"summary": "In January we picked RabbitMQ as the message broker for order events.", "type": "decision"},
+     {"summary": "In April we replaced RabbitMQ with NATS JetStream as the message broker after the ack-storm incident.", "type": "decision"}],
+   "oracle_regex": "NATS|JetStream"},
+  {"id": "tm-02", "question": "What is the current on-call rotation length?", "question_type": "temporal",
+   "seed_memories": [
+     {"summary": "On-call rotation was weekly (7 days) when the team was 4 people.", "type": "fact"},
+     {"summary": "Since the June reorg the on-call rotation is 3 days, not weekly.", "type": "fact"}],
+   "oracle_regex": "3.day|three.day"},
+  {"id": "tm-03", "question": "Which Terraform version are we pinned to right now?", "question_type": "temporal",
+   "seed_memories": [
+     {"summary": "Pinned Terraform to 1.5.7 in February for the provider lock bug.", "type": "decision"},
+     {"summary": "Upgraded the Terraform pin to 1.9.4 in May after the provider lock fix landed.", "type": "decision"}],
+   "oracle_regex": "1\\.9\\.4"},
+  {"id": "ku-01", "question": "What database does the billing service use now?", "question_type": "knowledge-update",
+   "seed_memories": [
+     {"summary": "Billing service originally used MySQL 8 on RDS.", "type": "fact"},
+     {"summary": "Update: billing service migrated to CockroachDB serverless; MySQL is decommissioned.", "type": "fact"}],
+   "oracle_regex": "cockroach"},
+  {"id": "ku-02", "question": "Who owns the payments-gateway repo today?", "question_type": "knowledge-update",
+   "seed_memories": [
+     {"summary": "payments-gateway was owned by the Atlas squad.", "type": "fact"},
+     {"summary": "Ownership update: payments-gateway moved from Atlas to the Meridian squad in the last reorg.", "type": "fact"}],
+   "oracle_regex": "meridian"},
+  {"id": "ku-03", "question": "What is our current API rate limit per client?", "question_type": "knowledge-update",
+   "seed_memories": [
+     {"summary": "Public API rate limit was 600 requests/minute per client.", "type": "requirement"},
+     {"summary": "Rate limit updated: public API now allows 250 requests/minute per client after the abuse incident.", "type": "requirement"}],
+   "oracle_regex": "250"},
+  {"id": "xp-01", "question": "Which shared VPC do the staging clusters of all our services deploy into?", "question_type": "cross-project",
+   "seed_memories": [
+     {"summary": "All staging clusters deploy into the shared VPC vpc-heron-staging-02, owned by the platform team.", "type": "fact"}],
+   "oracle_regex": "vpc-heron-staging-02"},
+  {"id": "xp-02", "question": "What internal CA issues our service-to-service mTLS certs?", "question_type": "cross-project",
+   "seed_memories": [
+     {"summary": "Service-to-service mTLS certs are issued by the internal CA cardinal-ca via cert-manager, 90-day rotation.", "type": "fact"}],
+   "oracle_regex": "cardinal-ca"},
+  {"id": "xp-03", "question": "Which artifact registry do all CI pipelines push images to?", "question_type": "cross-project",
+   "seed_memories": [
+     {"summary": "All CI pipelines push container images to registry.corp.internal/finch, never Docker Hub.", "type": "fact"}],
+   "oracle_regex": "finch"}
+]
