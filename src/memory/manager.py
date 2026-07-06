@@ -890,6 +890,7 @@ class MemoryManager:
                             "score": round(vector_score, 4),
                             "content": result.get("content"),
                             "date": result.get("date"),
+                            "timestamp": result.get("timestamp"),
                             "type": result.get("type"),
                             "project": result.get("project"),
                             "memory_id": memory_id,
@@ -933,6 +934,7 @@ class MemoryManager:
                         "vector_score": round(vector_score, 4),
                         "content": result.get("content"),
                         "date": result.get("date"),
+                        "timestamp": result.get("timestamp"),
                         "type": result.get("type"),
                         "project": result.get("project"),
                         "memory_id": memory_id,
@@ -1031,6 +1033,24 @@ class MemoryManager:
 
     def _format_with_guidance(self, memories: list[dict]) -> str:
         """Format memories with type-specific guidance."""
+        # Newest-first: deterministic freshness (spec 2026-07-06). Stable sort
+        # keeps retrieval order on total ties; timestamp falls back to date.
+        memories = sorted(
+            memories,
+            key=lambda m: m.get("timestamp") or m.get("date") or "",
+            reverse=True,
+        )
+
+        from collections import Counter
+
+        type_counts = Counter(m.get("type", "note") for m in memories)
+        header = ""
+        if any(c >= 2 for c in type_counts.values()):
+            header = (
+                "*Entries are newest-first. If entries conflict, "
+                "the newest is correct — ignore older values.*\n\n"
+            )
+
         # Group by type
         by_type: dict[str, list[dict]] = {}
         for mem in memories:
@@ -1081,7 +1101,7 @@ class MemoryManager:
                 lines.append(f"- {m['content']} ({m.get('date', 'unknown date')})")
             sections.append("\n".join(lines))
 
-        return "\n\n".join(sections)
+        return header + "\n\n".join(sections)
 
     # -------------------------------------------------------------------------
     # PROJECT CONTEXT: Stable, cache-friendly
