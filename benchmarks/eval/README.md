@@ -28,7 +28,7 @@ uv run python -m benchmarks.eval.runner \
 
 ## Frozen dev subset
 
-`probes/lme_dev_subset.frozen.json` — 199 question_ids, stratified by type, seed=42.
+`probes/lme_dev_subset.frozen.json` — 200 question_ids, stratified by type, seed=42.
 Regenerate from the downloaded dataset:
 
 ```bash

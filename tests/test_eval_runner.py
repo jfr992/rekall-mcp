@@ -71,6 +71,7 @@ def test_evaluate_loop_with_fakes(tmp_path):
         answer = "port 9741"
         rekall_payload_tokens = 42
         input_tokens = 900
+        prompt_tokens = 0
 
     items = [
         {
@@ -122,3 +123,87 @@ def test_aggregate_smoke_tier_blocks_delta_claim():
     assert rep["delta_claim_allowed"] is False
     assert "warning" in rep["primary_endpoints"]["delta_product"]
     assert "ci95" not in rep["primary_endpoints"]["delta_product"]
+
+
+def test_aggregate_no_per_type_mcnemar_when_repeats_gt_1():
+    """Records with 2 repeats per item produce fractional per-item means.
+    McNemar is only valid for binary outcomes, so per_type_delta_bh_significant
+    must be absent from the report when reps > 1."""
+    from benchmarks.eval.runner import aggregate
+
+    records = []
+    for i in range(200):
+        item = f"q{i}"
+        for _ in range(2):
+            records.append(
+                {
+                    "item_id": item,
+                    "arm": "seeded",
+                    "correct": bool(i % 2),
+                    "rekall_payload_tokens": 100,
+                    "question_type": "multi-session",
+                }
+            )
+            records.append(
+                {
+                    "item_id": item,
+                    "arm": "absent",
+                    "correct": False,
+                    "rekall_payload_tokens": 0,
+                    "question_type": "multi-session",
+                }
+            )
+    rep = aggregate(records, n_items=200)
+    assert "per_type_delta_bh_significant" not in rep["exploratory"], (
+        "per_type McNemar must be suppressed when repeats > 1 (fractional means)"
+    )
+
+
+def test_aggregate_uses_prompt_tokens_for_fullcontext_ratio():
+    """aggregate() must use prompt_tokens (pasted haystack) for the fullcontext
+    token ratio, not input_tokens (haystack + system prompt).
+    Falls back to input_tokens when prompt_tokens is absent or zero."""
+    from benchmarks.eval.runner import aggregate
+
+    records = []
+    for i in range(200):
+        item = f"q{i}"
+        records.append(
+            {
+                "item_id": item,
+                "arm": "seeded",
+                "correct": True,
+                "rekall_payload_tokens": 50,
+                "question_type": "multi-session",
+                "precision_at_5": 1.0,
+            }
+        )
+        records.append(
+            {
+                "item_id": item,
+                "arm": "absent",
+                "correct": False,
+                "rekall_payload_tokens": 0,
+                "question_type": "multi-session",
+            }
+        )
+        records.append(
+            {
+                "item_id": item,
+                "arm": "fullcontext",
+                "correct": True,
+                "rekall_payload_tokens": 0,
+                "question_type": "multi-session",
+                "input_tokens": 9000,  # haystack + system prompt — must NOT be used
+                "prompt_tokens": 8000,  # pasted haystack only — must be used
+            }
+        )
+    rep = aggregate(records, n_items=200)
+    pg = rep["primary_endpoints"]["parity_gap"]
+    assert pg["token_ratio_fullcontext_over_seeded"] == pytest.approx(8000.0 / 50.0, rel=1e-6)
+
+    # Fallback: when prompt_tokens is absent, use input_tokens
+    records_no_pt = [{k: v for k, v in r.items() if k != "prompt_tokens"} for r in records]
+    rep2 = aggregate(records_no_pt, n_items=200)
+    pg2 = rep2["primary_endpoints"]["parity_gap"]
+    assert pg2["token_ratio_fullcontext_over_seeded"] == pytest.approx(9000.0 / 50.0, rel=1e-6)

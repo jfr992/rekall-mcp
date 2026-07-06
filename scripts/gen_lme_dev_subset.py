@@ -38,6 +38,16 @@ for t, ids in sorted(by_type.items()):
     k = max(1, round(200 * len(ids) / total))
     subset += rng.sample(sorted(ids), min(k, len(ids)))
 
+# Proportional rounding can land on 199; top up deterministically from the largest strata.
+if len(subset) < 200:
+    used = set(subset)
+    overflow: list[str] = []
+    for _, ids in sorted(by_type.items(), key=lambda kv: -len(kv[1])):
+        overflow.extend(i for i in sorted(ids) if i not in used)
+    needed = 200 - len(subset)
+    subset += random.Random(42).sample(overflow, min(needed, len(overflow)))
+
 result = sorted(subset[:200])
+assert len(result) == 200, f"expected 200 ids, got {len(result)}"
 json.dump(result, OUT.open("w"), indent=0)
 print(f"{len(result)} ids -> {OUT}  ({OUT.stat().st_size} bytes)")

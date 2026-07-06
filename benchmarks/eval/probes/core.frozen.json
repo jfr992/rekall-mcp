@@ -29,7 +29,7 @@
    "seed_memories": [
      {"summary": "On-call rotation was weekly (7 days) when the team was 4 people.", "type": "fact"},
      {"summary": "Since the June reorg the on-call rotation is 3 days, not weekly.", "type": "fact"}],
-   "oracle_regex": "3[ -]day|three.day"},
+   "oracle_regex": "3[ -]day|three[ -]day"},
   {"id": "tm-03", "question": "Which Terraform version are we pinned to right now?", "question_type": "temporal",
    "seed_memories": [
      {"summary": "Pinned Terraform to 1.5.7 in February for the provider lock bug.", "type": "decision"},

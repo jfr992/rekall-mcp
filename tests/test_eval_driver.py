@@ -157,8 +157,8 @@ def test_run_strips_claude_code_session_vars(tmp_path, monkeypatch):
     and other session vars. Minimal env (HOME, PATH, USER, TMPDIR, LANG, TERM + explicit
     keys) blocks those leaks.
     REKALL_AUTOSAVE must be "0" to prevent session-start-memory.sh from hanging (~219s).
-    CLAUDECODE must be "1" to suppress SessionStart hooks while --strict-mcp-config loads
-    the eval server's MCP tools.
+    CLAUDECODE must be "1" — child-session signal; REKALL_AUTOSAVE=0 is what gates the
+    rekall hooks.
     ENABLE_TOOL_SEARCH must be "1" (NOT "auto:0") — auto:0 causes Claude Code to exclude
     26 of 28 rekall tools from BOTH context AND deferred pool, so recall_memories is
     completely unreachable. Value "1" keeps all 28 tools non-deferred in the init event.
@@ -203,7 +203,7 @@ def test_run_strips_claude_code_session_vars(tmp_path, monkeypatch):
     assert "CLAUDE_CODE_CHILD_SESSION" not in captured_env, "CLAUDE_CODE_CHILD_SESSION leaked"
     # Mandatory vars must be set.
     assert captured_env.get("CLAUDECODE") == "1", (
-        "CLAUDECODE must be '1' to suppress hooks while keeping MCP via --strict-mcp-config"
+        "CLAUDECODE must be '1' — child-session signal; REKALL_AUTOSAVE=0 is what gates the rekall hooks"
     )
     assert captured_env.get("ENABLE_TOOL_SEARCH") == "1", (
         "ENABLE_TOOL_SEARCH must be '1' — auto:0 from settings.json excludes 26 of 28 "

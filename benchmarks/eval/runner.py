@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import statistics
 import time
 from pathlib import Path
 
@@ -48,7 +47,11 @@ def aggregate(records: list[dict], n_items: int) -> dict:
     seeded = arm_item_means("seeded")
     accuracy = {arm: _mean(list(arm_item_means(arm).values())) for arm in by_arm}
     seeded_tokens = [r["rekall_payload_tokens"] for r in records if r["arm"] == "seeded"]
-    fullctx_tokens = [float(r.get("input_tokens", 0)) for r in records if r["arm"] == "fullcontext"]
+    fullctx_tokens = [
+        float(r.get("prompt_tokens") or r.get("input_tokens", 0))
+        for r in records
+        if r["arm"] == "fullcontext"
+    ]
     p5 = [r["precision_at_5"] for r in records if r["arm"] == "seeded" and "precision_at_5" in r]
 
     report: dict = {
@@ -60,6 +63,8 @@ def aggregate(records: list[dict], n_items: int) -> dict:
         "primary_endpoints": {},
         "exploratory": {},
     }
+
+    reps = max((len(v) for v in by_arm.get("seeded", {}).values()), default=1)
 
     for name, baseline_arm in (("delta_product", "absent"), ("parity_gap", "fullcontext")):
         base = arm_item_means(baseline_arm)
@@ -75,7 +80,6 @@ def aggregate(records: list[dict], n_items: int) -> dict:
             )
         if delta_claim_allowed(n_items):
             entry["ci95"] = stats.paired_bootstrap_ci(diffs)
-            reps = max(len(v) for v in by_arm["seeded"].values())
             if reps == 1:
                 b = sum(1 for i in common if seeded[i] > base[i])
                 c = sum(1 for i in common if base[i] > seeded[i])
@@ -98,21 +102,23 @@ def aggregate(records: list[dict], n_items: int) -> dict:
     )
 
     # exploratory per-type Δproduct p-values, BH-corrected (spec: exploratory = FDR-controlled)
-    absent = arm_item_means("absent")
-    type_of = {r["item_id"]: r["question_type"] for r in records if r["arm"] == "seeded"}
-    per_type_p: dict[str, float] = {}
-    for t in sorted({qt for qt in type_of.values()}):
-        t_items = [i for i in seeded if i in absent and type_of.get(i) == t]
-        if len(t_items) < MIN_STRATUM:
-            continue
-        b = sum(1 for i in t_items if seeded[i] > absent[i])
-        c = sum(1 for i in t_items if absent[i] > seeded[i])
-        per_type_p[t] = stats.mcnemar_exact(b, c)
-    if per_type_p:
-        flags = stats.benjamini_hochberg(list(per_type_p.values()), q=0.10)
-        report["exploratory"]["per_type_delta_bh_significant"] = {
-            t: flag for t, flag in zip(per_type_p, flags)
-        }
+    # Only valid when reps == 1 — with fractional per-item means McNemar is invalid.
+    if reps == 1:
+        absent = arm_item_means("absent")
+        type_of = {r["item_id"]: r["question_type"] for r in records if r["arm"] == "seeded"}
+        per_type_p: dict[str, float] = {}
+        for t in sorted({qt for qt in type_of.values()}):
+            t_items = [i for i in seeded if i in absent and type_of.get(i) == t]
+            if len(t_items) < MIN_STRATUM:
+                continue
+            b = sum(1 for i in t_items if seeded[i] > absent[i])
+            c = sum(1 for i in t_items if absent[i] > seeded[i])
+            per_type_p[t] = stats.mcnemar_exact(b, c)
+        if per_type_p:
+            flags = stats.benjamini_hochberg(list(per_type_p.values()), q=0.10)
+            report["exploratory"]["per_type_delta_bh_significant"] = {
+                t: flag for t, flag in zip(per_type_p, flags)
+            }
     return report
 
 
@@ -140,6 +146,7 @@ def evaluate(items: list[dict], arms: list[str], deps: dict, repeats: int = 1) -
                     "correct": deps["scorer"](item, out.answer),
                     "rekall_payload_tokens": out.rekall_payload_tokens,
                     "input_tokens": out.input_tokens,
+                    "prompt_tokens": out.prompt_tokens,
                     "question_type": item["question_type"],
                 }
                 if arm == "seeded" and rep == 0:
@@ -337,6 +344,8 @@ def _judge_client(provider: str):
                         "claude",
                         "-p",
                         prompt,
+                        "--output-format",
+                        "text",
                         "--strict-mcp-config",
                         "--mcp-config",
                         str(_cfg),

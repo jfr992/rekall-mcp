@@ -64,6 +64,7 @@ class RunResult:
     rekall_payload_tokens: int
     rekall_tool_calls: int
     rekall_payload_text: str = ""
+    prompt_tokens: int = 0
 
 
 def build_cmd(prompt: str, mcp_config: Path, model: str) -> list[str]:
@@ -269,6 +270,7 @@ def run(
         _diag = (proc.stderr or "")[-300:] or (proc.stdout or "")[-300:] or "(no output)"
         raise RuntimeError(f"claude -p failed (rc={proc.returncode}): {_diag}")
     result = parse_stream(proc.stdout.splitlines())
+    result.prompt_tokens = count_tokens(prompt)
     # ponytail: debug dump under REKALL_EVAL_DEBUG so the live test can read stderr
     import os as _os
 
