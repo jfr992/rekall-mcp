@@ -363,48 +363,17 @@ class TestMemoryManagerCleanup:
         assert len(data["decisions"]) == 1
 
     def test_cleanup_prunes_superseded(self, tmp_path):
-        """cleanup() should delete memories superseded in the knowledge graph."""
-        today = datetime.now().strftime("%Y-%m-%d")
-        data = {
-            "date": today,
-            "preferences": [
-                {
-                    "id": f"{today}_preference_old",
-                    "content": "Old preference",
-                    "project": "test",
-                    "timestamp": f"{today}T10:00:00",
-                },
-                {
-                    "id": f"{today}_preference_new",
-                    "content": "New preference",
-                    "project": "test",
-                    "timestamp": f"{today}T11:00:00",
-                },
-            ],
-        }
-        (tmp_path / f"{today}.yaml").write_text(yaml.dump(data))
+        """cleanup(prune_superseded=True) is now gated — raises ValueError."""
+        import pytest
 
         from memory.manager import MemoryManager
 
         manager = MemoryManager(memory_dir=tmp_path)
-
-        manager.knowledge_graph.add_node(f"{today}_preference_old", memory_type="preference")
-        manager.knowledge_graph.add_node(f"{today}_preference_new", memory_type="preference")
-        manager.knowledge_graph.add_edge(
-            f"{today}_preference_new", f"{today}_preference_old", relation="supersedes", weight=0.9
-        )
-        manager.knowledge_graph.save()
-
-        result = manager.cleanup(prune_superseded=True)
-
-        assert result["superseded_pruned"] == 1
-        with open(tmp_path / f"{today}.yaml") as f:
-            remaining = yaml.safe_load(f)
-        assert len(remaining["preferences"]) == 1
-        assert remaining["preferences"][0]["id"] == f"{today}_preference_new"
+        with pytest.raises(ValueError, match="prune/superseded"):
+            manager.cleanup(prune_superseded=True)
 
     def test_cleanup_flags_contradictions(self, tmp_path):
-        """cleanup() should flag contradictions but not delete them."""
+        """cleanup() flags contradictions without deleting them (no prune_superseded needed)."""
         today = datetime.now().strftime("%Y-%m-%d")
         data = {
             "date": today,
@@ -435,7 +404,8 @@ class TestMemoryManagerCleanup:
         )
         manager.knowledge_graph.save()
 
-        result = manager.cleanup(prune_superseded=True)
+        # Contradiction flagging now always runs (moved outside prune_superseded gate)
+        result = manager.cleanup()
 
         assert result["contradictions_flagged"] == 1
         assert len(result["contradictions"]) == 1

@@ -402,6 +402,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/resume` | GET | Resume packet for continuity |
 | `/api/memory/prune/plan` | POST | Build prune plan (plan-id, 15-min TTL, 200-deletion cap) |
 | `/api/memory/prune/apply` | POST | Apply plan with typed-id confirmation (REST-only) |
+| `/api/memory/prune/superseded` | POST | Gated auto-prune of superseded memories (confirm-date token, ≤10/fire, ≤20/day, backup-first; REST-only) |
 | `/api/memory/lifecycle/backfill` | POST | Backfill tier metadata (dry-run + execute) |
 | `/api/memory/{id}` | DELETE | Delete a single memory |
 | `/api/memory/cleanup` | POST | Batch cleanup (prune superseded, age-based) |

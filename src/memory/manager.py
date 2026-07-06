@@ -728,12 +728,19 @@ class MemoryManager:
 
         Args:
             max_age_days_facts: Delete facts older than N days
-            prune_superseded: Delete memories superseded in knowledge graph
+            prune_superseded: Raises ValueError — use POST /api/memory/prune/superseded instead
             dry_run: Report what would be deleted without deleting
 
         Returns:
             Stats dict with pruning counts and flagged contradictions
         """
+        if prune_superseded:
+            raise ValueError(
+                "prune_superseded is gated: use POST /api/memory/prune/superseded "
+                "(backup + age/reinforcement/cap gates). Direct supersedes pruning "
+                "caused the 2026-07-05 99-memory data loss."
+            )
+
         stats: dict[str, Any] = {
             "facts_pruned": 0,
             "superseded_pruned": 0,
@@ -761,34 +768,22 @@ class MemoryManager:
                             self.delete(fact["id"])
                     stats["facts_pruned"] += count
 
-        # 2. Prune superseded memories
-        if prune_superseded:
-            graph = self.knowledge_graph
-            superseded_ids = set()
-            for _source, target, edge_data in graph._graph.edges(data=True):
-                if edge_data.get("relation") == "supersedes":
-                    superseded_ids.add(target)
-
-            for memory_id in superseded_ids:
-                if not dry_run:
-                    self.delete(memory_id)
-                stats["superseded_pruned"] += 1
-
-            # 3. Flag contradictions (do NOT delete)
-            seen_pairs: set[tuple[str, str]] = set()
-            for source, target, edge_data in graph._graph.edges(data=True):
-                if edge_data.get("relation") == "contradicts":
-                    pair = tuple(sorted([source, target]))
-                    if pair in seen_pairs:
-                        continue
-                    seen_pairs.add(pair)
-                    stats["contradictions_flagged"] += 1
-                    stats["contradictions"].append(
-                        {
-                            "memory_a": source,
-                            "memory_b": target,
-                        }
-                    )
+        # 2. Flag contradictions (do NOT delete) — always runs, not gated on prune_superseded
+        graph = self.knowledge_graph
+        seen_pairs: set[tuple[str, str]] = set()
+        for source, target, edge_data in graph._graph.edges(data=True):
+            if edge_data.get("relation") == "contradicts":
+                pair = tuple(sorted([source, target]))
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+                stats["contradictions_flagged"] += 1
+                stats["contradictions"].append(
+                    {
+                        "memory_a": source,
+                        "memory_b": target,
+                    }
+                )
 
         return stats
 
