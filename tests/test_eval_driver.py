@@ -24,16 +24,12 @@ def test_build_cmd_no_bare_mcp_difference(tmp_path):
     --bare disables macOS Keychain OAuth auth. Arms now differ only in which
     --mcp-config file they point at; absent arm caller passes an empty config.
 
-    ALLOWED_TOOLS is an allowlist (not denylist): only ToolSearch and mcp__rekall__* are
-    permitted on both arms. This is strictly narrower than the old denylist and eliminates
-    the coverage gap where delegation tools (Workflow, SendMessage, EnterWorktree, Monitor,
-    etc.) were never enumerated and could be invoked to side-step the eval.
-    - ToolSearch: needed to load deferred MCP tool schemas at init.
-    - mcp__rekall__*: the memory tools we're actually measuring.
-    All other tools (Bash, Read, Grep, Glob, Write, Edit, WebFetch, Agent, etc.) are
-    implicitly denied — contamination channels that would destroy the causal delta.
+    DISALLOWED_TOOLS is a denylist, because --allowedTools is INERT under
+    --permission-mode bypassPermissions (which headless runs require). --disallowedTools
+    is a hard block that IS enforced under bypass. ToolSearch + mcp__rekall__* are the
+    only tools NOT denied; every contamination channel (Bash/Read/Web/delegation) is.
     """
-    from benchmarks.eval.driver import ALLOWED_TOOLS, build_cmd
+    from benchmarks.eval.driver import DISALLOWED_TOOLS, build_cmd
 
     cfg = tmp_path / "arm.json"
     empty = tmp_path / "empty.json"
@@ -43,15 +39,18 @@ def test_build_cmd_no_bare_mcp_difference(tmp_path):
     assert "--bare" not in seeded and "--bare" not in absent
     assert str(cfg) in seeded and str(empty) in absent
     assert seeded.index("-p") + 1 == seeded.index("q")
-    # Allowlist (not denylist) — both arms must use --allowedTools
-    assert "--allowedTools" in seeded and "--allowedTools" in absent
-    assert "--disallowedTools" not in seeded and "--disallowedTools" not in absent
-    for tool in ALLOWED_TOOLS:
-        assert tool in seeded, f"missing allowed tool {tool!r} in seeded arm"
-        assert tool in absent, f"missing allowed tool {tool!r} in absent arm"
-    # ToolSearch and mcp__rekall__* must both be in the allowlist
-    assert "ToolSearch" in ALLOWED_TOOLS
-    assert any("mcp__rekall__" in t for t in ALLOWED_TOOLS)
+    # Denylist (not allowlist) — allowlist is inert under bypassPermissions
+    assert "--disallowedTools" in seeded and "--disallowedTools" in absent
+    assert "--allowedTools" not in seeded and "--allowedTools" not in absent
+    for tool in DISALLOWED_TOOLS:
+        assert tool in seeded, f"missing denied tool {tool!r} in seeded arm"
+        assert tool in absent, f"missing denied tool {tool!r} in absent arm"
+    # The contamination tools that caused the 18/21 -> 7/21 regression must be denied
+    for must_block in ("Bash", "Read", "WebFetch", "Agent", "Workflow", "Task"):
+        assert must_block in DISALLOWED_TOOLS
+    # ToolSearch and rekall tools must NOT be denied (they are the eval's tools)
+    assert "ToolSearch" not in DISALLOWED_TOOLS
+    assert not any("mcp__rekall__" in t for t in DISALLOWED_TOOLS)
     # Arms differ only in the mcp-config path
     diffs = [(a, b) for a, b in zip(seeded, absent, strict=False) if a != b]
     assert len(diffs) == 1
