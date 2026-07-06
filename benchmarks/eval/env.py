@@ -31,9 +31,21 @@ def assert_not_prod(qdrant_url: str, storage_path: Path) -> None:
 
 
 def make_workspace(root: Path, item_id: str) -> Path:
-    """Per-item dir: basename = project name; observe cwd AND driver cwd."""
+    """Per-item dir: basename = project name; observe cwd AND driver cwd.
+
+    git init is required so Claude Code recognizes the directory as a project root
+    and reads cwd/.claude/settings.json. Without a .git marker, Claude Code ignores
+    project-level settings entirely — ENABLE_TOOL_SEARCH=1 never overrides auto:0.
+    """
     ws = root / f"eval-{item_id}"
     ws.mkdir(parents=True, exist_ok=True)
+    # ponytail: minimal git init — only HEAD + config; no index or pack needed
+    git_dir = ws / ".git"
+    git_dir.mkdir(exist_ok=True)
+    (git_dir / "HEAD").write_text("ref: refs/heads/main\n")
+    (git_dir / "config").write_text(
+        "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n"
+    )
     return ws
 
 
@@ -57,6 +69,10 @@ class EphemeralBackend:
 
     def _child_env(self) -> dict[str, str]:
         env = dict(os.environ)
+        # Strip pytest markers: server.py _is_testing = "PYTEST_VERSION" in os.environ
+        # If inherited, setup_tools() is skipped — only 2 of 28 rekall tools register.
+        for _k in ("PYTEST_VERSION", "PYTEST_CURRENT_TEST", "PYTEST_XDIST_WORKER"):
+            env.pop(_k, None)
         env.update(
             QDRANT_URL=self.qdrant_url,
             MEMORY_STORAGE_PATH=str(self.storage_path),

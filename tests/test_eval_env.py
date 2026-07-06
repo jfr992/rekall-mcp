@@ -33,6 +33,37 @@ def test_backend_env_and_url(tmp_path):
     assert env["REKALL_AUTOSAVE"] == "0"
 
 
+def test_child_env_strips_pytest_markers(tmp_path, monkeypatch):
+    """_child_env() must strip PYTEST_VERSION and PYTEST_CURRENT_TEST.
+
+    server.py: _is_testing = "PYTEST_VERSION" in os.environ
+    If inherited, the server skips setup_tools() and only 2 of 28 rekall tools
+    register — recall_memories never appears in the Claude Code init event.
+    """
+    from benchmarks.eval.env import EphemeralBackend
+
+    monkeypatch.setenv("PYTEST_VERSION", "7.0.0")
+    monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/test_foo.py::test_bar")
+    b = EphemeralBackend(storage_path=tmp_path / "store")
+    env = b._child_env()
+    assert "PYTEST_VERSION" not in env, "_child_env() must strip PYTEST_VERSION"
+    assert "PYTEST_CURRENT_TEST" not in env, "_child_env() must strip PYTEST_CURRENT_TEST"
+
+
+def test_make_workspace_creates_git_root(tmp_path):
+    """make_workspace initializes .git so Claude Code picks up cwd/.claude/settings.json.
+
+    Without a git root, Claude Code ignores project-level settings files entirely —
+    project settings only apply when CWD is inside a git-rooted project tree.
+    """
+    from benchmarks.eval.env import make_workspace
+
+    ws = make_workspace(tmp_path, "git01")
+    assert (ws / ".git").is_dir(), (
+        "make_workspace must init a git repo so project-level .claude/settings.json applies"
+    )
+
+
 @pytest.mark.integration
 def test_seed_then_recall_with_project_filter(tmp_path):
     """Regression guard for the red-team seeding CRITICAL + cwd side door."""
