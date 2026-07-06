@@ -48,11 +48,16 @@ def build_candidates(edges, get_memory, today: date) -> list[Candidate]:
         old_age = _days(old.get("date"), today)
         if old_age is None or old_age < MIN_MEMORY_AGE_DAYS:  # gate 3
             continue
-        gap = (
-            _days(old.get("date"), datetime.strptime(new.get("date", "")[:10], "%Y-%m-%d").date())
-            if new.get("date")
-            else None
-        )
+        try:
+            gap = (
+                _days(
+                    old.get("date"), datetime.strptime(new.get("date", "")[:10], "%Y-%m-%d").date()
+                )
+                if new.get("date")
+                else None
+            )
+        except ValueError:
+            gap = None
         if gap is None or gap < MIN_PAIR_GAP_DAYS:  # gate 3.6
             continue
         if old.get("tier") == "identity":  # gate 4

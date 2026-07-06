@@ -75,6 +75,11 @@ def test_happy_path_yields_candidate():
     assert [(c.memory_id, c.superseded_by) for c in cands] == [("old", "new")]
 
 
+def test_malformed_superseder_date_refused():
+    table = {"new": _mem("not-a-date"), "old": _mem("2026-01-01")}
+    assert build_candidates([_edge("new", "old")], _lookup(table), TODAY) == []
+
+
 def test_chain_leaf_first_ordering():
     # A supersedes B, B supersedes C — C must sort before B, so deleting B never orphans C.
     table = {"A": _mem("2026-06-01"), "B": _mem("2026-02-01"), "C": _mem("2025-12-01")}
