@@ -171,7 +171,9 @@ class EphemeralBackend:
             resp = httpx.post(
                 f"{self.base_url}/api/memory/observe",
                 json={"summary": m["summary"], "type": m.get("type", "fact"), "cwd": cwd},
-                timeout=30.0,
+                # first observe pays the sentence-transformers cold load (~10s idle,
+                # worse under CPU contention from a concurrent claude subprocess)
+                timeout=120.0,
             )
             resp.raise_for_status()
             idmap[resp.json()["memory_id"]] = m.get("session_id", f"probe:{i}")
@@ -182,7 +184,7 @@ class EphemeralBackend:
         resp = httpx.post(
             f"{self.base_url}/api/memory/recall",
             json={"query": query, "limit": limit, "project": project},
-            timeout=30.0,
+            timeout=120.0,
         )
         resp.raise_for_status()
         return [m["memory_id"] for m in resp.json()["memories"] if m.get("memory_id")]
