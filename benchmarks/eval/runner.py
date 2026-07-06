@@ -319,6 +319,18 @@ def _judge_client(provider: str):
             _d = tempfile.mkdtemp(prefix="claude-judge-nomcp-")
             _cfg = _Path(_d) / "empty.json"
             _cfg.write_text('{"mcpServers":{}}')
+            import os as _os
+
+            env = {
+                "HOME": _os.environ.get("HOME", ""),
+                "PATH": _os.environ.get("PATH", ""),
+                "USER": _os.environ.get("USER", ""),
+                "TMPDIR": _os.environ.get("TMPDIR", ""),
+                "LANG": _os.environ.get("LANG", "en_US.UTF-8"),
+                "TERM": _os.environ.get("TERM", "xterm-256color"),
+                "CLAUDECODE": "1",
+                "REKALL_AUTOSAVE": "0",
+            }
             try:
                 p = sp.run(
                     [
@@ -334,6 +346,7 @@ def _judge_client(provider: str):
                     capture_output=True,
                     text=True,
                     timeout=60,
+                    env=env,
                 )
             finally:
                 import shutil

@@ -214,7 +214,7 @@ def run(
         "TMPDIR": os.environ.get("TMPDIR", ""),
         "LANG": os.environ.get("LANG", "en_US.UTF-8"),
         "TERM": os.environ.get("TERM", "xterm-256color"),
-        # Suppress caveman/ponytail/superpowers SessionStart hooks; MCP still loads.
+        # Claude Code child-session signal (does NOT suppress hooks; REKALL_AUTOSAVE=0 is what gates the rekall hooks).
         "CLAUDECODE": "1",
         # Disable rekall hooks: session-start-memory.sh hangs ~219s without this.
         "REKALL_AUTOSAVE": "0",

@@ -56,3 +56,5 @@ uv run python -m benchmarks.eval.runner \
   `stats.run_to_run_unreliable(acc1, acc2, target_delta)` — True means the
   run-to-run noise swamps the effect; don't quote it.
 - Live tests: `pytest -m eval_live` (real `claude -p`, costs money, off CI).
+- `driver.run()` forces `ENABLE_TOOL_SEARCH=1` in the child env — with the operator's `auto:0` user setting, 26 of 28 rekall tools would be deferred and `recall_memories` unreachable; the eval requires the full tool surface. This is a machine-config-sensitive knob.
+- Hooks are NOT suppressed (`--bare` breaks Keychain OAuth; not used). User hooks fire SYMMETRICALLY in all arms; the rekall hooks specifically are disabled via `REKALL_AUTOSAVE=0` in the child env. Symmetric residue does not bias the arm deltas.
