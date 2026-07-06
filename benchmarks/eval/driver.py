@@ -25,21 +25,60 @@ import tiktoken
 
 from benchmarks.dataset import build_session_corpus
 
-# Arms are pure Q&A — only ToolSearch (schema loading) and mcp__rekall__* (memory retrieval)
-# are permitted. An allowlist is strictly narrower than a denylist: it eliminates the
-# coverage gap where delegation tools (Workflow, SendMessage, EnterWorktree, Monitor, etc.)
-# were never enumerated and could be invoked to side-step the eval.
-#   - ToolSearch: loads deferred MCP tool schemas at init; no disk/web access.
-#   - mcp__rekall__*: the memory tools under measurement.
-# All other tools are implicitly denied:
-#   - Bash/Read/Grep/Glob: absent arm could read the seeded YAML on disk, destroying Δ.
-#   - Write/Edit/NotebookEdit: pointless side effects in a read-only eval.
-#   - WebFetch/WebSearch: any arm could look up the answer externally.
-#   - Agent/Skill/Workflow/SendMessage/Monitor/EnterWorktree: spawn child processes
-#     whose mcp__rekall__* traffic is invisible to parse_stream.
-ALLOWED_TOOLS: tuple[str, ...] = (
-    "ToolSearch",
-    "mcp__rekall__*",
+# Arms are pure Q&A: the agent may use ONLY ToolSearch (deferred MCP schema loading)
+# and mcp__rekall__* (memory retrieval — under measurement). Everything else is a
+# contamination channel and is DENIED via --disallowedTools.
+#
+# Why a denylist, not an allowlist: --allowedTools is INERT under --permission-mode
+# bypassPermissions (which headless eval runs require) — bypass permits every tool
+# regardless of the allowlist, so the agent wanders into Bash/Read and never recalls.
+# --disallowedTools is a HARD block that IS enforced under bypass. A leaky-but-enforced
+# denylist beats an airtight-but-inert allowlist. (Regression: an allowlist here dropped
+# er+xp 18/21 -> 7/21 because the seeded agent explored the workspace via Bash instead
+# of calling recall_memories.) Guarded by test_no_bash_under_bypass (eval_live).
+DISALLOWED_TOOLS: tuple[str, ...] = (
+    # disk read — absent arm could read the seeded YAML on disk, destroying the delta
+    "Bash",
+    "Read",
+    "Grep",
+    "Glob",
+    # side effects in a read-only eval
+    "Write",
+    "Edit",
+    "NotebookEdit",
+    # external lookup — answer from the web, not from memory
+    "WebFetch",
+    "WebSearch",
+    # delegation / child processes — their mcp__rekall__* traffic is invisible to parse_stream
+    "Agent",
+    "Skill",
+    "Task",
+    "Workflow",
+    "SendMessage",
+    # background / scheduling / worktree — spawn or defer work outside the measured turn
+    "Monitor",
+    "EnterWorktree",
+    "ExitWorktree",
+    "RemoteTrigger",
+    "ScheduleWakeup",
+    "CronCreate",
+    "CronDelete",
+    "CronList",
+    "PushNotification",
+    "DesignSync",
+    # task management
+    "TaskCreate",
+    "TaskGet",
+    "TaskList",
+    "TaskOutput",
+    "TaskStop",
+    "TaskUpdate",
+    # arbitrary MCP resource reads + misc
+    "ListMcpResourcesTool",
+    "ReadMcpResourceTool",
+    "ReadMcpResourceDirTool",
+    "LSP",
+    "ReportFindings",
 )
 
 _ENC = tiktoken.get_encoding("cl100k_base")
@@ -68,9 +107,9 @@ def build_cmd(prompt: str, mcp_config: Path, model: str) -> list[str]:
     The absent arm passes an empty {"mcpServers":{}} file — handled by run().
     No --bare: it disables macOS Keychain OAuth auth in this environment.
 
-    Arms use --allowedTools (not --disallowedTools): only ToolSearch and mcp__rekall__* are
-    permitted. This closes the gap where delegation tools (Workflow, SendMessage, etc.) were
-    never enumerated in the old denylist. See ALLOWED_TOOLS for the full list.
+    Arms use --disallowedTools (a hard block enforced under bypassPermissions, unlike
+    --allowedTools which bypass ignores). Only ToolSearch and mcp__rekall__* survive.
+    See DISALLOWED_TOOLS for the rationale.
     """
     return [
         "claude",
@@ -86,8 +125,8 @@ def build_cmd(prompt: str, mcp_config: Path, model: str) -> list[str]:
         "--verbose",
         "--permission-mode",
         "bypassPermissions",
-        "--allowedTools",
-        *ALLOWED_TOOLS,
+        "--disallowedTools",
+        *DISALLOWED_TOOLS,
     ]
 
 
