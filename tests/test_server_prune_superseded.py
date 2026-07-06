@@ -98,6 +98,20 @@ def test_prune_superseded_over_per_fire_cap(server_client, monkeypatch):
     data = r.json()
     assert "candidates" in data["error"].lower() or "cap" in data["error"].lower()
 
+    # Contract: refusal must carry the candidate list so the operator can review
+    assert "candidates" in data, "fire-cap refusal must include 'candidates' key"
+    candidate_ids = data["candidates"]
+    assert isinstance(candidate_ids, list), "'candidates' must be a list"
+    assert len(candidate_ids) == MAX_PER_FIRE + 1, (
+        f"expected {MAX_PER_FIRE + 1} candidates, got {len(candidate_ids)}"
+    )
+    expected_ids = {f"id-{i}" for i in range(MAX_PER_FIRE + 1)}
+    assert set(candidate_ids) == expected_ids, "candidate IDs must match the seeded set"
+
+    # Nothing should have been deleted
+    fake_mgr = srv._memory_manager_instance
+    fake_mgr.delete.assert_not_called()
+
 
 def test_prune_superseded_success(server_client, monkeypatch):
     """old-1 deleted, old-2 partially fails (still in store after delete)."""

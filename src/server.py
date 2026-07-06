@@ -1353,9 +1353,14 @@ async def api_prune_superseded(request):
 
         # Gate 4: per-fire cap
         if len(candidates) > MAX_PER_FIRE:
-            return _bad_request(
-                f"{len(candidates)} candidates exceeds {MAX_PER_FIRE}/fire cap — "
-                "review via /api/memory/prune/plan and delete manually"
+            from starlette.responses import JSONResponse as _JSONResponse
+
+            return _JSONResponse(
+                {
+                    "error": f"{len(candidates)} candidates exceeds {MAX_PER_FIRE}/fire cap — review via prune_plan",
+                    "candidates": [c.memory_id for c in candidates],
+                },
+                status_code=400,
             )
 
         budget = min(MAX_PER_FIRE, MAX_PER_DAY - used)
