@@ -192,6 +192,19 @@ def build_question_prompt(entry: dict) -> str:
     return f"Today is {date}. {q}" if date else q
 
 
+# The line rekall-restore.sh injects at session start in a real deployment.
+# The seeded arm measures the product AS SHIPPED — without it, agents never
+# reach for memory tools (measured: 2% accuracy, ~4 tokens/query).
+REKALL_SESSION_PREAMBLE = (
+    "Rekall ready — {n} memories · vectors OK. Use recall_memories() on demand."
+)
+
+
+def build_seeded_prompt(entry: dict, n_memories: int) -> str:
+    """Product-as-deployed prompt: restore-hook preamble + the question."""
+    return f"{REKALL_SESSION_PREAMBLE.format(n=n_memories)}\n\n{build_question_prompt(entry)}"
+
+
 def build_fullcontext_prompt(entry: dict, include_assistant: bool = False) -> str:
     docs = build_session_corpus(entry, include_assistant=include_assistant)
     haystack = "\n\n".join(f"[session {d['session_id']} | {d['date']}]\n{d['text']}" for d in docs)

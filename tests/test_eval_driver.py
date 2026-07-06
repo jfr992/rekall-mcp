@@ -293,3 +293,13 @@ def test_fullcontext_prompt_carries_sessions_and_date():
     }
     p = build_fullcontext_prompt(entry)
     assert "Miso" in p and "s_1" in p and "Today is 2023/05/20" in p
+
+
+def test_seeded_prompt_carries_product_preamble():
+    """Seeded arm = product-as-deployed: the restore-hook line precedes the question."""
+    from benchmarks.eval.driver import build_seeded_prompt
+
+    p = build_seeded_prompt({"question": "What port?"}, n_memories=3)
+    assert p.startswith("Rekall ready — 3 memories")
+    assert "recall_memories() on demand" in p
+    assert p.endswith("What port?")

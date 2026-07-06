@@ -237,7 +237,9 @@ def main(argv: list[str] | None = None) -> int:
         def run_arm(arm: str, item: dict, ws: Path):
             if arm == "seeded":
                 return driver.run(
-                    driver.build_question_prompt(item.get("entry") or item),
+                    driver.build_seeded_prompt(
+                        item.get("entry") or item, len(item["seed_memories"])
+                    ),
                     mcp_config,
                     args.agent_model,
                     cwd=ws,
