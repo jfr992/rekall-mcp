@@ -57,6 +57,7 @@ config.yaml
 # Data (stored in ~/.claude/)
 data/
 *.jsonl
+!tests/fixtures/*.jsonl
 .superpowers/
 docs/superpowers/
 

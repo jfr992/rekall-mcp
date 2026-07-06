@@ -21,7 +21,8 @@ jobs:
       - name: Ruff format
         run: uv run ruff format --check src tests
       - name: Unit tests
-        run: uv run pytest -m "not integration" --tb=short -q
+        # eval_live = real claude -p + local Qdrant; opt-in only, never CI.
+        run: uv run pytest -m "not integration and not eval_live" --tb=short -q
       # Advisory gate — ~110 pre-existing mypy errors predate CI; surfaced, not
       # blocking, until cleaned up in a dedicated pass. Flip continue-on-error
       # off once that backlog clears.
