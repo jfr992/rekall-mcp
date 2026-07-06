@@ -36,7 +36,13 @@ def make_workspace(root: Path, item_id: str) -> Path:
     git init is required so Claude Code recognizes the directory as a project root
     and reads cwd/.claude/settings.json. Without a .git marker, Claude Code ignores
     project-level settings entirely — ENABLE_TOOL_SEARCH=1 never overrides auto:0.
+
+    settings.json is written here rather than in driver.run() so callers that use
+    subprocess.run(build_cmd(...)) directly (e.g. inline capture scripts) get the
+    same ENABLE_TOOL_SEARCH override without requiring driver.run() as a wrapper.
     """
+    import json as _json
+
     ws = root / f"eval-{item_id}"
     ws.mkdir(parents=True, exist_ok=True)
     # ponytail: minimal git init — only HEAD + config; no index or pack needed
@@ -46,6 +52,14 @@ def make_workspace(root: Path, item_id: str) -> Path:
     (git_dir / "config").write_text(
         "[core]\n\trepositoryformatversion = 0\n\tfilemode = true\n\tbare = false\n"
     )
+    # Project-level settings: ENABLE_TOOL_SEARCH=1 overrides user-level auto:0.
+    # settings.json env block has higher precedence than process env — without this,
+    # 26 of 28 rekall tools are deferred, recall_memories is unreachable.
+    _claude_dir = ws / ".claude"
+    _claude_dir.mkdir(exist_ok=True)
+    _settings = _claude_dir / "settings.json"
+    if not _settings.exists():
+        _settings.write_text(_json.dumps({"env": {"ENABLE_TOOL_SEARCH": "1"}}))
     return ws
 
 
@@ -112,7 +126,7 @@ class EphemeralBackend:
                 self._proc.kill()
             self._proc = None
 
-    def __enter__(self) -> "EphemeralBackend":
+    def __enter__(self) -> EphemeralBackend:
         self.start()
         return self
 

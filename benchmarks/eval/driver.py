@@ -49,6 +49,12 @@ def build_cmd(prompt: str, mcp_config: Path, model: str) -> list[str]:
     The seeded arm passes a real config pointing at the ephemeral backend (root URL, not /mcp).
     The absent arm passes an empty {"mcpServers":{}} file — handled by run().
     No --bare: it disables macOS Keychain OAuth auth in this environment.
+
+    --disallowedTools Agent Skill: both spawn child processes whose tool traffic is invisible
+    to parse_stream, causing rekall_tool_calls=0 and rekall_payload_tokens=0 even when memory
+    IS used. Agent delegates via subagent spawn; Skill runs forked execution via the skills
+    harness. Blocking both keeps all rekall tool traffic in the parent transcript.
+    This eval measures a single agent.
     """
     return [
         "claude",
@@ -64,6 +70,9 @@ def build_cmd(prompt: str, mcp_config: Path, model: str) -> list[str]:
         "--verbose",
         "--permission-mode",
         "bypassPermissions",
+        "--disallowedTools",
+        "Agent",
+        "Skill",
     ]
 
 

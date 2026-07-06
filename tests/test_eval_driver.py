@@ -23,6 +23,11 @@ def test_build_cmd_no_bare_mcp_difference(tmp_path):
 
     --bare disables macOS Keychain OAuth auth. Arms now differ only in which
     --mcp-config file they point at; absent arm caller passes an empty config.
+
+    --disallowedTools Agent Skill on both arms: both spawn child processes whose traffic
+    is invisible to parse_stream, silently zeroing rekall_tool_calls and rekall_payload_tokens.
+    Agent delegates via subagent spawn; Skill runs forked execution. Blocking both keeps the
+    eval in a single-agent measurement model where all rekall traffic stays in the parent.
     """
     from benchmarks.eval.driver import build_cmd
 
@@ -34,6 +39,10 @@ def test_build_cmd_no_bare_mcp_difference(tmp_path):
     assert "--bare" not in seeded and "--bare" not in absent
     assert str(cfg) in seeded and str(empty) in absent
     assert seeded.index("-p") + 1 == seeded.index("q")
+    # --disallowedTools Agent Skill present on both arms (single-agent measurement model).
+    # Agent spawns subagents; Skill runs forked execution — both hide mcp__rekall__* traffic.
+    assert "--disallowedTools" in seeded and "Agent" in seeded and "Skill" in seeded
+    assert "--disallowedTools" in absent and "Agent" in absent and "Skill" in absent
     # Arms differ only in the mcp-config path
     diffs = [(a, b) for a, b in zip(seeded, absent, strict=False) if a != b]
     assert len(diffs) == 1
@@ -150,6 +159,7 @@ def test_run_strips_claude_code_session_vars(tmp_path, monkeypatch):
     completely unreachable. Value "1" keeps all 28 tools non-deferred in the init event.
     """
     import subprocess as _sp
+
     from benchmarks.eval import driver
 
     # Inject offending vars into the current process env (monkeypatch restores on teardown)
@@ -208,6 +218,7 @@ def test_run_creates_project_settings_to_override_tool_search(tmp_path, monkeypa
     """
     import json as _json
     import subprocess as _sp
+
     from benchmarks.eval import driver
 
     def fake_run(cmd, **kwargs):
@@ -236,6 +247,7 @@ def test_run_does_not_overwrite_existing_project_settings(tmp_path, monkeypatch)
     """run() skips writing .claude/settings.json if it already exists."""
     import json as _json
     import subprocess as _sp
+
     from benchmarks.eval import driver
 
     claude_dir = tmp_path / ".claude"

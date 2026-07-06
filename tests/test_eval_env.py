@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pytest
-
 from benchmarks.eval.env import assert_not_prod
 
 
@@ -61,6 +60,30 @@ def test_make_workspace_creates_git_root(tmp_path):
     ws = make_workspace(tmp_path, "git01")
     assert (ws / ".git").is_dir(), (
         "make_workspace must init a git repo so project-level .claude/settings.json applies"
+    )
+
+
+def test_make_workspace_creates_claude_settings_json(tmp_path):
+    """make_workspace writes .claude/settings.json with ENABLE_TOOL_SEARCH=1.
+
+    This file must exist before any claude -p subprocess runs. settings.json env block
+    has higher precedence than process env, so callers that bypass driver.run() (e.g.
+    inline capture scripts using subprocess.run(build_cmd(...)) directly) also get the
+    override. Without it, user-level auto:0 defers 26 of 28 rekall tools, making
+    recall_memories unreachable in both the init event and deferred pool.
+    """
+    import json as _json
+
+    from benchmarks.eval.env import make_workspace
+
+    ws = make_workspace(tmp_path, "settings01")
+    settings = ws / ".claude" / "settings.json"
+    assert settings.exists(), (
+        "make_workspace must create .claude/settings.json with ENABLE_TOOL_SEARCH=1"
+    )
+    data = _json.loads(settings.read_text())
+    assert data.get("env", {}).get("ENABLE_TOOL_SEARCH") == "1", (
+        ".claude/settings.json must set ENABLE_TOOL_SEARCH=1 to override user-level auto:0"
     )
 
 
