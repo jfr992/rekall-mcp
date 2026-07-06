@@ -20,8 +20,14 @@ if [[ -f "$MARKER" ]]; then
   exit 0
 fi
 
-# Backend alive?
-curl -sfo /dev/null --max-time 1 "$API/health" 2>/dev/null || exit 0
+# Backend alive? Capture the body — /health carries the zero-vector tripwire.
+health=$(curl -sf --max-time 1 "$API/health" 2>/dev/null) || exit 0
+
+# Vector-corruption tripwire: two prod incidents sat undetected for days
+# because this line only showed counts. Absent vectors block → no indicator.
+vectors=$(jq -r 'if .vectors == null then ""
+  elif .vectors.zero_vectors == 0 then " · vectors OK"
+  else " · ⚠ \(.vectors.zero_vectors) dead vectors" end' <<< "$health" 2>/dev/null || true)
 
 # Zero-injection mode: check backend is alive, print a one-liner with
 # memory count, done. Model uses recall_memories() / mcp__rekall__recall
@@ -32,7 +38,7 @@ stats=$(curl -sf --max-time 2 "$API/api/memory/stats" 2>/dev/null \
 touch "$MARKER"
 
 if [[ -n "$stats" ]]; then
-  echo "Rekall ready — $stats. Use recall_memories() on demand."
+  echo "Rekall ready — ${stats}${vectors}. Use recall_memories() on demand."
 fi
 
 exit 0
