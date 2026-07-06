@@ -172,7 +172,7 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     ok "backed up to $(basename "$BACKUP")"
 
     # Merge: add UserPromptSubmit (rekall-restore) + Stop (rekall-observe) hooks.
-    # SessionStart is intentionally opt-in because it injects additionalContext.
+    # memory-prune.sh wires unconditionally (no context injection); session-start-memory.sh (context injector) stays opt-in.
     # Idempotent — checks if the command path already exists in the array.
     REST_CMD="$HOME/.claude/hooks/rekall-restore.sh"
     OBS_CMD="$HOME/.claude/hooks/rekall-observe.sh"
