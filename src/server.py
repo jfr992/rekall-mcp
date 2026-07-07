@@ -269,17 +269,15 @@ async def health_check(request):
 # =============================================================================
 
 
-_memory_manager_instance = None
-
-
 def _get_memory_manager():
-    """Get or create memory manager singleton for REST API."""
-    global _memory_manager_instance
-    if _memory_manager_instance is None:
-        from memory.manager import MemoryManager
+    """Process-wide manager shared with the MCP tool path (memory.singleton).
 
-        _memory_manager_instance = MemoryManager()
-    return _memory_manager_instance
+    Two instances = split-brain graphs: edges written via REST were invisible
+    to MCP recalls until restart (found by the effectiveness eval 2026-07-07).
+    """
+    from memory.singleton import get_memory_manager
+
+    return get_memory_manager()
 
 
 class RequestValidationError(ValueError):

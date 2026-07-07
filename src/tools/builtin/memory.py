@@ -328,11 +328,11 @@ class OptimizedMemoryTools(BaseToolProvider):
 
     @property
     def manager(self):
-        """Lazy-load the memory manager."""
+        """Process-wide manager shared with the REST routes (memory.singleton)."""
         if self._manager is None:
-            from memory import MemoryManager
+            from memory.singleton import get_memory_manager
 
-            self._manager = MemoryManager()
+            self._manager = get_memory_manager()
         return self._manager
 
     def get_tools(self) -> list[ToolDefinition]:
