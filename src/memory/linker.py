@@ -145,9 +145,7 @@ def auto_link(
                 llm_refined=llm_refined,
             )
             if llm_refined:
-                logger.debug(
-                    "llm_refined supersedes: %s -> %s", memory_id, candidate_id
-                )
+                logger.debug("llm_refined supersedes: %s -> %s", memory_id, candidate_id)
             # Reduce the importance of the superseded memory.
             if candidate_id in graph._graph:
                 old_importance = graph._graph.nodes[candidate_id].get("importance", 0.0)

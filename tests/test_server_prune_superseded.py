@@ -14,7 +14,7 @@ def server_client(monkeypatch):
     fake.store.get_many.return_value = []
     fake.knowledge_graph._graph.edges.return_value = []
     fake.record_event.return_value = None
-    monkeypatch.setattr(srv, "_memory_manager_instance", fake)
+    monkeypatch.setattr("memory.singleton._instance", fake)
     # raising=False: OK if not present yet (route not yet implemented)
     monkeypatch.setattr(srv, "_prune_daily_count", {}, raising=False)
 
@@ -80,7 +80,7 @@ def test_prune_superseded_dry_run(server_client, monkeypatch):
     assert data.get("dry_run") is True
     assert "old-1" in data.get("candidates", [])
 
-    fake_mgr = srv._memory_manager_instance
+    fake_mgr = __import__("memory.singleton", fromlist=["_instance"])._instance
     fake_mgr.delete.assert_not_called()
 
 
@@ -109,7 +109,7 @@ def test_prune_superseded_over_per_fire_cap(server_client, monkeypatch):
     assert set(candidate_ids) == expected_ids, "candidate IDs must match the seeded set"
 
     # Nothing should have been deleted
-    fake_mgr = srv._memory_manager_instance
+    fake_mgr = __import__("memory.singleton", fromlist=["_instance"])._instance
     fake_mgr.delete.assert_not_called()
 
 
@@ -126,7 +126,7 @@ def test_prune_superseded_success(server_client, monkeypatch):
     ]
     monkeypatch.setattr("memory.prune_superseded.build_candidates", lambda *a, **kw: candidates)
 
-    fake_mgr = srv._memory_manager_instance
+    fake_mgr = __import__("memory.singleton", fromlist=["_instance"])._instance
     # old-1: gone after delete; old-2: still present (partial failure)
     fake_mgr.store.get_many.side_effect = [[], [{"memory_id": "old-2"}]]
     monkeypatch.setattr(srv, "_prune_backup", lambda out_dir: [Path("/tmp/backup.tar.gz")])
@@ -140,10 +140,11 @@ def test_prune_superseded_success(server_client, monkeypatch):
 
 def test_cleanup_prune_superseded_returns_400_via_rest(server_client):
     """cleanup endpoint with prune_superseded=True must surface ValueError as 400."""
-    import server as srv
 
     # The real manager raises ValueError; configure the mock to mirror that
-    srv._memory_manager_instance.cleanup.side_effect = ValueError(
+    __import__(
+        "memory.singleton", fromlist=["_instance"]
+    )._instance.cleanup.side_effect = ValueError(
         "prune_superseded is gated: use POST /api/memory/prune/superseded"
     )
     r = server_client.post(
