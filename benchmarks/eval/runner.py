@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import time
 from pathlib import Path
 
@@ -138,7 +139,25 @@ def evaluate(items: list[dict], arms: list[str], deps: dict, repeats: int = 1) -
         p5 = precision_at_k([idmap.get(m, m) for m in retrieved], gold_sessions, 5)
         for arm in arms:
             for rep in range(repeats):
-                out = deps["run_arm"](arm, item, ws)
+                try:
+                    out = deps["run_arm"](arm, item, ws)
+                except subprocess.TimeoutExpired:
+                    # One hung claude -p must not kill a whole (billable) run:
+                    # record the cell as a timeout failure and keep going.
+                    records.append(
+                        {
+                            "item_id": item["item_id"],
+                            "arm": arm,
+                            "repeat": rep,
+                            "correct": False,
+                            "rekall_payload_tokens": 0,
+                            "input_tokens": 0,
+                            "prompt_tokens": 0,
+                            "question_type": item["question_type"],
+                            "timed_out": True,
+                        }
+                    )
+                    continue
                 rec = {
                     "item_id": item["item_id"],
                     "arm": arm,

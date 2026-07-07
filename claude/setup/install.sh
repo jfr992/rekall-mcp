@@ -135,7 +135,7 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     step "Installing hooks → ~/.claude/hooks/"
     mkdir -p "$HOME/.claude/hooks"
 
-    HOOKS=(rekall-restore.sh rekall-observe.sh)
+    HOOKS=(rekall-restore.sh rekall-observe.sh memory-prune.sh)
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         HOOKS+=(session-start-memory.sh)
     fi
@@ -172,18 +172,19 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     ok "backed up to $(basename "$BACKUP")"
 
     # Merge: add UserPromptSubmit (rekall-restore) + Stop (rekall-observe) hooks.
-    # SessionStart is intentionally opt-in because it injects additionalContext.
+    # memory-prune.sh wires unconditionally (no context injection); session-start-memory.sh (context injector) stays opt-in.
     # Idempotent — checks if the command path already exists in the array.
     REST_CMD="$HOME/.claude/hooks/rekall-restore.sh"
     OBS_CMD="$HOME/.claude/hooks/rekall-observe.sh"
+    PRUNE_CMD="$HOME/.claude/hooks/memory-prune.sh"
     START_CMD=""
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         START_CMD="$HOME/.claude/hooks/session-start-memory.sh"
     fi
 
-    /usr/bin/python3 - "$SETTINGS" "$REST_CMD" "$OBS_CMD" "$START_CMD" <<'PY'
+    /usr/bin/python3 - "$SETTINGS" "$REST_CMD" "$OBS_CMD" "$PRUNE_CMD" "$START_CMD" <<'PY'
 import json, sys
-path, rest_cmd, obs_cmd, start_cmd = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4]
+path, rest_cmd, obs_cmd, prune_cmd, start_cmd = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
 with open(path) as f: d = json.load(f)
 d.setdefault("hooks", {})
 
@@ -206,6 +207,8 @@ if ensure_event_hook("UserPromptSubmit", rest_cmd):
     added.append("UserPromptSubmit → rekall-restore.sh")
 if ensure_event_hook("Stop", obs_cmd):
     added.append("Stop → rekall-observe.sh")
+if ensure_event_hook("SessionStart", prune_cmd):
+    added.append("SessionStart → memory-prune.sh")
 if start_cmd and ensure_event_hook("SessionStart", start_cmd):
     added.append("SessionStart → session-start-memory.sh")
 
@@ -258,6 +261,7 @@ fi
 if [[ "$SKILLS_ONLY" == "0" ]]; then
     [[ -f "$HOME/.claude/hooks/rekall-restore.sh" ]] && ok "rekall-restore.sh in place" || warn "rekall-restore.sh missing"
     [[ -f "$HOME/.claude/hooks/rekall-observe.sh" ]] && ok "rekall-observe.sh in place" || warn "rekall-observe.sh missing"
+    [[ -f "$HOME/.claude/hooks/memory-prune.sh" ]]   && ok "memory-prune.sh in place"   || warn "memory-prune.sh missing"
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         [[ -f "$HOME/.claude/hooks/session-start-memory.sh" ]] && ok "session-start-memory.sh in place" || warn "session-start-memory.sh missing"
     fi

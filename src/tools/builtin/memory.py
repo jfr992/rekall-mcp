@@ -328,11 +328,11 @@ class OptimizedMemoryTools(BaseToolProvider):
 
     @property
     def manager(self):
-        """Lazy-load the memory manager."""
+        """Process-wide manager shared with the REST routes (memory.singleton)."""
         if self._manager is None:
-            from memory import MemoryManager
+            from memory.singleton import get_memory_manager
 
-            self._manager = MemoryManager()
+            self._manager = get_memory_manager()
         return self._manager
 
     def get_tools(self) -> list[ToolDefinition]:
@@ -528,7 +528,9 @@ class OptimizedMemoryTools(BaseToolProvider):
             project: str | None = None,
             days: int | None = None,
         ) -> str:
-            """Search memories using hybrid BM25 + semantic search.
+            """Use this whenever the question references prior decisions, current values or
+            settings, past learnings, or what was chosen/changed — before answering from
+            general knowledge.
 
             Uses RRF (Reciprocal Rank Fusion) to combine:
             - BM25 sparse vectors: exact term matching (great for ticket IDs, error codes, names)

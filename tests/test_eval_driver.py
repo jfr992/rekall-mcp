@@ -306,7 +306,7 @@ def test_seeded_prompt_carries_product_preamble():
     assert p.startswith("Rekall ready — 3 memories")
     assert "nodes" in p
     assert "edges" in p
-    assert "recall_memories() on demand" in p
+    assert "check memory first with recall_memories()" in p
     assert p.endswith("What port?")
 
 

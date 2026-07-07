@@ -269,17 +269,15 @@ async def health_check(request):
 # =============================================================================
 
 
-_memory_manager_instance = None
-
-
 def _get_memory_manager():
-    """Get or create memory manager singleton for REST API."""
-    global _memory_manager_instance
-    if _memory_manager_instance is None:
-        from memory.manager import MemoryManager
+    """Process-wide manager shared with the MCP tool path (memory.singleton).
 
-        _memory_manager_instance = MemoryManager()
-    return _memory_manager_instance
+    Two instances = split-brain graphs: edges written via REST were invisible
+    to MCP recalls until restart (found by the effectiveness eval 2026-07-07).
+    """
+    from memory.singleton import get_memory_manager
+
+    return get_memory_manager()
 
 
 class RequestValidationError(ValueError):
@@ -796,6 +794,8 @@ async def api_cleanup_memories(request):
         return JSONResponse(result)
     except RequestValidationError as e:
         return _bad_request(str(e))
+    except ValueError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error during cleanup: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
@@ -1284,6 +1284,131 @@ async def api_memory_prune_plan(request):
         return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error building prune plan: {e}")
+        return _server_error(str(e))
+
+
+_prune_daily_count: dict[str, int] = {}
+
+
+def _today_str() -> str:
+    from datetime import date
+
+    return date.today().isoformat()
+
+
+def _prune_backup(out_dir):
+    from memory.cli import _do_backup
+
+    return _do_backup(out_dir)
+
+
+@mcp.custom_route("/api/memory/prune/superseded", methods=["POST"])
+async def api_prune_superseded(request):
+    """Gated auto-prune of superseded memories. REST-only (destructive)."""
+    from starlette.responses import JSONResponse
+
+    try:
+        body = await request.json()
+
+        # Gate 1: intentionality token
+        if body.get("confirm_date") != _today_str():
+            return _bad_request("confirm_date must be today's date (intentionality token)")
+
+        from datetime import date
+
+        from memory.prune_superseded import MAX_PER_DAY, MAX_PER_FIRE, build_candidates
+
+        # Gate 2: per-day cap
+        today_key = _today_str()
+        used = _prune_daily_count.get(today_key, 0)
+        if used >= MAX_PER_DAY:
+            return JSONResponse(
+                {"error": "daily prune cap reached", "daily_remaining": 0}, status_code=429
+            )
+
+        # Build candidates via graph edges
+        manager = _get_memory_manager()
+        graph = manager.knowledge_graph
+        edges = list(graph._graph.edges(data=True))
+
+        def get_memory(mid: str):
+            hits = manager.store.get_many([mid])
+            return hits[0] if hits else None
+
+        candidates = build_candidates(edges, get_memory, date.today())
+        if not candidates:
+            return _ok({"deleted": [], "message": "no eligible candidates"})
+
+        # Gate 3: dry_run preview
+        if body.get("dry_run", False):
+            return _ok(
+                {
+                    "dry_run": True,
+                    "candidates": [c.memory_id for c in candidates],
+                    "would_delete": len(candidates),
+                }
+            )
+
+        # Gate 4: per-fire cap
+        if len(candidates) > MAX_PER_FIRE:
+            from starlette.responses import JSONResponse as _JSONResponse
+
+            return _JSONResponse(
+                {
+                    "error": f"{len(candidates)} candidates exceeds {MAX_PER_FIRE}/fire cap — review via prune_plan",
+                    "candidates": [c.memory_id for c in candidates],
+                },
+                status_code=400,
+            )
+
+        budget = min(MAX_PER_FIRE, MAX_PER_DAY - used)
+        candidates = candidates[:budget]
+
+        # Gate 5: backup-first
+        from pathlib import Path
+
+        backup_dir = Path.home() / "backups"
+        try:
+            artifacts = _prune_backup(backup_dir)
+        except Exception as e:
+            msg = f"backup failed: {e}"
+            logger.error(msg)
+            return _server_error(msg)
+
+        # Delete and verify
+        deleted: list[str] = []
+        partially_failed: list[str] = []
+        for cand in candidates:
+            manager.delete(cand.memory_id)
+            still = manager.store.get_many([cand.memory_id])
+            if still:
+                partially_failed.append(cand.memory_id)
+            else:
+                deleted.append(cand.memory_id)
+                logger.info(f"pruned superseded {cand.memory_id} (by {cand.superseded_by})")
+
+        _prune_daily_count[today_key] = used + len(deleted)
+
+        try:
+            manager.record_event(
+                event_type="superseded_pruned",
+                project="general",
+                memory_ids=deleted,
+                source="prune_superseded",
+            )
+        except Exception:
+            logger.debug("event emission skipped", exc_info=True)
+
+        return _ok(
+            {
+                "deleted": deleted,
+                "partially_failed": partially_failed,
+                "backup": [str(p) for p in artifacts],
+                "daily_remaining": MAX_PER_DAY - _prune_daily_count[today_key],
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error in superseded prune: {e}")
         return _server_error(str(e))
 
 

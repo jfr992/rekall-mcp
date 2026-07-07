@@ -89,3 +89,8 @@ warn_unused_ignores = true
 [[tool.mypy.overrides]]
 module = ["mcp.*", "qdrant_client.*", "sentence_transformers.*"]
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "tdd-guard-pytest>=0.1.2",
+]

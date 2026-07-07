@@ -184,7 +184,7 @@ def test_classify_supersedes():
             cand_type="decision",
             cand_content="Use PG 15",
             similarity=0.95,
-        )
+        )[0]
         == "supersedes"
     )
 
@@ -197,7 +197,7 @@ def test_classify_led_to():
             cand_type="decision",
             cand_content="Use PostgreSQL",
             similarity=0.7,
-        )
+        )[0]
         == "led_to"
     )
 
@@ -210,7 +210,7 @@ def test_classify_depends_on():
             cand_type="requirement",
             cand_content="Must support ACID",
             similarity=0.6,
-        )
+        )[0]
         == "depends_on"
     )
 
@@ -223,7 +223,7 @@ def test_classify_related_to_default():
             cand_type="fact",
             cand_content="Using us-east-1 region",
             similarity=0.65,
-        )
+        )[0]
         == "related_to"
     )
 
@@ -236,7 +236,7 @@ def test_classify_contradicts():
             cand_type="decision",
             cand_content="Enable this endpoint for admin users",
             similarity=0.8,
-        )
+        )[0]
         == "contradicts"
     )
 
@@ -249,7 +249,7 @@ def test_classify_no_contradiction_without_overlap():
             cand_type="note",
             cand_content="Deploy with two-node Postgres cluster",
             similarity=0.9,
-        )
+        )[0]
         == "related_to"
     )
 
@@ -273,7 +273,7 @@ def test_complementary_learnings_not_contradictions():
                 "docker build, create namespace, apply manifests"
             ),
             similarity=0.82,
-        )
+        )[0]
         == "related_to"
     )
 
@@ -293,7 +293,7 @@ def test_requirement_and_plan_not_contradictions():
                 "readiness: Phase 1 - Configure infrastructure alerting"
             ),
             similarity=0.76,
-        )
+        )[0]
         == "related_to"
     )
 
@@ -313,7 +313,7 @@ def test_similar_learnings_about_same_tool_not_contradictions():
                 "cause ACLI bulk creation failures"
             ),
             similarity=0.70,
-        )
+        )[0]
         == "related_to"
     )
 
@@ -332,7 +332,7 @@ def test_real_contradiction_still_detected():
                 "Port deployment_time must be in EST not UTC. Use TZ=America/New_York date format."
             ),
             similarity=0.70,
-        )
+        )[0]
         == "contradicts"
     )
 
@@ -346,6 +346,6 @@ def test_low_overlap_negation_not_contradiction():
             cand_type="fact",
             cand_content="Server runs on port 8000 with HTTP transport",
             similarity=0.65,
-        )
+        )[0]
         == "related_to"
     )
