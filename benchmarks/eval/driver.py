@@ -231,7 +231,8 @@ def build_question_prompt(entry: dict) -> str:
 # plus vectors=" · vectors OK", giving: "Rekall ready — N · M · K · vectors OK. ..."
 REKALL_SESSION_PREAMBLE = (
     "Rekall ready — {n} memories · {nodes} nodes · {edges} edges"
-    " · vectors OK. Use recall_memories() on demand."
+    " · vectors OK. Before answering anything about prior decisions, current"
+    " values, or past work: check memory first with recall_memories()."
 )
 
 
