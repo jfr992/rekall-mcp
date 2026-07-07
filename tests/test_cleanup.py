@@ -450,7 +450,11 @@ class TestCleanupIntegration:
     """Integration: save -> supersede -> cleanup -> verify gone."""
 
     def test_full_cleanup_flow(self, tmp_path):
-        """Save memories, create supersedes, run cleanup, verify pruning."""
+        """Fact aging still prunes; prune_superseded is GATED (2026-07-05 incident).
+
+        Direct supersedes deletion via cleanup() caused the 99-memory data loss;
+        it now raises and points at the gated endpoint. Both memories survive.
+        """
         from memory.manager import MemoryManager
 
         manager = MemoryManager(memory_dir=tmp_path)
@@ -480,15 +484,16 @@ class TestCleanupIntegration:
         }
         (tmp_path / f"{old_date}.yaml").write_text(yaml.dump(old_fact_data))
 
-        # Run cleanup
-        result = manager.cleanup(max_age_days_facts=7, prune_superseded=True)
+        # The legacy supersedes-prune path is gated: raises, deletes NOTHING
+        with pytest.raises(ValueError, match="prune/superseded"):
+            manager.cleanup(max_age_days_facts=7, prune_superseded=True)
 
+        # Fact aging still works without the gated flag
+        result = manager.cleanup(max_age_days_facts=7)
         assert result["facts_pruned"] == 1
-        assert result["superseded_pruned"] >= 1  # auto-linker may create extra edges
         assert not (tmp_path / f"{old_date}.yaml").exists()
 
-        # New preference should survive, old one deleted.
-        # v1.5.0+ writes nested: <project>/<date>.yaml
+        # BOTH preferences survive — supersession affects reads, never deletes here
         today = datetime.now().strftime("%Y-%m-%d")
         candidates = list(tmp_path.rglob(f"{today}.yaml"))
         assert len(candidates) >= 1, f"No surviving YAML found under {tmp_path}"
@@ -497,7 +502,7 @@ class TestCleanupIntegration:
             data = yaml.safe_load(yaml_file.read_text()) or {}
             all_preference_ids.extend(p["id"] for p in data.get("preferences", []))
         assert new_id in all_preference_ids
-        assert old_id not in all_preference_ids
+        assert old_id in all_preference_ids
 
     def test_cleanup_prunes_old_facts_in_nested_project_layout(self, tmp_path):
         """v1.5.0+ writes <project>/<date>.yaml — cleanup must find those too."""
