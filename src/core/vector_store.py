@@ -419,12 +419,13 @@ class VectorStore:
             results = self.scroll(filters={"memory_id": memory_id}, limit=1)
             return results[0] if results else None
 
-    def get_many(self, memory_ids: list[str]) -> list[dict[str, Any]]:
+    def get_many(self, memory_ids: list[str], with_vectors: bool = False) -> list[dict[str, Any]]:
         """Batch-fetch payloads by memory_id in a single retrieve call.
 
         Point IDs are deterministic (stable_hash_id of memory_id), so this
         avoids the N+1 of one filtered search per id. Missing ids are silently
-        omitted by Qdrant.
+        omitted by Qdrant. When with_vectors=True, the dense vector is returned
+        under the key "_vector" (named-vector points use the "" slot).
         """
         if not memory_ids:
             return []
@@ -434,8 +435,21 @@ class VectorStore:
                 collection_name=self.collection,
                 ids=point_ids,
                 with_payload=True,
+                with_vectors=with_vectors,
             )
-            return [dict(r.payload or {}) for r in records]
+            out = []
+            for rec in records:
+                item = dict(rec.payload or {})
+                if with_vectors:
+                    vec = rec.vector
+                    if isinstance(vec, dict):
+                        # Named vectors: {"": dense, "bm25": sparse}
+                        vec = vec.get("") or next(
+                            (v for v in vec.values() if isinstance(v, list)), None
+                        )
+                    item["_vector"] = vec
+                out.append(item)
+            return out
 
     def update_payload(self, memory_id: str, payload: dict[str, Any]) -> None:
         """Upsert the payload for an existing point (match by memory_id).

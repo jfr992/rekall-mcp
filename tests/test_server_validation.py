@@ -8,12 +8,11 @@ from starlette.testclient import TestClient
 
 @pytest.fixture
 def fake_manager(monkeypatch):
-    import server
 
     fake = MagicMock()
     fake.save.return_value = "2026-06-10_note_abc12345"
     fake.recall.return_value = []
-    monkeypatch.setattr(server, "_memory_manager_instance", fake)
+    monkeypatch.setattr("memory.singleton._instance", fake)
     return fake
 
 

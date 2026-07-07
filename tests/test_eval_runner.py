@@ -306,3 +306,67 @@ def test_claude_judge_returns_stdout_on_success(monkeypatch):
     judge = _judge_client("anthropic")
     result = judge.complete("Is this answer correct? Yes or No.")
     assert result == "Yes\n"
+
+
+def test_evaluate_survives_arm_timeout(tmp_path):
+    """One hung claude -p must not kill the whole billable run: the cell is
+    recorded as a timeout failure and the loop continues (gate run 2 died at
+    probe 15/16 from a single 300s TimeoutExpired)."""
+    import subprocess
+
+    from benchmarks.eval.runner import evaluate
+
+    class FakeBackend:
+        def wipe(self): ...
+
+        def seed(self, memories, cwd):
+            return {f"mem{i}": m.get("session_id", f"probe:{i}") for i, m in enumerate(memories)}
+
+        def recall_ids(self, query, project, limit=5):
+            return ["mem0"]
+
+    class FakeOut:
+        answer = "port 9741"
+        rekall_payload_tokens = 42
+        input_tokens = 900
+        prompt_tokens = 10
+
+    def run_arm(arm, item, ws):
+        if item["item_id"] == "er-01" and arm == "seeded":
+            raise subprocess.TimeoutExpired(cmd="claude", timeout=300)
+        return FakeOut()
+
+    items = [
+        {
+            "item_id": "er-01",
+            "question": "port?",
+            "question_type": "exact-recall",
+            "seed_memories": [{"summary": "proxy on 9741", "type": "decision"}],
+            "gold_session_ids": ["probe:0"],
+            "oracle_regex": "9741",
+            "entry": None,
+        },
+        {
+            "item_id": "er-02",
+            "question": "bucket?",
+            "question_type": "exact-recall",
+            "seed_memories": [{"summary": "bucket is velvet-otter", "type": "fact"}],
+            "gold_session_ids": ["probe:0"],
+            "oracle_regex": "velvet-otter",
+            "entry": None,
+        },
+    ]
+    records = evaluate(
+        items,
+        ["seeded", "absent"],
+        {
+            "backend": FakeBackend(),
+            "run_arm": run_arm,
+            "scorer": lambda item, ans: "9741" in ans,
+            "workspace_root": tmp_path,
+        },
+    )
+    assert len(records) == 4  # timeout cell recorded, run continued to er-02
+    t = next(r for r in records if r["item_id"] == "er-01" and r["arm"] == "seeded")
+    assert t["correct"] is False and t.get("timed_out") is True
+    assert any(r["item_id"] == "er-02" for r in records)

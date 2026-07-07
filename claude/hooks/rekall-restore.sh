@@ -38,7 +38,9 @@ stats=$(curl -sf --max-time 2 "$API/api/memory/stats" 2>/dev/null \
 touch "$MARKER"
 
 if [[ -n "$stats" ]]; then
-  echo "Rekall ready — ${stats}${vectors}. Use recall_memories() on demand."
+  # Imperative wording measured: soft "on demand" left agents skipping memory on
+  # ~45% of memory-dependent questions (eval run 8); check-first closes the gap.
+  echo "Rekall ready — ${stats}${vectors}. Before answering anything about prior decisions, current values, or past work: check memory first with recall_memories()."
 fi
 
 exit 0

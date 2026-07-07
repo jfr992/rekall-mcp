@@ -818,16 +818,19 @@ class TestMemoryManagerSingleton:
 
     def test_get_memory_manager_returns_same_instance(self):
         pytest.importorskip("mcp", reason="mcp package not installed locally")
+        # Reset singleton
+        import memory.singleton as _ms
         import server
 
-        # Reset singleton
-        server._memory_manager_instance = None
+        _ms._instance = None
         try:
             m1 = server._get_memory_manager()
             m2 = server._get_memory_manager()
             assert m1 is m2
         finally:
-            server._memory_manager_instance = None
+            import memory.singleton as _ms
+
+            _ms._instance = None
 
 
 class TestCliRecallType:

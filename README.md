@@ -125,6 +125,10 @@ Recall uses a 3-phase pipeline instead of flat cosine search:
 
 This finds memories that are *structurally related*, not just textually similar. Falls back to pure vector search when the graph is empty.
 
+### Freshness — conflict detection at read time
+
+When the same memory type appears in the result set, Rekall detects conflicting entries via graph edges and stored-vector cosine (θ ≥ 0.9). The `recall_formatted` output renders entries newest-first; outdated entries are collapsed to a stub line so the agent acts on current information only. No data is deleted — the detection is ephemeral and happens entirely at read time.
+
 ### Cockpit UI
 
 Browse the knowledge graph at `http://localhost:3333/brain` — the Next.js cockpit ships as a container, started by `docker compose up -d` alongside Qdrant and the backend. (For UI development, `cd ui && npm run dev -- -p 3333` still works.) Surfaces:
@@ -402,6 +406,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/resume` | GET | Resume packet for continuity |
 | `/api/memory/prune/plan` | POST | Build prune plan (plan-id, 15-min TTL, 200-deletion cap) |
 | `/api/memory/prune/apply` | POST | Apply plan with typed-id confirmation (REST-only) |
+| `/api/memory/prune/superseded` | POST | Gated auto-prune of superseded memories (confirm-date token, ≤10/fire, ≤20/day, backup-first; REST-only) |
 | `/api/memory/lifecycle/backfill` | POST | Backfill tier metadata (dry-run + execute) |
 | `/api/memory/{id}` | DELETE | Delete a single memory |
 | `/api/memory/cleanup` | POST | Batch cleanup (prune superseded, age-based) |
@@ -514,4 +519,4 @@ src/
 
 ## License
 
-Apache-2.0
+Apache-2.0 Conflict-group members carry ephemeral `_outdated: true`.
