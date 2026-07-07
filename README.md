@@ -125,6 +125,10 @@ Recall uses a 3-phase pipeline instead of flat cosine search:
 
 This finds memories that are *structurally related*, not just textually similar. Falls back to pure vector search when the graph is empty.
 
+### Freshness — conflict detection at read time
+
+When the same memory type appears in the result set, Rekall detects conflicting entries via graph edges and stored-vector cosine (θ ≥ 0.9). The `recall_formatted` output renders entries newest-first; outdated entries are collapsed to a stub line so the agent acts on current information only. No data is deleted — the detection is ephemeral and happens entirely at read time.
+
 ### Cockpit UI
 
 Browse the knowledge graph at `http://localhost:3333/brain` — the Next.js cockpit ships as a container, started by `docker compose up -d` alongside Qdrant and the backend. (For UI development, `cd ui && npm run dev -- -p 3333` still works.) Surfaces:

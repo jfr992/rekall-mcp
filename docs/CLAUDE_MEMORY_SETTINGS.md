@@ -154,7 +154,35 @@ When behavior drifts:
    - rebuild graph: `curl -X POST http://localhost:8000/api/memory/graph/rebuild`
    - restart: `docker compose restart mcp`
 
-## 6) Skill reference
+## 6) Freshness — conflict detection and stale-content suppression
+
+Rekall detects conflicting memories of the same type at read time, not write time, so no data is lost:
+
+- **On every save**: the auto-linker records `supersedes` or `contradicts` graph edges when a new memory is highly similar to an existing one of the same type.
+- **On every recall**: the two top-N results are compared via graph edges and stored-vector cosine (θ ≥ 0.9). Conflicting pairs are annotated with `_outdated: True` on all but the newest member. This is ephemeral — nothing is written back.
+- **In `recall_formatted` output**: entries render newest-first. Outdated entries are collapsed to a single stub line (`[outdated — replaced by the newer entry above]`) so the agent never acts on stale information. The imperative header `*…the newest is correct — ignore older values.*` appears whenever the same memory type repeats in the result set.
+- **Check memory first** before writing new facts in the same domain: `recall_memories(query, limit=5)` surfaces any existing entries that might already be superseded.
+
+## 7) Hooks: memory-prune.sh (gated daily superseded-prune)
+
+`claude/hooks/memory-prune.sh` is a thin `SessionStart` hook that fires the `/api/memory/prune/superseded` endpoint at most **once per calendar day**. Install it alongside `rekall-restore.sh` and `rekall-observe.sh`.
+
+**What it does:**
+- Sends `{"confirm_date": "YYYY-MM-DD"}` to `/api/memory/prune/superseded`.
+- The server evaluates safety gates (backup-first, ≤ 10 deletions per fire, ≤ 20 deletions per calendar day, confirm-date token must match today) before deleting anything.
+- Prints a one-line summary only when memories are actually removed.
+- Exits 0 and is silent on any error (curl timeout, server unreachable, empty result).
+
+**Kill switch:** set `REKALL_AUTOSAVE=0` — the hook exits immediately without calling the server. The same variable gates `rekall-observe.sh` autosave.
+
+**Server-side caps (hard limits in `src/memory/prune_superseded.py`):**
+- `MAX_PER_FIRE = 10` — maximum deletions in one endpoint call.
+- `MAX_PER_DAY = 20` — maximum deletions across all calls in a calendar day.
+- A backup tarball is created before any deletion (writes to `~/backups/`).
+
+**Marker file:** `$REKALL_MARKER_DIR/rekall-prune-YYYYMMDD` (default `/tmp`) prevents re-firing within the same day. Delete it to force a re-run.
+
+## 8) Skill reference
 
 | Skill | Command | Purpose |
 |-------|---------|---------|
