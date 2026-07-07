@@ -80,6 +80,14 @@ def test_malformed_superseder_date_refused():
     assert build_candidates([_edge("new", "old")], _lookup(table), TODAY) == []
 
 
+def test_gate_llm_refined_supersedes_refused():
+    """Edge with relation=supersedes AND llm_refined=True must never be a deletion signal."""
+    table = {"new": _mem("2026-06-01"), "old": _mem("2026-01-01")}
+    edge = ("new", "old", {"relation": "supersedes", "created": "2026-06-01", "llm_refined": True})
+    cands = build_candidates([edge], _lookup(table), TODAY)
+    assert cands == []
+
+
 def test_chain_leaf_first_ordering():
     # A supersedes B, B supersedes C — C must sort before B, so deleting B never orphans C.
     table = {"A": _mem("2026-06-01"), "B": _mem("2026-02-01"), "C": _mem("2025-12-01")}

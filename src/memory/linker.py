@@ -123,7 +123,7 @@ def auto_link(
         if candidate_id == memory_id or not candidate_id:
             continue
 
-        relation = _classify_relation(
+        relation, llm_refined = _classify_relation(
             new_type=memory_type,
             new_content=content,
             cand_type=candidate.get("type", "note"),
@@ -137,7 +137,17 @@ def auto_link(
             continue
 
         if relation == "supersedes":
-            graph.add_edge(memory_id, candidate_id, "supersedes", weight=candidate["score"])
+            graph.add_edge(
+                memory_id,
+                candidate_id,
+                "supersedes",
+                weight=candidate["score"],
+                llm_refined=llm_refined,
+            )
+            if llm_refined:
+                logger.debug(
+                    "llm_refined supersedes: %s -> %s", memory_id, candidate_id
+                )
             # Reduce the importance of the superseded memory.
             if candidate_id in graph._graph:
                 old_importance = graph._graph.nodes[candidate_id].get("importance", 0.0)
@@ -147,7 +157,13 @@ def auto_link(
 
         elif relation == "contradicts":
             # Direction from newer memory -> older memory.
-            graph.add_edge(memory_id, candidate_id, "contradicts", weight=candidate["score"])
+            graph.add_edge(
+                memory_id,
+                candidate_id,
+                "contradicts",
+                weight=candidate["score"],
+                llm_refined=llm_refined,
+            )
 
         elif relation == "led_to":
             # Direction decision -> learning.
@@ -179,10 +195,14 @@ def _entity_overlap(new_entities: list[str], cand_entities: list[str]) -> int:
     return len(new_set & cand_set)
 
 
-def _llm_refine(*, new_content: str, cand_content: str, deterministic: str) -> str:
-    """Optionally refine the deterministic relation via a Haiku call. Fail-open."""
+def _llm_refine(*, new_content: str, cand_content: str, deterministic: str) -> tuple[str, bool]:
+    """Optionally refine the deterministic relation via a Haiku call. Fail-open.
+
+    Returns ``(relation, llm_refined)`` where ``llm_refined`` is True only when
+    the LLM answer differed from the deterministic input.
+    """
     if not os.getenv("ANTHROPIC_API_KEY"):
-        return deterministic
+        return deterministic, False
     try:
         import anthropic as _ant
 
@@ -208,9 +228,11 @@ def _llm_refine(*, new_content: str, cand_content: str, deterministic: str) -> s
             "CONTRADICTS": "contradicts",
             "RELATED": "related_to",
         }
-        return mapping.get(word, deterministic)
+        result = mapping.get(word, deterministic)
+        llm_refined = result != deterministic
+        return result, llm_refined
     except Exception:
-        return deterministic
+        return deterministic, False
 
 
 def _classify_relation(
@@ -222,16 +244,18 @@ def _classify_relation(
     similarity: float,
     new_entities: list[str] | None = None,
     cand_entities: list[str] | None = None,
-) -> str:
+) -> tuple[str, bool]:
     """Classify a pair relation.
 
-    Current implementation applies heuristic rules in order.
+    Returns ``(relation, llm_refined)`` — ``llm_refined`` is True when the LLM
+    answer overrode the deterministic classification.  All non-LLM paths return
+    ``llm_refined=False``.
     """
     if _is_contradiction(new_content=new_content, cand_content=cand_content, similarity=similarity):
-        return "contradicts"
+        return "contradicts", False
 
     if similarity > 0.9 and new_type == cand_type:
-        return "supersedes"
+        return "supersedes", False
 
     # Entity-band contradicts: same type, mid-range similarity, shared entities signal conflict.
     if (
@@ -239,22 +263,25 @@ def _classify_relation(
         and _CONTRADICTION_SIMILARITY_THRESHOLD <= similarity < 0.9
         and _entity_overlap(new_entities or [], cand_entities or []) >= 1
     ):
-        return _llm_refine(
+        relation, llm_refined = _llm_refine(
             new_content=new_content,
             cand_content=cand_content,
             deterministic="contradicts",
         )
+        if llm_refined:
+            logger.debug("llm_refined %s: new -> cand", relation)
+        return relation, llm_refined
 
     if new_type == "learning" and cand_type == "decision":
-        return "led_to"
+        return "led_to", False
 
     if new_type == "decision" and cand_type == "requirement":
-        return "depends_on"
+        return "depends_on", False
 
     if similarity > _SIMILARITY_THRESHOLD:
-        return "related_to"
+        return "related_to", False
 
-    return "related_to"
+    return "related_to", False
 
 
 def _is_contradiction(
