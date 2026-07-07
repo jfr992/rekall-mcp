@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from memory.knowledge_graph import KnowledgeGraph
+from memory.representation import extract_entities
 
 if TYPE_CHECKING:
     from core.embeddings import Embedder
@@ -97,6 +99,7 @@ def auto_link(
     # vector format (encode(embedding_text)); falling back to content keeps
     # existing call-sites and unit tests unaffected.
     vector = embedder.encode(embedding_text if embedding_text is not None else content)
+    new_entities = extract_entities(content)
 
     candidates = store.search(
         vector=vector,
@@ -126,6 +129,8 @@ def auto_link(
             cand_type=candidate.get("type", "note"),
             cand_content=candidate.get("content", ""),
             similarity=candidate.get("score", 0.0),
+            new_entities=new_entities,
+            cand_entities=candidate.get("entities") or [],
         )
 
         if relation == "related_to" and candidate.get("score", 0.0) < _SIMILARITY_THRESHOLD:
@@ -167,6 +172,47 @@ def auto_link(
     )
 
 
+def _entity_overlap(new_entities: list[str], cand_entities: list[str]) -> int:
+    """Return count of case-insensitive shared entities between two lists."""
+    new_set = {e.lower() for e in new_entities}
+    cand_set = {e.lower() for e in cand_entities}
+    return len(new_set & cand_set)
+
+
+def _llm_refine(*, new_content: str, cand_content: str, deterministic: str) -> str:
+    """Optionally refine the deterministic relation via a Haiku call. Fail-open."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        return deterministic
+    try:
+        import anthropic as _ant
+
+        client = _ant.Anthropic()
+        response = client.messages.create(
+            model="claude-haiku-4-5",
+            max_tokens=20,
+            messages=[
+                {
+                    "role": "user",
+                    "content": (
+                        f"Memory A (newer): {new_content}\n"
+                        f"Memory B (older): {cand_content}\n\n"
+                        "Does A supersede B, contradict B, or is it just related? "
+                        "Reply with exactly one word: SUPERSEDES, CONTRADICTS, or RELATED."
+                    ),
+                }
+            ],
+        )
+        word = response.content[0].text.strip().upper()
+        mapping = {
+            "SUPERSEDES": "supersedes",
+            "CONTRADICTS": "contradicts",
+            "RELATED": "related_to",
+        }
+        return mapping.get(word, deterministic)
+    except Exception:
+        return deterministic
+
+
 def _classify_relation(
     *,
     new_type: str,
@@ -174,6 +220,8 @@ def _classify_relation(
     cand_type: str,
     cand_content: str,
     similarity: float,
+    new_entities: list[str] | None = None,
+    cand_entities: list[str] | None = None,
 ) -> str:
     """Classify a pair relation.
 
@@ -184,6 +232,18 @@ def _classify_relation(
 
     if similarity > 0.9 and new_type == cand_type:
         return "supersedes"
+
+    # Entity-band contradicts: same type, mid-range similarity, shared entities signal conflict.
+    if (
+        new_type == cand_type
+        and _CONTRADICTION_SIMILARITY_THRESHOLD <= similarity < 0.9
+        and _entity_overlap(new_entities or [], cand_entities or []) >= 1
+    ):
+        return _llm_refine(
+            new_content=new_content,
+            cand_content=cand_content,
+            deterministic="contradicts",
+        )
 
     if new_type == "learning" and cand_type == "decision":
         return "led_to"

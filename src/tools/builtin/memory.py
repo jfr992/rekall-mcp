@@ -528,7 +528,9 @@ class OptimizedMemoryTools(BaseToolProvider):
             project: str | None = None,
             days: int | None = None,
         ) -> str:
-            """Search memories using hybrid BM25 + semantic search.
+            """Use this whenever the question references prior decisions, current values or
+            settings, past learnings, or what was chosen/changed — before answering from
+            general knowledge.
 
             Uses RRF (Reciprocal Rank Fusion) to combine:
             - BM25 sparse vectors: exact term matching (great for ticket IDs, error codes, names)
