@@ -519,4 +519,4 @@ src/
 
 ## License
 
-Apache-2.0
+Apache-2.0 Conflict-group members carry ephemeral `_outdated: true`.
