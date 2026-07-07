@@ -346,3 +346,11 @@ def test_preamble_matches_hook_echo_line_shape():
         f"  Eval:  {eval_rendered!r}\n"
         f"  Update REKALL_SESSION_PREAMBLE in benchmarks/eval/driver.py to match."
     )
+
+
+def test_count_tokens_tolerates_special_token_text():
+    """LME haystacks can contain literal '<|endoftext|>' — tiktoken raises on
+    special tokens by default; for counting, treat them as plain text."""
+    from benchmarks.eval.driver import count_tokens
+
+    assert count_tokens("hello <|endoftext|> world") > 0

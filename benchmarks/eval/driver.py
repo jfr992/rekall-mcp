@@ -86,7 +86,9 @@ _REKALL_PREFIX = "mcp__rekall__"
 
 
 def count_tokens(text: str) -> int:
-    return len(_ENC.encode(text))
+    # disallowed_special=() — LME haystacks can contain literal special-token
+    # strings like <|endoftext|>; for counting they are plain text, not markers.
+    return len(_ENC.encode(text, disallowed_special=()))
 
 
 @dataclass
