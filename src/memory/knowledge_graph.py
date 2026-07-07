@@ -64,6 +64,7 @@ class Edge:
     relation: str
     weight: float
     auto: bool = True
+    llm_refined: bool = False
     created: str = field(default_factory=lambda: date.today().isoformat())
 
 
@@ -97,6 +98,7 @@ class KnowledgeGraph:
                 relation=edge["relation"],
                 weight=edge["weight"],
                 auto=edge.get("auto", True),
+                llm_refined=edge.get("llm_refined", False),
                 created=edge.get("created", date.today().isoformat()),
             )
 
@@ -186,6 +188,7 @@ class KnowledgeGraph:
         weight: float,
         *,
         auto: bool = True,
+        llm_refined: bool = False,
     ) -> None:
         if relation not in RELATION_TYPES:
             raise ValueError(f"Unknown relation: {relation}")
@@ -199,6 +202,7 @@ class KnowledgeGraph:
                     relation=relation,
                     weight=weight,
                     auto=auto,
+                    llm_refined=llm_refined,
                     created=date.today().isoformat(),
                 )
                 self._dirty = True
@@ -210,6 +214,7 @@ class KnowledgeGraph:
             relation=relation,
             weight=weight,
             auto=auto,
+            llm_refined=llm_refined,
             created=date.today().isoformat(),
         )
         self._dirty = True

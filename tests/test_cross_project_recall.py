@@ -59,7 +59,6 @@ def test_cross_project_recall_labels_scope(tmp_path):
 
 @pytest.fixture
 def fake_manager(monkeypatch):
-    import server
 
     fake = MagicMock()
     fake.recall_cross_project.return_value = {
@@ -69,7 +68,7 @@ def fake_manager(monkeypatch):
         "related_projects": [{"memory_id": "related", "scope": "related_project"}],
         "global": [{"memory_id": "global", "scope": "global"}],
     }
-    monkeypatch.setattr(server, "_memory_manager_instance", fake)
+    monkeypatch.setattr("memory.singleton._instance", fake)
     return fake
 
 

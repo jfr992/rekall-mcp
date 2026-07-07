@@ -728,12 +728,19 @@ class MemoryManager:
 
         Args:
             max_age_days_facts: Delete facts older than N days
-            prune_superseded: Delete memories superseded in knowledge graph
+            prune_superseded: Raises ValueError — use POST /api/memory/prune/superseded instead
             dry_run: Report what would be deleted without deleting
 
         Returns:
             Stats dict with pruning counts and flagged contradictions
         """
+        if prune_superseded:
+            raise ValueError(
+                "prune_superseded is gated: use POST /api/memory/prune/superseded "
+                "(backup + age/reinforcement/cap gates). Direct supersedes pruning "
+                "caused the 2026-07-05 99-memory data loss."
+            )
+
         stats: dict[str, Any] = {
             "facts_pruned": 0,
             "superseded_pruned": 0,
@@ -761,34 +768,22 @@ class MemoryManager:
                             self.delete(fact["id"])
                     stats["facts_pruned"] += count
 
-        # 2. Prune superseded memories
-        if prune_superseded:
-            graph = self.knowledge_graph
-            superseded_ids = set()
-            for _source, target, edge_data in graph._graph.edges(data=True):
-                if edge_data.get("relation") == "supersedes":
-                    superseded_ids.add(target)
-
-            for memory_id in superseded_ids:
-                if not dry_run:
-                    self.delete(memory_id)
-                stats["superseded_pruned"] += 1
-
-            # 3. Flag contradictions (do NOT delete)
-            seen_pairs: set[tuple[str, str]] = set()
-            for source, target, edge_data in graph._graph.edges(data=True):
-                if edge_data.get("relation") == "contradicts":
-                    pair = tuple(sorted([source, target]))
-                    if pair in seen_pairs:
-                        continue
-                    seen_pairs.add(pair)
-                    stats["contradictions_flagged"] += 1
-                    stats["contradictions"].append(
-                        {
-                            "memory_a": source,
-                            "memory_b": target,
-                        }
-                    )
+        # 2. Flag contradictions (do NOT delete) — always runs, not gated on prune_superseded
+        graph = self.knowledge_graph
+        seen_pairs: set[tuple[str, str]] = set()
+        for source, target, edge_data in graph._graph.edges(data=True):
+            if edge_data.get("relation") == "contradicts":
+                pair = tuple(sorted([source, target]))
+                if pair in seen_pairs:
+                    continue
+                seen_pairs.add(pair)
+                stats["contradictions_flagged"] += 1
+                stats["contradictions"].append(
+                    {
+                        "memory_a": source,
+                        "memory_b": target,
+                    }
+                )
 
         return stats
 
@@ -890,6 +885,7 @@ class MemoryManager:
                             "score": round(vector_score, 4),
                             "content": result.get("content"),
                             "date": result.get("date"),
+                            "timestamp": result.get("timestamp"),
                             "type": result.get("type"),
                             "project": result.get("project"),
                             "memory_id": memory_id,
@@ -933,6 +929,7 @@ class MemoryManager:
                         "vector_score": round(vector_score, 4),
                         "content": result.get("content"),
                         "date": result.get("date"),
+                        "timestamp": result.get("timestamp"),
                         "type": result.get("type"),
                         "project": result.get("project"),
                         "memory_id": memory_id,
@@ -946,7 +943,24 @@ class MemoryManager:
             if cutoff_date:
                 scored = [r for r in scored if (r.get("date") or "") >= cutoff_date]
 
-            return scored[:limit]
+            results = scored[:limit]
+
+            # Stage B freshness annotation (read-only; spec 2026-07-06)
+            try:
+                from memory.freshness import detect_conflict_groups, mark_outdated
+
+                top_ids = [m["memory_id"] for m in results if m.get("memory_id")]
+                vecs = {
+                    r.get("memory_id"): r.get("_vector")
+                    for r in self.store.get_many(top_ids, with_vectors=True)
+                    if r.get("memory_id")
+                }
+                groups = detect_conflict_groups(results, self.knowledge_graph, vecs)
+                mark_outdated(results, groups)
+            except Exception:
+                logger.debug("freshness annotation skipped", exc_info=True)
+
+            return results
 
     def recall_cross_project(
         self,
@@ -1031,11 +1045,34 @@ class MemoryManager:
 
     def _format_with_guidance(self, memories: list[dict]) -> str:
         """Format memories with type-specific guidance."""
+        # Newest-first: deterministic freshness (spec 2026-07-06). Stable sort
+        # keeps retrieval order on total ties; timestamp falls back to date.
+        memories = sorted(
+            memories,
+            key=lambda m: m.get("timestamp") or m.get("date") or "",
+            reverse=True,
+        )
+
+        from collections import Counter
+
+        type_counts = Counter(m.get("type", "note") for m in memories)
+        header = ""
+        if any(c >= 2 for c in type_counts.values()):
+            header = (
+                "*Entries are newest-first. If entries conflict, "
+                "the newest is correct — ignore older values.*\n\n"
+            )
+
         # Group by type
         by_type: dict[str, list[dict]] = {}
         for mem in memories:
             t = mem.get("type", "note")
             by_type.setdefault(t, []).append(mem)
+
+        def _line(m: dict) -> str:
+            if m.get("_outdated"):
+                return "- [outdated — replaced by the newer entry above]"
+            return f"- {m['content']} ({m.get('date', 'unknown date')})"
 
         sections = []
 
@@ -1045,7 +1082,7 @@ class MemoryManager:
             lines = ["## User Preferences (suggestions, not requirements)"]
             lines.append("*Show these as the default, but always offer alternatives.*\n")
             for p in prefs:
-                lines.append(f"- {p['content']} ({p.get('date', 'unknown date')})")
+                lines.append(_line(p))
             sections.append("\n".join(lines))
 
         # Decisions - these are more fixed but can be revisited
@@ -1054,7 +1091,7 @@ class MemoryManager:
             lines = ["## Past Decisions (established, but can be changed)"]
             lines.append("*Reference these but ask if user wants to reconsider.*\n")
             for d in decisions:
-                lines.append(f"- {d['content']} ({d.get('date', 'unknown date')})")
+                lines.append(_line(d))
             sections.append("\n".join(lines))
 
         # Requirements - these are hard constraints
@@ -1063,7 +1100,7 @@ class MemoryManager:
             lines = ["## Requirements (must follow)"]
             lines.append("*These are constraints that must be respected.*\n")
             for r in reqs:
-                lines.append(f"- {r['content']} ({r.get('date', 'unknown date')})")
+                lines.append(_line(r))
             sections.append("\n".join(lines))
 
         # Facts/context - informational
@@ -1071,17 +1108,17 @@ class MemoryManager:
             facts = by_type.pop("fact")
             lines = ["## Known Facts (context)"]
             for f in facts:
-                lines.append(f"- {f['content']}")
+                lines.append(_line(f))
             sections.append("\n".join(lines))
 
         # Everything else (notes, learnings, etc.)
         for mem_type, mems in by_type.items():
             lines = [f"## {mem_type.title()}s"]
             for m in mems:
-                lines.append(f"- {m['content']} ({m.get('date', 'unknown date')})")
+                lines.append(_line(m))
             sections.append("\n".join(lines))
 
-        return "\n\n".join(sections)
+        return header + "\n\n".join(sections)
 
     # -------------------------------------------------------------------------
     # PROJECT CONTEXT: Stable, cache-friendly

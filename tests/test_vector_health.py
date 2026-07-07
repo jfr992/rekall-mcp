@@ -39,7 +39,7 @@ def test_health_endpoint_degrades_on_zero_vectors(monkeypatch, tmp_path):
     import server
 
     manager = _manager_with_vectors(tmp_path, [[0.0, 0.0], [0.0, 0.0]])
-    monkeypatch.setattr(server, "_memory_manager_instance", manager)
+    monkeypatch.setattr("memory.singleton._instance", manager)
     server._reset_vector_health_cache()
 
     app = Starlette(routes=[Route("/health", server.health_check)])
@@ -53,7 +53,7 @@ def test_health_endpoint_healthy_with_real_vectors(monkeypatch, tmp_path):
     import server
 
     manager = _manager_with_vectors(tmp_path, [[0.3, 0.7]])
-    monkeypatch.setattr(server, "_memory_manager_instance", manager)
+    monkeypatch.setattr("memory.singleton._instance", manager)
     server._reset_vector_health_cache()
 
     app = Starlette(routes=[Route("/health", server.health_check)])

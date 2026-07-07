@@ -255,9 +255,12 @@ def test_installer_default_does_not_install_startup_capsule(tmp_path):
     assert "backend not reachable" in result.stdout
     assert (home / ".claude" / "hooks" / "rekall-restore.sh").exists()
     assert (home / ".claude" / "hooks" / "rekall-observe.sh").exists()
+    assert (home / ".claude" / "hooks" / "memory-prune.sh").exists()
     assert not (home / ".claude" / "hooks" / "session-start-memory.sh").exists()
     settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
-    assert "SessionStart" not in settings.get("hooks", {})
+    commands = _settings_commands(settings, "SessionStart")
+    assert any("memory-prune.sh" in c for c in commands)
+    assert not any("session-start-memory.sh" in c for c in commands)
 
 
 def test_installer_opt_in_installs_startup_capsule_and_backs_up_existing_hook(tmp_path):

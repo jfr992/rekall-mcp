@@ -118,7 +118,7 @@ def client(monkeypatch):
     manager.record_event.return_value = None
     import server
 
-    monkeypatch.setattr(server, "_memory_manager_instance", manager)
+    monkeypatch.setattr("memory.singleton._instance", manager)
     return TestClient(server.mcp.streamable_http_app()), manager
 
 

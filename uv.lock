@@ -1937,6 +1937,11 @@ ollama = [
     { name = "ollama" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "tdd-guard-pytest" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "click", specifier = ">=8.0.0" },
@@ -1960,6 +1965,9 @@ requires-dist = [
     { name = "tiktoken", marker = "extra == 'dev'", specifier = ">=0.7" },
 ]
 provides-extras = ["ollama", "gemini", "dev"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "tdd-guard-pytest", specifier = ">=0.1.2" }]
 
 [[package]]
 name = "requests"
@@ -2350,6 +2358,18 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/83/d3/803453b36afefb7c2bb238361cd4ae6125a569b4db67cd9e79846ba2d68c/sympy-1.14.0.tar.gz", hash = "sha256:d3d3fe8df1e5a0b42f0e7bdf50541697dbe7d23746e894990c030e2b05e72517", size = 7793921, upload-time = "2025-04-27T18:05:01.611Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a2/09/77d55d46fd61b4a135c444fc97158ef34a095e5681d0a6c10b75bf356191/sympy-1.14.0-py3-none-any.whl", hash = "sha256:e091cc3e99d2141a0ba2847328f5479b05d94a6635cb96148ccb3f34671bd8f5", size = 6299353, upload-time = "2025-04-27T18:04:59.103Z" },
+]
+
+[[package]]
+name = "tdd-guard-pytest"
+version = "0.1.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pytest" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e4/82/204f333a4d9005d2b8bdd39108bd40542a342f7296451d332a48ccb32a5c/tdd_guard_pytest-0.1.2.tar.gz", hash = "sha256:5fafd89e0dac6140d7db46865d12c09075d0ed211b6aac7c300393994582be00", size = 8332, upload-time = "2025-07-28T08:33:43.63Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c4/c7/69e1e53cfc6e06776cfe633d806ac78f643fcf8474ec1bdbf6e374aeb214/tdd_guard_pytest-0.1.2-py3-none-any.whl", hash = "sha256:4ca9333315f859b841461c03760ff8fe5d3525ab2389230233e7ad594f90117e", size = 4427, upload-time = "2025-07-28T08:33:42.617Z" },
 ]
 
 [[package]]

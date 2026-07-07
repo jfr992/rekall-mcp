@@ -363,48 +363,17 @@ class TestMemoryManagerCleanup:
         assert len(data["decisions"]) == 1
 
     def test_cleanup_prunes_superseded(self, tmp_path):
-        """cleanup() should delete memories superseded in the knowledge graph."""
-        today = datetime.now().strftime("%Y-%m-%d")
-        data = {
-            "date": today,
-            "preferences": [
-                {
-                    "id": f"{today}_preference_old",
-                    "content": "Old preference",
-                    "project": "test",
-                    "timestamp": f"{today}T10:00:00",
-                },
-                {
-                    "id": f"{today}_preference_new",
-                    "content": "New preference",
-                    "project": "test",
-                    "timestamp": f"{today}T11:00:00",
-                },
-            ],
-        }
-        (tmp_path / f"{today}.yaml").write_text(yaml.dump(data))
+        """cleanup(prune_superseded=True) is now gated — raises ValueError."""
+        import pytest
 
         from memory.manager import MemoryManager
 
         manager = MemoryManager(memory_dir=tmp_path)
-
-        manager.knowledge_graph.add_node(f"{today}_preference_old", memory_type="preference")
-        manager.knowledge_graph.add_node(f"{today}_preference_new", memory_type="preference")
-        manager.knowledge_graph.add_edge(
-            f"{today}_preference_new", f"{today}_preference_old", relation="supersedes", weight=0.9
-        )
-        manager.knowledge_graph.save()
-
-        result = manager.cleanup(prune_superseded=True)
-
-        assert result["superseded_pruned"] == 1
-        with open(tmp_path / f"{today}.yaml") as f:
-            remaining = yaml.safe_load(f)
-        assert len(remaining["preferences"]) == 1
-        assert remaining["preferences"][0]["id"] == f"{today}_preference_new"
+        with pytest.raises(ValueError, match="prune/superseded"):
+            manager.cleanup(prune_superseded=True)
 
     def test_cleanup_flags_contradictions(self, tmp_path):
-        """cleanup() should flag contradictions but not delete them."""
+        """cleanup() flags contradictions without deleting them (no prune_superseded needed)."""
         today = datetime.now().strftime("%Y-%m-%d")
         data = {
             "date": today,
@@ -435,7 +404,8 @@ class TestMemoryManagerCleanup:
         )
         manager.knowledge_graph.save()
 
-        result = manager.cleanup(prune_superseded=True)
+        # Contradiction flagging now always runs (moved outside prune_superseded gate)
+        result = manager.cleanup()
 
         assert result["contradictions_flagged"] == 1
         assert len(result["contradictions"]) == 1
@@ -480,7 +450,11 @@ class TestCleanupIntegration:
     """Integration: save -> supersede -> cleanup -> verify gone."""
 
     def test_full_cleanup_flow(self, tmp_path):
-        """Save memories, create supersedes, run cleanup, verify pruning."""
+        """Fact aging still prunes; prune_superseded is GATED (2026-07-05 incident).
+
+        Direct supersedes deletion via cleanup() caused the 99-memory data loss;
+        it now raises and points at the gated endpoint. Both memories survive.
+        """
         from memory.manager import MemoryManager
 
         manager = MemoryManager(memory_dir=tmp_path)
@@ -510,15 +484,16 @@ class TestCleanupIntegration:
         }
         (tmp_path / f"{old_date}.yaml").write_text(yaml.dump(old_fact_data))
 
-        # Run cleanup
-        result = manager.cleanup(max_age_days_facts=7, prune_superseded=True)
+        # The legacy supersedes-prune path is gated: raises, deletes NOTHING
+        with pytest.raises(ValueError, match="prune/superseded"):
+            manager.cleanup(max_age_days_facts=7, prune_superseded=True)
 
+        # Fact aging still works without the gated flag
+        result = manager.cleanup(max_age_days_facts=7)
         assert result["facts_pruned"] == 1
-        assert result["superseded_pruned"] >= 1  # auto-linker may create extra edges
         assert not (tmp_path / f"{old_date}.yaml").exists()
 
-        # New preference should survive, old one deleted.
-        # v1.5.0+ writes nested: <project>/<date>.yaml
+        # BOTH preferences survive — supersession affects reads, never deletes here
         today = datetime.now().strftime("%Y-%m-%d")
         candidates = list(tmp_path.rglob(f"{today}.yaml"))
         assert len(candidates) >= 1, f"No surviving YAML found under {tmp_path}"
@@ -527,7 +502,7 @@ class TestCleanupIntegration:
             data = yaml.safe_load(yaml_file.read_text()) or {}
             all_preference_ids.extend(p["id"] for p in data.get("preferences", []))
         assert new_id in all_preference_ids
-        assert old_id not in all_preference_ids
+        assert old_id in all_preference_ids
 
     def test_cleanup_prunes_old_facts_in_nested_project_layout(self, tmp_path):
         """v1.5.0+ writes <project>/<date>.yaml — cleanup must find those too."""
