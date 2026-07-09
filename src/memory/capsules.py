@@ -89,8 +89,12 @@ def build_project_capsule(manager, project: str, limit: int = 300) -> dict[str, 
 
         if memory_type in _DANGER_TYPES and any(p.search(content) for p in _DANGER_PATTERNS):
             danger_zones.append(row)
-        elif (point.get("date", "") >= cutoff) and any(
-            p.search(content) for p in _OPEN_LOOP_PATTERNS
+        elif (
+            (point.get("date", "") >= cutoff)
+            # close_loop appends a RESOLVED stamp; the original TODO wording
+            # stays in content, so the loop patterns alone would still match
+            and "resolved" not in content
+            and any(p.search(content) for p in _OPEN_LOOP_PATTERNS)
         ):
             open_loops.append(row)
         elif memory_type in _STANDING_TYPES:

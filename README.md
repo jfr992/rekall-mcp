@@ -348,8 +348,9 @@ AI:  vector search finds the memory
 | Tool | Purpose |
 |------|---------|
 | `observe(summary)` | Auto-classify and save (accepts caller `cwd` for project scope) |
-| `recall_memories(query)` | Graph-enhanced semantic search |
+| `recall_memories(query, task_hint?)` | Graph-enhanced semantic search; `task_hint` (2+ words) surfaces memories matching your current task first |
 | `recall_across_projects(query, current_project)` | Cross-project transfer recall across current, related, and global memory |
+| `close_loop(memory_id, note?)` | Close an open loop: appends a RESOLVED stamp, drops it from the Open Loops capsule bucket |
 | `save_memory(content, type)` | Manual save with explicit type |
 | `memory_detail(memory_id)` | Single memory + neighbors + scope |
 | `memory_kb(project)` | Typed slices (decisions / requirements / preferences / learnings) |
@@ -386,7 +387,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 |----------|--------|---------|
 | `/health` | GET | Health check |
 | `/api/memory/save` | POST | Save a memory |
-| `/api/memory/recall` | POST | Graph-enhanced search |
+| `/api/memory/recall` | POST | Graph-enhanced search (optional `task_hint`: context-matched results first) |
 | `/api/memory/recall/cross-project` | POST | Cross-project transfer recall |
 | `/api/memory/reflex` | POST | Cue-triggered recall packet for risky commands or edits |
 | `/api/memory/observe` | POST | Auto-classify and save (accepts `cwd` for scope) |

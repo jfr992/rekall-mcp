@@ -9,6 +9,7 @@ Based on best practices from:
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from memory.scope import ScopeDetector
@@ -563,6 +564,39 @@ class OptimizedMemoryTools(BaseToolProvider):
             )
 
         registered.append("recall_memories")
+
+        @mcp.tool(structured_output=False)
+        async def close_loop(memory_id: str, note: str | None = None) -> str:
+            """Use when a pending item, TODO, or open loop is finished, blocked, or
+            abandoned — keeps the session-start Open Loops list accurate.
+
+            Appends a RESOLVED stamp to the memory (history preserved, nothing
+            deleted); the item drops out of the Open Loops capsule bucket.
+
+            Args:
+                memory_id: The id of the memory holding the pending/todo item
+                note: Optional one-line resolution (e.g. "merged in PR #44")
+            """
+            hits = self.manager.store.get_many([memory_id])
+            if not hits:
+                return f"No memory found with id {memory_id}."
+            payload = hits[0]
+            scope = self._get_current_scope()
+            mem_project = payload.get("project")
+            if mem_project and scope.project and mem_project != scope.project:
+                return (
+                    f"Refused: {memory_id} belongs to project "
+                    f"{mem_project!r}, not {scope.project!r}."
+                )
+            if "RESOLVED" in str(payload.get("content", "")):
+                return f"{memory_id} is already resolved — no change."
+            stamp = f"RESOLVED {datetime.now().strftime('%Y-%m-%d')}"
+            if note:
+                stamp += f": {note}"
+            result = self.manager.update_memory_content(memory_id, stamp)
+            return f"Closed loop {result['memory_id']} — it will drop out of Open Loops."
+
+        registered.append("close_loop")
 
         @mcp.tool(structured_output=False)
         async def recall_across_projects(
