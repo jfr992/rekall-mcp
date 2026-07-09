@@ -55,7 +55,8 @@ def test_build_embedding_text_adds_scope_and_entities():
     assert "Claim: Two-node clusters need Longhorn replica settings." in text
 
 
-def test_manager_saves_embedding_text_and_uses_it_for_vector(tmp_path, monkeypatch):
+def test_manager_encodes_raw_content_for_dense_vector(tmp_path, monkeypatch):
+    """Dense vector = encode(content); embedding_text stays for BM25 + payload (repr v2)."""
     from memory.manager import MemoryManager
 
     captured = {}
@@ -87,12 +88,17 @@ def test_manager_saves_embedding_text_and_uses_it_for_vector(tmp_path, monkeypat
 
     manager.save("Longhorn settings matter", type="learning", project="byte-edge")
 
-    assert captured["encoded_text"].startswith("Project byte-edge.")
-    assert captured["payload"]["embedding_text"] == captured["encoded_text"]
+    assert captured["encoded_text"] == "Longhorn settings matter"
+    assert captured["payload"]["embedding_text"].startswith("Project byte-edge.")
+    # BM25 sparse leg keeps the enriched representation
+    assert captured["content"] == captured["payload"]["embedding_text"]
     assert "Longhorn" in captured["payload"]["entities"]
+    assert captured["payload"]["repr_version"] == 2
 
 
-def test_manager_uses_embedding_text_for_duplicate_search_before_save(tmp_path, monkeypatch):
+def test_manager_uses_raw_content_for_duplicate_search_before_save(tmp_path, monkeypatch):
+    """Dedupe dense leg queries with raw content first (matches stored repr v2
+    vectors); embedding_text runs second for the BM25 leg + legacy vectors."""
     from memory.manager import MemoryManager
 
     events = []
@@ -127,17 +133,19 @@ def test_manager_uses_embedding_text_for_duplicate_search_before_save(tmp_path, 
 
     manager.save("Longhorn settings matter", type="learning", project="byte-edge")
 
-    assert events[0][0] == "encode"
-    assert events[0][1].startswith("Project byte-edge.")
-    assert events[1] == ("search", events[0][1])
-    assert events[2] == ("encode", "Longhorn settings matter")
-    assert events[3] == ("search", "Longhorn settings matter")
-    assert events[4] == ("encode", events[0][1])
+    assert events[0] == ("encode", "Longhorn settings matter")
+    assert events[1] == ("search", "Longhorn settings matter")
+    assert events[2][0] == "encode"
+    assert events[2][1].startswith("Project byte-edge.")
+    assert events[3] == ("search", events[2][1])
+    assert events[4] == ("encode", "Longhorn settings matter")
     assert events[5][0] == "save"
     assert captured["payload"]["content"] == "Longhorn settings matter"
 
 
-def test_duplicate_search_falls_back_to_raw_content_for_legacy_vectors(tmp_path):
+def test_duplicate_search_falls_back_to_embedding_text_for_legacy_vectors(tmp_path):
+    """Pre-migration points were encoded from embedding_text; the second dedupe
+    pass keeps catching them (and feeds the BM25 leg the enriched text)."""
     from memory.manager import MemoryManager
 
     queries = []
@@ -145,7 +153,7 @@ def test_duplicate_search_falls_back_to_raw_content_for_legacy_vectors(tmp_path)
     class Store:
         def search(self, *args, **kwargs):
             queries.append(kwargs["query_text"])
-            if kwargs["query_text"] == "Longhorn settings matter":
+            if kwargs["query_text"] == "Project byte-edge. Claim: Longhorn settings matter":
                 return [{"memory_id": "legacy", "content": "Longhorn settings matter"}]
             return []
 
@@ -166,6 +174,6 @@ def test_duplicate_search_falls_back_to_raw_content_for_legacy_vectors(tmp_path)
 
     assert memory_id == "legacy"
     assert queries == [
-        "Project byte-edge. Claim: Longhorn settings matter",
         "Longhorn settings matter",
+        "Project byte-edge. Claim: Longhorn settings matter",
     ]
