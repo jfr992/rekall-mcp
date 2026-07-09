@@ -27,9 +27,15 @@ _MAX_CANDIDATES = 10
 #   supersedes 0.9 -> 0.85  (entity-band max 0.7717 < S <= supersedes min 0.9261)
 #   contradiction floor 0.6 -> 0.46  (unrelated 0.1678 < C <= band min 0.7464)
 #   similar floor 0.5 -> 0.40  (same bracket; keeps the historical offset below C)
+# Bracket data is n~5 fixture pairs — the 0.46/0.40 floors are PROVISIONAL
+# (wide, sparsely-bracketed interval) pending the corpus-scale dry-run
+# (scripts/edge_count_dryrun.py) measuring band membership on live data.
 _SIMILARITY_THRESHOLD = 0.40
 _CONTRADICTION_SIMILARITY_THRESHOLD = 0.46
 _SUPERSEDES_SIMILARITY_THRESHOLD = 0.85
+# Widened entity band can put every candidate in the LLM-refine path; bound
+# the per-save Haiku spend (hook-discipline cost cliff).
+_MAX_LLM_REFINEMENTS_PER_SAVE = 3
 
 _NEGATION_PATTERNS = (
     r"\bno longer\b",
@@ -115,6 +121,7 @@ def auto_link(
     )
 
     relations: dict[str, int] = {}
+    llm_budget = {"remaining": _MAX_LLM_REFINEMENTS_PER_SAVE}
 
     # Ensure source node exists before we add edges.
     if memory_id not in graph._graph:
@@ -137,6 +144,7 @@ def auto_link(
             similarity=candidate.get("score", 0.0),
             new_entities=new_entities,
             cand_entities=candidate.get("entities") or [],
+            llm_budget=llm_budget,
         )
 
         if relation == "related_to" and candidate.get("score", 0.0) < _SIMILARITY_THRESHOLD:
@@ -199,14 +207,26 @@ def _entity_overlap(new_entities: list[str], cand_entities: list[str]) -> int:
     return len(new_set & cand_set)
 
 
-def _llm_refine(*, new_content: str, cand_content: str, deterministic: str) -> tuple[str, bool]:
+def _llm_refine(
+    *,
+    new_content: str,
+    cand_content: str,
+    deterministic: str,
+    budget: dict[str, int] | None = None,
+) -> tuple[str, bool]:
     """Optionally refine the deterministic relation via a Haiku call. Fail-open.
 
     Returns ``(relation, llm_refined)`` where ``llm_refined`` is True only when
-    the LLM answer differed from the deterministic input.
+    the LLM answer differed from the deterministic input. ``budget`` (mutable,
+    shared per save) bounds actual API calls; exhausted budget keeps the
+    deterministic answer.
     """
     if not os.getenv("ANTHROPIC_API_KEY"):
         return deterministic, False
+    if budget is not None:
+        if budget.get("remaining", 0) <= 0:
+            return deterministic, False
+        budget["remaining"] -= 1
     try:
         import anthropic as _ant
 
@@ -248,6 +268,7 @@ def _classify_relation(
     similarity: float,
     new_entities: list[str] | None = None,
     cand_entities: list[str] | None = None,
+    llm_budget: dict[str, int] | None = None,
 ) -> tuple[str, bool]:
     """Classify a pair relation.
 
@@ -271,6 +292,7 @@ def _classify_relation(
             new_content=new_content,
             cand_content=cand_content,
             deterministic="contradicts",
+            budget=llm_budget,
         )
         if llm_refined:
             logger.debug("llm_refined %s: new -> cand", relation)
