@@ -405,7 +405,6 @@ class KnowledgeGraph:
                 project=point.get("project", "general"),
                 embedder=embedder,
                 store=store,
-                embedding_text=point.get("embedding_text"),
             )
 
         # Apply idle-based importance decay as part of maintenance so the
