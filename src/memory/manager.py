@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from core import Embedder, Telemetry, VectorStore
+from core.utils import assert_test_isolation
 from memory.events import EventLog, MemoryEvent
 from memory.lifecycle import summarize_lifecycle
 from memory.linker import auto_link
@@ -146,6 +147,7 @@ class MemoryManager:
 
         # File storage
         self.memory_dir = Path(memory_dir).expanduser()
+        assert_test_isolation(storage_path=self.memory_dir)
         self.memory_dir.mkdir(parents=True, exist_ok=True)
 
         # Vector store (uses core infrastructure)

@@ -37,10 +37,18 @@ from .types import VALID_MEMORY_TYPES
 def memory(ctx, memory_dir: str, qdrant_url: str):
     """Memory system CLI for persistent AI context."""
     ctx.ensure_object(dict)
-    ctx.obj["manager"] = MemoryManager(
-        memory_dir=memory_dir,
-        qdrant_url=qdrant_url,
-    )
+    ctx.obj["memory_dir"] = memory_dir
+    ctx.obj["qdrant_url"] = qdrant_url
+
+
+def _manager(ctx) -> MemoryManager:
+    """Construct lazily — commands like --help, doctor, and backup never need one."""
+    if "manager" not in ctx.obj:
+        ctx.obj["manager"] = MemoryManager(
+            memory_dir=ctx.obj["memory_dir"],
+            qdrant_url=ctx.obj["qdrant_url"],
+        )
+    return ctx.obj["manager"]
 
 
 @memory.command()
@@ -62,7 +70,7 @@ def save(ctx, content: str, memory_type: str, project: str | None):
         memory save "Decided to use Python" --type decision
         memory save "User prefers diagrams" --type preference --project my-app
     """
-    mgr: MemoryManager = ctx.obj["manager"]
+    mgr: MemoryManager = _manager(ctx)
     memory_id = mgr.save(content, type=memory_type, project=project)
     click.echo(f"✓ Saved: {memory_id}")
 
@@ -94,7 +102,7 @@ def recall(
         memory recall "user preferences" --project my-app
         memory recall "recent work" --days 7
     """
-    mgr: MemoryManager = ctx.obj["manager"]
+    mgr: MemoryManager = _manager(ctx)
     results = mgr.recall(
         query,
         limit=limit,
@@ -125,7 +133,7 @@ def context(ctx, project: str):
     Examples:
         memory context my-project
     """
-    mgr: MemoryManager = ctx.obj["manager"]
+    mgr: MemoryManager = _manager(ctx)
     ctx_str = mgr.get_project_context(project)
 
     if ctx_str:
@@ -153,7 +161,7 @@ def end_session(
         memory end-session --tasks "Built API, Added tests" --project my-app
         memory end-session -t "Fixed bug" -d "Use Redis for cache" -p backend
     """
-    mgr: MemoryManager = ctx.obj["manager"]
+    mgr: MemoryManager = _manager(ctx)
 
     memory_id = mgr.save_session_summary(
         tasks_completed=[t.strip() for t in (tasks or "").split(",") if t.strip()],
@@ -172,7 +180,7 @@ def end_session(
 @click.pass_context
 def stats(ctx):
     """Show memory statistics."""
-    mgr: MemoryManager = ctx.obj["manager"]
+    mgr: MemoryManager = _manager(ctx)
     s = mgr.get_stats()
 
     click.echo("\n📊 Memory System Stats")
@@ -197,7 +205,7 @@ def clear(ctx, project: str):
     Examples:
         memory clear old-project
     """
-    mgr: MemoryManager = ctx.obj["manager"]
+    mgr: MemoryManager = _manager(ctx)
     result = mgr.clear_project(project)
     click.echo(
         f"✓ Cleared {result['deleted']} memories for: {project}"
