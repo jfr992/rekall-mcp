@@ -488,3 +488,47 @@ def test_llm_refine_supersedes_override(tmp_path, monkeypatch):
 
     assert result.relations.get("supersedes") == 1
     assert result.relations.get("contradicts", 0) == 0
+
+
+def test_llm_refinement_capped_per_save(tmp_path, monkeypatch):
+    """Widened entity band [0.46, 0.85) can put all 10 candidates in the LLM
+    path — cap Haiku calls at 3 per save; candidates past the cap keep the
+    deterministic classification."""
+    mock_response = SimpleNamespace(content=[SimpleNamespace(text="RELATED")])
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+    mock_anthropic = MagicMock()
+    mock_anthropic.Anthropic.return_value = mock_client
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setitem(sys.modules, "anthropic", mock_anthropic)
+
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    candidates = [
+        {
+            "memory_id": f"old_decision_{i}",
+            "type": "decision",
+            "content": f"Use PostgreSQL variant {i} for primary storage",
+            "score": 0.79,
+            "entities": ["PostgreSQL", "MongoDB"],
+        }
+        for i in range(5)
+    ]
+    for c in candidates:
+        kg.add_node(c["memory_id"], memory_type="decision")
+
+    result = auto_link(
+        graph=kg,
+        memory_id="new_decision",
+        content="Switched from PostgreSQL to MongoDB for primary storage",
+        memory_type="decision",
+        project="api",
+        embedder=_mock_embedder(),
+        store=_mock_store(candidates),
+    )
+
+    assert mock_client.messages.create.call_count == 3
+    # All five candidates still classified: 3 LLM-refined to related_to,
+    # 2 deterministic contradicts past the cap.
+    assert result.relations.get("related_to", 0) == 3
+    assert result.relations.get("contradicts", 0) == 2
