@@ -9,6 +9,7 @@ Based on best practices from:
 
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -566,7 +567,9 @@ class OptimizedMemoryTools(BaseToolProvider):
         registered.append("recall_memories")
 
         @mcp.tool(structured_output=False)
-        async def close_loop(memory_id: str, note: str | None = None) -> str:
+        async def close_loop(
+            memory_id: str, note: str | None = None, project: str | None = None
+        ) -> str:
             """Use when a pending item, TODO, or open loop is finished, blocked, or
             abandoned — keeps the session-start Open Loops list accurate.
 
@@ -576,19 +579,20 @@ class OptimizedMemoryTools(BaseToolProvider):
             Args:
                 memory_id: The id of the memory holding the pending/todo item
                 note: Optional one-line resolution (e.g. "merged in PR #44")
+                project: Your current project — pass it so cross-project closes
+                    are refused
             """
             hits = self.manager.store.get_many([memory_id])
             if not hits:
                 return f"No memory found with id {memory_id}."
             payload = hits[0]
-            scope = self._get_current_scope()
+            # Guard only on caller-supplied project: the backend's own cwd is
+            # NOT the caller's project (v1.5.0 scope pitfall) — comparing
+            # against it refuses every legitimate close.
             mem_project = payload.get("project")
-            if mem_project and scope.project and mem_project != scope.project:
-                return (
-                    f"Refused: {memory_id} belongs to project "
-                    f"{mem_project!r}, not {scope.project!r}."
-                )
-            if "RESOLVED" in str(payload.get("content", "")):
+            if project and mem_project and mem_project != project:
+                return f"Refused: {memory_id} belongs to project {mem_project!r}, not {project!r}."
+            if re.search(r"\bRESOLVED \d{4}-\d{2}-\d{2}", str(payload.get("content", ""))):
                 return f"{memory_id} is already resolved — no change."
             stamp = f"RESOLVED {datetime.now().strftime('%Y-%m-%d')}"
             if note:

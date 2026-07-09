@@ -50,9 +50,9 @@ async def test_close_loop_project_guard_refuses_cross_project(tool_registry):
     manager.store.get_many.return_value = [
         {"memory_id": "m1", "content": "TODO: wire auth retry", "project": "other-app"}
     ]
-    tools = _bind(_provider(manager, scope_project="my-app"), tool_registry)
+    tools = _bind(_provider(manager), tool_registry)
 
-    out = await tools["close_loop"](memory_id="m1")
+    out = await tools["close_loop"](memory_id="m1", project="my-app")
 
     assert "Refused" in out
     manager.update_memory_content.assert_not_called()
@@ -86,6 +86,70 @@ async def test_close_loop_unknown_id(tool_registry):
 
     assert "No memory found" in out
     manager.update_memory_content.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_close_loop_without_project_param_does_not_false_refuse(tool_registry):
+    """The backend server's cwd is NOT the caller's project (v1.5.0 pitfall).
+    With no explicit project from the caller, the guard must not compare
+    against the backend's own scope and refuse legitimate closes."""
+    from tools.builtin.memory import OptimizedMemoryTools
+
+    manager = MagicMock()
+    manager.store.get_many.return_value = [
+        {"memory_id": "m1", "content": "TODO: wire auth retry", "project": "some-user-app"}
+    ]
+    manager.update_memory_content.return_value = {"memory_id": "m1"}
+    provider = OptimizedMemoryTools()
+    provider._manager = manager  # scope detection left REAL — backend cwd
+
+    tools = _bind(provider, tool_registry)
+    out = await tools["close_loop"](memory_id="m1")
+
+    manager.update_memory_content.assert_called_once()
+    assert "Closed loop" in out
+
+
+@pytest.mark.asyncio
+async def test_close_loop_unresolved_wording_is_still_closeable(tool_registry):
+    """Pasted alert text containing UNRESOLVED must not trip the no-op guard —
+    only the structured stamp counts as closed (adversarial review finding)."""
+    manager = MagicMock()
+    manager.store.get_many.return_value = [
+        {
+            "memory_id": "m1",
+            "content": "TODO: fix pager alert 'DNS UNRESOLVED for 3h'",
+            "project": "my-app",
+        }
+    ]
+    manager.update_memory_content.return_value = {"memory_id": "m1"}
+    tools = _bind(_provider(manager), tool_registry)
+
+    out = await tools["close_loop"](memory_id="m1")
+
+    manager.update_memory_content.assert_called_once()
+    assert "Closed loop" in out
+
+
+def test_unresolved_todo_stays_in_open_loops():
+    """'unresolved' contains 'resolved' — substring exclusion would silently
+    drop the strongest open-loop signal (adversarial review finding)."""
+    from memory.capsules import build_project_capsule
+
+    manager = MagicMock()
+    manager.store.scroll.return_value = [
+        {
+            "memory_id": "m1",
+            "content": "DNS flapping still unresolved — TODO: escalate to netops",
+            "type": "note",
+            "date": "2026-07-08",
+        }
+    ]
+    manager.knowledge_graph.get_importance.return_value = 0.5
+
+    cap = build_project_capsule(manager, "p")
+
+    assert [i["memory_id"] for i in cap["open_loops"]] == ["m1"]
 
 
 @pytest.mark.integration

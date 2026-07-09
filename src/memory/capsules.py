@@ -41,6 +41,7 @@ _OPEN_LOOP_PATTERNS = tuple(
         r"restart needed",
     )
 )
+_RESOLVED_STAMP = re.compile(r"\bresolved \d{4}-\d{2}-\d{2}")
 _DANGER_TYPES = {"learning", "fact", "requirement", "decision"}
 _STANDING_TYPES = {"decision", "requirement", "preference"}
 _OPEN_LOOP_MAX_AGE_DAYS = 90
@@ -92,8 +93,10 @@ def build_project_capsule(manager, project: str, limit: int = 300) -> dict[str, 
         elif (
             (point.get("date", "") >= cutoff)
             # close_loop appends a RESOLVED stamp; the original TODO wording
-            # stays in content, so the loop patterns alone would still match
-            and "resolved" not in content
+            # stays in content, so the loop patterns alone would still match.
+            # Stamp-shaped match only — bare "resolved"/"unresolved" prose is
+            # not a closure (adversarial review 2026-07-09).
+            and not _RESOLVED_STAMP.search(content)
             and any(p.search(content) for p in _OPEN_LOOP_PATTERNS)
         ):
             open_loops.append(row)

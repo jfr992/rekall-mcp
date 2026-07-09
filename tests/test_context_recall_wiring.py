@@ -63,6 +63,15 @@ def test_recall_formatted_passes_task_hint_through():
     assert "auth middleware rotation decision" in out
 
 
+def test_recall_promotes_via_entity_match_through_full_path():
+    """Entities must survive the scored-dict rebuild inside recall — otherwise
+    the entity bonus in _matches is dead code (adversarial review finding)."""
+    hits = [dict(h) for h in HITS]
+    hits[6]["entities"] = ["VectorStore", "Qdrant"]
+    out = MemoryManager.recall(_mgr(hits), "q", limit=5, task_hint="vectorstore qdrant tuning")
+    assert "m6" in [m["memory_id"] for m in out]
+
+
 def test_recall_single_token_hint_is_ignored():
     hits = [dict(h) for h in HITS]
     hits[7]["content"] = "auth middleware rotation decision"

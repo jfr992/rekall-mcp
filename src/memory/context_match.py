@@ -33,6 +33,8 @@ def _matches(memory: dict, tokens: list[str]) -> bool:
 
 
 def partition_by_context(results: list[dict], task_hint: str | None, limit: int) -> list[dict]:
+    # Mutates matched dicts in place (_context_matched=True) — recall() builds
+    # fresh dicts per call, so this is safe; do not feed cached pools.
     tokens = _hint_tokens(task_hint)
     if not tokens:
         return results[:limit]

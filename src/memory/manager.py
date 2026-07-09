@@ -634,6 +634,7 @@ class MemoryManager:
             raise ValueError(f"Memory not found: {memory_id}")
         payload = dict(found[0])
 
+        appended_text = Sanitizer.sanitize(appended_text)
         new_content = f"{payload['content']}\n\n{appended_text}"
         payload["content"] = new_content
         payload["entities"] = extract_entities(new_content)
@@ -651,8 +652,14 @@ class MemoryManager:
         return payload
 
     def _mutate_in_yaml(self, memory_id: str, new_content: str, payload: dict) -> None:
-        """Find the YAML entry by id across nested project dirs, rewrite atomically."""
-        for yaml_file in self.memory_dir.rglob("*.yaml"):
+        """Find the YAML entry by id across nested project dirs, rewrite atomically.
+
+        Narrowed to the date embedded in the id (same trick as delete()) —
+        scanning every YAML per close is a free 100x saved.
+        """
+        date_prefix = memory_id.split("_")[0]
+        pattern = f"{date_prefix}.yaml" if date_prefix.count("-") == 2 else "*.yaml"
+        for yaml_file in self.memory_dir.rglob(pattern):
             with open(yaml_file) as f:
                 data = yaml.safe_load(f) or {}
             entry = next(
@@ -685,7 +692,7 @@ class MemoryManager:
                     pass
                 raise
             return
-        logger.warning(f"YAML entry not found for {memory_id}; vector updated only")
+        logger.warning(f"YAML entry not found for {memory_id}; only the vector will be updated")
 
     # -------------------------------------------------------------------------
     # DELETE: Remove memories
@@ -958,6 +965,7 @@ class MemoryManager:
                             "type": result.get("type"),
                             "project": result.get("project"),
                             "memory_id": memory_id,
+                            "entities": result.get("entities") or [],
                         }
                     )
                     continue
@@ -1003,6 +1011,7 @@ class MemoryManager:
                         "project": result.get("project"),
                         "memory_id": memory_id,
                         "tier": tier,
+                        "entities": result.get("entities") or [],
                     }
                 )
 

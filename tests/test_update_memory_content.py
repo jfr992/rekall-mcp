@@ -105,6 +105,20 @@ def test_update_reencodes_vector_in_qdrant(memory_manager):
     assert after["_vector"] != before
 
 
+def test_update_sanitizes_appended_text(tmp_path):
+    """close_loop notes are free agent text — credentials must not persist
+    (same invariant save() enforces; adversarial review finding)."""
+    _seed_yaml(tmp_path)
+    mgr = _mgr(tmp_path, _payload())
+
+    token = "ghp_" + "a" * 36
+    result = mgr.update_memory_content(MEMORY_ID, f"RESOLVED 2026-07-09: rotated {token}")
+
+    assert token not in result["content"]
+    save_kwargs = mgr._store.save.call_args.kwargs
+    assert token not in save_kwargs["payload"]["content"]
+
+
 def test_update_unknown_id_raises(tmp_path):
     mgr = _mgr(tmp_path, None)
     try:

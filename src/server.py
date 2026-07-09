@@ -416,6 +416,10 @@ async def api_recall_memories(request):
         if mem_type:
             mem_type = _safe_type(mem_type)
         task_hint = body.get("task_hint")
+        if task_hint is not None:
+            if not isinstance(task_hint, str):
+                return JSONResponse({"error": "task_hint must be a string"}, status_code=400)
+            task_hint = task_hint[:256]
 
         if not query:
             return JSONResponse({"error": "query is required"}, status_code=400)
