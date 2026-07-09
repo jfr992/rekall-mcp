@@ -134,9 +134,7 @@ def migrate_repr_v2(
         "failed": failed,
         "count_before": count_before,
         "count_after": count_after,
-        "identity_tier_changes": len(
-            set(identity_before.items()) ^ set(identity_after.items())
-        ),
+        "identity_tier_changes": len(set(identity_before.items()) ^ set(identity_after.items())),
         "compacted_present": compacted_after,
     }
 
