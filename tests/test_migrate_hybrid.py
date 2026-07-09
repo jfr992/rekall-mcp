@@ -483,3 +483,65 @@ class TestMigrateToHybridWrite:
         assert entry["reinforcement_count"] == 0
         assert saved[0]["payload"]["embedding_text"] == entry["embedding_text"]
         assert saved[0]["payload"]["source_tool"] == "legacy-import"
+
+    def test_reindex_encodes_raw_content_for_dense_vector(self, tmp_path, monkeypatch):
+        """Repr v2: the re-index dense vector encodes raw content; the sparse
+        leg (content= kwarg) keeps embedding_text."""
+        from memory.migrate_hybrid import migrate_to_hybrid
+
+        yaml_file = tmp_path / "2026-07-03.yaml"
+        yaml_file.write_text(
+            yaml.dump(
+                {
+                    "date": "2026-07-03",
+                    "decisions": [
+                        {
+                            "id": "d1",
+                            "content": "Decided to use PostgreSQL for JSON support",
+                            "project": "byte-edge",
+                        }
+                    ],
+                }
+            )
+        )
+
+        saved = []
+        encoded = []
+
+        class FakeBM25Encoder:
+            vocab = {"postgresql": 1}
+
+            def fit(self, corpus):
+                pass
+
+            def save(self, path):
+                (tmp_path / "_bm25_vocab.json").write_text("{}")
+
+            def encode(self, content):
+                return {1: 1.0}
+
+        class FakeEmbedder:
+            def encode(self, text):
+                encoded.append(text)
+                return [0.1] * 384
+
+        class FakeVectorStore:
+            def __init__(self, **kwargs):
+                pass
+
+            def recreate_collection(self):
+                return None
+
+            def save(self, **kwargs):
+                saved.append(kwargs)
+
+        monkeypatch.setattr("core.BM25Encoder", FakeBM25Encoder)
+        monkeypatch.setattr("core.Embedder", FakeEmbedder)
+        monkeypatch.setattr("core.VectorStore", FakeVectorStore)
+
+        migrate_to_hybrid(memory_dir=tmp_path, qdrant_url="http://localhost:6334", dry_run=False)
+
+        assert encoded == ["Decided to use PostgreSQL for JSON support"]
+        assert saved[0]["content"] == saved[0]["payload"]["embedding_text"]
+        assert saved[0]["payload"]["embedding_text"].startswith("Project byte-edge.")
+        assert saved[0]["payload"]["repr_version"] == 2

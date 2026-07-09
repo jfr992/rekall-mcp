@@ -294,8 +294,10 @@ def migrate_to_hybrid(
 
         payload = _public_memory(mem)
         embedding_text = payload["embedding_text"]
+        payload["repr_version"] = 2
 
-        vector = embedder.encode(embedding_text)
+        # Repr v2: dense = raw content, sparse BM25 = embedding_text
+        vector = embedder.encode(payload["content"])
         store.save(
             id=payload["memory_id"],
             vector=vector,
