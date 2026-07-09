@@ -59,9 +59,7 @@ def test_recall_without_hint_is_byte_identical():
 def test_recall_formatted_passes_task_hint_through():
     hits = [dict(h) for h in HITS]
     hits[6]["content"] = "auth middleware rotation decision"
-    out = MemoryManager.recall_formatted(
-        _mgr(hits), "q", limit=5, task_hint="auth middleware"
-    )
+    out = MemoryManager.recall_formatted(_mgr(hits), "q", limit=5, task_hint="auth middleware")
     assert "auth middleware rotation decision" in out
 
 
