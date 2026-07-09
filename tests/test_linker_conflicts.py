@@ -205,11 +205,51 @@ def test_deterministic_edge_not_llm_refined(tmp_path, monkeypatch):
     assert not edge_data.get("llm_refined")
 
 
-# F4: Boundary tests — one at a time.
+# Repr v2 calibration (2026-07-09, all-MiniLM, stored-vs-stored on these fixtures):
+# raw-content cosines run lower than embedding_text ones. Boundaries re-derived by
+# bracket midpoint — see constants in memory/linker.py.
 
 
-def test_sim_060_exact_entity_band_fires(tmp_path, monkeypatch):
-    """sim=0.60 is at the lower entity-band boundary [0.60, 0.90) — fires contradicts."""
+def test_sim_087_same_type_supersedes_under_repr_v2_band(tmp_path, monkeypatch):
+    """Measured pg16-vs-pg15 supersedes pair fell 0.9903 -> 0.9261 under raw
+    content; band top is now 0.85. sim=0.87 same-type near-dup must supersede,
+    not fall into the entity contradicts band."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    kg.add_node("old_decision", memory_type="decision")
+
+    result = auto_link(
+        graph=kg,
+        memory_id="new_decision",
+        content="Use PostgreSQL 16 for primary storage",
+        memory_type="decision",
+        project="api",
+        embedder=_mock_embedder(),
+        store=_mock_store(
+            [
+                {
+                    "memory_id": "old_decision",
+                    "type": "decision",
+                    "content": "Use PostgreSQL 15 for primary storage",
+                    "score": 0.87,
+                    "entities": ["PostgreSQL", "storage"],
+                },
+            ]
+        ),
+    )
+
+    assert result.relations.get("supersedes") == 1
+    assert result.relations.get("contradicts", 0) == 0
+
+
+# F4: Boundary tests — one at a time. Boundary values re-pinned to the repr v2
+# calibrated band floor (0.46); the tests' intent (at-floor fires, below-floor
+# does not) is unchanged.
+
+
+def test_sim_046_exact_entity_band_fires(tmp_path, monkeypatch):
+    """sim=0.46 is at the lower entity-band boundary [0.46, 0.85) — fires contradicts."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     kg = KnowledgeGraph(tmp_path / "_graph.json")
@@ -228,7 +268,7 @@ def test_sim_060_exact_entity_band_fires(tmp_path, monkeypatch):
                     "memory_id": "old_decision",
                     "type": "decision",
                     "content": "Use PostgreSQL as primary datastore",
-                    "score": 0.60,
+                    "score": 0.46,
                     "entities": ["MongoDB"],  # overlaps with extract_entities of new content
                 },
             ]
@@ -238,8 +278,8 @@ def test_sim_060_exact_entity_band_fires(tmp_path, monkeypatch):
     assert result.relations.get("contradicts") == 1
 
 
-def test_sim_059_entity_band_does_not_fire(tmp_path, monkeypatch):
-    """sim=0.59 is below entity-band — falls through to related_to."""
+def test_sim_045_entity_band_does_not_fire(tmp_path, monkeypatch):
+    """sim=0.45 is below entity-band — falls through to related_to."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     kg = KnowledgeGraph(tmp_path / "_graph.json")
@@ -258,7 +298,7 @@ def test_sim_059_entity_band_does_not_fire(tmp_path, monkeypatch):
                     "memory_id": "old_decision",
                     "type": "decision",
                     "content": "Use PostgreSQL as primary datastore",
-                    "score": 0.59,
+                    "score": 0.45,
                     "entities": ["MongoDB"],
                 },
             ]
