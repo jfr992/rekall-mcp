@@ -84,6 +84,22 @@ def test_update_appends_content_mutates_yaml_and_reembeds(tmp_path):
     assert "RESOLVED 2026-07-09" in encoded_text
 
 
+def test_update_reencodes_raw_content_not_embedding_text(tmp_path):
+    """Repr v2: the dense vector re-encodes the raw new content; embedding_text
+    is still rebuilt for the payload and the BM25 sparse leg."""
+    _seed_yaml(tmp_path)
+    mgr = _mgr(tmp_path, _payload())
+
+    mgr.update_memory_content(MEMORY_ID, "RESOLVED 2026-07-09")
+
+    save_kwargs = mgr._store.save.call_args.kwargs
+    encoded_text = mgr._embedder.encode.call_args.args[0]
+    assert encoded_text == save_kwargs["payload"]["content"]
+    assert save_kwargs["payload"]["embedding_text"].startswith("Project my-app.")
+    assert save_kwargs["content"] == save_kwargs["payload"]["embedding_text"]
+    assert save_kwargs["payload"]["repr_version"] == 2
+
+
 @pytest.mark.integration
 def test_update_reencodes_vector_in_qdrant(memory_manager):
     """The Qdrant point's dense vector must actually change on update —
