@@ -621,6 +621,79 @@ class MemoryManager:
                 pass
             raise
 
+    def update_memory_content(self, memory_id: str, appended_text: str) -> dict[str, Any]:
+        """Append text to a memory's content, id-stable (spec 2026-07-08).
+
+        memory_id = sha256(content|save-timestamp) with the timestamp frozen at
+        save — appending content never changes the id, so graph edges stay
+        valid. The vector IS re-encoded: store.save upserts at the same point
+        id (set_payload would leave a stale embedding).
+        """
+        found = self.store.get_many([memory_id])
+        if not found:
+            raise ValueError(f"Memory not found: {memory_id}")
+        payload = dict(found[0])
+
+        appended_text = Sanitizer.sanitize(appended_text)
+        new_content = f"{payload['content']}\n\n{appended_text}"
+        payload["content"] = new_content
+        payload["entities"] = extract_entities(new_content)
+        payload["embedding_text"] = build_embedding_text(new_content, payload)
+
+        self._mutate_in_yaml(memory_id, new_content, payload)
+
+        vector = self.embedder.encode(payload["embedding_text"])
+        self.store.save(
+            id=memory_id,
+            vector=vector,
+            payload=payload,
+            content=payload["embedding_text"],
+        )
+        return payload
+
+    def _mutate_in_yaml(self, memory_id: str, new_content: str, payload: dict) -> None:
+        """Find the YAML entry by id across nested project dirs, rewrite atomically.
+
+        Narrowed to the date embedded in the id (same trick as delete()) —
+        scanning every YAML per close is a free 100x saved.
+        """
+        date_prefix = memory_id.split("_")[0]
+        pattern = f"{date_prefix}.yaml" if date_prefix.count("-") == 2 else "*.yaml"
+        for yaml_file in self.memory_dir.rglob(pattern):
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f) or {}
+            entry = next(
+                (
+                    e
+                    for entries in data.values()
+                    if isinstance(entries, list)
+                    for e in entries
+                    if isinstance(e, dict) and e.get("id") == memory_id
+                ),
+                None,
+            )
+            if entry is None:
+                continue
+            entry["content"] = new_content
+            for key in ("entities", "embedding_text"):
+                if key in entry:
+                    entry[key] = payload[key]
+            fd, tmp_path = tempfile.mkstemp(dir=yaml_file.parent, suffix=".yaml.tmp")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    yaml.dump(
+                        data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
+                    )
+                os.replace(tmp_path, yaml_file)
+            except BaseException:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+            return
+        logger.warning(f"YAML entry not found for {memory_id}; only the vector will be updated")
+
     # -------------------------------------------------------------------------
     # DELETE: Remove memories
     # -------------------------------------------------------------------------
@@ -799,6 +872,7 @@ class MemoryManager:
         type: str | None = None,
         days_back: int | None = None,
         score_threshold: float = 0.45,
+        task_hint: str | None = None,
     ) -> list[dict[str, Any]]:
         """Recall relevant memories using semantic search.
 
@@ -809,6 +883,8 @@ class MemoryManager:
             type: Filter by memory type
             days_back: Only search last N days
             score_threshold: Minimum similarity (0-1)
+            task_hint: Short phrase (2+ words) for the caller's current task;
+                matching results surface first, survivor floor ceil(limit/2)
 
         Returns:
             List of memories with scores
@@ -889,6 +965,7 @@ class MemoryManager:
                             "type": result.get("type"),
                             "project": result.get("project"),
                             "memory_id": memory_id,
+                            "entities": result.get("entities") or [],
                         }
                     )
                     continue
@@ -934,6 +1011,7 @@ class MemoryManager:
                         "project": result.get("project"),
                         "memory_id": memory_id,
                         "tier": tier,
+                        "entities": result.get("entities") or [],
                     }
                 )
 
@@ -943,7 +1021,11 @@ class MemoryManager:
             if cutoff_date:
                 scored = [r for r in scored if (r.get("date") or "") >= cutoff_date]
 
-            results = scored[:limit]
+            # Context partition (spec 2026-07-08): post-score deterministic
+            # reorder with survivor floor; task_hint=None is identity.
+            from memory.context_match import partition_by_context
+
+            results = partition_by_context(scored, task_hint, limit)
 
             # Stage B freshness annotation (read-only; spec 2026-07-06)
             try:
@@ -1009,6 +1091,7 @@ class MemoryManager:
         project: str | None = None,
         type: str | None = None,
         days_back: int | None = None,
+        task_hint: str | None = None,
     ) -> str:
         """Recall memories with smart formatting that guides AI behavior.
 
@@ -1036,6 +1119,7 @@ class MemoryManager:
             project=project,
             type=type,
             days_back=days_back,
+            task_hint=task_hint,
         )
 
         if not memories:
@@ -1045,12 +1129,18 @@ class MemoryManager:
 
     def _format_with_guidance(self, memories: list[dict]) -> str:
         """Format memories with type-specific guidance."""
-        # Newest-first: deterministic freshness (spec 2026-07-06). Stable sort
-        # keeps retrieval order on total ties; timestamp falls back to date.
+        # Context-matched first (spec 2026-07-08), then newest-first freshness
+        # (spec 2026-07-06). Two stable passes: timestamp, then matched flag.
         memories = sorted(
             memories,
             key=lambda m: m.get("timestamp") or m.get("date") or "",
             reverse=True,
+        )
+        # Outdated entries stay in timestamp position — their stub text points
+        # at "the newer entry above", which promotion would falsify.
+        memories = sorted(
+            memories,
+            key=lambda m: 0 if m.get("_context_matched") and not m.get("_outdated") else 1,
         )
 
         from collections import Counter
