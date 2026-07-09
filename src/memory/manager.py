@@ -621,6 +621,72 @@ class MemoryManager:
                 pass
             raise
 
+    def update_memory_content(self, memory_id: str, appended_text: str) -> dict[str, Any]:
+        """Append text to a memory's content, id-stable (spec 2026-07-08).
+
+        memory_id = sha256(content|save-timestamp) with the timestamp frozen at
+        save — appending content never changes the id, so graph edges stay
+        valid. The vector IS re-encoded: store.save upserts at the same point
+        id (set_payload would leave a stale embedding).
+        """
+        found = self.store.get_many([memory_id])
+        if not found:
+            raise ValueError(f"Memory not found: {memory_id}")
+        payload = dict(found[0])
+
+        new_content = f"{payload['content']}\n\n{appended_text}"
+        payload["content"] = new_content
+        payload["entities"] = extract_entities(new_content)
+        payload["embedding_text"] = build_embedding_text(new_content, payload)
+
+        self._mutate_in_yaml(memory_id, new_content, payload)
+
+        vector = self.embedder.encode(payload["embedding_text"])
+        self.store.save(
+            id=memory_id,
+            vector=vector,
+            payload=payload,
+            content=payload["embedding_text"],
+        )
+        return payload
+
+    def _mutate_in_yaml(self, memory_id: str, new_content: str, payload: dict) -> None:
+        """Find the YAML entry by id across nested project dirs, rewrite atomically."""
+        for yaml_file in self.memory_dir.rglob("*.yaml"):
+            with open(yaml_file) as f:
+                data = yaml.safe_load(f) or {}
+            entry = next(
+                (
+                    e
+                    for entries in data.values()
+                    if isinstance(entries, list)
+                    for e in entries
+                    if isinstance(e, dict) and e.get("id") == memory_id
+                ),
+                None,
+            )
+            if entry is None:
+                continue
+            entry["content"] = new_content
+            for key in ("entities", "embedding_text"):
+                if key in entry:
+                    entry[key] = payload[key]
+            fd, tmp_path = tempfile.mkstemp(dir=yaml_file.parent, suffix=".yaml.tmp")
+            try:
+                with os.fdopen(fd, "w") as f:
+                    yaml.dump(
+                        data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
+                    )
+                os.replace(tmp_path, yaml_file)
+            except BaseException:
+                try:
+                    os.unlink(tmp_path)
+                except OSError:
+                    pass
+                raise
+            return
+        logger.warning(f"YAML entry not found for {memory_id}; vector updated only")
+
     # -------------------------------------------------------------------------
     # DELETE: Remove memories
     # -------------------------------------------------------------------------
