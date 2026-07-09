@@ -20,8 +20,16 @@ logger = logging.getLogger(__name__)
 
 
 _MAX_CANDIDATES = 10
-_SIMILARITY_THRESHOLD = 0.5
-_CONTRADICTION_SIMILARITY_THRESHOLD = 0.6
+# Repr v2 calibration (2026-07-09): stored-vs-stored cosines re-measured on the
+# linker/freshness fixture pairs after dense vectors moved from embedding_text
+# to raw content (all-MiniLM). Bands re-derived by bracket midpoint between the
+# nearest measured pairs on either side of each old boundary:
+#   supersedes 0.9 -> 0.85  (entity-band max 0.7717 < S <= supersedes min 0.9261)
+#   contradiction floor 0.6 -> 0.46  (unrelated 0.1678 < C <= band min 0.7464)
+#   similar floor 0.5 -> 0.40  (same bracket; keeps the historical offset below C)
+_SIMILARITY_THRESHOLD = 0.40
+_CONTRADICTION_SIMILARITY_THRESHOLD = 0.46
+_SUPERSEDES_SIMILARITY_THRESHOLD = 0.85
 
 _NEGATION_PATTERNS = (
     r"\bno longer\b",
@@ -250,13 +258,15 @@ def _classify_relation(
     if _is_contradiction(new_content=new_content, cand_content=cand_content, similarity=similarity):
         return "contradicts", False
 
-    if similarity > 0.9 and new_type == cand_type:
+    if similarity > _SUPERSEDES_SIMILARITY_THRESHOLD and new_type == cand_type:
         return "supersedes", False
 
     # Entity-band contradicts: same type, mid-range similarity, shared entities signal conflict.
     if (
         new_type == cand_type
-        and _CONTRADICTION_SIMILARITY_THRESHOLD <= similarity < 0.9
+        and _CONTRADICTION_SIMILARITY_THRESHOLD
+        <= similarity
+        < _SUPERSEDES_SIMILARITY_THRESHOLD
         and _entity_overlap(new_entities or [], cand_entities or []) >= 1
     ):
         relation, llm_refined = _llm_refine(

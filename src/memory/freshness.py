@@ -1,9 +1,11 @@
 """Read-time conflict detection + freshness annotation (spec 2026-07-06, Stage B).
 
 Same-type only in v1 — cross-type conflicts are PR-F2 (needs eval scenarios first).
-Comparison basis: STORED vectors (embedding_text-vs-embedding_text), so theta
-matches the linker's supersedes calibration (0.9). Never deletes, never reorders
-scores — output is annotation only.
+Comparison basis: STORED vectors. Repr v2 stores encode(content) — theta 0.81 is
+the bracket midpoint between the max measured non-conflict pair cosine (0.7717)
+and the min measured conflict pair cosine (0.8455) on the linker/freshness test
+fixture corpus (all-MiniLM, 2026-07-09 calibration). Never deletes, never
+reorders scores — output is annotation only.
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ def detect_conflict_groups(
     memories: list[dict],
     graph,
     vectors: dict[str, list[float]] | None,
-    theta: float = 0.9,
+    theta: float = 0.81,
 ) -> list[set[str]]:
     """Union same-type pairs linked by (a) supersedes/contradicts edges or
     (b) stored-vector cosine >= theta. Returns groups of size >= 2."""
