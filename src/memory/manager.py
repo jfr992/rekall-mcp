@@ -292,6 +292,8 @@ class MemoryManager:
             payload.update(summarize_lifecycle(payload))
             payload["entities"] = extract_entities(content)
             payload["embedding_text"] = build_embedding_text(content, payload)
+            # Dense-representation version: 2 = encode(content). Migration skip-marker.
+            payload["repr_version"] = 2
 
             existing_memory_id = self._find_duplicate_memory_id(
                 content=content,
@@ -320,9 +322,11 @@ class MemoryManager:
             # Save to file (durability)
             self._save_to_file(memory_id, content, payload, type, date)
 
-            # Save to vector store (searchability)
+            # Save to vector store (searchability). Dense = raw content (repr v2:
+            # boilerplate diluted query cosines by ~0.2); sparse BM25 keeps the
+            # enriched embedding_text for lexical entity/project matching.
             embedding_text = payload["embedding_text"]
-            vector = self.embedder.encode(embedding_text)
+            vector = self.embedder.encode(content)
             self.store.save(
                 id=memory_id,
                 vector=vector,
@@ -414,10 +418,14 @@ class MemoryManager:
         project: str,
         memory_type: str,
     ) -> str | None:
-        """Return existing memory id for near-identical memories in same project/type."""
-        search_texts = [query_text or content]
+        """Return existing memory id for near-identical memories in same project/type.
+
+        Raw content first: repr v2 stores encode(content), so that's the dense
+        leg's match. embedding_text second: BM25 leg + pre-migration vectors.
+        """
+        search_texts = [content]
         if query_text and query_text != content:
-            search_texts.append(content)
+            search_texts.append(query_text)
 
         normalized = " ".join(content.split()).strip().lower()
 
