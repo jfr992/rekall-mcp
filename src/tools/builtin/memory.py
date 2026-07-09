@@ -527,6 +527,7 @@ class OptimizedMemoryTools(BaseToolProvider):
             memory_type: str | None = None,
             project: str | None = None,
             days: int | None = None,
+            task_hint: str | None = None,
         ) -> str:
             """Use this whenever the question references prior decisions, current values or
             settings, past learnings, or what was chosen/changed — before answering from
@@ -547,9 +548,18 @@ class OptimizedMemoryTools(BaseToolProvider):
                 memory_type: Filter by type (decision, learning, preference, requirement, fact)
                 project: Filter by project name
                 days: Only include memories from last N days
+                task_hint: Short noun phrase for what you're working on right now,
+                    e.g. "auth middleware refactor" or "vector_store named vectors"
+                    — 2+ words. Matching memories surface first; single words are
+                    ignored server-side.
             """
             return self.manager.recall_formatted(
-                query=query, limit=limit, type=memory_type, project=project, days_back=days
+                query=query,
+                limit=limit,
+                type=memory_type,
+                project=project,
+                days_back=days,
+                task_hint=task_hint,
             )
 
         registered.append("recall_memories")

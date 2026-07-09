@@ -799,6 +799,7 @@ class MemoryManager:
         type: str | None = None,
         days_back: int | None = None,
         score_threshold: float = 0.45,
+        task_hint: str | None = None,
     ) -> list[dict[str, Any]]:
         """Recall relevant memories using semantic search.
 
@@ -809,6 +810,8 @@ class MemoryManager:
             type: Filter by memory type
             days_back: Only search last N days
             score_threshold: Minimum similarity (0-1)
+            task_hint: Short phrase (2+ words) for the caller's current task;
+                matching results surface first, survivor floor ceil(limit/2)
 
         Returns:
             List of memories with scores
@@ -943,7 +946,11 @@ class MemoryManager:
             if cutoff_date:
                 scored = [r for r in scored if (r.get("date") or "") >= cutoff_date]
 
-            results = scored[:limit]
+            # Context partition (spec 2026-07-08): post-score deterministic
+            # reorder with survivor floor; task_hint=None is identity.
+            from memory.context_match import partition_by_context
+
+            results = partition_by_context(scored, task_hint, limit)
 
             # Stage B freshness annotation (read-only; spec 2026-07-06)
             try:
@@ -1009,6 +1016,7 @@ class MemoryManager:
         project: str | None = None,
         type: str | None = None,
         days_back: int | None = None,
+        task_hint: str | None = None,
     ) -> str:
         """Recall memories with smart formatting that guides AI behavior.
 
@@ -1036,6 +1044,7 @@ class MemoryManager:
             project=project,
             type=type,
             days_back=days_back,
+            task_hint=task_hint,
         )
 
         if not memories:

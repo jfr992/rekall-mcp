@@ -415,12 +415,15 @@ async def api_recall_memories(request):
         mem_type = body.get("type")
         if mem_type:
             mem_type = _safe_type(mem_type)
+        task_hint = body.get("task_hint")
 
         if not query:
             return JSONResponse({"error": "query is required"}, status_code=400)
 
         manager = _get_memory_manager()
-        results = manager.recall(query, limit=limit, project=project, type=mem_type)
+        results = manager.recall(
+            query, limit=limit, project=project, type=mem_type, task_hint=task_hint
+        )
 
         try:
             ids = [m["memory_id"] for m in results if m.get("memory_id")]
@@ -429,6 +432,7 @@ async def api_recall_memories(request):
                 project=project or "general",
                 memory_ids=ids,
                 source="recall",
+                payload={"task_hint": task_hint},
             )
         except Exception:
             logger.debug("event emission skipped", exc_info=True)
