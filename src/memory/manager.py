@@ -95,6 +95,43 @@ class Sanitizer:
         return content
 
 
+# Common English words that are plausible project names; stripping them from a
+# dense query would delete real semantics, not scope metadata.
+_COMMON_PROJECT_WORDS = frozenset(
+    {
+        "general",
+        "security",
+        "frontend",
+        "backend",
+        "database",
+        "platform",
+        "internal",
+        "research",
+        "documentation",
+        "infrastructure",
+        "engineering",
+        "projects",
+        "personal",
+        "sandbox",
+    }
+)
+
+
+def _is_project_shaped(project: str) -> bool:
+    """True when a project name is safe to strip from a dense query.
+
+    Heuristic ceiling: a hyphen/underscore/digit or an uncommon 8+ char token.
+    A plain-English project name that isn't in the list above (e.g. "payments")
+    still passes at 8+ chars — the dual probe's max-fusion bounds the damage to
+    one wasted search, never a lost result.
+    """
+    if project.lower() in _COMMON_PROJECT_WORDS:
+        return False
+    if any(c in project for c in "-_") or any(c.isdigit() for c in project):
+        return True
+    return len(project) >= 8
+
+
 # =============================================================================
 # MEMORY MANAGER: The main interface
 # =============================================================================
@@ -924,11 +961,12 @@ class MemoryManager:
             # svc-api" collapses 0.55 -> 0.10 without it). Probe with BOTH and
             # keep each memory's best cosine; BM25 keeps the full query.
             dense_queries = [query]
-            if project:
+            if project and _is_project_shaped(project):
+                normalized_query = " ".join(query.split())
                 stripped = " ".join(
                     re.sub(rf"\b{re.escape(project)}\b", " ", query, flags=re.IGNORECASE).split()
                 )
-                if stripped and stripped != query:
+                if stripped and stripped != normalized_query:
                     dense_queries.append(stripped)
 
             graph = self.knowledge_graph
@@ -938,7 +976,7 @@ class MemoryManager:
 
             seeds_by_id: dict[str, dict[str, Any]] = {}
             unkeyed: list[dict[str, Any]] = []
-            for dense_query in dense_queries:
+            for probe_index, dense_query in enumerate(dense_queries):
                 for result in self.store.search(
                     vector=self.embedder.encode(dense_query),
                     limit=limit * 2 if limit and graph_has_edges else limit,
@@ -948,7 +986,9 @@ class MemoryManager:
                 ):
                     memory_id = result.get("memory_id")
                     if not memory_id:
-                        unkeyed.append(result)
+                        # No stable key to max-fuse on; keep first-probe copies only.
+                        if probe_index == 0:
+                            unkeyed.append(result)
                     elif memory_id not in seeds_by_id or result.get("score", 0.0) > seeds_by_id[
                         memory_id
                     ].get("score", 0.0):

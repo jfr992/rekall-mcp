@@ -198,6 +198,42 @@ def test_recall_dual_probes_dense_with_and_without_project_token(tmp_path):
     ]
 
 
+def test_recall_single_probe_when_query_has_no_project_token(tmp_path):
+    """Whitespace differences must not fire the second probe: a double space
+    and no project token in the query means stripping changed nothing."""
+    mgr = _bare_recall_manager()
+
+    mgr.recall("inventory  sync locking", project="svc-api")
+
+    assert mgr._embedder.encode.call_count == 1
+
+
+def test_is_project_shaped_token():
+    """Gate for the stripped probe: only clearly project-shaped tokens are
+    stripped, so common English words used as project names never gut a query."""
+    from memory.manager import _is_project_shaped
+
+    assert _is_project_shaped("svc-api")  # hyphen
+    assert _is_project_shaped("rekall_mcp")  # underscore
+    assert _is_project_shaped("app2")  # digit
+    assert _is_project_shaped("rekallmcp")  # len >= 8, not a common word
+    assert not _is_project_shaped("general")  # common word, no separators
+    assert not _is_project_shaped("api")  # too short
+    assert not _is_project_shaped("security")  # len 8 but common English word
+    assert not _is_project_shaped("frontend")
+
+
+def test_recall_common_word_project_never_strips(tmp_path):
+    """project='general' with 'general' in the query: stripping would delete a
+    real English word, not scope metadata — only the full-query probe runs."""
+    mgr = _bare_recall_manager()
+
+    mgr.recall("general architecture guidance", project="general")
+
+    assert mgr._embedder.encode.call_count == 1
+    assert mgr._embedder.encode.call_args.args[0] == "general architecture guidance"
+
+
 def test_recall_dual_probe_keeps_max_score_per_memory(tmp_path):
     """The same memory returned by both probes keeps its best cosine."""
     mgr = _bare_recall_manager()
@@ -209,6 +245,17 @@ def test_recall_dual_probe_keeps_max_score_per_memory(tmp_path):
 
     assert len(results) == 1
     assert results[0]["score"] == 0.76
+
+
+def test_recall_dual_probe_does_not_duplicate_unkeyed_results(tmp_path):
+    """A hit without a memory_id returned by both probes must appear once."""
+    mgr = _bare_recall_manager()
+    unkeyed_hit = {"content": "legacy point without memory_id", "score": 0.6, "type": "fact"}
+    mgr._store.search.side_effect = [[dict(unkeyed_hit)], [dict(unkeyed_hit)]]
+
+    results = mgr.recall("inventory sync locking svc-api", project="svc-api")
+
+    assert len(results) == 1
 
 
 def test_duplicate_search_falls_back_to_embedding_text_for_legacy_vectors(tmp_path):
