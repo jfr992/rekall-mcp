@@ -143,6 +143,74 @@ def test_manager_uses_raw_content_for_duplicate_search_before_save(tmp_path, mon
     assert captured["payload"]["content"] == "Longhorn settings matter"
 
 
+def _bare_recall_manager(search_results=None):
+    from contextlib import contextmanager
+    from unittest.mock import MagicMock
+
+    from memory.manager import MemoryManager
+
+    mgr = object.__new__(MemoryManager)
+    embedder = MagicMock()
+    embedder.encode.return_value = [0.0] * 384
+    mgr._embedder = embedder
+    graph = MagicMock()
+    graph.stats.return_value = {"nodes": 0, "edges": 0}
+    mgr._knowledge_graph = graph
+    store = MagicMock()
+    store.search.return_value = search_results or []
+    mgr._store = store
+
+    @contextmanager
+    def _noop_track(_name):
+        yield
+
+    telemetry = MagicMock()
+    telemetry.track.side_effect = _noop_track
+    mgr._telemetry = telemetry
+    return mgr
+
+
+def test_recall_dual_probes_dense_with_and_without_project_token(tmp_path):
+    """With a project filter, the project token in the query may be filter
+    metadata (noise for repr v2 content vectors: correct memory measured
+    0.662 -> 0.763 without it) or the query's only anchor ('what were we
+    working on in svc-api' collapses 0.55 -> 0.10 without it). Probe dense
+    with BOTH and max-fuse; BM25 leg keeps the full query."""
+    mgr = _bare_recall_manager()
+
+    mgr.recall("inventory sync locking svc-api", project="svc-api")
+
+    encoded = [c.args[0] for c in mgr._embedder.encode.call_args_list]
+    assert encoded == ["inventory sync locking svc-api", "inventory sync locking"]
+    for call in mgr._store.search.call_args_list:
+        assert call.kwargs["query_text"] == "inventory sync locking svc-api"
+
+    # query that IS the project name: single full-query probe
+    mgr = _bare_recall_manager()
+    mgr.recall("svc-api", project="svc-api")
+    assert [c.args[0] for c in mgr._embedder.encode.call_args_list] == ["svc-api"]
+
+    # no project filter: single probe, query untouched
+    mgr = _bare_recall_manager()
+    mgr.recall("inventory sync locking svc-api")
+    assert [c.args[0] for c in mgr._embedder.encode.call_args_list] == [
+        "inventory sync locking svc-api"
+    ]
+
+
+def test_recall_dual_probe_keeps_max_score_per_memory(tmp_path):
+    """The same memory returned by both probes keeps its best cosine."""
+    mgr = _bare_recall_manager()
+    full_hit = {"memory_id": "m1", "content": "c", "score": 0.52, "type": "fact"}
+    stripped_hit = {"memory_id": "m1", "content": "c", "score": 0.76, "type": "fact"}
+    mgr._store.search.side_effect = [[full_hit], [stripped_hit]]
+
+    results = mgr.recall("inventory sync locking svc-api", project="svc-api")
+
+    assert len(results) == 1
+    assert results[0]["score"] == 0.76
+
+
 def test_duplicate_search_falls_back_to_embedding_text_for_legacy_vectors(tmp_path):
     """Pre-migration points were encoded from embedding_text; the second dedupe
     pass keeps catching them (and feeds the BM25 leg the enriched text)."""

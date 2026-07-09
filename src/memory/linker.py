@@ -264,9 +264,7 @@ def _classify_relation(
     # Entity-band contradicts: same type, mid-range similarity, shared entities signal conflict.
     if (
         new_type == cand_type
-        and _CONTRADICTION_SIMILARITY_THRESHOLD
-        <= similarity
-        < _SUPERSEDES_SIMILARITY_THRESHOLD
+        and _CONTRADICTION_SIMILARITY_THRESHOLD <= similarity < _SUPERSEDES_SIMILARITY_THRESHOLD
         and _entity_overlap(new_entities or [], cand_entities or []) >= 1
     ):
         relation, llm_refined = _llm_refine(
