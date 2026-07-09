@@ -917,19 +917,43 @@ class MemoryManager:
                 else None
             )
 
-            # Phase 1: SEED — standard vector search
-            query_vector = self.embedder.encode(query)
+            # Phase 1: SEED — dense search. With a project filter, the project
+            # token in the query may be filter metadata (pure noise against
+            # repr v2 content vectors: measured 0.662 -> 0.763 without it) or
+            # the query's only semantic anchor ("what were we working on in
+            # svc-api" collapses 0.55 -> 0.10 without it). Probe with BOTH and
+            # keep each memory's best cosine; BM25 keeps the full query.
+            dense_queries = [query]
+            if project:
+                stripped = " ".join(
+                    re.sub(rf"\b{re.escape(project)}\b", " ", query, flags=re.IGNORECASE).split()
+                )
+                if stripped and stripped != query:
+                    dense_queries.append(stripped)
+
             graph = self.knowledge_graph
             graph_stats = graph.stats()
             graph_has_edges = graph_stats["edges"] > 0
             graph_has_nodes = graph_stats["nodes"] > 0
-            seed_results = self.store.search(
-                vector=query_vector,
-                limit=limit * 2 if limit and graph_has_edges else limit,
-                filters=filters if filters else None,
-                score_threshold=score_threshold,
-                query_text=query,
-            )
+
+            seeds_by_id: dict[str, dict[str, Any]] = {}
+            unkeyed: list[dict[str, Any]] = []
+            for dense_query in dense_queries:
+                for result in self.store.search(
+                    vector=self.embedder.encode(dense_query),
+                    limit=limit * 2 if limit and graph_has_edges else limit,
+                    filters=filters if filters else None,
+                    score_threshold=score_threshold,
+                    query_text=query,
+                ):
+                    memory_id = result.get("memory_id")
+                    if not memory_id:
+                        unkeyed.append(result)
+                    elif memory_id not in seeds_by_id or result.get("score", 0.0) > seeds_by_id[
+                        memory_id
+                    ].get("score", 0.0):
+                        seeds_by_id[memory_id] = result
+            seed_results = [*seeds_by_id.values(), *unkeyed]
 
             # Phase 2: EXPAND — graph traversal
             if graph_has_edges:

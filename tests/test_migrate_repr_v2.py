@@ -71,16 +71,14 @@ def seeded_store():
 
 
 def test_migrate_reencodes_content_in_place_and_is_idempotent(seeded_store, tmp_path):
-    from conftest import TEST_QDRANT_URL
-
     from scripts.migrate_repr_v2 import migrate_repr_v2
+
+    from conftest import TEST_QDRANT_URL
 
     store, embedder, points = seeded_store
     count_before = store.count()
 
-    result = migrate_repr_v2(
-        qdrant_url=TEST_QDRANT_URL, collection=COLLECTION, memory_dir=tmp_path
-    )
+    result = migrate_repr_v2(qdrant_url=TEST_QDRANT_URL, collection=COLLECTION, memory_dir=tmp_path)
 
     assert result["migrated"] == 2
     assert result["skipped"] == 0
@@ -107,9 +105,7 @@ def test_migrate_reencodes_content_in_place_and_is_idempotent(seeded_store, tmp_
     assert migrated["2026-07-02_preference_bbbb2222"]["reinforcement_count"] == 7
 
     # idempotent resume: second run skips every point
-    rerun = migrate_repr_v2(
-        qdrant_url=TEST_QDRANT_URL, collection=COLLECTION, memory_dir=tmp_path
-    )
+    rerun = migrate_repr_v2(qdrant_url=TEST_QDRANT_URL, collection=COLLECTION, memory_dir=tmp_path)
     assert rerun["migrated"] == 0
     assert rerun["skipped"] == 2
     assert rerun["failed"] == 0

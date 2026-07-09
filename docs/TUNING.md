@@ -183,9 +183,9 @@ uv run python -m memory.migrate_hybrid --memory-dir ~/.claude/memory
 
 The migration reads nested project YAML, backfills missing `entities`,
 `embedding_text`, and lifecycle fields into YAML, builds `_bm25_vocab.json`, and
-reindexes Qdrant from `embedding_text`. Dense vectors remain required; BM25 is
-an additional exact-cue path for project names, file paths, flags, ticket IDs,
-and tool names.
+reindexes Qdrant (dense vectors from raw `content` — repr v2 — and BM25 sparse
+from `embedding_text`). Dense vectors remain required; BM25 is an additional
+exact-cue path for project names, file paths, flags, ticket IDs, and tool names.
 
 ## Nervous-System Recall Surfaces
 
