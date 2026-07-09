@@ -92,13 +92,11 @@ def auto_link(
     project: str,
     embedder: Embedder,
     store: VectorStore,
-    embedding_text: str | None = None,
 ) -> LinkResult:
     """Find and persist likely relationships for a new memory."""
-    # Use embedding_text when available so the search vector matches the stored
-    # vector format (encode(embedding_text)); falling back to content keeps
-    # existing call-sites and unit tests unaffected.
-    vector = embedder.encode(embedding_text if embedding_text is not None else content)
+    # Repr v2: stored dense vectors are encode(content) — search with the same
+    # representation or similarity silently degrades (PR #38 bug class).
+    vector = embedder.encode(content)
     new_entities = extract_entities(content)
 
     candidates = store.search(
