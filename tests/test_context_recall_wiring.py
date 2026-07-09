@@ -70,3 +70,48 @@ def test_recall_single_token_hint_is_ignored():
     hits[7]["content"] = "auth middleware rotation decision"
     out = MemoryManager.recall(_mgr(hits), "q", limit=5, task_hint="auth")
     assert [m["memory_id"] for m in out] == [f"m{i}" for i in range(5)]
+
+
+def test_render_puts_context_matched_before_newer_unmatched():
+    mems = [
+        {
+            "memory_id": "new",
+            "content": "newer unrelated note",
+            "type": "fact",
+            "date": "2026-07-08",
+            "timestamp": "2026-07-08T10:00:00",
+        },
+        {
+            "memory_id": "old",
+            "content": "auth middleware rotation",
+            "type": "fact",
+            "date": "2026-07-01",
+            "timestamp": "2026-07-01T10:00:00",
+            "_context_matched": True,
+        },
+    ]
+    out = MemoryManager._format_with_guidance(_mgr([]), mems)
+    assert out.index("auth middleware rotation") < out.index("newer unrelated note")
+
+
+def test_outdated_context_match_never_jumps_above_its_replacement():
+    mems = [
+        {
+            "memory_id": "new",
+            "content": "auth middleware uses RS256 now",
+            "type": "fact",
+            "date": "2026-07-08",
+            "timestamp": "2026-07-08T10:00:00",
+        },
+        {
+            "memory_id": "old",
+            "content": "auth middleware uses HS256",
+            "type": "fact",
+            "date": "2026-07-01",
+            "timestamp": "2026-07-01T10:00:00",
+            "_context_matched": True,
+            "_outdated": True,
+        },
+    ]
+    out = MemoryManager._format_with_guidance(_mgr([]), mems)
+    assert out.index("RS256") < out.index("[outdated")

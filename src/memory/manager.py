@@ -1054,12 +1054,18 @@ class MemoryManager:
 
     def _format_with_guidance(self, memories: list[dict]) -> str:
         """Format memories with type-specific guidance."""
-        # Newest-first: deterministic freshness (spec 2026-07-06). Stable sort
-        # keeps retrieval order on total ties; timestamp falls back to date.
+        # Context-matched first (spec 2026-07-08), then newest-first freshness
+        # (spec 2026-07-06). Two stable passes: timestamp, then matched flag.
         memories = sorted(
             memories,
             key=lambda m: m.get("timestamp") or m.get("date") or "",
             reverse=True,
+        )
+        # Outdated entries stay in timestamp position — their stub text points
+        # at "the newer entry above", which promotion would falsify.
+        memories = sorted(
+            memories,
+            key=lambda m: 0 if m.get("_context_matched") and not m.get("_outdated") else 1,
         )
 
         from collections import Counter
