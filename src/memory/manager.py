@@ -650,7 +650,9 @@ class MemoryManager:
 
         self._mutate_in_yaml(memory_id, new_content, payload)
 
-        vector = self.embedder.encode(payload["embedding_text"])
+        # Repr v2: dense re-encodes raw content; embedding_text feeds the sparse leg.
+        payload["repr_version"] = 2
+        vector = self.embedder.encode(new_content)
         self.store.save(
             id=memory_id,
             vector=vector,
