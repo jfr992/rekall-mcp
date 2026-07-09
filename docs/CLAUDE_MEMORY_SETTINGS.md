@@ -40,6 +40,10 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 - Use `consolidate_memories()` to find duplicates/conflicts.
 - Use `proactive_context_summary()` for top signals ranked by importance × recency.
 
+### Context hints + open loops
+- Pass `task_hint` to `recall_memories` when you know what you're working on — a short noun phrase, 2+ words ("auth middleware refactor"). Matching memories surface first; single words are ignored server-side; omitting it changes nothing.
+- Call `close_loop(memory_id, note?)` when a pending item is finished, blocked, or abandoned — it appends a RESOLVED stamp (history preserved) and the item drops out of the session-start Open Loops list.
+
 ### Failsafe
 - If memory seems stale, call `memory_doctor(project)` first, then `memory_stats()` for counts.
 - Cockpit UI at `http://localhost:3333/brain` for visual graph exploration (ships as a container via `docker compose up -d`).

@@ -179,11 +179,17 @@ class EphemeralBackend:
             idmap[resp.json()["memory_id"]] = m.get("session_id", f"probe:{i}")
         return idmap
 
-    def recall_ids(self, query: str, project: str | None, limit: int = 5) -> list[str]:
+    def recall_ids(
+        self,
+        query: str,
+        project: str | None,
+        limit: int = 5,
+        task_hint: str | None = None,
+    ) -> list[str]:
         """Direct REST retrieval — the agent-free precision@5 path."""
         resp = httpx.post(
             f"{self.base_url}/api/memory/recall",
-            json={"query": query, "limit": limit, "project": project},
+            json={"query": query, "limit": limit, "project": project, "task_hint": task_hint},
             timeout=120.0,
         )
         resp.raise_for_status()
