@@ -9,6 +9,8 @@ Based on best practices from:
 
 from __future__ import annotations
 
+import re
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from memory.scope import ScopeDetector
@@ -527,6 +529,7 @@ class OptimizedMemoryTools(BaseToolProvider):
             memory_type: str | None = None,
             project: str | None = None,
             days: int | None = None,
+            task_hint: str | None = None,
         ) -> str:
             """Use this whenever the question references prior decisions, current values or
             settings, past learnings, or what was chosen/changed — before answering from
@@ -547,12 +550,57 @@ class OptimizedMemoryTools(BaseToolProvider):
                 memory_type: Filter by type (decision, learning, preference, requirement, fact)
                 project: Filter by project name
                 days: Only include memories from last N days
+                task_hint: Short noun phrase for what you're working on right now,
+                    e.g. "auth middleware refactor" or "vector_store named vectors"
+                    — 2+ words. Matching memories surface first; single words are
+                    ignored server-side.
             """
             return self.manager.recall_formatted(
-                query=query, limit=limit, type=memory_type, project=project, days_back=days
+                query=query,
+                limit=limit,
+                type=memory_type,
+                project=project,
+                days_back=days,
+                task_hint=task_hint,
             )
 
         registered.append("recall_memories")
+
+        @mcp.tool(structured_output=False)
+        async def close_loop(
+            memory_id: str, note: str | None = None, project: str | None = None
+        ) -> str:
+            """Use when a pending item, TODO, or open loop is finished, blocked, or
+            abandoned — keeps the session-start Open Loops list accurate.
+
+            Appends a RESOLVED stamp to the memory (history preserved, nothing
+            deleted); the item drops out of the Open Loops capsule bucket.
+
+            Args:
+                memory_id: The id of the memory holding the pending/todo item
+                note: Optional one-line resolution (e.g. "merged in PR #44")
+                project: Your current project — pass it so cross-project closes
+                    are refused
+            """
+            hits = self.manager.store.get_many([memory_id])
+            if not hits:
+                return f"No memory found with id {memory_id}."
+            payload = hits[0]
+            # Guard only on caller-supplied project: the backend's own cwd is
+            # NOT the caller's project (v1.5.0 scope pitfall) — comparing
+            # against it refuses every legitimate close.
+            mem_project = payload.get("project")
+            if project and mem_project and mem_project != project:
+                return f"Refused: {memory_id} belongs to project {mem_project!r}, not {project!r}."
+            if re.search(r"\bRESOLVED \d{4}-\d{2}-\d{2}", str(payload.get("content", ""))):
+                return f"{memory_id} is already resolved — no change."
+            stamp = f"RESOLVED {datetime.now().strftime('%Y-%m-%d')}"
+            if note:
+                stamp += f": {note}"
+            result = self.manager.update_memory_content(memory_id, stamp)
+            return f"Closed loop {result['memory_id']} — it will drop out of Open Loops."
+
+        registered.append("close_loop")
 
         @mcp.tool(structured_output=False)
         async def recall_across_projects(
