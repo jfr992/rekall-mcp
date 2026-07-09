@@ -150,6 +150,24 @@ def test_detect_groups_same_type_high_sim_only():
     assert groups == [{"old", "new"}]
 
 
+def test_detect_groups_default_theta_catches_repr_v2_conflict_band():
+    """Repr v2 calibration: raw-content stored cosines run lower than the old
+    embedding_text ones (terraform-pin conflict pair measured 0.9649 -> 0.8455).
+    The default theta must group a same-type pair at cosine ~0.83."""
+    import math
+
+    from memory.freshness import detect_conflict_groups
+
+    mems = [
+        {"memory_id": "old", "type": "fact"},
+        {"memory_id": "new", "type": "fact"},
+    ]
+    # unit vectors with cosine exactly 0.83
+    v = {"old": [1.0, 0.0], "new": [0.83, math.sqrt(1 - 0.83**2)]}
+    groups = detect_conflict_groups(mems, graph=None, vectors=v)
+    assert groups == [{"old", "new"}]
+
+
 def test_mark_outdated_flags_all_but_newest():
     from memory.freshness import mark_outdated
 
