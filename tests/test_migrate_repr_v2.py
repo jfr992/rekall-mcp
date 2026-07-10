@@ -245,12 +245,11 @@ def test_migrate_preserves_sparse_vector_byte_identical(tmp_path):
     must keep its stored sparse vector byte-identical: the migration updates
     ONLY the named dense vector, never replacing the point."""
     from qdrant_client import QdrantClient
+    from scripts.migrate_repr_v2 import migrate_repr_v2
 
     from conftest import TEST_QDRANT_URL
-
     from core import BM25Encoder
     from core.utils import stable_hash_id
-    from scripts.migrate_repr_v2 import migrate_repr_v2
 
     encoder = BM25Encoder()
     encoder.fit(["postgresql storage decision text", "another vocabulary document"])
