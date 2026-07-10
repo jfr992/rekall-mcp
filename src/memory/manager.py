@@ -891,7 +891,7 @@ class MemoryManager:
         project: str | None = None,
         type: str | None = None,
         days_back: int | None = None,
-        score_threshold: float = 0.45,
+        score_threshold: float = 0.35,
         task_hint: str | None = None,
     ) -> list[dict[str, Any]]:
         """Recall relevant memories using semantic search.

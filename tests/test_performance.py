@@ -157,4 +157,5 @@ class TestRecallThreshold:
 
         sig = inspect.signature(MemoryManager.recall)
         default = sig.parameters["score_threshold"].default
-        assert default >= 0.4, f"Default threshold {default} is too low"
+        # 0.35 measured at 93.8% seeded probe accuracy vs 75.0% at 0.40 and 70.8% at 0.45 (3-repeat arms, 2026-07-09, docs/superpowers/specs/2026-07-09-dense-representation-fix.md)
+        assert default >= 0.35, f"Default threshold {default} is below the measured 0.35 floor"
