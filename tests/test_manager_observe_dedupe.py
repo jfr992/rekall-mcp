@@ -6,6 +6,23 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 
+@pytest.mark.integration
+def test_identical_content_different_projects_does_not_dedupe(memory_manager):
+    """Repr v2 queries dedupe with raw content (cosine 1.0 for identical text);
+    the project filter must keep cross-project saves from reinforcing."""
+    mgr = memory_manager
+    content = "Rotate the API gateway certificates every 90 days"
+
+    id_a = mgr.save(content, type="fact", project="project-alpha")
+    id_b = mgr.save(content, type="fact", project="project-beta")
+
+    assert id_a != id_b, "identical content across projects must create two memories"
+    payload_a = mgr.store.get_by_id(id_a)
+    payload_b = mgr.store.get_by_id(id_b)
+    assert payload_a["reinforcement_count"] == 0
+    assert payload_b["reinforcement_count"] == 0
+
+
 @pytest.fixture
 def manager_with_fake_store(tmp_path):
     """Construct a MemoryManager with an in-memory fake store + mocked embedder."""

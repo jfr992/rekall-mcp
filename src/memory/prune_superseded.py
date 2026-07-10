@@ -39,6 +39,9 @@ def build_candidates(edges, get_memory, today: date) -> list[Candidate]:
         # LLM-refined supersedes edges are recall-ranking signals only — never deletion signals.
         if data.get("llm_refined"):
             continue
+        # Same for provisional-band edges (widened [0.85, 0.90) similarity range).
+        if data.get("band") == "provisional":
+            continue
         edge_age = _days(data.get("created"), today)
         if edge_age is None or edge_age < MIN_EDGE_AGE_DAYS:  # gate 3.5 (missing = refuse)
             continue

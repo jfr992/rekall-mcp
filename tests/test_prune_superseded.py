@@ -95,3 +95,15 @@ def test_chain_leaf_first_ordering():
         [_edge("A", "B"), _edge("B", "C", created="2026-05-01")], _lookup(table), TODAY
     )
     assert [c.memory_id for c in cands] == ["C", "B"]
+
+
+def test_gate_provisional_band_supersedes_refused():
+    """Supersedes from the widened [0.85, 0.90) similarity range carries
+    band='provisional' — recall-ranking signal only, never deletion evidence."""
+    table = {"new": _mem("2026-06-01"), "old": _mem("2026-01-01")}
+    edge = (
+        "new",
+        "old",
+        {"relation": "supersedes", "created": "2026-06-01", "band": "provisional"},
+    )
+    assert build_candidates([edge], _lookup(table), TODAY) == []

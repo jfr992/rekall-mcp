@@ -95,6 +95,17 @@ class Sanitizer:
         return content
 
 
+def _is_project_shaped(project: str) -> bool:
+    """True when a project name is safe to strip from a dense query.
+
+    Only a hyphen/underscore/digit marks a token as project-shaped. Deliberate
+    ceiling: single-word project names ("payments", "rekallmcp") are never
+    stripped — no length or dictionary heuristic reliably separates them from
+    real query semantics, and the full-query probe always runs regardless.
+    """
+    return any(c in "-_" or c.isdigit() for c in project)
+
+
 # =============================================================================
 # MEMORY MANAGER: The main interface
 # =============================================================================
@@ -292,6 +303,8 @@ class MemoryManager:
             payload.update(summarize_lifecycle(payload))
             payload["entities"] = extract_entities(content)
             payload["embedding_text"] = build_embedding_text(content, payload)
+            # Dense-representation version: 2 = encode(content). Migration skip-marker.
+            payload["repr_version"] = 2
 
             existing_memory_id = self._find_duplicate_memory_id(
                 content=content,
@@ -320,9 +333,11 @@ class MemoryManager:
             # Save to file (durability)
             self._save_to_file(memory_id, content, payload, type, date)
 
-            # Save to vector store (searchability)
+            # Save to vector store (searchability). Dense = raw content (repr v2:
+            # boilerplate diluted query cosines by ~0.2); sparse BM25 keeps the
+            # enriched embedding_text for lexical entity/project matching.
             embedding_text = payload["embedding_text"]
-            vector = self.embedder.encode(embedding_text)
+            vector = self.embedder.encode(content)
             self.store.save(
                 id=memory_id,
                 vector=vector,
@@ -365,7 +380,6 @@ class MemoryManager:
                     project=project_name,
                     embedder=self.embedder,
                     store=self.store,
-                    embedding_text=embedding_text,
                 )
                 self.knowledge_graph.save()
                 if link_result.edges_created:
@@ -414,10 +428,14 @@ class MemoryManager:
         project: str,
         memory_type: str,
     ) -> str | None:
-        """Return existing memory id for near-identical memories in same project/type."""
-        search_texts = [query_text or content]
+        """Return existing memory id for near-identical memories in same project/type.
+
+        Raw content first: repr v2 stores encode(content), so that's the dense
+        leg's match. embedding_text second: BM25 leg + pre-migration vectors.
+        """
+        search_texts = [content]
         if query_text and query_text != content:
-            search_texts.append(content)
+            search_texts.append(query_text)
 
         normalized = " ".join(content.split()).strip().lower()
 
@@ -642,7 +660,9 @@ class MemoryManager:
 
         self._mutate_in_yaml(memory_id, new_content, payload)
 
-        vector = self.embedder.encode(payload["embedding_text"])
+        # Repr v2: dense re-encodes raw content; embedding_text feeds the sparse leg.
+        payload["repr_version"] = 2
+        vector = self.embedder.encode(new_content)
         self.store.save(
             id=memory_id,
             vector=vector,
@@ -908,19 +928,46 @@ class MemoryManager:
                 else None
             )
 
-            # Phase 1: SEED — standard vector search
-            query_vector = self.embedder.encode(query)
+            # Phase 1: SEED — dense search. With a project filter, the project
+            # token in the query may be filter metadata (pure noise against
+            # repr v2 content vectors: measured 0.662 -> 0.763 without it) or
+            # the query's only semantic anchor ("what were we working on in
+            # svc-api" collapses 0.55 -> 0.10 without it). Probe with BOTH and
+            # keep each memory's best cosine; BM25 keeps the full query.
+            dense_queries = [query]
+            if project and _is_project_shaped(project):
+                normalized_query = " ".join(query.split())
+                stripped = " ".join(
+                    re.sub(rf"\b{re.escape(project)}\b", " ", query, flags=re.IGNORECASE).split()
+                )
+                if stripped and stripped != normalized_query:
+                    dense_queries.append(stripped)
+
             graph = self.knowledge_graph
             graph_stats = graph.stats()
             graph_has_edges = graph_stats["edges"] > 0
             graph_has_nodes = graph_stats["nodes"] > 0
-            seed_results = self.store.search(
-                vector=query_vector,
-                limit=limit * 2 if limit and graph_has_edges else limit,
-                filters=filters if filters else None,
-                score_threshold=score_threshold,
-                query_text=query,
-            )
+
+            seeds_by_id: dict[str, dict[str, Any]] = {}
+            unkeyed: list[dict[str, Any]] = []
+            for probe_index, dense_query in enumerate(dense_queries):
+                for result in self.store.search(
+                    vector=self.embedder.encode(dense_query),
+                    limit=limit * 2 if limit and graph_has_edges else limit,
+                    filters=filters if filters else None,
+                    score_threshold=score_threshold,
+                    query_text=query,
+                ):
+                    memory_id = result.get("memory_id")
+                    if not memory_id:
+                        # No stable key to max-fuse on; keep first-probe copies only.
+                        if probe_index == 0:
+                            unkeyed.append(result)
+                    elif memory_id not in seeds_by_id or result.get("score", 0.0) > seeds_by_id[
+                        memory_id
+                    ].get("score", 0.0):
+                        seeds_by_id[memory_id] = result
+            seed_results = [*seeds_by_id.values(), *unkeyed]
 
             # Phase 2: EXPAND — graph traversal
             if graph_has_edges:

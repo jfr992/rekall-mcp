@@ -108,6 +108,7 @@ def sample_memory_entry() -> dict:
             "Entities: PostgreSQL. Claim: Decided to use PostgreSQL for its JSON support"
         ),
         "entities": ["PostgreSQL"],
+        "repr_version": 2,
     }
 
 

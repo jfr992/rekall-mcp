@@ -29,6 +29,8 @@ from pathlib import Path
 
 import yaml
 
+from memory.representation import build_embedding_text
+
 logging.basicConfig(level=logging.INFO, format="%(message)s")
 logger = logging.getLogger(__name__)
 
@@ -38,11 +40,19 @@ def _content_hash(content: str) -> str:
     return hashlib.md5(content.encode()).hexdigest()[:12]
 
 
+def _first_nonblank_str(value) -> str:
+    text = str(value or "").strip()
+    return text
+
+
 def _get_yaml_memories(storage_path: Path) -> dict[str, dict]:
     """Load all memories from YAML files, keyed by ID."""
     memories = {}
 
-    for yaml_file in storage_path.glob("*.yaml"):
+    # rglob: v1.5.0 layout nests YAML per-project (<project>/<date>.yaml)
+    for yaml_file in storage_path.rglob("*.yaml"):
+        if yaml_file.name.startswith("_"):
+            continue
         try:
             with open(yaml_file) as f:
                 data = yaml.safe_load(f) or {}
@@ -61,8 +71,12 @@ def _get_yaml_memories(storage_path: Path) -> dict[str, dict]:
                     content = memory.get("content", "")
 
                     if memory_id and content:
+                        # Carry every YAML field — stripping to a fixed subset
+                        # wiped tier/entities/embedding_text on re-sync.
                         memories[memory_id] = {
+                            **memory,
                             "id": memory_id,
+                            "memory_id": memory_id,
                             "content": content,
                             "content_hash": _content_hash(content),
                             "type": memory_type,
@@ -142,11 +156,21 @@ def sync_memories(
     yaml_memories = _get_yaml_memories(storage_path)
     logger.info(f"  Found {len(yaml_memories)} memories in YAML")
 
-    # Initialize Qdrant
+    # Initialize Qdrant. Load the BM25 encoder when the vocab exists so
+    # upserts re-write the sparse vector instead of dropping it.
+    sparse_encoder = None
+    bm25_path = storage_path / "_bm25_vocab.json"
+    if bm25_path.exists():
+        from core import BM25Encoder
+
+        sparse_encoder = BM25Encoder()
+        sparse_encoder.load(str(bm25_path))
+
     store = VectorStore(
         collection=config.tools.memory.collection,
         embedding_dim=384,  # Will be overwritten if collection exists
         url=config.qdrant.url,
+        sparse_encoder=sparse_encoder,
     )
 
     logger.info("Loading memories from Qdrant...")
@@ -227,27 +251,31 @@ def sync_memories(
     deleted = 0
     errors = 0
 
+    def _upsert(memory_id: str) -> None:
+        """Dense = encode(content) (repr v2); sparse leg gets embedding_text —
+        saving without content= wiped the BM25 sparse vector."""
+        memory = yaml_memories[memory_id]
+        payload = {k: v for k, v in memory.items() if k != "content_hash"}
+        embedding_text = _first_nonblank_str(memory.get("embedding_text")) or build_embedding_text(
+            memory["content"], payload
+        )
+        payload["embedding_text"] = embedding_text
+        payload["repr_version"] = 2
+
+        store.save(
+            id=memory_id,
+            vector=embedder.encode(memory["content"]),
+            payload=payload,
+            content=embedding_text,
+        )
+
     # Add new memories
     if to_add:
         logger.info("")
         logger.info("Adding new memories...")
         for memory_id in to_add:
             try:
-                memory = yaml_memories[memory_id]
-                vector = embedder.encode(memory["content"])
-
-                store.save(
-                    id=memory_id,
-                    vector=vector,
-                    payload={
-                        "memory_id": memory_id,
-                        "content": memory["content"],
-                        "date": memory["date"],
-                        "timestamp": memory["timestamp"],
-                        "type": memory["type"],
-                        "project": memory["project"],
-                    },
-                )
+                _upsert(memory_id)
                 added += 1
             except Exception as e:
                 logger.warning(f"  Failed to add {memory_id}: {e}")
@@ -260,21 +288,7 @@ def sync_memories(
         logger.info("Updating changed memories...")
         for memory_id in to_update:
             try:
-                memory = yaml_memories[memory_id]
-                vector = embedder.encode(memory["content"])
-
-                store.save(
-                    id=memory_id,
-                    vector=vector,
-                    payload={
-                        "memory_id": memory_id,
-                        "content": memory["content"],
-                        "date": memory["date"],
-                        "timestamp": memory["timestamp"],
-                        "type": memory["type"],
-                        "project": memory["project"],
-                    },
-                )
+                _upsert(memory_id)
                 updated += 1
             except Exception as e:
                 logger.warning(f"  Failed to update {memory_id}: {e}")
