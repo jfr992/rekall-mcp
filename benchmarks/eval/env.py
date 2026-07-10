@@ -15,19 +15,9 @@ from pathlib import Path
 
 import httpx
 
+from core.utils import assert_not_prod
 
-def assert_not_prod(qdrant_url: str, storage_path: Path) -> None:
-    """Refuse prod targets. Raises RuntimeError — there is no override flag."""
-    if ":6333" in qdrant_url:
-        raise RuntimeError(f"prod Qdrant refused: {qdrant_url}")
-    resolved = storage_path.resolve()
-    prod_paths = [Path.home() / ".claude" / "memory"]
-    env_prod = os.getenv("MEMORY_STORAGE_PATH")
-    if env_prod:
-        prod_paths.append(Path(env_prod))
-    for prod in prod_paths:
-        if resolved == prod.resolve() or resolved.is_relative_to(prod.resolve()):
-            raise RuntimeError(f"prod storage refused: {resolved}")
+__all__ = ["EphemeralBackend", "assert_not_prod", "make_workspace"]
 
 
 def make_workspace(root: Path, item_id: str) -> Path:

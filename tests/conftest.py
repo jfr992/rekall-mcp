@@ -4,23 +4,14 @@ import os
 import tempfile
 from datetime import datetime
 from pathlib import Path
-from urllib.parse import urlparse
 
 import pytest
 import yaml
 
+from core.utils import is_prod_qdrant_url as _is_production_qdrant_url
 from memory import MemoryManager
 
 HOST_TEST_QDRANT_URL = "http://localhost:6334"
-
-
-def _is_production_qdrant_url(url: str) -> bool:
-    parsed = urlparse(url)
-    port = parsed.port or 6333
-    return port == 6333 and parsed.hostname not in {
-        "qdrant-test",
-        "rekall-qdrant-test",
-    }
 
 
 def _resolve_test_qdrant_url() -> str:
@@ -56,7 +47,25 @@ def _qdrant_isolation(monkeypatch):
             )
         return original_connect(self)
 
+    # expose the real method so tests can exercise the code-level guard directly
+    guarded_connect.__wrapped__ = original_connect
     monkeypatch.setattr(VectorStore, "_connect", guarded_connect)
+
+
+@pytest.fixture(autouse=True)
+def _storage_isolation(tmp_path, monkeypatch):
+    """Force default storage resolution toward tmp and refuse prod ~/.claude/memory.
+
+    Code that resolves storage from MEMORY_STORAGE_PATH (singleton manager,
+    server routes, CLI env fallbacks) gets a per-test tmp dir instead of prod.
+    The shared singleton is reset so no test inherits another's storage path.
+    """
+    monkeypatch.setenv("MEMORY_STORAGE_PATH", str(tmp_path / "memory-store"))
+    from memory import singleton
+
+    singleton.reset_memory_manager()
+    yield
+    singleton.reset_memory_manager()
 
 
 @pytest.fixture(autouse=True)
