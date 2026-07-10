@@ -106,6 +106,7 @@ def migrate_repr_v2(
     count_before, identity_before, compacted_before = _snapshot(store)
 
     migrated = skipped = failed = blank_embedding_text = no_content = 0
+    unmigrated_ids: list[str] = []
     offset = None
     while True:
         points, offset = client.scroll(
@@ -131,6 +132,7 @@ def migrate_repr_v2(
                 # module docstring). Counted, unstamped, not a run failure.
                 logger.warning(f"  {memory_id}: blank content, keeping v1 vector")
                 no_content += 1
+                unmigrated_ids.append(str(memory_id))
                 continue
 
             embedding_text = str(payload.get("embedding_text") or "").strip()
@@ -139,6 +141,7 @@ def migrate_repr_v2(
                 # below never touches the sparse leg.
                 logger.warning(f"  {memory_id}: blank embedding_text in bm25 collection, skipping")
                 blank_embedding_text += 1
+                unmigrated_ids.append(str(memory_id))
                 continue
 
             try:
@@ -158,6 +161,7 @@ def migrate_repr_v2(
             except Exception as e:
                 logger.warning(f"  {memory_id}: {e}")
                 failed += 1
+                unmigrated_ids.append(str(memory_id))
 
         if migrated and migrated % 100 < BATCH:
             logger.info(f"progress: migrated={migrated} skipped={skipped} failed={failed}")
@@ -172,6 +176,7 @@ def migrate_repr_v2(
         "failed": failed,
         "skipped_blank_embedding_text": blank_embedding_text,
         "no_content": no_content,
+        "unmigrated_ids": unmigrated_ids,
         "compacted_resurrected": max(0, compacted_after - compacted_before),
         "count_before": count_before,
         "count_after": count_after,
@@ -194,8 +199,20 @@ def migrate_repr_v2(
     return result
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    import argparse
+
     logging.basicConfig(level=logging.INFO, format="%(message)s")
+
+    parser = argparse.ArgumentParser(description="Migrate dense vectors to repr v2 in place")
+    parser.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="exit 0 even when some points remain at v1 (default: strict — "
+        "unmigrated points are invisible to content-encoded dense queries)",
+    )
+    args = parser.parse_args(argv)
+
     qdrant_url = os.environ.get("QDRANT_URL")
     if not qdrant_url:
         print("QDRANT_URL env var is required (no default — this touches every vector)")
@@ -206,12 +223,21 @@ def main() -> int:
         memory_dir=os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory"),
     )
     print(f"Result: {result}")
+
     ok = (
         result["failed"] == 0
         and result["count_before"] == result["count_after"]
         and result["identity_tier_changes"] == 0
         and result["compacted_resurrected"] == 0
     )
+    unmigrated = result.get("unmigrated_ids", [])
+    if unmigrated and not args.allow_partial:
+        logger.error(
+            f"STRICT: {len(unmigrated)} point(s) remain at v1 and are invisible to "
+            f"repr v2 dense queries: {unmigrated} — backfill and re-run, or pass "
+            "--allow-partial to accept the degradation."
+        )
+        ok = False
     return 0 if ok else 1
 
 
