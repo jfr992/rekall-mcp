@@ -84,7 +84,13 @@ def edge_count_dryrun(qdrant_url: str, collection: str = "agent_memory") -> dict
 
     n = len(ids)
     if n < 2:
-        return {"points": n, "considered_pairs": 0, "old_band_pairs": 0, "new_band_pairs": 0, "pairs": []}
+        return {
+            "points": n,
+            "considered_pairs": 0,
+            "old_band_pairs": 0,
+            "new_band_pairs": 0,
+            "pairs": [],
+        }
 
     def _cosine_matrix(vectors: list[list[float]]) -> Any:
         matrix = np.asarray(vectors, dtype=np.float64)
