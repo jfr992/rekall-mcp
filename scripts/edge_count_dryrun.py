@@ -26,6 +26,9 @@ logger = logging.getLogger(__name__)
 
 OLD_BAND = (0.60, 0.90)
 NEW_BAND = (0.46, 0.85)
+# deterministic-supersedes thresholds (no entity-overlap requirement)
+OLD_SUPERSEDES = 0.90
+NEW_SUPERSEDES = 0.85
 
 
 def _entities_of(payload: dict[str, Any]) -> set[str]:
@@ -103,13 +106,28 @@ def edge_count_dryrun(qdrant_url: str, collection: str = "agent_memory") -> dict
     new_cos = _cosine_matrix([embedder.encode(c) for c in contents])
 
     considered = old_band = new_band = 0
+    sup_considered = old_sup = new_sup = 0
     pairs: list[tuple[str, str, float, float]] = []
+    supersedes_pairs: list[tuple[str, str, float, float]] = []
     for i in range(n):
         for j in range(i + 1, n):
-            if types[i] != types[j] or not (entity_sets[i] & entity_sets[j]):
+            if types[i] != types[j]:
+                continue
+            o, w = float(old_cos[i, j]), float(new_cos[i, j])
+
+            # supersedes exposure: same-type only — NO entity-overlap requirement
+            sup_considered += 1
+            in_old_sup = o >= OLD_SUPERSEDES
+            in_new_sup = w >= NEW_SUPERSEDES
+            old_sup += in_old_sup
+            new_sup += in_new_sup
+            if in_old_sup or in_new_sup:
+                supersedes_pairs.append((ids[i], ids[j], round(o, 4), round(w, 4)))
+
+            # contradiction entity band: same-type AND shared entities
+            if not (entity_sets[i] & entity_sets[j]):
                 continue
             considered += 1
-            o, w = float(old_cos[i, j]), float(new_cos[i, j])
             old_band += OLD_BAND[0] <= o < OLD_BAND[1]
             new_band += NEW_BAND[0] <= w < NEW_BAND[1]
             pairs.append((ids[i], ids[j], round(o, 4), round(w, 4)))
@@ -120,6 +138,10 @@ def edge_count_dryrun(qdrant_url: str, collection: str = "agent_memory") -> dict
         "old_band_pairs": old_band,
         "new_band_pairs": new_band,
         "pairs": pairs,
+        "supersedes_considered_pairs": sup_considered,
+        "old_supersedes_pairs": old_sup,
+        "new_supersedes_pairs": new_sup,
+        "supersedes_pairs": supersedes_pairs,
     }
 
 
@@ -141,6 +163,14 @@ def main() -> int:
     for a, b, o, w in report["pairs"]:
         if OLD_BAND[0] <= o < OLD_BAND[1] or NEW_BAND[0] <= w < NEW_BAND[1]:
             print(f"  {a} <-> {b}  stored={o:.4f}  repr_v2={w:.4f}")
+    print(
+        f"supersedes: considered={report['supersedes_considered_pairs']} "
+        f"old(>=0.90 stored)={report['old_supersedes_pairs']} "
+        f"new(>=0.85 repr_v2)={report['new_supersedes_pairs']}"
+    )
+    for a, b, o, w in report["supersedes_pairs"]:
+        widened = " [WIDENED RANGE]" if w >= NEW_SUPERSEDES and w < OLD_SUPERSEDES else ""
+        print(f"  {a} <-> {b}  stored={o:.4f}  repr_v2={w:.4f}{widened}")
     return 0
 
 

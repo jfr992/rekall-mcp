@@ -151,12 +151,16 @@ def auto_link(
             continue
 
         if relation == "supersedes":
+            # Widened-range supersedes (below the old 0.90 deterministic bar)
+            # is provisional evidence: prune_superseded refuses to act on it.
+            provisional = candidate.get("score", 0.0) < 0.90
             graph.add_edge(
                 memory_id,
                 candidate_id,
                 "supersedes",
                 weight=candidate["score"],
                 llm_refined=llm_refined,
+                band="provisional" if provisional else None,
             )
             if llm_refined:
                 logger.debug("llm_refined supersedes: %s -> %s", memory_id, candidate_id)
