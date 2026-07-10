@@ -237,7 +237,7 @@ def test_main_exits_nonzero_on_compacted_resurrection(monkeypatch):
         },
     )
 
-    assert mod.main() == 1
+    assert mod.main([]) == 1
 
 
 def test_migrate_preserves_sparse_vector_byte_identical(tmp_path):
@@ -296,3 +296,28 @@ def test_migrate_preserves_sparse_vector_byte_identical(tmp_path):
     after = store.get_many([memory_id], with_vectors=True)[0]
     assert after["_vector"] != dense_before, "dense vector must be re-encoded"
     assert after["repr_version"] == 2
+
+
+def test_main_strict_by_default_fails_on_unmigrated_points(monkeypatch):
+    """Points left at v1 are semantically invisible to content-encoded dense
+    queries — a partial migration must not exit 0 unless explicitly allowed."""
+    import scripts.migrate_repr_v2 as mod
+
+    monkeypatch.setenv("QDRANT_URL", "http://localhost:6334")
+    result = {
+        "migrated": 5,
+        "skipped": 0,
+        "failed": 0,
+        "skipped_blank_embedding_text": 1,
+        "no_content": 1,
+        "unmigrated_ids": ["2026-07-01_note_blank222", "2026-07-01_note_blankc11"],
+        "count_before": 7,
+        "count_after": 7,
+        "identity_tier_changes": 0,
+        "compacted_present": 0,
+        "compacted_resurrected": 0,
+    }
+    monkeypatch.setattr(mod, "migrate_repr_v2", lambda **kwargs: dict(result))
+
+    assert mod.main([]) == 1, "strict default: unmigrated points must fail the run"
+    assert mod.main(["--allow-partial"]) == 0, "--allow-partial overrides explicitly"
