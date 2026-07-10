@@ -150,6 +150,24 @@ def test_detect_groups_same_type_high_sim_only():
     assert groups == [{"old", "new"}]
 
 
+def test_detect_groups_default_theta_catches_repr_v2_conflict_band():
+    """Repr v2 calibration: raw-content stored cosines run lower than the old
+    embedding_text ones (terraform-pin conflict pair measured 0.9649 -> 0.8455).
+    The default theta must group a same-type pair at cosine ~0.83."""
+    import math
+
+    from memory.freshness import detect_conflict_groups
+
+    mems = [
+        {"memory_id": "old", "type": "fact"},
+        {"memory_id": "new", "type": "fact"},
+    ]
+    # unit vectors with cosine exactly 0.83
+    v = {"old": [1.0, 0.0], "new": [0.83, math.sqrt(1 - 0.83**2)]}
+    groups = detect_conflict_groups(mems, graph=None, vectors=v)
+    assert groups == [{"old", "new"}]
+
+
 def test_mark_outdated_flags_all_but_newest():
     from memory.freshness import mark_outdated
 
@@ -267,3 +285,23 @@ def test_stage_c_stubs_outdated_content():
     assert "1.4.x" not in out  # old content suppressed at render
     assert "[outdated — replaced by the newer entry above]" in out
     assert "1.9.4" in out
+
+
+def test_detect_groups_requires_shared_entity_when_both_have_entities():
+    """Complementary same-type pairs above theta but about different subjects
+    (disjoint entities) must NOT group — matching the linker's contradiction
+    evidence standard. Cosine alone is not conflict evidence."""
+    import math
+
+    from memory.freshness import detect_conflict_groups
+
+    mems = [
+        {"memory_id": "a", "type": "learning", "entities": ["LogFleet", "kind"]},
+        {"memory_id": "b", "type": "learning", "entities": ["Grafana", "Loki"]},
+    ]
+    v = {"a": [1.0, 0.0], "b": [0.82, math.sqrt(1 - 0.82**2)]}
+    assert detect_conflict_groups(mems, graph=None, vectors=v) == []
+
+    # shared entity: same pair groups
+    mems[1]["entities"] = ["LogFleet", "Loki"]
+    assert detect_conflict_groups(mems, graph=None, vectors=v) == [{"a", "b"}]

@@ -80,6 +80,7 @@ A memory record has:
 | `durability` | float | importance×retention factor |
 | `reinforcement_count` | int | increments on cosine ≥ 0.97 dedupe |
 | `compacted` / `compacted_into` | bool / string | set by compaction; originals stay in YAML, removed from Qdrant |
+| `repr_version` | int | dense-vector representation: 2 = `encode(content)` (v1 encoded embedding_text); `scripts/migrate_repr_v2.py` skips points already at 2 |
 
 **Don't bump the schema silently.** If you add a new field, update `memory/observe.py` (sanitization), `memory/lifecycle.py` (defaults), and `tests/conftest.py` (test fixtures). If existing memories need backfill, write a migration that runs through `manager.backfill_lifecycle()`.
 

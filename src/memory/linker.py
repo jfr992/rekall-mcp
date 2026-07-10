@@ -20,8 +20,22 @@ logger = logging.getLogger(__name__)
 
 
 _MAX_CANDIDATES = 10
-_SIMILARITY_THRESHOLD = 0.5
-_CONTRADICTION_SIMILARITY_THRESHOLD = 0.6
+# Repr v2 calibration (2026-07-09): stored-vs-stored cosines re-measured on the
+# linker/freshness fixture pairs after dense vectors moved from embedding_text
+# to raw content (all-MiniLM). Bands re-derived by bracket midpoint between the
+# nearest measured pairs on either side of each old boundary:
+#   supersedes 0.9 -> 0.85  (entity-band max 0.7717 < S <= supersedes min 0.9261)
+#   contradiction floor 0.6 -> 0.46  (unrelated 0.1678 < C <= band min 0.7464)
+#   similar floor 0.5 -> 0.40  (same bracket; keeps the historical offset below C)
+# Bracket data is n~5 fixture pairs — the 0.46/0.40 floors are PROVISIONAL
+# (wide, sparsely-bracketed interval) pending the corpus-scale dry-run
+# (scripts/edge_count_dryrun.py) measuring band membership on live data.
+_SIMILARITY_THRESHOLD = 0.40
+_CONTRADICTION_SIMILARITY_THRESHOLD = 0.46
+_SUPERSEDES_SIMILARITY_THRESHOLD = 0.85
+# Widened entity band can put every candidate in the LLM-refine path; bound
+# the per-save Haiku spend (hook-discipline cost cliff).
+_MAX_LLM_REFINEMENTS_PER_SAVE = 3
 
 _NEGATION_PATTERNS = (
     r"\bno longer\b",
@@ -92,13 +106,11 @@ def auto_link(
     project: str,
     embedder: Embedder,
     store: VectorStore,
-    embedding_text: str | None = None,
 ) -> LinkResult:
     """Find and persist likely relationships for a new memory."""
-    # Use embedding_text when available so the search vector matches the stored
-    # vector format (encode(embedding_text)); falling back to content keeps
-    # existing call-sites and unit tests unaffected.
-    vector = embedder.encode(embedding_text if embedding_text is not None else content)
+    # Repr v2: stored dense vectors are encode(content) — search with the same
+    # representation or similarity silently degrades (PR #38 bug class).
+    vector = embedder.encode(content)
     new_entities = extract_entities(content)
 
     candidates = store.search(
@@ -109,6 +121,7 @@ def auto_link(
     )
 
     relations: dict[str, int] = {}
+    llm_budget = {"remaining": _MAX_LLM_REFINEMENTS_PER_SAVE}
 
     # Ensure source node exists before we add edges.
     if memory_id not in graph._graph:
@@ -131,18 +144,23 @@ def auto_link(
             similarity=candidate.get("score", 0.0),
             new_entities=new_entities,
             cand_entities=candidate.get("entities") or [],
+            llm_budget=llm_budget,
         )
 
         if relation == "related_to" and candidate.get("score", 0.0) < _SIMILARITY_THRESHOLD:
             continue
 
         if relation == "supersedes":
+            # Widened-range supersedes (below the old 0.90 deterministic bar)
+            # is provisional evidence: prune_superseded refuses to act on it.
+            provisional = candidate.get("score", 0.0) < 0.90
             graph.add_edge(
                 memory_id,
                 candidate_id,
                 "supersedes",
                 weight=candidate["score"],
                 llm_refined=llm_refined,
+                band="provisional" if provisional else None,
             )
             if llm_refined:
                 logger.debug("llm_refined supersedes: %s -> %s", memory_id, candidate_id)
@@ -193,14 +211,26 @@ def _entity_overlap(new_entities: list[str], cand_entities: list[str]) -> int:
     return len(new_set & cand_set)
 
 
-def _llm_refine(*, new_content: str, cand_content: str, deterministic: str) -> tuple[str, bool]:
+def _llm_refine(
+    *,
+    new_content: str,
+    cand_content: str,
+    deterministic: str,
+    budget: dict[str, int] | None = None,
+) -> tuple[str, bool]:
     """Optionally refine the deterministic relation via a Haiku call. Fail-open.
 
     Returns ``(relation, llm_refined)`` where ``llm_refined`` is True only when
-    the LLM answer differed from the deterministic input.
+    the LLM answer differed from the deterministic input. ``budget`` (mutable,
+    shared per save) bounds actual API calls; exhausted budget keeps the
+    deterministic answer.
     """
     if not os.getenv("ANTHROPIC_API_KEY"):
         return deterministic, False
+    if budget is not None:
+        if budget.get("remaining", 0) <= 0:
+            return deterministic, False
+        budget["remaining"] -= 1
     try:
         import anthropic as _ant
 
@@ -242,6 +272,7 @@ def _classify_relation(
     similarity: float,
     new_entities: list[str] | None = None,
     cand_entities: list[str] | None = None,
+    llm_budget: dict[str, int] | None = None,
 ) -> tuple[str, bool]:
     """Classify a pair relation.
 
@@ -252,19 +283,20 @@ def _classify_relation(
     if _is_contradiction(new_content=new_content, cand_content=cand_content, similarity=similarity):
         return "contradicts", False
 
-    if similarity > 0.9 and new_type == cand_type:
+    if similarity > _SUPERSEDES_SIMILARITY_THRESHOLD and new_type == cand_type:
         return "supersedes", False
 
     # Entity-band contradicts: same type, mid-range similarity, shared entities signal conflict.
     if (
         new_type == cand_type
-        and _CONTRADICTION_SIMILARITY_THRESHOLD <= similarity < 0.9
+        and _CONTRADICTION_SIMILARITY_THRESHOLD <= similarity < _SUPERSEDES_SIMILARITY_THRESHOLD
         and _entity_overlap(new_entities or [], cand_entities or []) >= 1
     ):
         relation, llm_refined = _llm_refine(
             new_content=new_content,
             cand_content=cand_content,
             deterministic="contradicts",
+            budget=llm_budget,
         )
         if llm_refined:
             logger.debug("llm_refined %s: new -> cand", relation)

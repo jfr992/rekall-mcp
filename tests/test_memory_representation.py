@@ -55,7 +55,8 @@ def test_build_embedding_text_adds_scope_and_entities():
     assert "Claim: Two-node clusters need Longhorn replica settings." in text
 
 
-def test_manager_saves_embedding_text_and_uses_it_for_vector(tmp_path, monkeypatch):
+def test_manager_encodes_raw_content_for_dense_vector(tmp_path, monkeypatch):
+    """Dense vector = encode(content); embedding_text stays for BM25 + payload (repr v2)."""
     from memory.manager import MemoryManager
 
     captured = {}
@@ -87,12 +88,17 @@ def test_manager_saves_embedding_text_and_uses_it_for_vector(tmp_path, monkeypat
 
     manager.save("Longhorn settings matter", type="learning", project="byte-edge")
 
-    assert captured["encoded_text"].startswith("Project byte-edge.")
-    assert captured["payload"]["embedding_text"] == captured["encoded_text"]
+    assert captured["encoded_text"] == "Longhorn settings matter"
+    assert captured["payload"]["embedding_text"].startswith("Project byte-edge.")
+    # BM25 sparse leg keeps the enriched representation
+    assert captured["content"] == captured["payload"]["embedding_text"]
     assert "Longhorn" in captured["payload"]["entities"]
+    assert captured["payload"]["repr_version"] == 2
 
 
-def test_manager_uses_embedding_text_for_duplicate_search_before_save(tmp_path, monkeypatch):
+def test_manager_uses_raw_content_for_duplicate_search_before_save(tmp_path, monkeypatch):
+    """Dedupe dense leg queries with raw content first (matches stored repr v2
+    vectors); embedding_text runs second for the BM25 leg + legacy vectors."""
     from memory.manager import MemoryManager
 
     events = []
@@ -127,17 +133,144 @@ def test_manager_uses_embedding_text_for_duplicate_search_before_save(tmp_path, 
 
     manager.save("Longhorn settings matter", type="learning", project="byte-edge")
 
-    assert events[0][0] == "encode"
-    assert events[0][1].startswith("Project byte-edge.")
-    assert events[1] == ("search", events[0][1])
-    assert events[2] == ("encode", "Longhorn settings matter")
-    assert events[3] == ("search", "Longhorn settings matter")
-    assert events[4] == ("encode", events[0][1])
+    assert events[0] == ("encode", "Longhorn settings matter")
+    assert events[1] == ("search", "Longhorn settings matter")
+    assert events[2][0] == "encode"
+    assert events[2][1].startswith("Project byte-edge.")
+    assert events[3] == ("search", events[2][1])
+    assert events[4] == ("encode", "Longhorn settings matter")
     assert events[5][0] == "save"
     assert captured["payload"]["content"] == "Longhorn settings matter"
 
 
-def test_duplicate_search_falls_back_to_raw_content_for_legacy_vectors(tmp_path):
+def _bare_recall_manager(search_results=None):
+    from contextlib import contextmanager
+    from unittest.mock import MagicMock
+
+    from memory.manager import MemoryManager
+
+    mgr = object.__new__(MemoryManager)
+    embedder = MagicMock()
+    embedder.encode.return_value = [0.0] * 384
+    mgr._embedder = embedder
+    graph = MagicMock()
+    graph.stats.return_value = {"nodes": 0, "edges": 0}
+    mgr._knowledge_graph = graph
+    store = MagicMock()
+    store.search.return_value = search_results or []
+    mgr._store = store
+
+    @contextmanager
+    def _noop_track(_name):
+        yield
+
+    telemetry = MagicMock()
+    telemetry.track.side_effect = _noop_track
+    mgr._telemetry = telemetry
+    return mgr
+
+
+def test_recall_dual_probes_dense_with_and_without_project_token(tmp_path):
+    """With a project filter, the project token in the query may be filter
+    metadata (noise for repr v2 content vectors: correct memory measured
+    0.662 -> 0.763 without it) or the query's only anchor ('what were we
+    working on in svc-api' collapses 0.55 -> 0.10 without it). Probe dense
+    with BOTH and max-fuse; BM25 leg keeps the full query."""
+    mgr = _bare_recall_manager()
+
+    mgr.recall("inventory sync locking svc-api", project="svc-api")
+
+    encoded = [c.args[0] for c in mgr._embedder.encode.call_args_list]
+    assert encoded == ["inventory sync locking svc-api", "inventory sync locking"]
+    for call in mgr._store.search.call_args_list:
+        assert call.kwargs["query_text"] == "inventory sync locking svc-api"
+
+    # query that IS the project name: single full-query probe
+    mgr = _bare_recall_manager()
+    mgr.recall("svc-api", project="svc-api")
+    assert [c.args[0] for c in mgr._embedder.encode.call_args_list] == ["svc-api"]
+
+    # no project filter: single probe, query untouched
+    mgr = _bare_recall_manager()
+    mgr.recall("inventory sync locking svc-api")
+    assert [c.args[0] for c in mgr._embedder.encode.call_args_list] == [
+        "inventory sync locking svc-api"
+    ]
+
+
+def test_recall_single_probe_when_query_has_no_project_token(tmp_path):
+    """Whitespace differences must not fire the second probe: a double space
+    and no project token in the query means stripping changed nothing."""
+    mgr = _bare_recall_manager()
+
+    mgr.recall("inventory  sync locking", project="svc-api")
+
+    assert mgr._embedder.encode.call_count == 1
+
+
+def test_is_project_shaped_token():
+    """Gate for the stripped probe: only tokens carrying a hyphen, underscore,
+    or digit are project-shaped; plain English words never gut a query."""
+    from memory.manager import _is_project_shaped
+
+    assert _is_project_shaped("svc-api")  # hyphen
+    assert _is_project_shaped("rekall_mcp")  # underscore
+    assert _is_project_shaped("app2")  # digit
+    assert not _is_project_shaped("general")
+    assert not _is_project_shaped("api")
+    assert not _is_project_shaped("security")
+    assert not _is_project_shaped("frontend")
+
+
+def test_single_word_project_names_never_project_shaped():
+    """No length heuristic: nothing separates 'rekallmcp' from 'payments' or
+    'terraform'. Deliberate ceiling — only a hyphen/underscore/digit marks a
+    token as project-shaped; single-word project names are never stripped."""
+    from memory.manager import _is_project_shaped
+
+    assert not _is_project_shaped("rekallmcp")
+    assert not _is_project_shaped("payments")
+    assert not _is_project_shaped("terraform")
+
+
+def test_recall_common_word_project_never_strips(tmp_path):
+    """project='general' with 'general' in the query: stripping would delete a
+    real English word, not scope metadata — only the full-query probe runs."""
+    mgr = _bare_recall_manager()
+
+    mgr.recall("general architecture guidance", project="general")
+
+    assert mgr._embedder.encode.call_count == 1
+    assert mgr._embedder.encode.call_args.args[0] == "general architecture guidance"
+
+
+def test_recall_dual_probe_keeps_max_score_per_memory(tmp_path):
+    """The same memory returned by both probes keeps its best cosine."""
+    mgr = _bare_recall_manager()
+    full_hit = {"memory_id": "m1", "content": "c", "score": 0.52, "type": "fact"}
+    stripped_hit = {"memory_id": "m1", "content": "c", "score": 0.76, "type": "fact"}
+    mgr._store.search.side_effect = [[full_hit], [stripped_hit]]
+
+    results = mgr.recall("inventory sync locking svc-api", project="svc-api")
+
+    assert len(results) == 1
+    assert results[0]["score"] == 0.76
+
+
+def test_recall_dual_probe_does_not_duplicate_unkeyed_results(tmp_path):
+    """A hit without a memory_id returned by both probes must appear once."""
+    mgr = _bare_recall_manager()
+    unkeyed_hit = {"content": "legacy point without memory_id", "score": 0.6, "type": "fact"}
+    mgr._store.search.side_effect = [[dict(unkeyed_hit)], [dict(unkeyed_hit)]]
+
+    results = mgr.recall("inventory sync locking svc-api", project="svc-api")
+
+    assert len(results) == 1
+
+
+def test_duplicate_search_falls_back_to_embedding_text_for_legacy_vectors(tmp_path):
+    """Pre-migration points were encoded from embedding_text; the second dedupe
+    pass keeps catching them (and feeds the BM25 leg the enriched text)."""
     from memory.manager import MemoryManager
 
     queries = []
@@ -145,7 +278,7 @@ def test_duplicate_search_falls_back_to_raw_content_for_legacy_vectors(tmp_path)
     class Store:
         def search(self, *args, **kwargs):
             queries.append(kwargs["query_text"])
-            if kwargs["query_text"] == "Longhorn settings matter":
+            if kwargs["query_text"] == "Project byte-edge. Claim: Longhorn settings matter":
                 return [{"memory_id": "legacy", "content": "Longhorn settings matter"}]
             return []
 
@@ -166,6 +299,6 @@ def test_duplicate_search_falls_back_to_raw_content_for_legacy_vectors(tmp_path)
 
     assert memory_id == "legacy"
     assert queries == [
-        "Project byte-edge. Claim: Longhorn settings matter",
         "Longhorn settings matter",
+        "Project byte-edge. Claim: Longhorn settings matter",
     ]

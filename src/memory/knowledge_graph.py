@@ -66,6 +66,9 @@ class Edge:
     auto: bool = True
     llm_refined: bool = False
     created: str = field(default_factory=lambda: date.today().isoformat())
+    # "provisional" for supersedes from the widened [0.85, 0.90) similarity
+    # range — recall-ranking signal only, never deletion evidence.
+    band: str | None = None
 
 
 class KnowledgeGraph:
@@ -189,34 +192,30 @@ class KnowledgeGraph:
         *,
         auto: bool = True,
         llm_refined: bool = False,
+        band: str | None = None,
     ) -> None:
         if relation not in RELATION_TYPES:
             raise ValueError(f"Unknown relation: {relation}")
         if source == target:
             return
+        attrs = {
+            "relation": relation,
+            "weight": weight,
+            "auto": auto,
+            "llm_refined": llm_refined,
+            "created": date.today().isoformat(),
+            **({"band": band} if band else {}),
+        }
         if self._graph.has_edge(source, target):
             existing = self._graph.edges[source, target]
             existing_relation = existing.get("relation")
             if _RELATION_PRIORITY[relation] > _RELATION_PRIORITY.get(existing_relation, -1):
-                existing.update(
-                    relation=relation,
-                    weight=weight,
-                    auto=auto,
-                    llm_refined=llm_refined,
-                    created=date.today().isoformat(),
-                )
+                existing.pop("band", None)
+                existing.update(**attrs)
                 self._dirty = True
             return
 
-        self._graph.add_edge(
-            source,
-            target,
-            relation=relation,
-            weight=weight,
-            auto=auto,
-            llm_refined=llm_refined,
-            created=date.today().isoformat(),
-        )
+        self._graph.add_edge(source, target, **attrs)
         self._dirty = True
 
     def get_edges(self, memory_id: str, direction: str = "both") -> list[Edge]:
@@ -405,7 +404,6 @@ class KnowledgeGraph:
                 project=point.get("project", "general"),
                 embedder=embedder,
                 store=store,
-                embedding_text=point.get("embedding_text"),
             )
 
         # Apply idle-based importance decay as part of maintenance so the
