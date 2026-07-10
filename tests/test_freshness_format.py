@@ -285,3 +285,23 @@ def test_stage_c_stubs_outdated_content():
     assert "1.4.x" not in out  # old content suppressed at render
     assert "[outdated — replaced by the newer entry above]" in out
     assert "1.9.4" in out
+
+
+def test_detect_groups_requires_shared_entity_when_both_have_entities():
+    """Complementary same-type pairs above theta but about different subjects
+    (disjoint entities) must NOT group — matching the linker's contradiction
+    evidence standard. Cosine alone is not conflict evidence."""
+    import math
+
+    from memory.freshness import detect_conflict_groups
+
+    mems = [
+        {"memory_id": "a", "type": "learning", "entities": ["LogFleet", "kind"]},
+        {"memory_id": "b", "type": "learning", "entities": ["Grafana", "Loki"]},
+    ]
+    v = {"a": [1.0, 0.0], "b": [0.82, math.sqrt(1 - 0.82**2)]}
+    assert detect_conflict_groups(mems, graph=None, vectors=v) == []
+
+    # shared entity: same pair groups
+    mems[1]["entities"] = ["LogFleet", "Loki"]
+    assert detect_conflict_groups(mems, graph=None, vectors=v) == [{"a", "b"}]

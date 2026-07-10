@@ -29,9 +29,17 @@ def detect_conflict_groups(
     theta: float = 0.81,
 ) -> list[set[str]]:
     """Union same-type pairs linked by (a) supersedes/contradicts edges or
-    (b) stored-vector cosine >= theta. Returns groups of size >= 2."""
+    (b) stored-vector cosine >= theta AND >= 1 shared entity (the linker's
+    contradiction evidence standard — cosine alone is not conflict evidence).
+    When either member carries no entity metadata the cosine leg falls back
+    to cosine-only. Returns groups of size >= 2."""
     ids = [m.get("memory_id") for m in memories if m.get("memory_id")]
     type_of = {m["memory_id"]: m.get("type", "note") for m in memories if m.get("memory_id")}
+    entities_of = {
+        m["memory_id"]: {str(e).lower() for e in (m.get("entities") or [])}
+        for m in memories
+        if m.get("memory_id")
+    }
     parent = {i: i for i in ids}
 
     def find(x: str) -> str:
@@ -60,6 +68,9 @@ def detect_conflict_groups(
         for i, a in enumerate(ids):
             for b in ids[i + 1 :]:
                 if type_of.get(a) != type_of.get(b):
+                    continue
+                ea, eb = entities_of.get(a), entities_of.get(b)
+                if ea and eb and not (ea & eb):
                     continue
                 va, vb = vectors.get(a), vectors.get(b)
                 if va and vb and _cosine(va, vb) >= theta:
