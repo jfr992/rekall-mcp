@@ -116,9 +116,9 @@ def test_migrate_aborts_when_bm25_collection_has_no_vocab(tmp_path):
     """A collection WITH a bm25 sparse config but no loadable vocab must ABORT:
     dense-only upserts would silently destroy every point's sparse vector while
     the run reports success."""
-    from conftest import TEST_QDRANT_URL
-
     from scripts.migrate_repr_v2 import migrate_repr_v2
+
+    from conftest import TEST_QDRANT_URL
 
     class DummySparse:
         def encode(self, content):
@@ -142,10 +142,10 @@ def test_migrate_skips_blank_embedding_text_points_in_bm25_collection(tmp_path):
     """In a bm25 collection, a point with blank embedding_text must be SKIPPED
     (counted, not stamped): upserting it dense-only would wipe its sparse
     vector. Points with embedding_text migrate normally."""
-    from conftest import TEST_QDRANT_URL
-
-    from core import BM25Encoder
     from scripts.migrate_repr_v2 import migrate_repr_v2
+
+    from conftest import TEST_QDRANT_URL
+    from core import BM25Encoder
 
     encoder = BM25Encoder()
     encoder.fit(["Project api. Claim: good point with sparse text", "some other doc"])
@@ -192,9 +192,9 @@ def test_migrate_blank_content_keeps_v1_vector_and_does_not_fail_run(tmp_path):
     vector, is counted as no_content (not failed — the run's exit code stays
     honest for idempotent re-runs), and stays unstamped. compacted_resurrected
     is reported for the nonzero-exit verify path."""
-    from conftest import TEST_QDRANT_URL
-
     from scripts.migrate_repr_v2 import migrate_repr_v2
+
+    from conftest import TEST_QDRANT_URL
 
     embedder = Embedder()
     store = VectorStore(collection=COLLECTION, url=TEST_QDRANT_URL)

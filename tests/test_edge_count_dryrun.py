@@ -17,9 +17,9 @@ COLLECTION = "edge_dryrun_test"
 
 
 def test_dryrun_reports_old_vs_new_band_membership(tmp_path):
-    from conftest import TEST_QDRANT_URL
-
     from scripts.edge_count_dryrun import edge_count_dryrun
+
+    from conftest import TEST_QDRANT_URL
 
     embedder = Embedder()
     store = VectorStore(collection=COLLECTION, url=TEST_QDRANT_URL)
