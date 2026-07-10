@@ -45,7 +45,7 @@ from qdrant_client.http.models import (
 )
 
 from core.telemetry import Telemetry
-from core.utils import stable_hash_id
+from core.utils import assert_test_isolation, stable_hash_id
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +117,7 @@ class VectorStore:
 
     def _connect(self) -> None:
         """Connect to Qdrant and ensure collection exists."""
+        assert_test_isolation(qdrant_url=self.url)
         logger.info(f"Connecting to Qdrant at {self.url}")
         self._client = QdrantClient(url=self.url, api_key=self.api_key)
         self._ensure_collection()

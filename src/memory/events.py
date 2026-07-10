@@ -7,6 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from core.utils import assert_test_isolation
+
 
 @dataclass(frozen=True, slots=True)
 class MemoryEvent:
@@ -22,6 +24,7 @@ class MemoryEvent:
 class EventLog:
     def __init__(self, path: Path | str) -> None:
         self.path = Path(path)
+        assert_test_isolation(storage_path=self.path)
 
     def append(self, event: MemoryEvent) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
