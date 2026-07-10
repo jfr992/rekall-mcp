@@ -1,9 +1,11 @@
 """Read-time conflict detection + freshness annotation (spec 2026-07-06, Stage B).
 
 Same-type only in v1 — cross-type conflicts are PR-F2 (needs eval scenarios first).
-Comparison basis: STORED vectors (embedding_text-vs-embedding_text), so theta
-matches the linker's supersedes calibration (0.9). Never deletes, never reorders
-scores — output is annotation only.
+Comparison basis: STORED vectors. Repr v2 stores encode(content) — theta 0.81 is
+the bracket midpoint between the max measured non-conflict pair cosine (0.7717)
+and the min measured conflict pair cosine (0.8455) on the linker/freshness test
+fixture corpus (all-MiniLM, 2026-07-09 calibration). Never deletes, never
+reorders scores — output is annotation only.
 """
 
 from __future__ import annotations
@@ -24,12 +26,20 @@ def detect_conflict_groups(
     memories: list[dict],
     graph,
     vectors: dict[str, list[float]] | None,
-    theta: float = 0.9,
+    theta: float = 0.81,
 ) -> list[set[str]]:
     """Union same-type pairs linked by (a) supersedes/contradicts edges or
-    (b) stored-vector cosine >= theta. Returns groups of size >= 2."""
+    (b) stored-vector cosine >= theta AND >= 1 shared entity (the linker's
+    contradiction evidence standard — cosine alone is not conflict evidence).
+    When either member carries no entity metadata the cosine leg falls back
+    to cosine-only. Returns groups of size >= 2."""
     ids = [m.get("memory_id") for m in memories if m.get("memory_id")]
     type_of = {m["memory_id"]: m.get("type", "note") for m in memories if m.get("memory_id")}
+    entities_of = {
+        m["memory_id"]: {str(e).lower() for e in (m.get("entities") or [])}
+        for m in memories
+        if m.get("memory_id")
+    }
     parent = {i: i for i in ids}
 
     def find(x: str) -> str:
@@ -58,6 +68,9 @@ def detect_conflict_groups(
         for i, a in enumerate(ids):
             for b in ids[i + 1 :]:
                 if type_of.get(a) != type_of.get(b):
+                    continue
+                ea, eb = entities_of.get(a), entities_of.get(b)
+                if ea and eb and not (ea & eb):
                     continue
                 va, vb = vectors.get(a), vectors.get(b)
                 if va and vb and _cosine(va, vb) >= theta:

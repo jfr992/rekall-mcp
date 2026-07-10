@@ -42,6 +42,29 @@ class TestGetYamlMemories:
         assert memories["dec1"]["type"] == "decision"
         assert memories["learn1"]["type"] == "learning"
 
+    def test_loads_memories_from_nested_project_dirs(self, tmp_path):
+        """v1.5.0 writes <project>/<date>.yaml — flat glob finds zero files."""
+        from memory.sync import _get_yaml_memories
+
+        project_dir = tmp_path / "my-app"
+        project_dir.mkdir()
+        data = {
+            "date": "2026-07-01",
+            "facts": [
+                {
+                    "id": "nested1",
+                    "content": "Nested fact",
+                    "project": "my-app",
+                    "timestamp": "2026-07-01T10:00:00",
+                },
+            ],
+        }
+        (project_dir / "2026-07-01.yaml").write_text(yaml.dump(data))
+
+        memories = _get_yaml_memories(tmp_path)
+
+        assert "nested1" in memories
+
     def test_empty_directory_returns_empty(self, tmp_path):
         """Should return empty dict for empty directory."""
         from memory.sync import _get_yaml_memories
@@ -202,6 +225,49 @@ class TestSyncMemories:
 
 class TestSyncIntegration:
     """Integration tests for sync (with mocked Qdrant)."""
+
+    def test_sync_preserves_payload_fields_and_sparse_content(self, tmp_path):
+        """Repr v2 contract: sync must pass content= (embedding_text) to
+        store.save so the BM25 sparse vector is not wiped, and must not strip
+        payload fields (tier, entities, embedding_text) down to the bare six."""
+        from memory.sync import sync_memories
+
+        data = {
+            "date": "2024-01-01",
+            "decisions": [
+                {
+                    "id": "new1",
+                    "content": "Use PostgreSQL for storage",
+                    "project": "test",
+                    "timestamp": "2024-01-01T10:00:00",
+                    "tier": "semantic",
+                    "entities": ["PostgreSQL"],
+                    "embedding_text": "Project test. Claim: Use PostgreSQL for storage",
+                    "reinforcement_count": 3,
+                },
+            ],
+        }
+        (tmp_path / "2024-01-01.yaml").write_text(yaml.dump(data))
+
+        mock_store = MagicMock()
+        mock_embedder = MagicMock()
+        mock_embedder.encode.return_value = [0.1] * 384
+
+        with patch("memory.sync._get_qdrant_memories", return_value={}):
+            with patch("core.VectorStore", return_value=mock_store):
+                with patch("core.Embedder", return_value=mock_embedder):
+                    sync_memories(storage_path=str(tmp_path), dry_run=False)
+
+        save_kwargs = mock_store.save.call_args.kwargs
+        # dense = raw content
+        mock_embedder.encode.assert_called_with("Use PostgreSQL for storage")
+        # sparse leg gets the enriched representation — omitting it wipes BM25
+        assert save_kwargs["content"] == "Project test. Claim: Use PostgreSQL for storage"
+        payload = save_kwargs["payload"]
+        assert payload["tier"] == "semantic"
+        assert payload["entities"] == ["PostgreSQL"]
+        assert payload["embedding_text"] == "Project test. Claim: Use PostgreSQL for storage"
+        assert payload["reinforcement_count"] == 3
 
     def test_sync_adds_new_memories(self, tmp_path):
         """Should add new memories to Qdrant."""
