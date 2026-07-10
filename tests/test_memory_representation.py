@@ -209,18 +209,28 @@ def test_recall_single_probe_when_query_has_no_project_token(tmp_path):
 
 
 def test_is_project_shaped_token():
-    """Gate for the stripped probe: only clearly project-shaped tokens are
-    stripped, so common English words used as project names never gut a query."""
+    """Gate for the stripped probe: only tokens carrying a hyphen, underscore,
+    or digit are project-shaped; plain English words never gut a query."""
     from memory.manager import _is_project_shaped
 
     assert _is_project_shaped("svc-api")  # hyphen
     assert _is_project_shaped("rekall_mcp")  # underscore
     assert _is_project_shaped("app2")  # digit
-    assert _is_project_shaped("rekallmcp")  # len >= 8, not a common word
-    assert not _is_project_shaped("general")  # common word, no separators
-    assert not _is_project_shaped("api")  # too short
-    assert not _is_project_shaped("security")  # len 8 but common English word
+    assert not _is_project_shaped("general")
+    assert not _is_project_shaped("api")
+    assert not _is_project_shaped("security")
     assert not _is_project_shaped("frontend")
+
+
+def test_single_word_project_names_never_project_shaped():
+    """No length heuristic: nothing separates 'rekallmcp' from 'payments' or
+    'terraform'. Deliberate ceiling — only a hyphen/underscore/digit marks a
+    token as project-shaped; single-word project names are never stripped."""
+    from memory.manager import _is_project_shaped
+
+    assert not _is_project_shaped("rekallmcp")
+    assert not _is_project_shaped("payments")
+    assert not _is_project_shaped("terraform")
 
 
 def test_recall_common_word_project_never_strips(tmp_path):

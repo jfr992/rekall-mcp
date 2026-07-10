@@ -95,41 +95,15 @@ class Sanitizer:
         return content
 
 
-# Common English words that are plausible project names; stripping them from a
-# dense query would delete real semantics, not scope metadata.
-_COMMON_PROJECT_WORDS = frozenset(
-    {
-        "general",
-        "security",
-        "frontend",
-        "backend",
-        "database",
-        "platform",
-        "internal",
-        "research",
-        "documentation",
-        "infrastructure",
-        "engineering",
-        "projects",
-        "personal",
-        "sandbox",
-    }
-)
-
-
 def _is_project_shaped(project: str) -> bool:
     """True when a project name is safe to strip from a dense query.
 
-    Heuristic ceiling: a hyphen/underscore/digit or an uncommon 8+ char token.
-    A plain-English project name that isn't in the list above (e.g. "payments")
-    still passes at 8+ chars — the dual probe's max-fusion bounds the damage to
-    one wasted search, never a lost result.
+    Only a hyphen/underscore/digit marks a token as project-shaped. Deliberate
+    ceiling: single-word project names ("payments", "rekallmcp") are never
+    stripped — no length or dictionary heuristic reliably separates them from
+    real query semantics, and the full-query probe always runs regardless.
     """
-    if project.lower() in _COMMON_PROJECT_WORDS:
-        return False
-    if any(c in project for c in "-_") or any(c.isdigit() for c in project):
-        return True
-    return len(project) >= 8
+    return any(c in "-_" or c.isdigit() for c in project)
 
 
 # =============================================================================
