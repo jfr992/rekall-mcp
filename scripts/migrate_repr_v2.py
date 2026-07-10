@@ -9,6 +9,17 @@ Per point: dense vector = encode(payload["content"]); the BM25 sparse leg keeps
 payload["embedding_text"]; payload gains repr_version: 2 so an interrupted run
 resumes idempotently (already-stamped points are skipped).
 
+Safety guards:
+- A bm25 collection without a loadable _bm25_vocab.json ABORTS before touching
+  anything (dense-only upserts would silently wipe every sparse vector).
+- In a bm25 collection, points with blank embedding_text are skipped unstamped
+  (counted as skipped_blank_embedding_text) — backfill embedding_text (e.g.
+  migrate_hybrid schema pass), then re-run.
+- Points with blank content keep their v1 vector permanently (counted as
+  no_content, not a failure). Deliberate: there is nothing to re-encode, and
+  re-encoding embedding_text would just reproduce the v1 vector they already
+  have. Zero-vector repair is scripts/reembed_vectors.py's job.
+
 Usage (never against production without a tarball first — see CLAUDE.md):
     QDRANT_URL=http://localhost:6333 uv run python scripts/migrate_repr_v2.py
 """
@@ -68,8 +79,20 @@ def migrate_repr_v2(
 
     # Only write the sparse leg when the collection actually has one — an
     # upsert naming "bm25" against a dense-only collection 400s per point.
+    # Conversely, a bm25 collection WITHOUT a loadable encoder must abort:
+    # dense-only upserts replace the whole point, silently destroying every
+    # sparse vector while the run reports success.
     sparse_config = client.get_collection(collection).config.params.sparse_vectors or {}
-    sparse_encoder = _load_sparse_encoder(memory_dir) if "bm25" in sparse_config else None
+    sparse_encoder = None
+    if "bm25" in sparse_config:
+        sparse_encoder = _load_sparse_encoder(memory_dir)
+        if sparse_encoder is None:
+            raise RuntimeError(
+                f"Collection {collection!r} has a bm25 sparse vector but no BM25 "
+                f"vocab was loadable from {memory_dir / '_bm25_vocab.json'} — "
+                "migrating would wipe all sparse vectors. Fix MEMORY_STORAGE_PATH "
+                "or restore _bm25_vocab.json, then re-run."
+            )
 
     store = VectorStore(
         collection=collection,
@@ -80,7 +103,7 @@ def migrate_repr_v2(
 
     count_before, identity_before, compacted_before = _snapshot(store)
 
-    migrated = skipped = failed = 0
+    migrated = skipped = failed = blank_embedding_text = no_content = 0
     offset = None
     while True:
         points, offset = client.scroll(
@@ -102,8 +125,19 @@ def migrate_repr_v2(
             content = str(payload.get("content") or "")
             memory_id = payload.get("memory_id", point.id)
             if not content.strip():
-                logger.warning(f"  {memory_id}: blank content, cannot re-encode")
-                failed += 1
+                # Nothing to re-encode: the point keeps its v1 vector (see
+                # module docstring). Counted, unstamped, not a run failure.
+                logger.warning(f"  {memory_id}: blank content, keeping v1 vector")
+                no_content += 1
+                continue
+
+            embedding_text = str(payload.get("embedding_text") or "").strip()
+            if sparse_encoder is not None and not embedding_text:
+                # bm25 collection: a dense-only upsert would wipe this point's
+                # sparse vector. Skip unstamped so a run after embedding_text
+                # backfill can still migrate it.
+                logger.warning(f"  {memory_id}: blank embedding_text in bm25 collection, skipping")
+                blank_embedding_text += 1
                 continue
 
             try:
@@ -114,7 +148,7 @@ def migrate_repr_v2(
                     id=point.id,
                     vector=embedder.encode(content),
                     payload=payload,
-                    content=str(payload.get("embedding_text") or "") or None,
+                    content=embedding_text or None,
                 )
                 migrated += 1
             except Exception as e:
@@ -132,6 +166,9 @@ def migrate_repr_v2(
         "migrated": migrated,
         "skipped": skipped,
         "failed": failed,
+        "skipped_blank_embedding_text": blank_embedding_text,
+        "no_content": no_content,
+        "compacted_resurrected": max(0, compacted_after - compacted_before),
         "count_before": count_before,
         "count_after": count_after,
         "identity_tier_changes": len(set(identity_before.items()) ^ set(identity_after.items())),
@@ -148,7 +185,7 @@ def migrate_repr_v2(
         logger.error("VERIFY FAILED: point count changed")
     if result["identity_tier_changes"]:
         logger.error("VERIFY FAILED: identity-tier memberships changed")
-    if compacted_after > compacted_before:
+    if result["compacted_resurrected"]:
         logger.error("VERIFY FAILED: previously-compacted points resurrected")
     return result
 
@@ -169,6 +206,7 @@ def main() -> int:
         result["failed"] == 0
         and result["count_before"] == result["count_after"]
         and result["identity_tier_changes"] == 0
+        and result["compacted_resurrected"] == 0
     )
     return 0 if ok else 1
 
