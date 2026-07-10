@@ -61,3 +61,42 @@ def test_dryrun_reports_old_vs_new_band_membership(tmp_path):
 
     assert report["new_band_pairs"] == 1
     assert frozenset(("mongo", "pg")) in pairs
+
+
+def test_dryrun_reports_supersedes_band_membership(tmp_path):
+    """Supersedes needs NO entity overlap — report same-type pairs at the old
+    (>=0.90, stored) and new (>=0.85, re-encoded) deterministic-supersedes
+    thresholds so prod exposure of the widened [0.85, 0.90) range is measurable."""
+    from conftest import TEST_QDRANT_URL
+
+    from scripts.edge_count_dryrun import edge_count_dryrun
+
+    embedder = Embedder()
+    store = VectorStore(collection=COLLECTION, url=TEST_QDRANT_URL)
+    store.recreate_collection()
+
+    points = [
+        ("pg16", "Use PostgreSQL 16 for primary storage", "decision", ["PostgreSQL", "storage"]),
+        ("pg15", "Use PostgreSQL 15 for primary storage", "decision", ["PostgreSQL", "storage"]),
+        # same-type, DISJOINT entities: still evaluated for supersedes
+        ("mongo", "Use MongoDB as primary datastore", "decision", ["MongoDB"]),
+    ]
+    for pid, content, mem_type, entities in points:
+        meta = {"project": "api", "type": mem_type, "tier": "working", "entities": entities}
+        store.save(
+            id=pid,
+            vector=embedder.encode(build_embedding_text(content, meta)),
+            payload={"memory_id": pid, "content": content, **meta},
+        )
+
+    report = edge_count_dryrun(qdrant_url=TEST_QDRANT_URL, collection=COLLECTION)
+
+    # all three same-type pairs evaluated regardless of entity overlap
+    assert report["supersedes_considered_pairs"] == 3
+    # only pg16/pg15 clears either supersedes threshold
+    assert report["old_supersedes_pairs"] == 1
+    assert report["new_supersedes_pairs"] == 1
+
+    sup = {frozenset((a, b)): (old, new) for a, b, old, new in report["supersedes_pairs"]}
+    pg = sup[frozenset(("pg16", "pg15"))]
+    assert pg[0] >= 0.90 and pg[1] >= 0.85

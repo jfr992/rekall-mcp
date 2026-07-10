@@ -532,3 +532,44 @@ def test_llm_refinement_capped_per_save(tmp_path, monkeypatch):
     # 2 deterministic contradicts past the cap.
     assert result.relations.get("related_to", 0) == 3
     assert result.relations.get("contradicts", 0) == 2
+
+
+def test_widened_range_supersedes_carries_provisional_band(tmp_path, monkeypatch):
+    """Supersedes from the widened [0.85, 0.90) range must be marked
+    band='provisional' — prune refuses to delete on provisional evidence.
+    Edges at >= 0.90 keep the unmarked deterministic behavior."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    kg.add_node("old_87", memory_type="decision")
+    kg.add_node("old_95", memory_type="decision")
+
+    auto_link(
+        graph=kg,
+        memory_id="new_decision",
+        content="Use PostgreSQL 16 for primary storage",
+        memory_type="decision",
+        project="api",
+        embedder=_mock_embedder(),
+        store=_mock_store(
+            [
+                {
+                    "memory_id": "old_87",
+                    "type": "decision",
+                    "content": "Use PostgreSQL 15 for primary storage",
+                    "score": 0.87,
+                    "entities": ["PostgreSQL", "storage"],
+                },
+                {
+                    "memory_id": "old_95",
+                    "type": "decision",
+                    "content": "Use PostgreSQL 14 for primary storage",
+                    "score": 0.95,
+                    "entities": ["PostgreSQL", "storage"],
+                },
+            ]
+        ),
+    )
+
+    assert kg._graph.edges["new_decision", "old_87"].get("band") == "provisional"
+    assert "band" not in kg._graph.edges["new_decision", "old_95"]
