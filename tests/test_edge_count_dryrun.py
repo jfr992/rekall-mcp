@@ -67,9 +67,9 @@ def test_dryrun_reports_supersedes_band_membership(tmp_path):
     """Supersedes needs NO entity overlap — report same-type pairs at the old
     (>=0.90, stored) and new (>=0.85, re-encoded) deterministic-supersedes
     thresholds so prod exposure of the widened [0.85, 0.90) range is measurable."""
-    from conftest import TEST_QDRANT_URL
-
     from scripts.edge_count_dryrun import edge_count_dryrun
+
+    from conftest import TEST_QDRANT_URL
 
     embedder = Embedder()
     store = VectorStore(collection=COLLECTION, url=TEST_QDRANT_URL)
