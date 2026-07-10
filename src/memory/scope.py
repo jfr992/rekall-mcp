@@ -19,6 +19,14 @@ from memory.trust import DEFAULT_BOUNDARY, TrustResolver, load_trust_rules
 
 _CRED_RE = re.compile(r"(https?://)[^@/]+@")
 
+# Session artifacts, not projects: timestamp-shaped dirs (20260708-091227),
+# pure-numeric dirs, and tmp-style scratch names.
+_JUNK_PROJECT_RE = re.compile(r"^(\d{8}-\d{6}|\d+|tmp[\w.-]*|scratch[\w.-]*)$", re.IGNORECASE)
+
+
+def _is_junk_project_name(name: str) -> bool:
+    return bool(_JUNK_PROJECT_RE.match(name))
+
 
 def _strip_creds(url: str | None) -> str:
     """Remove user:token@ from HTTPS remote URLs. Leaves SSH/git URLs alone."""
@@ -111,6 +119,9 @@ class ScopeDetector:
         repo_remote = _strip_creds(raw_remote)
 
         detected_project = project or repo_name or current.name or "general"
+        # Explicit `project` is trusted verbatim; only inferred names are screened.
+        if not project and _is_junk_project_name(detected_project):
+            detected_project = "general"
         detected_agent = agent or rekall_env("AGENT") or cls._detect_agent()
         detected_trust = (
             trust_boundary
