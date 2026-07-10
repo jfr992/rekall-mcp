@@ -238,3 +238,61 @@ def test_main_exits_nonzero_on_compacted_resurrection(monkeypatch):
     )
 
     assert mod.main() == 1
+
+
+def test_migrate_preserves_sparse_vector_byte_identical(tmp_path):
+    """A point whose embedding_text is OOV for the vocab (sparse-encodes to {})
+    must keep its stored sparse vector byte-identical: the migration updates
+    ONLY the named dense vector, never replacing the point."""
+    from qdrant_client import QdrantClient
+
+    from conftest import TEST_QDRANT_URL
+
+    from core import BM25Encoder
+    from core.utils import stable_hash_id
+    from scripts.migrate_repr_v2 import migrate_repr_v2
+
+    encoder = BM25Encoder()
+    encoder.fit(["postgresql storage decision text", "another vocabulary document"])
+    encoder.save(str(tmp_path / "_bm25_vocab.json"))
+
+    embedder = Embedder()
+    store = VectorStore(collection=COLLECTION, url=TEST_QDRANT_URL, sparse_encoder=encoder)
+    store.recreate_collection()
+
+    # Seed with in-vocab text so the point HAS a sparse vector, then the
+    # payload's embedding_text is OOV — old store.save migration would take
+    # the dense-only branch and wipe the sparse leg.
+    memory_id = "2026-07-01_note_oov11111"
+    store.save(
+        id=memory_id,
+        vector=embedder.encode("v1 placeholder"),
+        payload={
+            "memory_id": memory_id,
+            "content": "postgresql storage decision text",
+            "embedding_text": "zzzqx wvvkj entirely out of vocabulary",
+            "type": "note",
+        },
+        content="postgresql storage decision text",
+    )
+
+    client = QdrantClient(url=TEST_QDRANT_URL)
+
+    def sparse_of() -> tuple[list[int], list[float]]:
+        rec = client.retrieve(
+            collection_name=COLLECTION, ids=[stable_hash_id(memory_id)], with_vectors=True
+        )[0]
+        sparse = rec.vector["bm25"]
+        return list(sparse.indices), list(sparse.values)
+
+    sparse_before = sparse_of()
+    assert sparse_before[0], "fixture must have a non-empty sparse vector"
+    dense_before = store.get_many([memory_id], with_vectors=True)[0]["_vector"]
+
+    result = migrate_repr_v2(qdrant_url=TEST_QDRANT_URL, collection=COLLECTION, memory_dir=tmp_path)
+
+    assert result["migrated"] == 1
+    assert sparse_of() == sparse_before, "sparse vector must survive byte-identical"
+    after = store.get_many([memory_id], with_vectors=True)[0]
+    assert after["_vector"] != dense_before, "dense vector must be re-encoded"
+    assert after["repr_version"] == 2

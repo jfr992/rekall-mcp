@@ -1,13 +1,14 @@
 """Migrate dense vectors to representation v2: encode(content) in place.
 
-Qdrant is the source of truth — this scrolls points WITH payloads and upserts
-each one back at the same point id. It deliberately does NOT rebuild from YAML:
-YAML is stale for reinforcement_count / tier promotions and would resurrect
-compacted memories.
+Qdrant is the source of truth — this scrolls points WITH payloads and updates
+ONLY the named dense vector in place (update_vectors + set_payload), never
+replacing the point, so the BM25 sparse leg survives verbatim. It deliberately
+does NOT rebuild from YAML: YAML is stale for reinforcement_count / tier
+promotions and would resurrect compacted memories.
 
-Per point: dense vector = encode(payload["content"]); the BM25 sparse leg keeps
-payload["embedding_text"]; payload gains repr_version: 2 so an interrupted run
-resumes idempotently (already-stamped points are skipped).
+Per point: dense vector = encode(payload["content"]); payload gains
+repr_version: 2 so an interrupted run resumes idempotently (already-stamped
+points are skipped).
 
 Safety guards:
 - A bm25 collection without a loadable _bm25_vocab.json ABORTS before touching
@@ -71,6 +72,7 @@ def migrate_repr_v2(
 ) -> dict[str, Any]:
     """Re-encode every point's dense vector from payload["content"]. Idempotent."""
     from qdrant_client import QdrantClient
+    from qdrant_client.models import PointVectors
 
     from core import Embedder, VectorStore
 
@@ -133,22 +135,24 @@ def migrate_repr_v2(
 
             embedding_text = str(payload.get("embedding_text") or "").strip()
             if sparse_encoder is not None and not embedding_text:
-                # bm25 collection: a dense-only upsert would wipe this point's
-                # sparse vector. Skip unstamped so a run after embedding_text
-                # backfill can still migrate it.
+                # Belt-and-braces (HIGH-1b): kept even though update_vectors
+                # below never touches the sparse leg.
                 logger.warning(f"  {memory_id}: blank embedding_text in bm25 collection, skipping")
                 blank_embedding_text += 1
                 continue
 
             try:
-                payload["repr_version"] = 2
-                # Same point id: point.id is the stored int; VectorStore.save
-                # passes int ids through unhashed.
-                store.save(
-                    id=point.id,
-                    vector=embedder.encode(content),
-                    payload=payload,
-                    content=embedding_text or None,
+                # Update ONLY the named dense vector in place; the sparse leg
+                # and the rest of the point are never rewritten, which removes
+                # the whole replace-the-point sparse-wipe class.
+                client.update_vectors(
+                    collection_name=collection,
+                    points=[PointVectors(id=point.id, vector=embedder.encode(content))],
+                )
+                client.set_payload(
+                    collection_name=collection,
+                    payload={"repr_version": 2},
+                    points=[point.id],
                 )
                 migrated += 1
             except Exception as e:
