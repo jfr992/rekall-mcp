@@ -206,9 +206,10 @@ Stored: "Set api_key to [REDACTED]"
 
 ### Securing a non-localhost deployment
 
-The server binds `0.0.0.0` (required for Claude Code's port-mapped network) and is
-**unauthenticated by default** — fine on a trusted machine. If you expose it on an
-untrusted network, either bind loopback (`HOST=127.0.0.1`) or enable bearer auth:
+The server binds `127.0.0.1` by default and is **unauthenticated** — the trust
+model is localhost. Docker sets `HOST=0.0.0.0` inside the container (required for
+port-mapping); compose maps ports to localhost only. If you deliberately expose
+the server on a network (`HOST=0.0.0.0` on bare metal), enable bearer auth:
 
 ```bash
 export REKALL_API_TOKEN=$(openssl rand -hex 32)   # on the server
