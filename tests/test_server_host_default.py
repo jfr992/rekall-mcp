@@ -1,15 +1,15 @@
-"""Server defaults to 0.0.0.0 (Claude Code needs it); the bind is logged loudly."""
+"""Server defaults to 127.0.0.1; Docker sets HOST=0.0.0.0 explicitly in compose."""
 
 import logging
 
 
-def test_resolve_host_defaults_to_public_bind(monkeypatch):
-    # 0.0.0.0 is required: Claude Code reaches the server through port-mapped /
-    # namespaced networks where loopback-only is unreachable.
+def test_resolve_host_defaults_to_loopback(monkeypatch):
+    # Unauthenticated API must not default to all-interfaces on bare metal.
+    # Docker deployments set HOST=0.0.0.0 explicitly (docker-compose.yaml / Dockerfile).
     monkeypatch.delenv("HOST", raising=False)
     from server import _resolve_host
 
-    assert _resolve_host() == "0.0.0.0"
+    assert _resolve_host() == "127.0.0.1"
 
 
 def test_resolve_host_warns_on_public_bind(monkeypatch, caplog):

@@ -1,0 +1,15 @@
+# Gitleaks config — extends the default ruleset.
+
+[extend]
+useDefault = true
+
+# The credential-sanitizer test suite and docs intentionally contain FAKE
+# credentials (ghp_1234..., sk-abc123..., a truncated fake RSA key) used as
+# fixtures to prove the sanitizer redacts them. Nothing here is real.
+# Do not add paths to this allowlist without the same justification.
+[[allowlists]]
+description = "sanitizer-test fixtures (fake credentials)"
+paths = [
+  '''tests/test_memory\.py''',
+  '''docs/EXAMPLES\.md''',
+]
