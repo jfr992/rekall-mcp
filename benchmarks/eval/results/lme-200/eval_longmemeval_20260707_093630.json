@@ -1,0 +1,42 @@
+{
+  "n_items": 50,
+  "delta_claim_allowed": false,
+  "accuracy": {
+    "seeded": 0.08,
+    "fullcontext": 0.36,
+    "absent": 0.0
+  },
+  "precision_at_5": 0.08,
+  "retrieved_context_tokens_per_query": 743.4,
+  "primary_endpoints": {
+    "delta_product": {
+      "estimate": 0.08,
+      "n": 50,
+      "warning": "n_items < 200: no delta claim (smoke tier)"
+    },
+    "parity_gap": {
+      "estimate": -0.28,
+      "n": 50,
+      "token_ratio_fullcontext_over_seeded": 140.24269572235673,
+      "warning": "n_items < 200: no delta claim (smoke tier)"
+    }
+  },
+  "exploratory": {
+    "per_type_seeded_accuracy": {
+      "knowledge-update": 0.08333333333333333,
+      "multi-session": 0.0
+    },
+    "suppressed_strata": [
+      "single-session-assistant",
+      "single-session-preference",
+      "single-session-user",
+      "temporal-reasoning"
+    ],
+    "per_type_delta_bh_significant": {
+      "knowledge-update": false,
+      "multi-session": false
+    }
+  },
+  "judge_provider": "anthropic",
+  "label": "Rekall-internal (anthropic judge, uncalibrated) \u2014 not mem0-comparable"
+}
