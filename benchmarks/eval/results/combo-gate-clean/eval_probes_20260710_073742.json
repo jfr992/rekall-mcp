@@ -1,0 +1,30 @@
+{
+  "n_items": 16,
+  "delta_claim_allowed": false,
+  "accuracy": {
+    "seeded": 0.9166666666666666,
+    "absent": 0.0
+  },
+  "precision_at_5": 0.275,
+  "retrieved_context_tokens_per_query": 50.9375,
+  "primary_endpoints": {
+    "delta_product": {
+      "estimate": 0.9166666666666666,
+      "n": 16,
+      "warning": "n_items < 200: no delta claim (smoke tier)"
+    }
+  },
+  "exploratory": {
+    "per_type_seeded_accuracy": {
+      "exact-recall": 0.9166666666666666
+    },
+    "suppressed_strata": [
+      "cross-project",
+      "knowledge-update",
+      "preference",
+      "temporal"
+    ]
+  },
+  "judge_provider": "anthropic",
+  "label": "Rekall-internal (anthropic judge, uncalibrated) \u2014 not mem0-comparable"
+}

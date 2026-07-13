@@ -1,0 +1,150 @@
+{"item_id": "f8c5f88b", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 70, "question_type": "single-session-user", "precision_at_5": 0.0}
+{"item_id": "f8c5f88b", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 103958, "question_type": "single-session-user"}
+{"item_id": "f8c5f88b", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 27, "question_type": "single-session-user"}
+{"item_id": "f4f1d8a4_abs", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 4, "prompt_tokens": 71, "question_type": "single-session-user", "precision_at_5": 0.0}
+{"item_id": "f4f1d8a4_abs", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105818, "question_type": "single-session-user"}
+{"item_id": "f4f1d8a4_abs", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 28, "question_type": "single-session-user"}
+{"item_id": "gpt4_59c863d7", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 71, "question_type": "multi-session", "precision_at_5": 0.0}
+{"item_id": "gpt4_59c863d7", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 104569, "question_type": "multi-session"}
+{"item_id": "gpt4_59c863d7", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 28, "question_type": "multi-session"}
+{"item_id": "gpt4_f2262a51", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 68, "question_type": "multi-session", "precision_at_5": 0.0}
+{"item_id": "gpt4_f2262a51", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 103643, "question_type": "multi-session"}
+{"item_id": "gpt4_f2262a51", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 25, "question_type": "multi-session"}
+{"item_id": "gpt4_5501fe77", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 4, "prompt_tokens": 76, "question_type": "multi-session", "precision_at_5": 0.6}
+{"item_id": "gpt4_5501fe77", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105102, "question_type": "multi-session"}
+{"item_id": "gpt4_5501fe77", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 33, "question_type": "multi-session"}
+{"item_id": "gpt4_194be4b3", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 4, "prompt_tokens": 69, "question_type": "multi-session", "precision_at_5": 0.2}
+{"item_id": "gpt4_194be4b3", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 103807, "question_type": "multi-session"}
+{"item_id": "gpt4_194be4b3", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 26, "question_type": "multi-session"}
+{"item_id": "gpt4_372c3eed", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 83, "question_type": "multi-session", "precision_at_5": 0.0}
+{"item_id": "gpt4_372c3eed", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 104877, "question_type": "multi-session"}
+{"item_id": "gpt4_372c3eed", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 40, "question_type": "multi-session"}
+{"item_id": "gpt4_2f91af09", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 8148, "input_tokens": 9, "prompt_tokens": 91, "question_type": "multi-session", "precision_at_5": 0.6}
+{"item_id": "gpt4_2f91af09", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105234, "question_type": "multi-session"}
+{"item_id": "gpt4_2f91af09", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 48, "question_type": "multi-session"}
+{"item_id": "gpt4_372c3eed_abs", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 83, "question_type": "multi-session", "precision_at_5": 0.0}
+{"item_id": "gpt4_372c3eed_abs", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 104850, "question_type": "multi-session"}
+{"item_id": "gpt4_372c3eed_abs", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 40, "question_type": "multi-session"}
+{"item_id": "fca70973", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 3296, "input_tokens": 8, "prompt_tokens": 74, "question_type": "single-session-preference", "precision_at_5": 0.2}
+{"item_id": "fca70973", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 103880, "question_type": "single-session-preference"}
+{"item_id": "fca70973", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 31, "question_type": "single-session-preference"}
+{"item_id": "f35224e0", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 84, "question_type": "multi-session", "precision_at_5": 0.4}
+{"item_id": "f35224e0", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105624, "question_type": "multi-session"}
+{"item_id": "f35224e0", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 41, "question_type": "multi-session"}
+{"item_id": "ef9cf60a", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 2796, "input_tokens": 9, "prompt_tokens": 71, "question_type": "multi-session", "precision_at_5": 0.4}
+{"item_id": "ef9cf60a", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105759, "question_type": "multi-session"}
+{"item_id": "ef9cf60a", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 28, "question_type": "multi-session"}
+{"item_id": "gpt4_fa19884c", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 3222, "input_tokens": 10, "prompt_tokens": 89, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_fa19884c", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 102138, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_fa19884c", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 46, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_4929293a", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 4, "prompt_tokens": 75, "question_type": "temporal-reasoning", "precision_at_5": 0.4}
+{"item_id": "gpt4_4929293a", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105273, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_4929293a", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 32, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_b5700ca9", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 77, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_b5700ca9", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 103202, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_b5700ca9", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 34, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_e072b769", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 77, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_e072b769", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105358, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_e072b769", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 34, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_7f6b06db", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 81, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_7f6b06db", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 103199, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_7f6b06db", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 38, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_6dc9b45b", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 73, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_6dc9b45b", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 102232, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_6dc9b45b", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 30, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_18c2b244", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 118, "question_type": "temporal-reasoning", "precision_at_5": 0.6}
+{"item_id": "gpt4_18c2b244", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 106058, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_18c2b244", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 75, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_1916e0ea", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 87, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_1916e0ea", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105577, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_1916e0ea", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 44, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_468eb063", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 69, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_468eb063", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 104422, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_468eb063", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 26, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_7abb270c", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 2380, "input_tokens": 9, "prompt_tokens": 75, "question_type": "temporal-reasoning", "precision_at_5": 1.0}
+{"item_id": "gpt4_7abb270c", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 101133, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_7abb270c", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 32, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_4fc4f797", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 6893, "input_tokens": 8, "prompt_tokens": 85, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_4fc4f797", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105361, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_4fc4f797", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 42, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_61e13b3c", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 93, "question_type": "temporal-reasoning", "precision_at_5": 0.2}
+{"item_id": "gpt4_61e13b3c", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105329, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_61e13b3c", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 50, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_d6585ce8", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 83, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_d6585ce8", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 102887, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_d6585ce8", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 40, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_74aed68e", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 3047, "input_tokens": 10, "prompt_tokens": 88, "question_type": "temporal-reasoning", "precision_at_5": 0.4}
+{"item_id": "gpt4_74aed68e", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105158, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_74aed68e", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 45, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_7ddcf75f", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 3360, "input_tokens": 8, "prompt_tokens": 79, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_7ddcf75f", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 104425, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_7ddcf75f", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 36, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_a2d1d1f6", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 3216, "input_tokens": 8, "prompt_tokens": 79, "question_type": "temporal-reasoning", "precision_at_5": 0.2}
+{"item_id": "gpt4_a2d1d1f6", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105299, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_a2d1d1f6", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 36, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_85da3956", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 2187, "input_tokens": 8, "prompt_tokens": 78, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_85da3956", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 102866, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_85da3956", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 35, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_e061b84g", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 76, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_e061b84g", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 103323, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_e061b84g", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 33, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_e414231f", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 71, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_e414231f", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105779, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_e414231f", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 28, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_4929293b", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 79, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_4929293b", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105560, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_4929293b", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 36, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_b5700ca0", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 4, "prompt_tokens": 70, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_b5700ca0", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 104497, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_b5700ca0", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 27, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_68e94288", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 4, "prompt_tokens": 73, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_68e94288", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 104434, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_68e94288", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 30, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_2312f94c", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 3201, "input_tokens": 9, "prompt_tokens": 80, "question_type": "temporal-reasoning", "precision_at_5": 0.4}
+{"item_id": "gpt4_2312f94c", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 103601, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_2312f94c", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 37, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_385a5000", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 4, "prompt_tokens": 74, "question_type": "temporal-reasoning", "precision_at_5": 0.4}
+{"item_id": "gpt4_385a5000", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 102942, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_385a5000", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 31, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_5dcc0aab", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 4, "prompt_tokens": 70, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_5dcc0aab", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 104257, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_5dcc0aab", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 27, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_2c50253f", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 3550, "input_tokens": 9, "prompt_tokens": 73, "question_type": "temporal-reasoning", "precision_at_5": 0.4}
+{"item_id": "gpt4_2c50253f", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 104724, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_2c50253f", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 30, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_8c8961ae", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 4, "prompt_tokens": 80, "question_type": "temporal-reasoning", "precision_at_5": 0.4}
+{"item_id": "gpt4_8c8961ae", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 103142, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_8c8961ae", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 37, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_d31cdae3", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 83, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_d31cdae3", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 101283, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_d31cdae3", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 40, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_4cd9eba1", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 3516, "input_tokens": 9, "prompt_tokens": 83, "question_type": "temporal-reasoning", "precision_at_5": 0.4}
+{"item_id": "gpt4_4cd9eba1", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 106012, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_4cd9eba1", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 40, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_78cf46a3", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 80, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_78cf46a3", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 104054, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_78cf46a3", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 37, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_fe651585", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 70, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_fe651585", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 103049, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_fe651585", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 27, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_c27434e8_abs", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 79, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_c27434e8_abs", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105508, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_c27434e8_abs", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 36, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_fe651585_abs", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 4, "prompt_tokens": 70, "question_type": "temporal-reasoning", "precision_at_5": 0.0}
+{"item_id": "gpt4_fe651585_abs", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 104148, "question_type": "temporal-reasoning"}
+{"item_id": "gpt4_fe651585_abs", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 27, "question_type": "temporal-reasoning"}
+{"item_id": "f9e8c073", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 74, "question_type": "knowledge-update", "precision_at_5": 0.0}
+{"item_id": "f9e8c073", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105378, "question_type": "knowledge-update"}
+{"item_id": "f9e8c073", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 31, "question_type": "knowledge-update"}
+{"item_id": "f685340e", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 82, "question_type": "knowledge-update", "precision_at_5": 0.0}
+{"item_id": "f685340e", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 102939, "question_type": "knowledge-update"}
+{"item_id": "f685340e", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 39, "question_type": "knowledge-update"}
+{"item_id": "f685340e_abs", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 8, "prompt_tokens": 75, "question_type": "knowledge-update", "precision_at_5": 0.0}
+{"item_id": "f685340e_abs", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105544, "question_type": "knowledge-update"}
+{"item_id": "f685340e_abs", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 32, "question_type": "knowledge-update"}
+{"item_id": "fea54f57", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 97, "question_type": "single-session-assistant", "precision_at_5": 0.2}
+{"item_id": "fea54f57", "arm": "fullcontext", "repeat": 0, "correct": true, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 104188, "question_type": "single-session-assistant"}
+{"item_id": "fea54f57", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 54, "question_type": "single-session-assistant"}
+{"item_id": "fca762bc", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 4, "prompt_tokens": 106, "question_type": "single-session-assistant", "precision_at_5": 0.0}
+{"item_id": "fca762bc", "arm": "fullcontext", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 105137, "question_type": "single-session-assistant"}
+{"item_id": "fca762bc", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 2, "prompt_tokens": 63, "question_type": "single-session-assistant"}
