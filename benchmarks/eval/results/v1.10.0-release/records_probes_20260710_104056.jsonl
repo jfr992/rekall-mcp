@@ -1,0 +1,96 @@
+{"item_id": "er-01", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 54, "input_tokens": 11, "prompt_tokens": 53, "question_type": "exact-recall", "precision_at_5": 0.2}
+{"item_id": "er-01", "arm": "seeded", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 6, "prompt_tokens": 53, "question_type": "exact-recall"}
+{"item_id": "er-01", "arm": "seeded", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 6, "prompt_tokens": 53, "question_type": "exact-recall"}
+{"item_id": "er-01", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "exact-recall"}
+{"item_id": "er-01", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "exact-recall"}
+{"item_id": "er-01", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "exact-recall"}
+{"item_id": "er-02", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 38, "input_tokens": 11, "prompt_tokens": 56, "question_type": "exact-recall", "precision_at_5": 0.2}
+{"item_id": "er-02", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 38, "input_tokens": 11, "prompt_tokens": 56, "question_type": "exact-recall"}
+{"item_id": "er-02", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 38, "input_tokens": 11, "prompt_tokens": 56, "question_type": "exact-recall"}
+{"item_id": "er-02", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 13, "question_type": "exact-recall"}
+{"item_id": "er-02", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 13, "question_type": "exact-recall"}
+{"item_id": "er-02", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 13, "question_type": "exact-recall"}
+{"item_id": "er-03", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 38, "input_tokens": 11, "prompt_tokens": 55, "question_type": "exact-recall", "precision_at_5": 0.2}
+{"item_id": "er-03", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 38, "input_tokens": 11, "prompt_tokens": 55, "question_type": "exact-recall"}
+{"item_id": "er-03", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 38, "input_tokens": 11, "prompt_tokens": 55, "question_type": "exact-recall"}
+{"item_id": "er-03", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 12, "question_type": "exact-recall"}
+{"item_id": "er-03", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 12, "question_type": "exact-recall"}
+{"item_id": "er-03", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 12, "question_type": "exact-recall"}
+{"item_id": "er-04", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 29, "input_tokens": 11, "prompt_tokens": 55, "question_type": "exact-recall", "precision_at_5": 0.2}
+{"item_id": "er-04", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 29, "input_tokens": 24, "prompt_tokens": 55, "question_type": "exact-recall"}
+{"item_id": "er-04", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 29, "input_tokens": 11, "prompt_tokens": 55, "question_type": "exact-recall"}
+{"item_id": "er-04", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 12, "question_type": "exact-recall"}
+{"item_id": "er-04", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 12, "question_type": "exact-recall"}
+{"item_id": "er-04", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 12, "question_type": "exact-recall"}
+{"item_id": "pr-01", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 5, "input_tokens": 11, "prompt_tokens": 53, "question_type": "preference", "precision_at_5": 0.2}
+{"item_id": "pr-01", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 59, "input_tokens": 11, "prompt_tokens": 53, "question_type": "preference"}
+{"item_id": "pr-01", "arm": "seeded", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 6, "prompt_tokens": 53, "question_type": "preference"}
+{"item_id": "pr-01", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "preference"}
+{"item_id": "pr-01", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "preference"}
+{"item_id": "pr-01", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "preference"}
+{"item_id": "pr-02", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 56, "input_tokens": 11, "prompt_tokens": 53, "question_type": "preference", "precision_at_5": 0.2}
+{"item_id": "pr-02", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 56, "input_tokens": 11, "prompt_tokens": 53, "question_type": "preference"}
+{"item_id": "pr-02", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 56, "input_tokens": 11, "prompt_tokens": 53, "question_type": "preference"}
+{"item_id": "pr-02", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "preference"}
+{"item_id": "pr-02", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "preference"}
+{"item_id": "pr-02", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "preference"}
+{"item_id": "pr-03", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 52, "input_tokens": 11, "prompt_tokens": 53, "question_type": "preference", "precision_at_5": 0.2}
+{"item_id": "pr-03", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 52, "input_tokens": 11, "prompt_tokens": 53, "question_type": "preference"}
+{"item_id": "pr-03", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 52, "input_tokens": 11, "prompt_tokens": 53, "question_type": "preference"}
+{"item_id": "pr-03", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "preference"}
+{"item_id": "pr-03", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "preference"}
+{"item_id": "pr-03", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "preference"}
+{"item_id": "tm-01", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 86, "input_tokens": 12, "prompt_tokens": 53, "question_type": "temporal", "precision_at_5": 0.4}
+{"item_id": "tm-01", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 86, "input_tokens": 12, "prompt_tokens": 53, "question_type": "temporal"}
+{"item_id": "tm-01", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 86, "input_tokens": 12, "prompt_tokens": 53, "question_type": "temporal"}
+{"item_id": "tm-01", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "temporal"}
+{"item_id": "tm-01", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "temporal"}
+{"item_id": "tm-01", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "temporal"}
+{"item_id": "tm-02", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 63, "input_tokens": 12, "prompt_tokens": 52, "question_type": "temporal", "precision_at_5": 0.4}
+{"item_id": "tm-02", "arm": "seeded", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 25, "prompt_tokens": 52, "question_type": "temporal"}
+{"item_id": "tm-02", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 63, "input_tokens": 12, "prompt_tokens": 52, "question_type": "temporal"}
+{"item_id": "tm-02", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 9, "question_type": "temporal"}
+{"item_id": "tm-02", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 9, "question_type": "temporal"}
+{"item_id": "tm-02", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 9, "question_type": "temporal"}
+{"item_id": "tm-03", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 86, "input_tokens": 12, "prompt_tokens": 54, "question_type": "temporal", "precision_at_5": 0.4}
+{"item_id": "tm-03", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 86, "input_tokens": 12, "prompt_tokens": 54, "question_type": "temporal"}
+{"item_id": "tm-03", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 86, "input_tokens": 30, "prompt_tokens": 54, "question_type": "temporal"}
+{"item_id": "tm-03", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 11, "question_type": "temporal"}
+{"item_id": "tm-03", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 11, "question_type": "temporal"}
+{"item_id": "tm-03", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 11, "question_type": "temporal"}
+{"item_id": "ku-01", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 64, "input_tokens": 12, "prompt_tokens": 52, "question_type": "knowledge-update", "precision_at_5": 0.4}
+{"item_id": "ku-01", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 64, "input_tokens": 12, "prompt_tokens": 52, "question_type": "knowledge-update"}
+{"item_id": "ku-01", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 64, "input_tokens": 12, "prompt_tokens": 52, "question_type": "knowledge-update"}
+{"item_id": "ku-01", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 9, "question_type": "knowledge-update"}
+{"item_id": "ku-01", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 9, "question_type": "knowledge-update"}
+{"item_id": "ku-01", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 9, "question_type": "knowledge-update"}
+{"item_id": "ku-02", "arm": "seeded", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 6, "prompt_tokens": 52, "question_type": "knowledge-update", "precision_at_5": 0.4}
+{"item_id": "ku-02", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 66, "input_tokens": 12, "prompt_tokens": 52, "question_type": "knowledge-update"}
+{"item_id": "ku-02", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 66, "input_tokens": 12, "prompt_tokens": 52, "question_type": "knowledge-update"}
+{"item_id": "ku-02", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 9, "question_type": "knowledge-update"}
+{"item_id": "ku-02", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 9, "question_type": "knowledge-update"}
+{"item_id": "ku-02", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 9, "question_type": "knowledge-update"}
+{"item_id": "ku-03", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 75, "input_tokens": 12, "prompt_tokens": 53, "question_type": "knowledge-update", "precision_at_5": 0.4}
+{"item_id": "ku-03", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 75, "input_tokens": 12, "prompt_tokens": 53, "question_type": "knowledge-update"}
+{"item_id": "ku-03", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 75, "input_tokens": 12, "prompt_tokens": 53, "question_type": "knowledge-update"}
+{"item_id": "ku-03", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "knowledge-update"}
+{"item_id": "ku-03", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "knowledge-update"}
+{"item_id": "ku-03", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 10, "question_type": "knowledge-update"}
+{"item_id": "xp-01", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 40, "input_tokens": 11, "prompt_tokens": 58, "question_type": "cross-project", "precision_at_5": 0.2}
+{"item_id": "xp-01", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 40, "input_tokens": 11, "prompt_tokens": 58, "question_type": "cross-project"}
+{"item_id": "xp-01", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 40, "input_tokens": 11, "prompt_tokens": 58, "question_type": "cross-project"}
+{"item_id": "xp-01", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 15, "question_type": "cross-project"}
+{"item_id": "xp-01", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 15, "question_type": "cross-project"}
+{"item_id": "xp-01", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 15, "question_type": "cross-project"}
+{"item_id": "xp-02", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 38, "input_tokens": 11, "prompt_tokens": 55, "question_type": "cross-project", "precision_at_5": 0.2}
+{"item_id": "xp-02", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 38, "input_tokens": 11, "prompt_tokens": 55, "question_type": "cross-project"}
+{"item_id": "xp-02", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 38, "input_tokens": 11, "prompt_tokens": 55, "question_type": "cross-project"}
+{"item_id": "xp-02", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 12, "question_type": "cross-project"}
+{"item_id": "xp-02", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 12, "question_type": "cross-project"}
+{"item_id": "xp-02", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 12, "question_type": "cross-project"}
+{"item_id": "xp-03", "arm": "seeded", "repeat": 0, "correct": true, "rekall_payload_tokens": 34, "input_tokens": 11, "prompt_tokens": 54, "question_type": "cross-project", "precision_at_5": 0.2}
+{"item_id": "xp-03", "arm": "seeded", "repeat": 1, "correct": true, "rekall_payload_tokens": 34, "input_tokens": 11, "prompt_tokens": 54, "question_type": "cross-project"}
+{"item_id": "xp-03", "arm": "seeded", "repeat": 2, "correct": true, "rekall_payload_tokens": 34, "input_tokens": 11, "prompt_tokens": 54, "question_type": "cross-project"}
+{"item_id": "xp-03", "arm": "absent", "repeat": 0, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 11, "question_type": "cross-project"}
+{"item_id": "xp-03", "arm": "absent", "repeat": 1, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 11, "question_type": "cross-project"}
+{"item_id": "xp-03", "arm": "absent", "repeat": 2, "correct": false, "rekall_payload_tokens": 0, "input_tokens": 3, "prompt_tokens": 11, "question_type": "cross-project"}
