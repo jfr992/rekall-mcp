@@ -134,13 +134,14 @@ class BearerAuthMiddleware:
 
 
 def _resolve_host() -> str:
-    """Default to 0.0.0.0 — Claude Code reaches the server through a port-mapped /
-    namespaced network (Docker, WSL, devcontainer) where loopback-only is unreachable.
+    """Default to 127.0.0.1 — Rekall has no auth, so bare metal must not bind
+    all interfaces. Docker sets HOST=0.0.0.0 explicitly (compose + Dockerfile)
+    because port-mapped / namespaced networks can't reach a loopback-only bind.
 
-    Rekall has no auth, so a non-loopback bind is logged: on an untrusted network,
-    set HOST=127.0.0.1 or put it behind a reverse proxy with auth.
+    A non-loopback bind is logged loudly: on an untrusted network, keep the
+    default or put the server behind a reverse proxy with auth.
     """
-    host = os.getenv("HOST", "0.0.0.0")  # noqa: S104 — required for the primary client
+    host = os.getenv("HOST", "127.0.0.1")
     if host not in {"127.0.0.1", "localhost", "::1"}:
         logger.warning(
             f"Binding to {host}: Rekall has no authentication — anyone who can reach "
@@ -150,7 +151,7 @@ def _resolve_host() -> str:
 
 
 # Create the MCP server
-# Host defaults to 0.0.0.0 so Claude Code (and Docker port-mapping) can connect.
+# Host defaults to 127.0.0.1; Docker sets HOST=0.0.0.0 for port-mapping.
 # stateless_http must be True for Claude Code compatibility.
 # Claude Code sends each request independently without session tracking.
 mcp = FastMCP(
