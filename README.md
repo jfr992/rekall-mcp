@@ -284,7 +284,7 @@ docker compose ps            # qdrant, mcp, ui should all be running
 docker compose up -d ui      # (re)start just the cockpit
 ```
 
-**"Claude forgets"** - Install the memory plugin (skills + hook) or add to `~/.claude/CLAUDE.md`:
+**"Claude forgets"** - Install the Claude Code bundle (`claude/` directory — skills + hooks) or add to `~/.claude/CLAUDE.md`:
 ```
 At session start, call get_cached_context() to restore memory.
 ```
@@ -451,7 +451,7 @@ At high usage: **~$54/month savings** per 10k cached tokens
 ```bash
 pip install -e ".[dev]"
 docker compose up -d qdrant
-cd src && python -m server
+cd src && MCP_TRANSPORT=streamable-http python -m server
 ```
 
 ### Tests
@@ -516,6 +516,7 @@ src/
 ## Requirements
 
 - Docker (or Python 3.11+)
+- [uv](https://docs.astral.sh/uv/) (for the `uv run` commands used throughout)
 - ~500MB disk (embedding model downloads on first use)
 - macOS, Linux, or Windows (WSL)
 
@@ -523,4 +524,4 @@ src/
 
 ## License
 
-Apache-2.0 Conflict-group members carry ephemeral `_outdated: true`.
+Apache-2.0

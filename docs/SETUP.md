@@ -24,7 +24,7 @@ Everything runs in containers. No Python install needed.
 ### Step 1: Start the Services
 
 ```bash
-git clone <repo>
+git clone https://github.com/jfr992/rekall-mcp.git
 cd rekall-mcp
 docker compose up -d
 ```
@@ -59,6 +59,9 @@ curl http://localhost:8000/health
 ```
 
 ### Step 4: Build the Knowledge Graph
+
+> **Coming from an older version?** See [docs/MIGRATION.md](MIGRATION.md) — notably
+> `python -m memory.migrate_hybrid` for v1.7 → v1.8 and `scripts/migrate_repr_v2.py` for v1.10.
 
 If you already have memories from a previous version, rebuild the graph to create relationships:
 
@@ -127,7 +130,7 @@ If you prefer running locally:
 ### Step 1: Install
 
 ```bash
-git clone <repo>
+git clone https://github.com/jfr992/rekall-mcp.git
 cd rekall-mcp
 pip install -e .
 ```
@@ -148,11 +151,11 @@ cd /path/to/rekall-mcp/src
 claude mcp add rekall -- python -m server
 ```
 
-Or manually edit `~/.claude/claude_code_config.json` (lets you pin `cwd`):
+Or manually edit `~/.claude.json` (user scope — use `.mcp.json` in a project root for project scope; lets you pin `cwd`):
 ```json
 {
   "mcpServers": {
-    "memory": {
+    "rekall": {
       "command": "python",
       "args": ["-m", "server"],
       "cwd": "/path/to/rekall-mcp/src"
@@ -163,7 +166,10 @@ Or manually edit `~/.claude/claude_code_config.json` (lets you pin `cwd`):
 
 ### Step 4: Test It
 
+Step 3 registered a stdio server, which Claude Code spawns on demand — nothing listens on :8000 yet. Start an HTTP instance to test the REST API:
+
 ```bash
+MCP_TRANSPORT=streamable-http HOST=127.0.0.1 uv run python -m server &
 curl http://localhost:8000/health
 curl http://localhost:8000/api/memory/stats
 ```
@@ -237,7 +243,8 @@ curl -X POST http://localhost:8000/api/memory/graph/rebuild
 ```
 ~/.claude/
 ├── memory/
-│   ├── *.yaml          # Your memories (source of truth)
+│   ├── <project>/
+│   │   └── <date>.yaml # Your memories (source of truth, nested per-project since v1.5)
 │   └── _graph.json     # Knowledge graph (rebuildable)
 └── qdrant/             # Search index (rebuildable)
 ```
@@ -302,7 +309,7 @@ curl -X POST http://localhost:8000/api/memory/graph/rebuild
 | `EMBEDDING_PROVIDER` | `sentence-transformers` | Embedding backend |
 | `GEMINI_API_KEY` | (none) | Gemini provider API key |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
-| `MCP_TRANSPORT` | `streamable-http` | Protocol (stdio or streamable-http) |
+| `MCP_TRANSPORT` | `stdio` | Protocol (stdio or streamable-http; Docker and start scripts set `streamable-http`) |
 | `HOST` | `127.0.0.1` | Listen address (Docker sets `0.0.0.0` for port-mapping) |
 | `PORT` | `8000` | Listen port |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |

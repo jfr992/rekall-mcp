@@ -13,6 +13,7 @@ claude/
 ├── hooks/
 │   ├── rekall-restore.sh       UserPromptSubmit — once-per-session "Rekall ready" status line
 │   ├── rekall-observe.sh       Stop — gated Haiku judge that auto-saves durable observations
+│   ├── memory-prune.sh         SessionStart — once-per-day debounced trigger for the gated superseded-prune
 │   └── session-start-memory.sh SessionStart — optional thin project capsule injection
 └── skills/
     ├── rekall-setup/SKILL.md       /rekall-setup             — re-run installer from inside Claude Code
@@ -35,7 +36,7 @@ bash claude/setup/install.sh
 What it does (all idempotent):
 - Preflight: checks `docker`, `jq`, `curl`, `python3`
 - Starts Qdrant + backend if not already running
-- Copies the 2 default hooks to `~/.claude/hooks/`
+- Copies the 3 default hooks (`rekall-restore.sh`, `rekall-observe.sh`, `memory-prune.sh`) to `~/.claude/hooks/`
 - Backs up `~/.claude/settings.json` then merges in `UserPromptSubmit` + `Stop` entries (deduped — won't duplicate if already wired)
 - Copies all 9 slash commands to `~/.claude/skills/`
 - Verifies backend health + reports memory count
@@ -73,9 +74,11 @@ chmod +x ~/.claude/hooks/session-start-memory.sh
 # Then add a SessionStart command entry for ~/.claude/hooks/session-start-memory.sh
 # to ~/.claude/settings.json.
 
-# 2. Settings — see claude/settings.example.json for the snippet to merge into
-#    ~/.claude/settings.json (or copy it directly if you have no existing settings)
-cp claude/settings.example.json ~/.claude/settings.json
+# 2. Settings — open claude/settings.example.json and copy its hook entries
+#    into the matching arrays of your existing ~/.claude/settings.json.
+#    (Or run `bash claude/setup/install.sh --hooks-only`, which merges safely.)
+# Only if you have NO existing settings.json:
+# cp claude/settings.example.json ~/.claude/settings.json
 
 # 3. Slash commands (optional)
 mkdir -p ~/.claude/skills
@@ -87,7 +90,7 @@ cp -r claude/skills/* ~/.claude/skills/
 The hooks talk to the Rekall backend over HTTP. Both must be running:
 
 ```bash
-docker compose up -d                                                      # Qdrant
+docker compose up -d qdrant
 MCP_TRANSPORT=streamable-http nohup uv run python -m server > /tmp/rekall-backend.log 2>&1 &
 ```
 
