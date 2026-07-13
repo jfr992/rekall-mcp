@@ -303,7 +303,7 @@ curl -X POST http://localhost:8000/api/memory/graph/rebuild
 | `GEMINI_API_KEY` | (none) | Gemini provider API key |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
 | `MCP_TRANSPORT` | `streamable-http` | Protocol (stdio or streamable-http) |
-| `HOST` | `0.0.0.0` | Listen address |
+| `HOST` | `127.0.0.1` | Listen address (Docker sets `0.0.0.0` for port-mapping) |
 | `PORT` | `8000` | Listen port |
 | `LOG_LEVEL` | `INFO` | Logging verbosity |
 
