@@ -230,6 +230,8 @@ echo "NEXT_PUBLIC_REKALL_API_TOKEN=$REKALL_API_TOKEN" >> ui/.env.local
 
 Tested on [LongMemEval](https://github.com/xiaowu0162/LongMemEval) (500 questions, 6 question types). Reproducible — runner in [`benchmarks/`](benchmarks/).
 
+End-to-end effectiveness numbers — accuracy, token cost, and the workloads Rekall loses on — live in [`BENCHMARKS.md`](BENCHMARKS.md), with committed raw evidence.
+
 These are **R@5 retrieval-recall** numbers — "was the correct memory in the top 5 retrieved" — with no LLM at any stage. They are **not** end-to-end QA-accuracy and are **not** comparable to the QA-accuracy figures other systems (mem0, Zep) publish on LongMemEval. MemPalace's raw retrieval baseline (96.6% R@5) uses the same metric and is the closest comparison point.
 
 Measured 2026-07-02 on v1.7.0 (`main`, 5-weight recall ranking). All three benchmark modes run from `main`; the product's default recall path is dense — BM25 in the product search path still lives on `feat/hybrid-search-bm25`.
