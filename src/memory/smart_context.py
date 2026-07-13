@@ -9,7 +9,7 @@ Instead of dumping everything, selects and ranks memories by:
 Usage:
     from memory.smart_context import get_smart_context
 
-    result = get_smart_context(manager, project="byte-edge", max_tokens=2000)
+    result = get_smart_context(manager, project="my-app", max_tokens=2000)
     print(result["context"])   # formatted markdown
     print(result["tokens"])    # token budget used
 """
