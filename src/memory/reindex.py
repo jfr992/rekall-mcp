@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 INDEXED_FIELDS = ("date", "project", "type", "memory_id")
+BOOTSTRAP_THRESHOLD = 50
 
 
 def _tarball(src: Path, dest: Path) -> None:
@@ -134,3 +135,18 @@ def reindex(manager: MemoryManager, *, tarball_dir: Path | None = None) -> dict[
     # manager refuses save/recall until a reindex completes.
     manager.reindex_sentinel.unlink(missing_ok=True)
     return {"points": points, "verified": True, "graph_nodes": graph_stats["nodes"]}
+
+
+def bootstrap_sparse(manager: MemoryManager) -> None:
+    """Post-save hook body: vocab-less store crossed the threshold — go hybrid.
+
+    Same lock-safety contract as reindex: reuse ``manager.store``, set both
+    encoder slots before recreation, re-embed via ``manager.store.save``.
+    """
+    memories = load_all_yaml_memories(manager.memory_dir)
+    encoder = BM25Encoder()
+    encoder.fit(build_corpus(memories))
+
+    _rebuild_collection(manager, memories, encoder)
+    manager.reindex_sentinel.unlink(missing_ok=True)
+    logger.info(f"BM25 bootstrap complete: {len(memories)} memories re-embedded with sparse")

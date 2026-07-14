@@ -175,3 +175,28 @@ def test_vocab_without_binding_loads_as_before(tmp_path):
     loaded = manager.sparse_encoder
     assert loaded is not None
     assert loaded.encode("connection pooling")
+
+
+def test_bootstrap_at_50_recreates_with_sparse(tmp_path):
+    manager = _embedded_manager(tmp_path)
+
+    first_id = manager.save(
+        "chose portalocker for the embedded store flock probe", type="decision", project="proj-a"
+    )
+    for i in range(1, 50):
+        manager.save(
+            f"observation {i}: subsystem sub_{i} owns responsibility {i}",
+            type="note",
+            project="proj-a",
+        )
+
+    vocab_path = manager.memory_dir / "_bm25_vocab.json"
+    assert vocab_path.exists(), "50th save on a vocab-less store must build the vocab"
+    assert manager.sparse_encoder is not None
+    assert manager.store.count() == 50
+
+    info = manager.store.client.get_collection("agent_memory")
+    assert info.config.params.sparse_vectors, "recreated collection must carry sparse config"
+
+    results = manager.recall("portalocker flock probe", limit=5, score_threshold=0.0)
+    assert any(r["memory_id"] == first_id for r in results), "memory 1 must stay recallable"
