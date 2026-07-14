@@ -62,6 +62,122 @@ jobs:
           QDRANT_URL: http://localhost:6334
         run: PYTHONPATH=src uv run pytest -m integration --tb=short -q
 
+  # Portability lanes (spec rev 3) ------------------------------------------
+
+  # Full suite with the memory_manager fixture swapped to the embedded
+  # (QDRANT_PATH) store via REKALL_TEST_LANE — the uvx-trial storage engine.
+  # The qdrant service stays: integration tests that construct URL stores
+  # directly (hybrid search, migrate, crawler) still need :6334.
+  embedded-lane:
+    runs-on: ubuntu-latest
+    services:
+      qdrant:
+        image: qdrant/qdrant:v1.13.4
+        ports:
+          - 6334:6333
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      # fastembed's default cache is <tempdir>/fastembed_cache (fastembed
+      # common/utils.py define_cache_dir) — not stable across runs; route it
+      # somewhere cacheable. The env var is read verbatim (no ~ expansion).
+      - name: Route fastembed cache
+        run: echo "FASTEMBED_CACHE_PATH=$HOME/.cache/fastembed" >> "$GITHUB_ENV"
+      - name: Cache fastembed model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/fastembed
+          key: fastembed-all-MiniLM-L6-v2-${{ runner.os }}
+      - name: Install dependencies
+        run: uv sync --extra dev
+      - name: Wait for Qdrant
+        run: |
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:6334/healthz && exit 0
+            sleep 1
+          done
+          echo "Qdrant did not become healthy" >&2
+          exit 1
+      - name: Full suite (embedded lane)
+        env:
+          REKALL_TEST_LANE: embedded
+        # A bare -m here would override the addopts -m 'not wheel', so both
+        # exclusions are restated. eval_live = real claude -p; never CI.
+        run: uv run pytest -m "not wheel and not eval_live" --tb=short -q
+
+  # Build the wheel, install it into a clean venv, drive save/recall over
+  # stdio — the exact `uvx rekall-mcp` path, on both supported platforms.
+  wheel-gate:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Route fastembed cache
+        run: echo "FASTEMBED_CACHE_PATH=$HOME/.cache/fastembed" >> "$GITHUB_ENV"
+      - name: Cache embedding model caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/huggingface
+            ~/.cache/fastembed
+          key: wheel-models-${{ runner.os }}-all-MiniLM-L6-v2
+      - name: Install dependencies
+        run: uv sync --extra dev
+      - name: Wheel smoke (build -> clean venv -> stdio save/recall)
+        run: uv run --extra dev pytest tests/test_wheel_smoke.py -m wheel --tb=short -q
+
+  # Identity invariant: fastembed (fp32 ONNX) must be vector-identical to
+  # sentence-transformers (cosine >= 0.9999 per pair, incl. one >256-token doc).
+  embedder-identity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Route fastembed cache
+        run: echo "FASTEMBED_CACHE_PATH=$HOME/.cache/fastembed" >> "$GITHUB_ENV"
+      - name: Cache embedding model caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/huggingface
+            ~/.cache/fastembed
+          key: identity-models-${{ runner.os }}-all-MiniLM-L6-v2
+      - name: Install dependencies
+        run: uv sync --extra dev
+      # CPU torch first (the PyTorch CPU index avoids the 2GB+ CUDA wheel),
+      # then the [torch] extra resolves sentence-transformers against it.
+      - name: Install torch (CPU) + [torch] extra
+        run: |
+          uv pip install torch --index-url https://download.pytorch.org/whl/cpu
+          uv pip install ".[torch]"
+      # --no-sync: a default `uv run` re-syncs the env and would strip the
+      # extra-installed torch/sentence-transformers right back out.
+      - name: Identity invariant
+        run: uv run --no-sync pytest tests/test_fastembed_identity.py --tb=short -q
+
+  # docker-compose.yaml defaults stay safe for strangers (pure YAML parse).
+  compose-defaults:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: uv sync --extra dev
+      - name: Compose defaults
+        run: uv run pytest tests/test_compose_defaults.py --tb=short -q
+
   ui:
     runs-on: ubuntu-latest
     defaults:
