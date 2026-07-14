@@ -176,3 +176,19 @@ def test_save_stamps_capture_origin_into_memory_saved_event(tmp_path, monkeypatc
     events = manager.event_log.tail(limit=2)
     assert events[0].payload["capture_origin"] == "cli"
     assert events[1].payload["capture_origin"] == "rest"  # documented default
+
+
+def test_observe_threads_capture_origin_to_save():
+    mgr = object.__new__(MemoryManager)
+    candidate = MagicMock()
+    candidate.should_save = True
+    candidate.content = "judged content"
+    candidate.memory_type = "learning"
+    candidate.salience = 0.8
+    mgr._observer = MagicMock()
+    mgr._observer.evaluate.return_value = candidate
+    mgr.save = MagicMock(return_value="mid")
+
+    MemoryManager.observe(mgr, "judged content", capture_origin="observe_judge")
+
+    assert mgr.save.call_args.kwargs["capture_origin"] == "observe_judge"
