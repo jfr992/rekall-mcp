@@ -93,3 +93,14 @@ def test_load_rebuilds_when_older_than_events_file(tmp_path):
         (tmp_path / "_review_state.json").stat().st_mtime
         >= (tmp_path / "_events.jsonl").stat().st_mtime
     )
+
+
+def test_load_rebuilds_when_missing_or_unparseable(tmp_path):
+    _write_events(tmp_path, [_reviewed("m1", "keep")])
+
+    # missing → rebuild
+    assert review_state.load(tmp_path)["m1"]["last_verdict"] == "keep"
+
+    # unparseable → rebuild, not crash (touch events older so mtime check passes)
+    (tmp_path / "_review_state.json").write_text("{corrupt")
+    assert review_state.load(tmp_path)["m1"]["last_verdict"] == "keep"
