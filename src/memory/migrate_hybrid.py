@@ -181,6 +181,9 @@ def load_all_yaml_memories(memory_dir: Path | str) -> list[dict[str, Any]]:
             for index, item in enumerate(items):
                 if not isinstance(item, dict):
                     continue
+                if item.get("compacted"):
+                    # Compacted originals live only in YAML — never re-indexed.
+                    continue
                 yaml_id = _first_nonblank(item.get("id"), item.get("memory_id"))
                 memory_id = _first_nonblank(item.get("memory_id"), item.get("id"))
                 content = item.get("content", "")

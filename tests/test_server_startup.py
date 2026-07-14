@@ -40,6 +40,17 @@ async def test_api_agent_startup(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_health_carries_rekall_signature(monkeypatch):
+    import server
+
+    monkeypatch.setattr("server._vector_health", lambda: {"sampled": 0, "zero_vectors": 0})
+    response = await server.health_check(SimpleNamespace())
+    body = json.loads(response.body)
+    assert body["server"] == "rekall"
+    assert isinstance(body["version"], str) and body["version"]
+
+
+@pytest.mark.asyncio
 async def test_api_project_capsule(monkeypatch):
     from server import api_project_capsule
 

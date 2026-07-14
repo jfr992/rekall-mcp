@@ -246,6 +246,15 @@ def _vector_health() -> dict[str, int]:
     return _vector_health_cache["value"]
 
 
+def _rekall_version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("rekall-mcp")
+    except PackageNotFoundError:
+        return "dev"
+
+
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request):
     """Health check endpoint."""
@@ -258,6 +267,8 @@ async def health_check(request):
     return JSONResponse(
         {
             "status": status,
+            "server": "rekall",
+            "version": _rekall_version(),
             "transport": "streamable-http",
             "tools_enabled": enabled,
             "vectors": vectors,
@@ -1668,6 +1679,50 @@ def main() -> None:
         uvicorn.run(app, host=host, port=port, log_level="info")
     else:
         mcp.run(transport="stdio")
+
+
+def main_stdio() -> None:
+    """uvx entry: embedded storage default, eager warmup, stdio transport."""
+    rekall_dir = Path(os.environ.get("REKALL_DIR", str(Path.home() / ".rekall"))).expanduser()
+    qdrant_url = os.environ.get("QDRANT_URL")
+    # QDRANT_URL set = server-backed store; defaulting QDRANT_PATH too would
+    # trip the mutual-exclusion guard (mirrors memory/cli.py).
+    if not qdrant_url:
+        os.environ.setdefault("QDRANT_PATH", str(rekall_dir / "qdrant"))
+    # Forced, not setdefault: an inherited streamable-http would leave the MCP
+    # client hanging on stdio. `rekall serve` is the explicit HTTP entry.
+    os.environ["MCP_TRANSPORT"] = "stdio"
+    from core import ownership
+
+    try:
+        acq = ownership.acquire(
+            rekall_dir, port=int(os.environ.get("PORT", "8000")), qdrant_url=qdrant_url
+        )
+    except ownership.ForeignServiceError as exc:
+        sys.stderr.write(f"rekall: {exc}\n")
+        sys.exit(2)
+    except ownership.RekallOwnershipError as exc:
+        sys.stderr.write(f"rekall: {exc}\n")
+        sys.exit(2)
+    if acq.mode == "daemon":
+        sys.stderr.write(
+            "rekall: daemon is running — register with: "
+            f"claude mcp add --transport http rekall {acq.base_url}/  (or stop the daemon)\n"
+        )
+        sys.exit(2)
+    # acquire() already wrote active-backend.json (embedded or url backend).
+    if acq.mode == "embedded" and acq.client is not None:
+        # The acquire-held client IS the store flock — the singleton must reuse it.
+        from memory.manager import MemoryManager
+        from memory.singleton import set_memory_manager
+
+        set_memory_manager(MemoryManager(qdrant_path=str(acq.path), qdrant_client=acq.client))
+    sys.stderr.write("rekall: warming up embedder (first run downloads ~90MB)...\n")
+    from memory.singleton import get_memory_manager
+
+    get_memory_manager().embedder.encode("warmup")  # eager, before tools advertised
+    sys.stderr.write("rekall: ready\n")
+    main()
 
 
 if __name__ == "__main__":

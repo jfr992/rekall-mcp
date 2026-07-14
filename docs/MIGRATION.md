@@ -1,3 +1,33 @@
+# Migration Guide — portability release (unreleased)
+
+**No data migration. One compose behavior change for existing installs.**
+
+- **Compose volume defaults are now named volumes** (`rekall-memory`,
+  `rekall-qdrant`), not `~/.claude/` bind mounts — a fresh `docker compose up`
+  must never aim at live data. If your data lives at `~/.claude/memory` and
+  `~/.claude/qdrant`, keep your bind mounts with the committed override file:
+
+  ```bash
+  docker compose -f docker-compose.yaml -f docker-compose.bind-mounts.example.yaml up -d
+  ```
+
+  Or copy it to `docker-compose.override.yaml` so plain `docker compose up -d`
+  keeps working. Without the override, existing installs start with empty
+  named volumes (your data stays untouched on disk — it's just not mounted).
+- **`container_name` dropped from every service.** Containers are now named
+  by the compose project prefix (e.g. `rekall-mcp-mcp-1`). Update any scripts
+  that `docker exec rekall-mcp ...` by fixed name; `docker compose exec mcp`
+  is the stable spelling.
+- **The image starts as root and drops to `mcp`.** The entrypoint chowns
+  `/data` once when ownership is wrong (named volumes arrive root-owned),
+  then execs the server via gosu. Fixes the named-volume `PermissionError`
+  on save.
+- **The image embeds fastembed, not sentence-transformers.** Compose's
+  `EMBEDDING_PROVIDER` default changed accordingly. Vectors are identical
+  (fp32 ONNX export of the same model) — no reindex needed.
+
+---
+
 # Migration Guide — v1.8.0 → v1.9.0 (Smarter reads)
 
 **No data migration.** Upgrade in place.
