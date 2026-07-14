@@ -70,7 +70,7 @@ def test_manager_encodes_raw_content_for_dense_vector(tmp_path, monkeypatch):
 
     class Embedder:
         def encode(self, text):
-            captured["encoded_text"] = text
+            captured.setdefault("encoded_texts", []).append(text)
             return [0.1] * 384
 
     manager = MemoryManager(memory_dir=tmp_path, qdrant_url="http://localhost:6334")
@@ -88,7 +88,9 @@ def test_manager_encodes_raw_content_for_dense_vector(tmp_path, monkeypatch):
 
     manager.save("Longhorn settings matter", type="learning", project="byte-edge")
 
-    assert captured["encoded_text"] == "Longhorn settings matter"
+    # Raw content is encoded (hoisted, exactly once) — the dense leg's vector.
+    assert captured["encoded_texts"][0] == "Longhorn settings matter"
+    assert captured["encoded_texts"].count("Longhorn settings matter") == 1
     assert captured["payload"]["embedding_text"].startswith("Project byte-edge.")
     # BM25 sparse leg keeps the enriched representation
     assert captured["content"] == captured["payload"]["embedding_text"]
@@ -138,8 +140,8 @@ def test_manager_uses_raw_content_for_duplicate_search_before_save(tmp_path, mon
     assert events[2][0] == "encode"
     assert events[2][1].startswith("Project byte-edge.")
     assert events[3] == ("search", events[2][1])
-    assert events[4] == ("encode", "Longhorn settings matter")
-    assert events[5][0] == "save"
+    # No re-encode before the write: the hoisted content vector is reused.
+    assert events[4][0] == "save"
     assert captured["payload"]["content"] == "Longhorn settings matter"
 
 
