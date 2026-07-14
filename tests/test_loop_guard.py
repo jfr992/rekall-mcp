@@ -83,3 +83,15 @@ def test_unrelated_content_below_threshold_saves_normally(tmp_path):
     assert result != "m-old"
     mgr._reinforce_existing_memory.assert_not_called()
     mgr._store.save.assert_called_once()
+
+
+def test_recall_outside_window_saves_normally(tmp_path):
+    """Same paraphrase-grade similarity, but the recall is 13h old (12h window)."""
+    mgr = _mgr(tmp_path, recalled_vec=_vec(0.92))
+    _seed_recall_event(mgr, hours_ago=13)
+
+    result = mgr.save("prefers concise replies with diagrams", project="proj-x", scope=SCOPE)
+
+    assert result != "m-old"
+    mgr._reinforce_existing_memory.assert_not_called()
+    mgr._store.save.assert_called_once()
