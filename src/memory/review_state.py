@@ -87,3 +87,46 @@ def rebuild(memory_dir: Path | str) -> State:
                 continue
             state = apply_event(state, event)
     return state
+
+
+def write(memory_dir: Path | str, state: State) -> None:
+    """Atomically persist the projection (tmp + os.replace). Server-only."""
+    memory_dir = Path(memory_dir)
+    memory_dir.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=memory_dir, suffix=".review_state.tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as file:
+            json.dump(state, file, sort_keys=True, indent=1)
+        os.replace(tmp_path, memory_dir / STATE_FILENAME)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def load(memory_dir: Path | str) -> State:
+    """Read the projection, rebuilding (and re-writing) it when stale.
+
+    Rebuild triggers: state file missing, unparseable, or mtime older than
+    the events file — the tarball-restore case.
+    """
+    memory_dir = Path(memory_dir)
+    state_path = memory_dir / STATE_FILENAME
+    events_path = memory_dir / EVENTS_FILENAME
+
+    if state_path.exists():
+        stale = events_path.exists() and state_path.stat().st_mtime < events_path.stat().st_mtime
+        if not stale:
+            try:
+                loaded = json.loads(state_path.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    return loaded
+                logger.warning("review state is not an object — rebuilding")
+            except ValueError:
+                logger.warning("review state unparseable — rebuilding", exc_info=True)
+
+    state = rebuild(memory_dir)
+    write(memory_dir, state)
+    return state

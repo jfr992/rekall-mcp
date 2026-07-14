@@ -58,3 +58,14 @@ def test_rebuild_scans_events_jsonl(tmp_path):
     assert state["m3"]["pruned_at"] == "2026-07-14T13:00:00"
     assert state["m4"]["pruned_at"] == "2026-07-14T13:00:00"
     assert set(state) == {"m1", "m2", "m3", "m4"}
+
+
+def test_write_then_load_roundtrip_atomic(tmp_path):
+    _write_events(tmp_path, [_reviewed("m1", "keep")])
+    state = review_state.rebuild(tmp_path)
+
+    review_state.write(tmp_path, state)
+
+    assert (tmp_path / "_review_state.json").exists()
+    assert not list(tmp_path.glob("*.tmp"))  # tmp+os.replace leaves no droppings
+    assert review_state.load(tmp_path) == state
