@@ -240,6 +240,17 @@ def test_rest_observe_threads_session_id(rest_client, fake_rest_manager):
     assert fake_rest_manager.save.call_args.kwargs["session_id"] == "s-1"
 
 
+def test_rest_observe_without_session_id_nulls_it(rest_client, fake_rest_manager):
+    """Version-skew pin: an old installed hook sends no session_id -> null, never fabricated."""
+    fake_rest_manager.save.return_value = "mid"
+    r = rest_client.post(
+        "/api/memory/observe",
+        json={"summary": "fixed the bug", "type": "learning", "cwd": "/tmp/x"},
+    )
+    assert r.status_code == 200
+    assert fake_rest_manager.save.call_args.kwargs["session_id"] is None
+
+
 @pytest.mark.asyncio
 async def test_mcp_tools_stamp_capture_origin(tool_registry):
     from tools.builtin.memory import OptimizedMemoryTools
