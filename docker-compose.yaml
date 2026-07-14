@@ -40,7 +40,7 @@ services:
     build: .
     environment:
       - QDRANT_URL=http://qdrant:6333
-      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-sentence-transformers}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-fastembed}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
       - MCP_TRANSPORT=streamable-http
@@ -83,7 +83,7 @@ services:
   # =========================================================================
   # OLLAMA - Local Embeddings (optional, better quality)
   # =========================================================================
-  # Uncomment to use Ollama instead of sentence-transformers
+  # Uncomment to use Ollama instead of fastembed
   # Then set EMBEDDING_PROVIDER=ollama in your .env file
   #
   # ollama:
@@ -102,7 +102,7 @@ services:
     build: .
     environment:
       - QDRANT_URL=http://qdrant:6333
-      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-sentence-transformers}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-fastembed}
       - MCP_TRANSPORT=streamable-http
       - LOG_LEVEL=DEBUG
       - MEMORY_STORAGE_PATH=/data/memory
@@ -141,7 +141,10 @@ services:
   # TESTS
   # =========================================================================
   test:
-    build: .
+    build:
+      context: .
+      # Prod image carries no dev deps; the test stage adds pytest et al.
+      target: test
     environment:
       - QDRANT_URL=http://qdrant-test:6333
       - MEMORY_STORAGE_PATH=/tmp/test_memory
