@@ -44,6 +44,7 @@ dev = [
 
 [project.scripts]
 rekall = "memory.cli:main"
+rekall-mcp = "server:main_stdio"
 
 [build-system]
 requires = ["hatchling"]
@@ -52,14 +53,19 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/memory", "src/core", "src/tools"]
 
+[tool.hatch.build.targets.wheel.force-include]
+"src/server.py" = "server.py"
+"src/config.py" = "config.py"
+
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 pythonpath = ["src", "."]
 testpaths = ["tests"]
-addopts = "-v"
+addopts = "-v -m 'not wheel'"
 markers = [
     "integration: real Qdrant on :6334 required",
     "eval_live: real claude -p invocations, costs money",
+    "wheel: builds + installs the wheel in a clean venv (slow; CI wheel gate / pytest -m wheel)",
 ]
 
 [tool.ruff]
