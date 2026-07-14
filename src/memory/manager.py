@@ -1741,10 +1741,12 @@ class MemoryManager:
         """Return a single startup payload for agent clients."""
         return build_agent_startup(self, project=project, agent=agent, limit=limit)
 
-    def get_project_capsule(self, project: str, limit: int = 300) -> dict[str, Any]:
+    def get_project_capsule(
+        self, project: str, limit: int = 300, session_id: str | None = None
+    ) -> dict[str, Any]:
         from memory.capsules import build_project_capsule
 
-        return build_project_capsule(self, project=project, limit=limit)
+        return build_project_capsule(self, project=project, limit=limit, session_id=session_id)
 
     def doctor(self, project: str | None = None) -> dict[str, Any]:
         from memory.doctor import run_memory_doctor
