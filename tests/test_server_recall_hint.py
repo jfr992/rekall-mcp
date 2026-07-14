@@ -42,7 +42,16 @@ def test_recall_truncates_oversized_task_hint(client, fake_manager):
     assert len(fake_manager.recall.call_args.kwargs["task_hint"]) == 256
 
 
-def test_recall_event_payload_carries_task_hint(client, fake_manager):
-    client.post("/api/memory/recall", json={"query": "q", "task_hint": "auth middleware"})
-    payload = fake_manager.record_event.call_args.kwargs["payload"]
-    assert payload["task_hint"] == "auth middleware"
+def test_rest_recall_emits_exactly_once(client, fake_manager):
+    """Emission lives in manager.recall — the REST handler must not add a second."""
+
+    def _recall(*args, **kwargs):
+        fake_manager.record_event(
+            event_type="memory_recalled", project="general", payload={"query": "q"}
+        )
+        return [{"memory_id": "m1", "content": "x", "score": 0.9}]
+
+    fake_manager.recall.side_effect = _recall
+    r = client.post("/api/memory/recall", json={"query": "q"})
+    assert r.status_code == 200
+    assert fake_manager.record_event.call_count == 1
