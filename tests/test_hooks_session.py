@@ -251,3 +251,12 @@ def test_session_start_appends_session_id_to_both_gets(tmp_path):
     assert len(startup_gets) == 1, url_lines
     assert "session_id=start-sess-5" in capsule_gets[0]
     assert "session_id=start-sess-5" in startup_gets[0]
+
+
+def test_session_start_without_session_id_sends_no_param(tmp_path):
+    """Skew pin: payloads without session_id must not fabricate one."""
+    result, url_lines = _run_session_start(tmp_path, {"cwd": str(tmp_path)})
+    assert result.returncode == 0, result.stderr
+    gets = [u for u in url_lines if "/api/memory/" in u]
+    assert gets, url_lines
+    assert all("session_id=" not in u for u in gets), url_lines
