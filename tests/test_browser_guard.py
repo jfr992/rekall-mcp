@@ -131,3 +131,24 @@ def test_build_app_enforces_guard_on_real_routes():
         headers={"Origin": "http://localhost:9999", "Content-Type": "text/plain"},
     )
     assert r.status_code == 403
+
+
+def test_cockpit_prune_plan_mutation_still_works(monkeypatch):
+    """Cockpit regression: the exact headers ui/lib/api/client.ts sends pass."""
+    from unittest.mock import MagicMock
+
+    import server
+
+    monkeypatch.setattr("memory.singleton._instance", MagicMock())
+    plan = MagicMock()
+    plan.to_dict.return_value = {"plan_id": "p1", "candidates": []}
+    monkeypatch.setattr("memory.prune.build_plan", lambda *a, **k: plan)
+
+    client = TestClient(server.build_app())
+    r = client.post(
+        "/api/memory/prune/plan",
+        json={"project": "proj-x", "limit": 5},
+        headers={"Origin": "http://localhost:3333", "X-Rekall-UI": "1"},
+    )
+    assert r.status_code == 200
+    assert r.json()["plan_id"] == "p1"
