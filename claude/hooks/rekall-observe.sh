@@ -203,10 +203,14 @@ DO NOT save:
 - Things trivially derivable from code or docs
 - Vague or speculative observations
 
+For evidence_class, claim ONLY:
+- "explicit_user" when the user stated the fact directly (preference, correction, explicit decision)
+- "inferred" when you deduced it from the exchange
+
 Output STRICT JSON only, no prose, no markdown fence:
 {"observe": false}
 OR
-{"observe": true, "type": "preference|learning|decision|requirement|fact", "content": "ONE concise sentence"}
+{"observe": true, "type": "preference|learning|decision|requirement|fact", "content": "ONE concise sentence", "evidence_class": "explicit_user|inferred"}
 
 Exchange:
 EOF
@@ -291,15 +295,30 @@ mtype="$(jq -r '.type // "learning"' <<<"$json" 2>/dev/null)"
 content="$(jq -r '.content // ""' <<<"$json" 2>/dev/null)"
 [[ -z "$content" ]] && exit 0
 
+# evidence_class: the judge may only claim explicit_user|inferred; anything
+# else (including absent) stays empty -> null in the POST. NEVER default to
+# "inferred" — null must mean "unknown", not a fabricated judgment.
+evidence_class="$(jq -r '.evidence_class // ""' <<<"$json" 2>/dev/null || true)"
+case "$evidence_class" in
+  explicit_user|inferred) ;;
+  *) evidence_class="" ;;
+esac
+# Shell override, grounded: gate Signal 1 saw new commits since last fire —
+# an objective artifact trumps whatever the judge claimed.
+if [[ "${NEW_COMMITS:-0}" -gt 0 ]]; then
+  evidence_class="confirmed_artifact"
+fi
+
 # POST to rekall. Dedupe (cosine ≥ 0.97) is handled server-side.
 # session_id: extracted from the Stop payload above; empty -> null (an old
 # server ignores the extra key, a new one nulls it — skew-safe both ways).
 curl -sfo /dev/null --max-time 5 -X POST "$API/api/memory/observe" \
   -H "Content-Type: application/json" \
   -d "$(jq -cn --arg c "$content" --arg t "$mtype" --arg d "$caller_cwd" \
-    --arg s "${_sess_id:-}" \
+    --arg s "${_sess_id:-}" --arg e "$evidence_class" \
     '{summary:$c, type:$t, cwd:$d,
-      session_id:(if $s == "" then null else $s end)}')" \
+      session_id:(if $s == "" then null else $s end),
+      evidence_class:(if $e == "" then null else $e end)}')" \
   2>/dev/null || true
 
 trace "save: type=$mtype project=$(basename "$caller_cwd") :: $content"

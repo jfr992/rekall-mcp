@@ -205,6 +205,21 @@ def test_observe_post_carries_session_id(tmp_path):
     assert observe_bodies[0]["session_id"] == OBSERVE_SESSION
 
 
+def test_observe_post_carries_judge_evidence_class(tmp_path):
+    """No new commits (Signal 1 quiet) -> the judge's own class is kept."""
+    judge = (
+        '{"observe": true, "type": "preference", '
+        '"content": "User prefers Friday-only deploys.", '
+        '"evidence_class": "explicit_user"}'
+    )
+    result, url_lines, bodies = _run_observe_judge(tmp_path, judge_json=judge, git_commits=0)
+
+    assert result.returncode == 0, result.stderr
+    observe_bodies = _observe_bodies(url_lines, bodies)
+    assert len(observe_bodies) == 1, bodies
+    assert observe_bodies[0]["evidence_class"] == "explicit_user"
+
+
 # ---------------------------------------------------------------------------
 # session-start-memory.sh — session_id on capsule GET and startup fallback GET
 # ---------------------------------------------------------------------------
