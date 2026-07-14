@@ -444,8 +444,24 @@ class MemoryManager:
                     "Auto-linking failed, memory saved without graph edges", exc_info=True
                 )
 
+            # Post-save hook: fires only AFTER the vector write completed.
+            self._maybe_bootstrap_sparse()
+
             logger.info(f"Saved memory: {memory_id}")
             return memory_id
+
+    def _maybe_bootstrap_sparse(self) -> None:
+        """BM25 bootstrap: 50th vector write on a vocab-less store goes hybrid."""
+        if self._sparse_encoder is not None or self._bm25_path.exists():
+            return
+
+        from memory.reindex import BOOTSTRAP_THRESHOLD, bootstrap_sparse
+
+        count = self.store.count()
+        # Mocked stores in tests return non-int counts — a real store never does.
+        if not isinstance(count, int) or count < BOOTSTRAP_THRESHOLD:
+            return
+        bootstrap_sparse(self)
 
     def observe(
         self,
