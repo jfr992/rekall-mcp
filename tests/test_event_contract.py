@@ -143,3 +143,36 @@ def test_reflex_handler_does_not_emit(rest_client, fake_rest_manager):
     r = rest_client.post("/api/memory/reflex", json={"text": "terraform apply"})
     assert r.status_code == 200
     fake_rest_manager.record_event.assert_not_called()
+
+
+def _real_save_manager(tmp_path, monkeypatch):
+    """Real manager against tmp storage, vector/graph legs stubbed (pattern:
+    tests/test_memory_events.py::test_manager_records_memory_saved_event)."""
+    manager = MemoryManager(memory_dir=tmp_path, qdrant_url="http://localhost:6334")
+    manager._store = type(
+        "Store",
+        (),
+        {"search": lambda *a, **k: [], "save": lambda *a, **k: None},
+    )()
+    manager._embedder = type("Embedder", (), {"encode": lambda self, text: [0.1] * 384})()
+    manager._knowledge_graph = type(
+        "Graph",
+        (),
+        {"add_node": lambda *a, **k: None, "save": lambda *a, **k: None},
+    )()
+    monkeypatch.setattr(
+        "memory.manager.auto_link",
+        lambda **kwargs: type("R", (), {"edges_created": 0, "relations": {}})(),
+    )
+    return manager
+
+
+def test_save_stamps_capture_origin_into_memory_saved_event(tmp_path, monkeypatch):
+    manager = _real_save_manager(tmp_path, monkeypatch)
+
+    manager.save("Use capsules", type="decision", project="p", capture_origin="cli")
+    manager.save("Another memory entirely", type="decision", project="p")
+
+    events = manager.event_log.tail(limit=2)
+    assert events[0].payload["capture_origin"] == "cli"
+    assert events[1].payload["capture_origin"] == "rest"  # documented default

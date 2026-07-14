@@ -335,6 +335,7 @@ class MemoryManager:
         type: str = "note",
         project: str | None = None,
         scope: MemoryScope | None = None,
+        capture_origin: str = "rest",
         **metadata: Any,
     ) -> str:
         """Save a memory.
@@ -343,6 +344,8 @@ class MemoryManager:
             content: What to remember (will be sanitized)
             type: Memory type (note, decision, learning, preference, session)
             project: Project name
+            capture_origin: Which call site initiated the save
+                (observe_judge | save_memory_tool | rest | cli | hook)
             **metadata: Additional metadata
 
         Returns:
@@ -429,6 +432,7 @@ class MemoryManager:
                     "tier": payload.get("tier"),
                     "cwd": payload.get("cwd"),
                     "repo_name": payload.get("repo_name"),
+                    "capture_origin": capture_origin,
                 },
             )
 
