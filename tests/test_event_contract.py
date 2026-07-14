@@ -3,6 +3,8 @@
 from contextlib import contextmanager
 from unittest.mock import MagicMock
 
+import pytest
+
 from memory.manager import MemoryManager
 
 HITS = [
@@ -77,3 +79,24 @@ def test_recall_emits_one_memory_recalled_with_query_scores_tokens():
     assert payload["token_estimate"] == sum(len(m["content"]) // 4 for m in out)
     assert payload["session_id"] is None
     assert payload["capture_origin"] is None
+
+
+@pytest.mark.asyncio
+async def test_mcp_recall_tool_rides_on_manager_emission(tool_registry):
+    """recall_memories has no emission of its own — manager.recall carries it."""
+    from tools.builtin.memory import OptimizedMemoryTools
+
+    capture_tool, registered_tools = tool_registry
+
+    class FakeMCP:
+        def tool(self, **kwargs):
+            return capture_tool()
+
+    provider = OptimizedMemoryTools()
+    provider._manager = _mgr(HITS)
+    provider.register(FakeMCP())
+
+    await registered_tools["recall_memories"](query="auth rotation", limit=3)
+
+    assert provider._manager.record_event.call_count == 1
+    assert provider._manager.record_event.call_args.kwargs["event_type"] == "memory_recalled"
