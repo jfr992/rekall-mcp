@@ -91,3 +91,19 @@ def test_valid_bearer_short_circuits_origin_rejection(monkeypatch):
         },
     )
     assert r.status_code == 403
+
+
+def test_env_csv_extends_origin_and_host_allowlists(monkeypatch):
+    monkeypatch.setenv("REKALL_UI_ORIGINS", "http://cockpit.local:4444")
+    monkeypatch.setenv("REKALL_ALLOWED_HOSTS", "cockpit.local, qdrant")
+    client = TestClient(_app())
+    r = client.post(
+        "/api/x",
+        json={"a": 1},
+        headers={
+            "Host": "cockpit.local:8000",
+            "Origin": "http://cockpit.local:4444",
+            "X-Rekall-UI": "1",
+        },
+    )
+    assert r.status_code == 200
