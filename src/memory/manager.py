@@ -412,6 +412,7 @@ class MemoryManager:
                 query_text=payload["embedding_text"],
                 project=project_name,
                 memory_type=type,
+                content_vector=vector,  # hoisted encode reused — never encode twice
             )
             if existing_memory_id:
                 self._reinforce_existing_memory(existing_memory_id)
@@ -555,15 +556,17 @@ class MemoryManager:
         query_text: str | None = None,
         project: str,
         memory_type: str,
+        content_vector: list[float] | None = None,
     ) -> str | None:
         """Return existing memory id for near-identical memories in same project/type.
 
         Raw content first: repr v2 stores encode(content), so that's the dense
         leg's match. embedding_text second: BM25 leg + pre-migration vectors.
+        content_vector: caller-provided encode(content), so it isn't re-encoded.
         """
-        search_texts = [content]
+        search_texts = [(content, content_vector)]
         if query_text and query_text != content:
-            search_texts.append(query_text)
+            search_texts.append((query_text, None))
 
         normalized = " ".join(content.split()).strip().lower()
 
@@ -574,10 +577,10 @@ class MemoryManager:
                     return match.get("memory_id")
             return None
 
-        for search_text in search_texts:
+        for search_text, vector in search_texts:
             try:
                 matches = self.store.search(
-                    vector=self.embedder.encode(search_text),
+                    vector=vector if vector is not None else self.embedder.encode(search_text),
                     limit=3,
                     filters={"project": project, "type": memory_type},
                     score_threshold=0.97,
