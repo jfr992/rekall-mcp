@@ -241,9 +241,9 @@ def test_observe_shell_override_confirmed_artifact_beats_judge(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def _run_session_start(tmp_path: Path, stdin_payload: dict) -> tuple[
-    subprocess.CompletedProcess, list[str]
-]:
+def _run_session_start(
+    tmp_path: Path, stdin_payload: dict
+) -> tuple[subprocess.CompletedProcess, list[str]]:
     fakebin, calls, _ = _make_fake_curl(tmp_path)
     env = os.environ.copy()
     env.update(
