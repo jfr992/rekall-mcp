@@ -177,3 +177,32 @@ def test_read_from_is_o_new_bytes_at_10k_events(tmp_path, monkeypatch):
     assert counted["bytes"] <= new_bytes + 1024, (
         f"read {counted['bytes']}B for {new_bytes}B of new events (file is {total}B)"
     )
+
+
+def _rest_client(monkeypatch, tmp_path):
+    from unittest.mock import MagicMock
+
+    from starlette.testclient import TestClient
+
+    import server
+
+    manager = MagicMock()
+    manager.event_log = _log(tmp_path)
+    manager.memory_dir = tmp_path
+    monkeypatch.setattr("memory.singleton._instance", manager)
+    return TestClient(server.mcp.streamable_http_app())
+
+
+def test_get_events_returns_events_cursor_truncated(monkeypatch, tmp_path):
+    client = _rest_client(monkeypatch, tmp_path)
+    log = _log(tmp_path)
+    for i in range(3):
+        log.append(_event(i))
+
+    r = client.get("/api/memory/events", params={"limit": 2})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert [e["payload"]["index"] for e in body["events"]] == [1, 2]
+    assert isinstance(body["cursor"], str) and body["cursor"]
+    assert body["truncated"] is False
