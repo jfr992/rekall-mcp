@@ -206,3 +206,13 @@ def test_get_events_returns_events_cursor_truncated(monkeypatch, tmp_path):
     assert [e["payload"]["index"] for e in body["events"]] == [1, 2]
     assert isinstance(body["cursor"], str) and body["cursor"]
     assert body["truncated"] is False
+
+
+def test_get_events_bad_cursor_returns_400(monkeypatch, tmp_path):
+    client = _rest_client(monkeypatch, tmp_path)
+    _log(tmp_path).append(_event(0))
+
+    r = client.get("/api/memory/events", params={"cursor": "not-a-cursor"})
+
+    assert r.status_code == 400
+    assert "cursor" in r.json()["error"]
