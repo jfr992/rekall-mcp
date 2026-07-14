@@ -107,3 +107,10 @@ def test_env_csv_extends_origin_and_host_allowlists(monkeypatch):
         },
     )
     assert r.status_code == 200
+
+
+def test_get_with_origin_untouched():
+    """Browser reads are not gated — only state-changing methods are."""
+    client = TestClient(_app())
+    r = client.get("/api/x", headers={"Origin": "http://localhost:9999"})
+    assert r.status_code == 200
