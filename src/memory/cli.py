@@ -620,6 +620,51 @@ def serve():
 
 
 @memory.command()
+@click.option(
+    "--tarball-dir",
+    default=None,
+    help="Where to write the pre-reindex tarballs (default: ~/backups)",
+)
+def reindex(tarball_dir: str | None):
+    """Rebuild the vector store from YAML: tarball -> rebuild -> verify -> graph.
+
+    Embedded store by default; QDRANT_URL switches to server-backed Qdrant.
+    Refuses to run while a rekall daemon owns the store.
+    """
+    port = int(os.environ.get("PORT", "8000"))
+    rekall_dir = Path(os.environ.get("REKALL_DIR", str(Path.home() / ".rekall"))).expanduser()
+    memory_dir = os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory")
+
+    from core import ownership
+
+    daemon_msg = (
+        "ERROR: rekall daemon is running — this command would bypass it; "
+        "stop the daemon or use the MCP/REST interface"
+    )
+    if os.environ.get("QDRANT_URL"):
+        if ownership.probe_daemon(f"http://127.0.0.1:{port}") == "rekall":
+            click.echo(daemon_msg, err=True)
+            sys.exit(2)
+        mgr = MemoryManager(memory_dir=memory_dir, qdrant_url=os.environ["QDRANT_URL"])
+    else:
+        try:
+            acq = ownership.acquire(rekall_dir, port=port)
+        except ownership.RekallOwnershipError as exc:
+            click.echo(f"ERROR: {exc}", err=True)
+            sys.exit(2)
+        if acq.mode == "daemon":
+            click.echo(daemon_msg, err=True)
+            sys.exit(2)
+        mgr = MemoryManager(memory_dir=memory_dir, qdrant_path=str(acq.path))
+
+    from .reindex import reindex as run_reindex
+
+    dest = Path(tarball_dir).expanduser() if tarball_dir else None
+    result = run_reindex(mgr, tarball_dir=dest)
+    click.echo(json.dumps(result, indent=2))
+
+
+@memory.command()
 def warmup():
     """Download and prime the embedding model (one encode)."""
     import tempfile

@@ -417,3 +417,41 @@ class TestWarmupCommand:
         assert len(encoded) == 1
         assert "fastembed" in result.output
         assert "/tmp/fe-cache" in result.output
+
+
+class TestReindexCommand:
+    """Test the 'reindex' CLI command (ownership-gated rebuild)."""
+
+    def test_reindex_refuses_when_daemon_running(self, cli_runner, monkeypatch, tmp_path):
+        from core.ownership import Acquisition
+        from memory.cli import memory
+
+        monkeypatch.delenv("QDRANT_URL", raising=False)
+        monkeypatch.setenv("REKALL_DIR", str(tmp_path / "rekall"))
+        monkeypatch.setattr(
+            "core.ownership.acquire",
+            lambda *a, **k: Acquisition(mode="daemon", base_url="http://127.0.0.1:8000"),
+        )
+
+        result = cli_runner.invoke(memory, ["reindex"])
+
+        assert result.exit_code == 2
+        assert "daemon is running" in result.output
+
+    def test_reindex_embedded_rebuilds_and_reports(self, cli_runner, monkeypatch, tmp_path):
+        from core.ownership import Acquisition
+        from memory.cli import memory
+
+        monkeypatch.delenv("QDRANT_URL", raising=False)
+        monkeypatch.setenv("REKALL_DIR", str(tmp_path / "rekall"))
+        monkeypatch.setattr(
+            "core.ownership.acquire",
+            lambda *a, **k: Acquisition(mode="embedded", path=tmp_path / "rekall" / "qdrant"),
+        )
+
+        result = cli_runner.invoke(memory, ["reindex", "--tarball-dir", str(tmp_path / "backups")])
+
+        assert result.exit_code == 0, result.output
+        assert '"points": 0' in result.output
+        assert '"verified": true' in result.output
+        assert list((tmp_path / "backups").glob("*.tar.gz")), "tarballs must be written"
