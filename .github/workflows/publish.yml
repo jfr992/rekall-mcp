@@ -1,0 +1,76 @@
+name: Publish
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/metadata-action@v5
+        id: meta
+        with:
+          images: ghcr.io/jfr992/rekall-mcp
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+      # Size gate before anything is pushed. The gha cache carries the
+      # model-bake layer (~90 MB) so the multi-arch build below reuses it.
+      - name: Build amd64 for size gate
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64
+          load: true
+          tags: rekall-size-gate:local
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Image size gate (fail > 1 GB)
+        run: |
+          size=$(docker image inspect rekall-size-gate:local --format '{{.Size}}')
+          echo "image size: ${size} bytes"
+          if [ "$size" -gt 1073741824 ]; then
+            echo "FATAL: image exceeds 1 GB" >&2
+            exit 1
+          fi
+      - name: Build and push (linux/amd64, linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  pypi:
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read
+      # Required for PyPI Trusted Publishing (OIDC) — see RELEASING.md for
+      # the one-time publisher setup on pypi.org.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Build wheel + sdist
+        run: uv build
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
