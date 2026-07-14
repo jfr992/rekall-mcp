@@ -107,7 +107,7 @@ services:
       - LOG_LEVEL=DEBUG
       - MEMORY_STORAGE_PATH=/data/memory
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
     volumes:
       - ./src:/app/src
       - rekall-memory:/data/memory
@@ -123,7 +123,7 @@ services:
   qdrant-test:
     image: qdrant/qdrant:v1.13.4
     ports:
-      - "6334:6333"
+      - "127.0.0.1:6334:6333"
     tmpfs:
       - /qdrant/storage:size=1G
     healthcheck:
