@@ -31,3 +31,22 @@ def test_read_from_none_returns_tail_and_cursor(tmp_path):
     assert [e.payload["index"] for e in events] == [2, 3, 4]
     assert isinstance(cursor, str) and cursor
     assert truncated is False
+
+
+def test_read_from_cursor_returns_only_new_events(tmp_path):
+    log = _log(tmp_path)
+    for i in range(3):
+        log.append(_event(i))
+    _, cursor, _ = log.read_from(None, limit=10)
+
+    log.append(_event(3))
+    log.append(_event(4))
+    events, cursor2, truncated = log.read_from(cursor, limit=10)
+
+    assert [e.payload["index"] for e in events] == [3, 4]
+    assert truncated is False
+
+    # nothing new → empty, no truncation
+    events, _, truncated = log.read_from(cursor2, limit=10)
+    assert events == []
+    assert truncated is False
