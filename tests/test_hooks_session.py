@@ -82,3 +82,9 @@ def test_restore_marker_named_from_stdin_session_id(tmp_path):
         p.name for p in tmp_path.iterdir()
     )
     assert not (tmp_path / "rekall-restored-env-sess-should-lose").exists()
+
+
+def test_restore_marker_falls_back_to_env_when_stdin_has_no_session(tmp_path):
+    result = _run_restore(tmp_path, {"cwd": str(tmp_path)}, env_session="env-sess-2")
+    assert result.returncode == 0, result.stderr
+    assert (tmp_path / "rekall-restored-env-sess-2").exists()
