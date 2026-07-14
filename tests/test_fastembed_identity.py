@@ -35,9 +35,16 @@ def _cos(a: list[float], b: list[float]) -> float:
     return dot / (math.sqrt(sum(x * x for x in a)) * math.sqrt(sum(y * y for y in b)))
 
 
-def test_fastembed_identical_to_sentence_transformers():
+@pytest.mark.parametrize(
+    "fastembed_model_name",
+    ["all-MiniLM-L6-v2", "sentence-transformers/all-MiniLM-L6-v2"],
+)
+def test_fastembed_identical_to_sentence_transformers(fastembed_model_name):
+    """Both spellings of the canonical model must be vector-identical to ST —
+    the full name once skipped the 256-token truncation alignment, so the
+    >256-token LONG_DOC embedded differently."""
     st = SentenceTransformerProvider(model="all-MiniLM-L6-v2")
-    fe = FastEmbedProvider(model="all-MiniLM-L6-v2")
+    fe = FastEmbedProvider(model=fastembed_model_name)
 
     for text in TEXTS:
         cos = _cos(st.encode(text), fe.encode(text))

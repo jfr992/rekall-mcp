@@ -85,6 +85,7 @@ class VectorStore:
         embedding_dim: int = 384,
         sparse_encoder: Any | None = None,
         path: str | None = None,
+        client: QdrantClient | None = None,
     ) -> None:
         """Initialize vector store.
 
@@ -95,6 +96,8 @@ class VectorStore:
             embedding_dim: Vector dimensions (default: 384 for MiniLM)
             sparse_encoder: BM25Encoder for hybrid search (optional)
             path: Local directory for embedded (in-process) Qdrant
+            client: Pre-connected QdrantClient to reuse (ownership.acquire's
+                embedded client holds the store flock — never reconstruct it)
         """
         if url is not None and path is not None:
             raise ValueError("QDRANT_URL and QDRANT_PATH are mutually exclusive")
@@ -105,6 +108,7 @@ class VectorStore:
         self.embedding_dim = embedding_dim
         self.sparse_encoder = sparse_encoder
 
+        self._injected_client = client
         self._client: QdrantClient | None = None
         self._telemetry = Telemetry.get()
 
@@ -122,7 +126,9 @@ class VectorStore:
 
     def _connect(self) -> None:
         """Connect to Qdrant (server url or embedded path) and ensure collection exists."""
-        if self.path is not None:
+        if self._injected_client is not None:
+            self._client = self._injected_client
+        elif self.path is not None:
             assert_test_isolation(qdrant_path=self.path)
             logger.info(f"Opening embedded Qdrant at {self.path}")
             self._client = QdrantClient(path=self.path)

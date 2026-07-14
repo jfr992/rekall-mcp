@@ -13,7 +13,7 @@ import os
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import httpx
 
@@ -40,9 +40,13 @@ class RekallStoreLockedError(RekallOwnershipError):
 
 @dataclass(frozen=True)
 class Acquisition:
-    mode: Literal["daemon", "embedded"]
+    mode: Literal["daemon", "embedded", "url"]
     base_url: str | None = None
     path: Path | None = None
+    qdrant_url: str | None = None
+    # Embedded mode: the live QdrantClient whose flock IS the store lock.
+    # Callers must reuse it (a second client on the same path is refused).
+    client: Any = None
 
 
 def probe_daemon(base_url: str, timeout: float = 1.5) -> Literal["rekall", "foreign", "absent"]:
@@ -64,19 +68,20 @@ def probe_daemon(base_url: str, timeout: float = 1.5) -> Literal["rekall", "fore
     return "foreign"
 
 
-def write_active_backend(rekall_dir: Path, backend: str, target: str) -> None:
-    """Record who owns the store: {backend, target, pid, written_at}."""
+def write_active_backend(
+    rekall_dir: Path, backend: str, target: str, daemon_url: str | None = None
+) -> None:
+    """Record who owns the store: {backend, target, pid, written_at[, daemon_url]}."""
     rekall_dir.mkdir(parents=True, exist_ok=True)
-    (rekall_dir / ACTIVE_BACKEND_FILE).write_text(
-        json.dumps(
-            {
-                "backend": backend,
-                "target": target,
-                "pid": os.getpid(),
-                "written_at": datetime.now(UTC).isoformat(),
-            }
-        )
-    )
+    record = {
+        "backend": backend,
+        "target": target,
+        "pid": os.getpid(),
+        "written_at": datetime.now(UTC).isoformat(),
+    }
+    if daemon_url:
+        record["daemon_url"] = daemon_url
+    (rekall_dir / ACTIVE_BACKEND_FILE).write_text(json.dumps(record))
 
 
 def _pid_alive(pid: int) -> bool:
@@ -91,7 +96,11 @@ def _pid_alive(pid: int) -> bool:
 
 def _recorded_owner_alive(record: dict) -> bool:
     if record.get("backend") == "url":
-        return probe_daemon(str(record.get("target", ""))) == "rekall"
+        # target is the Qdrant URL; the owning daemon answers on daemon_url
+        # (older records put the daemon URL in target — probe that as fallback).
+        probe_target = str(record.get("daemon_url") or record.get("target", ""))
+        if probe_daemon(probe_target) == "rekall":
+            return True
     return _pid_alive(int(record.get("pid", -1)))
 
 
@@ -120,30 +129,27 @@ def check_active_backend(
     return "stale-taken-over"
 
 
-def _assert_store_lock_free(qdrant_path: Path) -> None:
-    """Try-and-release qdrant's own flock; translate contention to the ladder.
+def _open_embedded_store(qdrant_path: Path) -> Any:
+    """Construct the real embedded client — holding qdrant's flock IS the lock.
 
-    The real guard stays qdrant's non-blocking flock at client construction —
-    this probe just turns its raw exception into an actionable message.
+    Probe-and-release would leave a window where two fresh processes both pass
+    and both record ownership; the winner's client is created here and handed
+    to the caller so lock precedes record with no gap.
     """
-    lock_file = qdrant_path / ".lock"
-    import portalocker
+    from qdrant_client import QdrantClient
 
+    from core.utils import assert_test_isolation
+
+    assert_test_isolation(qdrant_path=str(qdrant_path))
     try:
-        handle = open(lock_file, "r+")
-    except OSError:
-        return  # no lock file — nothing holds the store
-    with handle:
-        try:
-            portalocker.lock(
-                handle, portalocker.LockFlags.EXCLUSIVE | portalocker.LockFlags.NON_BLOCKING
-            )
-        except portalocker.exceptions.LockException:
-            raise RekallStoreLockedError(
-                "another rekall process owns the local store — close it, or run "
-                "`rekall serve` once so all sessions share one daemon."
-            ) from None
-        portalocker.unlock(handle)
+        return QdrantClient(path=str(qdrant_path))
+    except RuntimeError as exc:
+        if "already accessed" not in str(exc):
+            raise
+        raise RekallStoreLockedError(
+            "another rekall process owns the local store — close it, or run "
+            "`rekall serve` once so all sessions share one daemon."
+        ) from None
 
 
 def release(rekall_dir: Path) -> None:
@@ -156,8 +162,13 @@ def release(rekall_dir: Path) -> None:
         pass  # missing/corrupt/foreign file — leave it to the staleness rule
 
 
-def acquire(rekall_dir: Path, port: int) -> Acquisition:
-    """The single integration point: probe, route/refuse, lock, record."""
+def acquire(rekall_dir: Path, port: int, qdrant_url: str | None = None) -> Acquisition:
+    """The single integration point: probe, route/refuse, lock, record.
+
+    qdrant_url set = server-backed store: no embedded flock, the record says
+    {backend: "url", target: <qdrant_url>} so embedded acquires on the same
+    YAML refuse while this owner lives (and vice versa).
+    """
     base_url = f"http://127.0.0.1:{port}"
     state = probe_daemon(base_url)
     if state == "rekall":
@@ -167,13 +178,22 @@ def acquire(rekall_dir: Path, port: int) -> Acquisition:
             f"something is serving on {base_url} that isn't a recognizable rekall — "
             "if it's an older rekall, upgrade it; otherwise set PORT."
         )
-    qdrant_path = rekall_dir / "qdrant"
-    _assert_store_lock_free(qdrant_path)
-    if check_active_backend(rekall_dir, "embedded", str(qdrant_path)) == "mismatch":
+    client = None
+    if qdrant_url:
+        backend, target = "url", qdrant_url
+    else:
+        qdrant_path = rekall_dir / "qdrant"
+        client = _open_embedded_store(qdrant_path)  # lock BEFORE record
+        backend, target = "embedded", str(qdrant_path)
+    if check_active_backend(rekall_dir, backend, target) == "mismatch":
+        if client is not None:
+            client.close()
         raise RekallDaemonRunningError(
             "a live rekall owns this store through another backend "
             f"(see {rekall_dir / ACTIVE_BACKEND_FILE}) — use it, or stop it first."
         )
-    write_active_backend(rekall_dir, "embedded", str(qdrant_path))
+    write_active_backend(rekall_dir, backend, target, daemon_url=base_url if qdrant_url else None)
     atexit.register(release, rekall_dir)
-    return Acquisition(mode="embedded", path=qdrant_path)
+    if qdrant_url:
+        return Acquisition(mode="url", qdrant_url=qdrant_url)
+    return Acquisition(mode="embedded", path=qdrant_path, client=client)

@@ -144,6 +144,7 @@ class MemoryManager:
         qdrant_url: str | None = None,
         qdrant_path: str | None = None,
         embedding_model: str | None = None,
+        qdrant_client: Any | None = None,
     ) -> None:
         """Initialize memory manager.
 
@@ -153,6 +154,8 @@ class MemoryManager:
             qdrant_path: Local directory for embedded Qdrant (default: QDRANT_PATH env).
                 Mutually exclusive with qdrant_url — both set raises when the store connects.
             embedding_model: Model for embeddings (default: EMBEDDING_MODEL or all-MiniLM-L6-v2)
+            qdrant_client: Pre-connected client (ownership.acquire holds the embedded
+                flock through it — reuse, never construct a second one on the path)
         """
         # Read from environment with sensible defaults.
         # Resolution: explicit args → QDRANT_PATH env → QDRANT_URL env → url default.
@@ -173,6 +176,7 @@ class MemoryManager:
         self._store: VectorStore | None = None
         self._qdrant_url = qdrant_url
         self._qdrant_path = qdrant_path
+        self._qdrant_client = qdrant_client
 
         # Embeddings (uses core infrastructure)
         self._embedder: Embedder | None = None
@@ -241,6 +245,8 @@ class MemoryManager:
                 url=self._qdrant_url,
                 path=self._qdrant_path,
                 sparse_encoder=self.sparse_encoder,
+                client=self._qdrant_client,
+                embedding_dim=self.embedder.dimensions,
             )
             # Create indexes for filtering
             for field in ["date", "project", "type", "memory_id"]:
@@ -722,6 +728,7 @@ class MemoryManager:
         valid. The vector IS re-encoded: store.save upserts at the same point
         id (set_payload would leave a stale embedding).
         """
+        self._assert_reindex_complete()
         found = self.store.get_many([memory_id])
         if not found:
             raise ValueError(f"Memory not found: {memory_id}")
@@ -802,6 +809,7 @@ class MemoryManager:
         Returns:
             True if deleted, False if not found
         """
+        self._assert_reindex_complete()
         # Parse date from memory_id: "2026-04-01_fact_hash" → "2026-04-01"
         date = memory_id[:10] if len(memory_id) >= 10 else None
         if not date or len(date) != 10 or date[4] != "-" or date[7] != "-":
@@ -902,6 +910,7 @@ class MemoryManager:
         Returns:
             Stats dict with pruning counts and flagged contradictions
         """
+        self._assert_reindex_complete()
         if prune_superseded:
             raise ValueError(
                 "prune_superseded is gated: use POST /api/memory/prune/superseded "
@@ -1960,6 +1969,7 @@ class MemoryManager:
 
     def clear_project(self, project: str) -> dict[str, int]:
         """Delete all memories for a project from YAML, vector store, AND knowledge graph."""
+        self._assert_reindex_complete()
         with self._telemetry.track("memory.clear_project"):
             points = self.store.scroll(filters={"project": project}, limit=10000)
             ids = [p["memory_id"] for p in points if p.get("memory_id")]
