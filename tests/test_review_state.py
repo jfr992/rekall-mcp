@@ -215,3 +215,20 @@ def test_review_rejects_bad_verdict_and_editor(monkeypatch, tmp_path):
         ).status_code
         == 400
     )
+
+
+def test_review_failed_event_write_logs_loudly_not_silently(monkeypatch, tmp_path, caplog):
+    """kill mutates first — if the event write then fails, say so at ERROR level."""
+    import logging
+
+    client, manager = _review_client(monkeypatch, tmp_path)
+    manager.event_log.append = lambda event: (_ for _ in ()).throw(OSError("disk full"))
+
+    with caplog.at_level(logging.ERROR):
+        r = client.post(
+            "/api/memory/review", json={"memory_id": "m1", "verdict": "kill", "editor": "ui"}
+        )
+
+    assert r.status_code == 200  # the mutation stands
+    assert r.json()["event_recorded"] is False
+    assert "memory_reviewed event write FAILED" in caplog.text
