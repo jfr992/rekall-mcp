@@ -1,0 +1,19 @@
+# Bind-mount override for existing installs (data already at ~/.claude/).
+#
+# The default compose uses named volumes. If your memories live at
+# ~/.claude/memory and ~/.claude/qdrant from a pre-portability install,
+# run with this override to keep using them:
+#
+#   docker compose -f docker-compose.yaml -f docker-compose.bind-mounts.example.yaml up -d
+#
+# Or copy it to docker-compose.override.yaml so plain `docker compose up -d`
+# picks it up automatically. Compose merges volume entries by container
+# target, so these replace the named-volume mounts.
+
+services:
+  qdrant:
+    volumes:
+      - ${QDRANT_DATA_PATH:-~/.claude/qdrant}:/qdrant/storage
+  mcp:
+    volumes:
+      - ${MEMORY_STORAGE_PATH:-~/.claude/memory}:/data/memory
