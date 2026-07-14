@@ -337,6 +337,19 @@ def test_build_project_capsule_emits_one_memory_surfaced():
     assert kwargs["session_id"] == "sess-7"
 
 
+def test_capsule_get_threads_session_id(rest_client, fake_rest_manager):
+    """?session_id= reaches build_project_capsule; absent -> None (skew pin)."""
+    fake_rest_manager.get_project_capsule.return_value = {"project": "p"}
+
+    r = rest_client.get("/api/memory/capsule?project=p&session_id=s-2")
+    assert r.status_code == 200
+    assert fake_rest_manager.get_project_capsule.call_args.kwargs["session_id"] == "s-2"
+
+    r = rest_client.get("/api/memory/capsule?project=p")
+    assert r.status_code == 200
+    assert fake_rest_manager.get_project_capsule.call_args.kwargs["session_id"] is None
+
+
 def test_capsule_and_startup_handlers_do_not_emit(rest_client, fake_rest_manager):
     """Both consumers of build_project_capsule ride on its emission."""
     capsule = {

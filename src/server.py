@@ -1067,8 +1067,9 @@ async def api_project_capsule(request):
     try:
         project = _safe_project(request.query_params.get("project")) or "general"
         limit = _read_int(request.query_params, "limit", 300, lo=1, hi=2000)
+        session_id = request.query_params.get("session_id") or None
         manager = _get_memory_manager()
-        result = manager.get_project_capsule(project=project, limit=limit)
+        result = manager.get_project_capsule(project=project, limit=limit, session_id=session_id)
 
         # memory_surfaced emission lives in build_project_capsule (event contract v2)
         return _ok(result)
