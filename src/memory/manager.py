@@ -142,18 +142,29 @@ class MemoryManager:
         self,
         memory_dir: str | Path | None = None,
         qdrant_url: str | None = None,
+        qdrant_path: str | None = None,
         embedding_model: str | None = None,
+        qdrant_client: Any | None = None,
     ) -> None:
         """Initialize memory manager.
 
         Args:
             memory_dir: Where to store memory files (default: MEMORY_STORAGE_PATH or ~/.claude/memory)
             qdrant_url: Qdrant server URL (default: QDRANT_URL or http://localhost:6333)
+            qdrant_path: Local directory for embedded Qdrant (default: QDRANT_PATH env).
+                Mutually exclusive with qdrant_url — both set raises when the store connects.
             embedding_model: Model for embeddings (default: EMBEDDING_MODEL or all-MiniLM-L6-v2)
+            qdrant_client: Pre-connected client (ownership.acquire holds the embedded
+                flock through it — reuse, never construct a second one on the path)
         """
-        # Read from environment with sensible defaults
+        # Read from environment with sensible defaults.
+        # Resolution: explicit args → QDRANT_PATH env → QDRANT_URL env → url default.
         memory_dir = memory_dir or os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory")
-        qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "http://localhost:6333")
+        if qdrant_url is None and qdrant_path is None:
+            qdrant_path = os.environ.get("QDRANT_PATH") or None
+            qdrant_url = os.environ.get("QDRANT_URL") or None
+            if qdrant_path is None and qdrant_url is None:
+                qdrant_url = "http://localhost:6333"
         embedding_model = embedding_model or os.environ.get("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
         # File storage
@@ -164,6 +175,8 @@ class MemoryManager:
         # Vector store (uses core infrastructure)
         self._store: VectorStore | None = None
         self._qdrant_url = qdrant_url
+        self._qdrant_path = qdrant_path
+        self._qdrant_client = qdrant_client
 
         # Embeddings (uses core infrastructure)
         self._embedder: Embedder | None = None
@@ -171,6 +184,7 @@ class MemoryManager:
 
         # BM25 sparse encoder for hybrid search
         self._sparse_encoder = None
+        self._sparse_vocab_rejected = False
         self._bm25_path = self.memory_dir / "_bm25_vocab.json"
         self._event_log: EventLog | None = None
 
@@ -186,10 +200,37 @@ class MemoryManager:
 
     @property
     def sparse_encoder(self):
-        """Get BM25 encoder, loading from disk if available."""
-        if self._sparse_encoder is None and self._bm25_path.exists():
+        """Get BM25 encoder, loading from disk if available.
+
+        A vocab carrying a ``_binding`` for a different store is refused
+        (dense-only, logged once) — decoding with the wrong vocab would return
+        silently wrong sparse matches. Headerless vocabs load as always.
+        """
+        if (
+            self._sparse_encoder is None
+            and not self._sparse_vocab_rejected
+            and self._bm25_path.exists()
+        ):
+            import json
+
             from core import BM25Encoder
 
+            try:
+                binding = (json.loads(self._bm25_path.read_text()) or {}).get("_binding")
+            except (OSError, ValueError):
+                binding = None
+            target = str(self._qdrant_path or self._qdrant_url)
+            if binding is not None and (
+                binding.get("target") != target or binding.get("collection") != self.COLLECTION
+            ):
+                logger.warning(
+                    f"BM25 vocab at {self._bm25_path} is bound to "
+                    f"{binding.get('target')}/{binding.get('collection')}, not this store "
+                    f"({target}/{self.COLLECTION}) — running dense-only; "
+                    "run `rekall reindex` to rebuild the vocab for this store"
+                )
+                self._sparse_vocab_rejected = True
+                return None
             enc = BM25Encoder()
             enc.load(str(self._bm25_path))
             self._sparse_encoder = enc
@@ -202,7 +243,10 @@ class MemoryManager:
             self._store = VectorStore(
                 collection=self.COLLECTION,
                 url=self._qdrant_url,
+                path=self._qdrant_path,
                 sparse_encoder=self.sparse_encoder,
+                client=self._qdrant_client,
+                embedding_dim=self.embedder.dimensions,
             )
             # Create indexes for filtering
             for field in ["date", "project", "type", "memory_id"]:
@@ -233,6 +277,23 @@ class MemoryManager:
         if self._event_log is None:
             self._event_log = EventLog(self.memory_dir / "_events.jsonl")
         return self._event_log
+
+    @property
+    def reindex_sentinel(self) -> Path:
+        """In-progress reindex marker: inside the embedded store, or next to YAML."""
+        if getattr(self, "_qdrant_path", None):
+            return Path(self._qdrant_path) / ".rekall-reindex-in-progress"
+        return self.memory_dir / ".reindex-sentinel"
+
+    def _assert_reindex_complete(self) -> None:
+        # Bare test doubles (object.__new__) have no storage roots to check.
+        if getattr(self, "memory_dir", None) is None:
+            return
+        if self.reindex_sentinel.exists():
+            raise RuntimeError(
+                f"an interrupted reindex left {self.reindex_sentinel} — the vector "
+                "store may be incomplete; run `rekall reindex` to rebuild it"
+            )
 
     def record_event(
         self,
@@ -287,6 +348,7 @@ class MemoryManager:
             memory.save("Chose hybrid architecture", type="decision", project="my-app")
         """
         with self._telemetry.track("memory.save"):
+            self._assert_reindex_complete()
             content = Sanitizer.sanitize(content)
             scope = scope or ScopeDetector.detect(project=project)
             project_name = project or scope.project or "general"
@@ -391,8 +453,25 @@ class MemoryManager:
                     "Auto-linking failed, memory saved without graph edges", exc_info=True
                 )
 
+            # Post-save hook: fires only AFTER the vector write completed.
+            self._maybe_bootstrap_sparse()
+
             logger.info(f"Saved memory: {memory_id}")
             return memory_id
+
+    def _maybe_bootstrap_sparse(self) -> None:
+        """BM25 bootstrap: 50th vector write on a vocab-less store goes hybrid."""
+        if self._sparse_encoder is not None or self._bm25_path.exists():
+            return
+
+        from memory.reindex import BOOTSTRAP_THRESHOLD, bootstrap_sparse
+
+        # Test doubles may lack count() or return non-ints — a real store never does.
+        counter = getattr(self.store, "count", None)
+        count = counter() if callable(counter) else None
+        if not isinstance(count, int) or count < BOOTSTRAP_THRESHOLD:
+            return
+        bootstrap_sparse(self)
 
     def observe(
         self,
@@ -649,6 +728,7 @@ class MemoryManager:
         valid. The vector IS re-encoded: store.save upserts at the same point
         id (set_payload would leave a stale embedding).
         """
+        self._assert_reindex_complete()
         found = self.store.get_many([memory_id])
         if not found:
             raise ValueError(f"Memory not found: {memory_id}")
@@ -729,6 +809,7 @@ class MemoryManager:
         Returns:
             True if deleted, False if not found
         """
+        self._assert_reindex_complete()
         # Parse date from memory_id: "2026-04-01_fact_hash" → "2026-04-01"
         date = memory_id[:10] if len(memory_id) >= 10 else None
         if not date or len(date) != 10 or date[4] != "-" or date[7] != "-":
@@ -829,6 +910,7 @@ class MemoryManager:
         Returns:
             Stats dict with pruning counts and flagged contradictions
         """
+        self._assert_reindex_complete()
         if prune_superseded:
             raise ValueError(
                 "prune_superseded is gated: use POST /api/memory/prune/superseded "
@@ -916,6 +998,7 @@ class MemoryManager:
             memories = memory.recall("preferences", project="my-app")
         """
         with self._telemetry.track("memory.recall"):
+            self._assert_reindex_complete()
             # Build filters
             filters = {}
             if project:
@@ -1886,6 +1969,7 @@ class MemoryManager:
 
     def clear_project(self, project: str) -> dict[str, int]:
         """Delete all memories for a project from YAML, vector store, AND knowledge graph."""
+        self._assert_reindex_complete()
         with self._telemetry.track("memory.clear_project"):
             points = self.store.scroll(filters={"project": project}, limit=10000)
             ids = [p["memory_id"] for p in points if p.get("memory_id")]

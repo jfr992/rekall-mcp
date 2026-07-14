@@ -569,6 +569,189 @@ def install_claude(skills_only: bool, hooks_only: bool, skip_backend: bool):
     sys.exit(proc.returncode)
 
 
+@memory.command()
+def serve():
+    """Run the rekall daemon (streamable-http) over the embedded store.
+
+    Loopback-only by default; PORT env (default 8000) picks the port.
+    QDRANT_URL switches to server-backed Qdrant instead of the embedded store.
+    """
+    os.environ["MCP_TRANSPORT"] = "streamable-http"
+    os.environ.setdefault("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "8000"))
+    rekall_dir = Path(os.environ.get("REKALL_DIR", str(Path.home() / ".rekall"))).expanduser()
+
+    from core import ownership
+
+    qdrant_url = os.environ.get("QDRANT_URL")
+    if not qdrant_url:
+        os.environ.setdefault("QDRANT_PATH", str(rekall_dir / "qdrant"))
+    try:
+        # url mode records {backend: "url", target: <url>} — the YAML store is
+        # owned either way, so embedded/url acquires cross-refuse while alive.
+        acq = ownership.acquire(rekall_dir, port=port, qdrant_url=qdrant_url)
+    except ownership.RekallOwnershipError as exc:
+        click.echo(f"ERROR: {exc}", err=True)
+        sys.exit(2)
+    if acq.mode == "daemon":
+        click.echo(
+            f"ERROR: a rekall daemon is already running at {acq.base_url} — "
+            "use it, or stop it first.",
+            err=True,
+        )
+        sys.exit(2)
+    if acq.mode == "embedded" and acq.client is not None:
+        # The acquire-held client IS the store flock — the singleton must reuse it.
+        from memory.singleton import set_memory_manager
+
+        set_memory_manager(MemoryManager(qdrant_path=str(acq.path), qdrant_client=acq.client))
+
+    from server import main as server_main
+
+    server_main()
+
+
+@memory.command()
+@click.option(
+    "--tarball-dir",
+    default=None,
+    help="Where to write the pre-reindex tarballs (default: ~/backups)",
+)
+def reindex(tarball_dir: str | None):
+    """Rebuild the vector store from YAML: tarball -> rebuild -> verify -> graph.
+
+    Embedded store by default; QDRANT_URL switches to server-backed Qdrant.
+    Refuses to run while a rekall daemon owns the store.
+    """
+    port = int(os.environ.get("PORT", "8000"))
+    rekall_dir = Path(os.environ.get("REKALL_DIR", str(Path.home() / ".rekall"))).expanduser()
+    memory_dir = os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory")
+
+    from core import ownership
+
+    daemon_msg = (
+        "ERROR: rekall daemon is running — this command would bypass it; "
+        "stop the daemon or use the MCP/REST interface"
+    )
+    if os.environ.get("QDRANT_URL"):
+        if ownership.probe_daemon(f"http://127.0.0.1:{port}") == "rekall":
+            click.echo(daemon_msg, err=True)
+            sys.exit(2)
+        mgr = MemoryManager(memory_dir=memory_dir, qdrant_url=os.environ["QDRANT_URL"])
+    else:
+        try:
+            acq = ownership.acquire(rekall_dir, port=port)
+        except ownership.RekallOwnershipError as exc:
+            click.echo(f"ERROR: {exc}", err=True)
+            sys.exit(2)
+        if acq.mode == "daemon":
+            click.echo(daemon_msg, err=True)
+            sys.exit(2)
+        # acquire holds the store flock through acq.client — reuse it.
+        mgr = MemoryManager(
+            memory_dir=memory_dir, qdrant_path=str(acq.path), qdrant_client=acq.client
+        )
+
+    from .reindex import reindex as run_reindex
+
+    dest = Path(tarball_dir).expanduser() if tarball_dir else None
+    result = run_reindex(mgr, tarball_dir=dest)
+    click.echo(json.dumps(result, indent=2))
+
+
+@memory.command()
+def warmup():
+    """Download and prime the embedding model (one encode)."""
+    import tempfile
+
+    from core import embeddings
+
+    embedder = embeddings.Embedder()
+    embedder.encode("warmup")
+
+    if embedder.provider_name == "fastembed":
+        # fastembed's define_cache_dir: FASTEMBED_CACHE_PATH env or <tmpdir>/fastembed_cache.
+        cache = os.environ.get(
+            "FASTEMBED_CACHE_PATH", str(Path(tempfile.gettempdir()) / "fastembed_cache")
+        )
+    else:
+        cache = os.environ.get("HF_HOME", str(Path.home() / ".cache" / "huggingface"))
+    click.echo(
+        f"✓ Embedder ready ({embedder.provider_name}, {embedder.model_name}) — model cache: {cache}"
+    )
+
+
+@memory.command()
+@click.option(
+    "--clean",
+    "clean_flag",
+    is_flag=True,
+    default=False,
+    help="Remove the seeded demo memories (manifest ids only)",
+)
+@click.option(
+    "--force-into-real-store",
+    is_flag=True,
+    default=False,
+    help="Seed into a non-empty existing store anyway",
+)
+def demo(clean_flag: bool, force_into_real_store: bool):
+    """Seed 20 sample memories into an isolated demo store and print starter queries.
+
+    Defaults to its own store under ~/.rekall/demo — never the real one.
+    MEMORY_STORAGE_PATH redirects the target; a non-empty store that isn't a
+    rekall demo is refused without --force-into-real-store.
+    """
+    from . import demo_seed
+
+    env_memory = os.environ.get("MEMORY_STORAGE_PATH")
+    if env_memory:
+        memory_dir = Path(env_memory).expanduser()
+        demo_dir = memory_dir.parent
+        manager_kwargs: dict = {"memory_dir": memory_dir}  # qdrant resolves from env
+    else:
+        rekall_dir = Path(os.environ.get("REKALL_DIR", str(Path.home() / ".rekall"))).expanduser()
+        demo_dir = rekall_dir / "demo"
+        memory_dir = demo_dir / "memory"
+        manager_kwargs = {"memory_dir": memory_dir, "qdrant_path": str(demo_dir / "qdrant")}
+
+    manifest = demo_dir / demo_seed.MANIFEST_NAME
+
+    if clean_flag:
+        if not manifest.exists():
+            click.echo(f"ERROR: no demo manifest at {manifest} — nothing to clean.", err=True)
+            sys.exit(1)
+        deleted, failed = demo_seed.clean(MemoryManager(**manager_kwargs), manifest)
+        if failed:
+            click.echo(
+                f"ERROR: {len(failed)} demo memories could not be deleted — their ids "
+                f"stay in {manifest}; re-run `rekall demo --clean` to retry.",
+                err=True,
+            )
+            sys.exit(1)
+        click.echo(f"✓ Removed {deleted} demo memories (manifest: {manifest})")
+        return
+
+    non_demo_store = (
+        not manifest.exists() and memory_dir.is_dir() and any(memory_dir.rglob("*.yaml"))
+    )
+    if non_demo_store and not force_into_real_store:
+        click.echo(
+            f"ERROR: {memory_dir} already holds memories that aren't a rekall demo — "
+            "refusing to mix demo data in; pass --force-into-real-store to override.",
+            err=True,
+        )
+        sys.exit(2)
+
+    ids = demo_seed.seed(MemoryManager(**manager_kwargs), demo_dir)
+    click.echo(f"✓ Seeded {len(ids)} demo memories into {memory_dir}")
+    click.echo(f"  manifest: {manifest}")
+    click.echo("\nTry these recall queries:")
+    for query in demo_seed.SUGGESTED_QUERIES:
+        click.echo(f'  • "{query}"')
+    click.echo("\nClean up with: rekall demo --clean")
+
+
 def main():
     """Entry point."""
     memory()
