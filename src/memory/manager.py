@@ -180,6 +180,7 @@ class MemoryManager:
 
         # BM25 sparse encoder for hybrid search
         self._sparse_encoder = None
+        self._sparse_vocab_rejected = False
         self._bm25_path = self.memory_dir / "_bm25_vocab.json"
         self._event_log: EventLog | None = None
 
@@ -195,10 +196,37 @@ class MemoryManager:
 
     @property
     def sparse_encoder(self):
-        """Get BM25 encoder, loading from disk if available."""
-        if self._sparse_encoder is None and self._bm25_path.exists():
+        """Get BM25 encoder, loading from disk if available.
+
+        A vocab carrying a ``_binding`` for a different store is refused
+        (dense-only, logged once) — decoding with the wrong vocab would return
+        silently wrong sparse matches. Headerless vocabs load as always.
+        """
+        if (
+            self._sparse_encoder is None
+            and not self._sparse_vocab_rejected
+            and self._bm25_path.exists()
+        ):
+            import json
+
             from core import BM25Encoder
 
+            try:
+                binding = (json.loads(self._bm25_path.read_text()) or {}).get("_binding")
+            except (OSError, ValueError):
+                binding = None
+            target = str(self._qdrant_path or self._qdrant_url)
+            if binding is not None and (
+                binding.get("target") != target or binding.get("collection") != self.COLLECTION
+            ):
+                logger.warning(
+                    f"BM25 vocab at {self._bm25_path} is bound to "
+                    f"{binding.get('target')}/{binding.get('collection')}, not this store "
+                    f"({target}/{self.COLLECTION}) — running dense-only; "
+                    "run `rekall reindex` to rebuild the vocab for this store"
+                )
+                self._sparse_vocab_rejected = True
+                return None
             enc = BM25Encoder()
             enc.load(str(self._bm25_path))
             self._sparse_encoder = enc

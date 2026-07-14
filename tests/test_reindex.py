@@ -133,3 +133,45 @@ def test_sentinel_detected_on_startup(tmp_path, monkeypatch):
     assert sentinel_during_recreate == [True], "recreation must happen under the sentinel"
     assert not sentinel.exists(), "sentinel must be removed on success"
     assert manager.recall("memory saved before", score_threshold=0.0) != []
+
+
+def test_vocab_binding_refused_on_mismatch(tmp_path, caplog):
+    import json
+    import logging
+
+    from memory.reindex import reindex
+
+    manager = _embedded_manager(tmp_path)
+    manager.save("hybrid corpus seed about qdrant flock behavior", type="note")
+    reindex(manager, tarball_dir=tmp_path / "backups")
+
+    vocab_path = manager.memory_dir / "_bm25_vocab.json"
+    binding = json.loads(vocab_path.read_text()).get("_binding")
+    assert binding == {
+        "target": str(manager._qdrant_path),
+        "collection": "agent_memory",
+        "points": 1,
+    }
+
+    # Same vocab file, different vector target: never wrong-decode — go dense-only.
+    other = MemoryManager(
+        memory_dir=manager.memory_dir, qdrant_path=str(tmp_path / "other-q")
+    )
+    with caplog.at_level(logging.WARNING):
+        assert other.sparse_encoder is None
+        assert other.sparse_encoder is None  # repeated access must not re-log
+    assert sum("bound to" in r.message for r in caplog.records) == 1
+
+
+def test_vocab_without_binding_loads_as_before(tmp_path):
+    """Backward compat: existing prod vocabs have no _binding header."""
+    from core import BM25Encoder
+
+    manager = _embedded_manager(tmp_path)
+    legacy = BM25Encoder()
+    legacy.fit(["legacy vocab corpus about connection pooling"])
+    legacy.save(str(manager.memory_dir / "_bm25_vocab.json"))
+
+    loaded = manager.sparse_encoder
+    assert loaded is not None
+    assert loaded.encode("connection pooling")
