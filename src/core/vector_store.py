@@ -208,20 +208,22 @@ class VectorStore:
             if self.sparse_encoder is not None and content:
                 sparse = self.sparse_encoder.encode(content)
                 if sparse:
+                    # PointStruct (not a raw dict): the embedded local client
+                    # rejects dict points; the HTTP client merely tolerates them.
                     self.client.upsert(
                         collection_name=self.collection,
                         points=[
-                            {
-                                "id": point_id,
-                                "vector": {
+                            PointStruct(
+                                id=point_id,
+                                vector={
                                     "": vector,
                                     "bm25": SparseVector(
                                         indices=list(sparse.keys()),
                                         values=list(sparse.values()),
                                     ),
                                 },
-                                "payload": payload or {},
-                            }
+                                payload=payload or {},
+                            )
                         ],
                     )
                     return
