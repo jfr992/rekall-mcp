@@ -569,6 +569,78 @@ def install_claude(skills_only: bool, hooks_only: bool, skip_backend: bool):
     sys.exit(proc.returncode)
 
 
+@memory.command()
+def serve():
+    """Run the rekall daemon (streamable-http) over the embedded store.
+
+    Loopback-only by default; PORT env (default 8000) picks the port.
+    QDRANT_URL switches to server-backed Qdrant instead of the embedded store.
+    """
+    os.environ["MCP_TRANSPORT"] = "streamable-http"
+    os.environ.setdefault("HOST", "127.0.0.1")
+    port = int(os.environ.get("PORT", "8000"))
+    rekall_dir = Path(os.environ.get("REKALL_DIR", str(Path.home() / ".rekall"))).expanduser()
+
+    from core import ownership
+
+    if os.environ.get("QDRANT_URL"):
+        # Server-backed Qdrant: no embedded lock to take — just refuse a taken port.
+        state = ownership.probe_daemon(f"http://127.0.0.1:{port}")
+        if state == "rekall":
+            click.echo(
+                f"ERROR: a rekall daemon is already running on port {port} — "
+                "use it, or stop it first.",
+                err=True,
+            )
+            sys.exit(2)
+        if state == "foreign":
+            click.echo(
+                f"ERROR: something that isn't rekall answers on port {port} — set PORT.",
+                err=True,
+            )
+            sys.exit(2)
+    else:
+        os.environ.setdefault("QDRANT_PATH", str(rekall_dir / "qdrant"))
+        try:
+            acq = ownership.acquire(rekall_dir, port=port)
+        except ownership.RekallOwnershipError as exc:
+            click.echo(f"ERROR: {exc}", err=True)
+            sys.exit(2)
+        if acq.mode == "daemon":
+            click.echo(
+                f"ERROR: a rekall daemon is already running at {acq.base_url} — "
+                "use it, or stop it first.",
+                err=True,
+            )
+            sys.exit(2)
+
+    from server import main as server_main
+
+    server_main()
+
+
+@memory.command()
+def warmup():
+    """Download and prime the embedding model (one encode)."""
+    import tempfile
+
+    from core import embeddings
+
+    embedder = embeddings.Embedder()
+    embedder.encode("warmup")
+
+    if embedder.provider_name == "fastembed":
+        # fastembed's define_cache_dir: FASTEMBED_CACHE_PATH env or <tmpdir>/fastembed_cache.
+        cache = os.environ.get(
+            "FASTEMBED_CACHE_PATH", str(Path(tempfile.gettempdir()) / "fastembed_cache")
+        )
+    else:
+        cache = os.environ.get("HF_HOME", str(Path.home() / ".cache" / "huggingface"))
+    click.echo(
+        f"✓ Embedder ready ({embedder.provider_name}, {embedder.model_name}) — model cache: {cache}"
+    )
+
+
 def main():
     """Entry point."""
     memory()
