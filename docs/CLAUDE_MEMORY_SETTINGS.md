@@ -57,7 +57,8 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 - `HOST`, `PORT` control listening address.
 - `MEMORY_STORAGE_PATH` is where YAML memory files are persisted.
 - `QDRANT_URL` controls vector DB endpoint.
-- `EMBEDDING_PROVIDER` sets embedding backend (`sentence-transformers`, `ollama`, `gemini`).
+- `QDRANT_PATH` selects an embedded (local-path) Qdrant store instead — mutually exclusive with `QDRANT_URL`.
+- `EMBEDDING_PROVIDER` sets embedding backend (`fastembed` default; `sentence-transformers` requires the `[torch]` extra; `ollama`, `gemini`).
 - `LOG_LEVEL` for diagnostics.
 - `OLLAMA_URL`, `GEMINI_API_KEY` as provider-specific settings.
 - `REKALL_MARKER_DIR` — directory where the restore and observe hooks write/read the per-session restore marker file (default `/tmp`).

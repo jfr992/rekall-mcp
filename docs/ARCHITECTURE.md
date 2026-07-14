@@ -311,6 +311,19 @@ Vectors: 384 dimensions (cosine distance)
 Indexes: date, project, type (for filtering)
 ```
 
+### Distribution tiers
+
+The same manager runs behind four entry points; only transport and vector-store placement differ:
+
+| Tier | Entry | Transport | Vector store |
+|------|-------|-----------|--------------|
+| Trial | `uvx rekall-mcp` (`server.main_stdio`) | stdio | embedded Qdrant at `~/.rekall/qdrant` (`QDRANT_PATH`) |
+| Serve | `rekall serve` daemon | HTTP loopback | embedded Qdrant, shared through the daemon |
+| All-in-one | `docker run ghcr.io/jfr992/rekall-mcp` | HTTP loopback | embedded Qdrant at `/data/qdrant` on a named volume |
+| Full compose | `docker compose up -d` | HTTP + cockpit | external Qdrant container (`QDRANT_URL`) |
+
+Only one process may own the embedded store, so every entry point routes through the ownership protocol (`core/ownership.py`): probe the daemon first, use it when it answers with the rekall signature, refuse anything foreign on the port. Otherwise it takes the embedded store's flock and records the owner in `~/.rekall/active-backend.json`; a second process on a locked path is refused loudly instead of splitting the store.
+
 ---
 
 ## Security
