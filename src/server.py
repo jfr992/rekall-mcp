@@ -607,6 +607,96 @@ async def api_read_events(request):
         return _server_error(str(e))
 
 
+@mcp.custom_route("/api/memory/review", methods=["POST"])
+async def api_memory_review(request):
+    """REST API: record a review verdict for a memory. Server-only writer.
+
+    keep → record only; kill → delete then record (mutate-then-record);
+    fix → 501 until supersede semantics land in U3.
+    """
+    from starlette.responses import JSONResponse
+
+    from memory import review_state
+    from memory.events import MemoryEvent
+
+    try:
+        body = await request.json()
+        memory_id = body.get("memory_id")
+        verdict = body.get("verdict")
+        editor = body.get("editor")
+
+        if not memory_id or not isinstance(memory_id, str):
+            return _bad_request("memory_id is required")
+        if verdict not in ("keep", "fix", "kill"):
+            return _bad_request("verdict must be one of ['fix', 'keep', 'kill']")
+        if editor not in ("ui", "agent"):
+            return _bad_request("editor must be one of ['agent', 'ui']")
+        if verdict == "fix":
+            return JSONResponse(
+                {
+                    "error": "verdict=fix is not implemented in U1 — fix means supersede "
+                    "(corrected memory + superseded edge), which arrives in U3. "
+                    "Use keep or kill for now."
+                },
+                status_code=501,
+            )
+
+        manager = _get_memory_manager()
+        found = manager.store.get_many([memory_id])
+        if not found:
+            return JSONResponse(
+                {"error": "not found", "memory_id": memory_id}, status_code=404
+            )
+        project = found[0].get("project") or "general"
+
+        if verdict == "kill" and not manager.delete(memory_id):
+            return JSONResponse(
+                {"error": "not found", "memory_id": memory_id}, status_code=404
+            )
+
+        # Mutate-then-record: the event lands only after the mutation did.
+        event_recorded = True
+        try:
+            manager.event_log.append(
+                MemoryEvent(
+                    event_type="memory_reviewed",
+                    project=project,
+                    agent="unknown",
+                    source="review_endpoint",
+                    payload={
+                        "memory_id": memory_id,
+                        "verdict": verdict,
+                        "editor": editor,
+                        "memory_ids": [memory_id],
+                        "session_id": None,
+                    },
+                )
+            )
+        except Exception:
+            event_recorded = False
+            logger.error(
+                f"memory_reviewed event write FAILED for {memory_id} (verdict={verdict}) "
+                "— the mutation stands but audit/projection missed this review",
+                exc_info=True,
+            )
+
+        if event_recorded:
+            try:
+                review_state.load(manager.memory_dir)
+            except Exception:
+                logger.error("review-state projection refresh failed", exc_info=True)
+
+        result = {"memory_id": memory_id, "verdict": verdict, "event_recorded": event_recorded}
+        if verdict == "kill":
+            result["deleted"] = True
+        return _ok(result)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error recording review: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/context", methods=["GET"])
 async def api_get_context(request):
     """REST API: Get cached context for a project."""

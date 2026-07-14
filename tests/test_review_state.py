@@ -104,3 +104,43 @@ def test_load_rebuilds_when_missing_or_unparseable(tmp_path):
     # unparseable → rebuild, not crash (touch events older so mtime check passes)
     (tmp_path / "_review_state.json").write_text("{corrupt")
     assert review_state.load(tmp_path)["m1"]["last_verdict"] == "keep"
+
+
+# ---------------------------------------------------------------------------
+# POST /api/memory/review
+# ---------------------------------------------------------------------------
+
+
+def _review_client(monkeypatch, tmp_path):
+    from unittest.mock import MagicMock
+
+    from starlette.testclient import TestClient
+
+    import server
+    from memory.events import EventLog
+
+    manager = MagicMock()
+    manager.memory_dir = tmp_path
+    manager.event_log = EventLog(tmp_path / "_events.jsonl")
+    manager.store.get_many.return_value = [{"memory_id": "m1", "project": "my-app"}]
+    manager.delete.return_value = True
+    monkeypatch.setattr("memory.singleton._instance", manager)
+    return TestClient(server.mcp.streamable_http_app()), manager
+
+
+def test_review_keep_records_event_only(monkeypatch, tmp_path):
+    client, manager = _review_client(monkeypatch, tmp_path)
+
+    r = client.post(
+        "/api/memory/review", json={"memory_id": "m1", "verdict": "keep", "editor": "ui"}
+    )
+
+    assert r.status_code == 200
+    manager.delete.assert_not_called()
+    events = manager.event_log.tail(limit=1)
+    assert events[0].event_type == "memory_reviewed"
+    assert events[0].project == "my-app"
+    assert events[0].payload["verdict"] == "keep"
+    assert events[0].payload["editor"] == "ui"
+    # server-only writer: the projection is refreshed in the same request
+    assert review_state.load(tmp_path)["m1"]["last_verdict"] == "keep"
