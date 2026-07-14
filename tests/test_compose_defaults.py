@@ -19,3 +19,13 @@ def _services() -> dict:
 def test_no_container_names():
     offenders = [name for name, svc in _services().items() if "container_name" in svc]
     assert offenders == [], f"container_name pins these services: {offenders}"
+
+
+def test_no_prod_data_paths_in_volume_defaults():
+    offenders = []
+    for name, svc in _services().items():
+        for vol in svc.get("volumes", []):
+            entry = vol if isinstance(vol, str) else str(vol.get("source", ""))
+            if "~/.claude" in entry or "$HOME" in entry:
+                offenders.append(f"{name}: {vol}")
+    assert offenders == [], f"volume defaults point at prod data: {offenders}"
