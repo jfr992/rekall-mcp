@@ -96,3 +96,22 @@ class TestDemoCommand:
         assert (demo_dir / "qdrant").is_dir(), "vectors must land in the demo dir"
         for query in SUGGESTED_QUERIES:
             assert query in result.output
+
+    def test_demo_refuses_non_empty_non_demo_store(self, tmp_path, monkeypatch):
+        from click.testing import CliRunner
+
+        from memory.cli import memory
+
+        store = tmp_path / "real-memory"
+        (store / "real-project").mkdir(parents=True)
+        (store / "real-project" / "2026-07-01.yaml").write_text(
+            "date: '2026-07-01'\nnotes:\n- id: 2026-07-01_note_rea10000\n  content: real memory\n"
+        )
+        monkeypatch.setenv("MEMORY_STORAGE_PATH", str(store))
+
+        result = CliRunner().invoke(memory, ["demo"])
+
+        assert result.exit_code == 2, result.output
+        assert "--force-into-real-store" in result.output
+        yaml_files = list(store.rglob("*.yaml"))
+        assert len(yaml_files) == 1, "refusal must not write anything"
