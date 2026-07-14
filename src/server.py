@@ -1681,5 +1681,35 @@ def main() -> None:
         mcp.run(transport="stdio")
 
 
+def main_stdio() -> None:
+    """uvx entry: embedded storage default, eager warmup, stdio transport."""
+    rekall_dir = Path(os.environ.get("REKALL_DIR", str(Path.home() / ".rekall"))).expanduser()
+    os.environ.setdefault("QDRANT_PATH", str(rekall_dir / "qdrant"))
+    os.environ.setdefault("MCP_TRANSPORT", "stdio")
+    from core import ownership
+
+    try:
+        acq = ownership.acquire(rekall_dir, port=int(os.environ.get("PORT", "8000")))
+    except ownership.ForeignServiceError as exc:
+        sys.stderr.write(f"rekall: {exc}\n")
+        sys.exit(2)
+    except ownership.RekallOwnershipError as exc:
+        sys.stderr.write(f"rekall: {exc}\n")
+        sys.exit(2)
+    if acq.mode == "daemon":
+        sys.stderr.write(
+            "rekall: daemon is running — register with: "
+            f"claude mcp add --transport http rekall {acq.base_url}/  (or stop the daemon)\n"
+        )
+        sys.exit(2)
+    # acquire() already wrote active-backend.json for the embedded store.
+    sys.stderr.write("rekall: warming up embedder (first run downloads ~90MB)...\n")
+    from memory.singleton import get_memory_manager
+
+    get_memory_manager().embedder.encode("warmup")  # eager, before tools advertised
+    sys.stderr.write("rekall: ready\n")
+    main()
+
+
 if __name__ == "__main__":
     main()
