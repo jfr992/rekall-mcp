@@ -73,7 +73,14 @@ def _rebuild_collection(
 
     manager._sparse_encoder = encoder
     manager.store.sparse_encoder = encoder
-    encoder.save(str(manager._bm25_path))
+    encoder.save(
+        str(manager._bm25_path),
+        binding={
+            "target": str(manager._qdrant_path or manager._qdrant_url),
+            "collection": manager.COLLECTION,
+            "points": len(memories),
+        },
+    )
 
     manager.store.recreate_collection()
     for field in INDEXED_FIELDS:
