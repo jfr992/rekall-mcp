@@ -67,6 +67,10 @@ def _rebuild_collection(
     ``manager.save`` (which would re-trigger dedupe/linker/bootstrap).
     """
     embedder = manager.embedder
+    sentinel = manager.reindex_sentinel
+    sentinel.parent.mkdir(parents=True, exist_ok=True)
+    sentinel.touch()
+
     manager._sparse_encoder = encoder
     manager.store.sparse_encoder = encoder
     encoder.save(str(manager._bm25_path))
@@ -119,4 +123,7 @@ def reindex(manager: MemoryManager, *, tarball_dir: Path | None = None) -> dict[
     points = _rebuild_collection(manager, memories, encoder)
     graph_stats = manager.knowledge_graph.rebuild(store=manager.store, embedder=manager.embedder)
 
+    # Success — clear the marker. On any failure above it stays put and the
+    # manager refuses save/recall until a reindex completes.
+    manager.reindex_sentinel.unlink(missing_ok=True)
     return {"points": points, "verified": True, "graph_nodes": graph_stats["nodes"]}
