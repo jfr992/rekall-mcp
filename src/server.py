@@ -571,6 +571,42 @@ async def api_record_events(request):
         return _server_error(str(e))
 
 
+@mcp.custom_route("/api/memory/events", methods=["GET"])
+async def api_read_events(request):
+    """REST API: Cursor-paginated read of the event log.
+
+    Coexists with POST /api/memory/events (session_summary append) via
+    Starlette method routing. No cursor → bounded tail; a rewritten/restored
+    log returns truncated=True plus a reset cursor.
+    """
+    from dataclasses import asdict
+
+    from memory.events import CursorError
+
+    try:
+        cursor = request.query_params.get("cursor")
+        limit = _read_int(request.query_params, "limit", 100, lo=1, hi=1000)
+
+        manager = _get_memory_manager()
+        try:
+            events, next_cursor, truncated = manager.event_log.read_from(cursor, limit=limit)
+        except CursorError:
+            return _bad_request("invalid cursor")
+
+        return _ok(
+            {
+                "events": [asdict(e) for e in events],
+                "cursor": next_cursor,
+                "truncated": truncated,
+            }
+        )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error reading events: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/context", methods=["GET"])
 async def api_get_context(request):
     """REST API: Get cached context for a project."""
