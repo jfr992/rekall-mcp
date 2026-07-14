@@ -50,3 +50,25 @@ def test_clean_removes_only_manifest_ids(tmp_path):
     assert manager.store.count() == 1
     assert manager.store.get_by_id(survivor) is not None
     assert not (demo_dir / "manifest.json").exists()
+
+
+def test_conflict_pair_renders_outdated_stub(tmp_path):
+    """The corpus's one conflict pair (retry limit 5 → 3) must actually group:
+    recall + format shows the newer value and stubs the older one (freshness
+    Stage B/C, same pipeline test_freshness_integration pins)."""
+    from memory.demo_seed import seed
+
+    manager = _embedded_manager(tmp_path)
+    seed(manager, tmp_path / "demo")
+
+    results = manager.recall(
+        "Stripe webhook retry limit",
+        project="demo-payments-api",
+        limit=10,
+        score_threshold=0.0,
+    )
+    out = manager._format_with_guidance(results)
+
+    assert "3 attempts" in out, f"newer conflict member missing:\n{out}"
+    assert "5 attempts" not in out, f"older conflict member should be stubbed:\n{out}"
+    assert "[outdated — replaced by the newer entry above]" in out
