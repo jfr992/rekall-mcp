@@ -72,3 +72,14 @@ def test_paraphrased_recalled_memory_reinforced_not_saved(tmp_path):
     assert result == "m-old"
     mgr._reinforce_existing_memory.assert_called_once_with("m-old")
     mgr._store.save.assert_not_called()
+
+
+def test_unrelated_content_below_threshold_saves_normally(tmp_path):
+    mgr = _mgr(tmp_path, recalled_vec=_vec(0.5))
+    _seed_recall_event(mgr, hours_ago=1)
+
+    result = mgr.save("switched the build to bazel remote cache", project="proj-x", scope=SCOPE)
+
+    assert result != "m-old"
+    mgr._reinforce_existing_memory.assert_not_called()
+    mgr._store.save.assert_called_once()
