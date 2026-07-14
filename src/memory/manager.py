@@ -1174,6 +1174,28 @@ class MemoryManager:
             except Exception:
                 logger.debug("freshness annotation skipped", exc_info=True)
 
+            try:
+                self.record_event(
+                    event_type="memory_recalled",
+                    project=project or "general",
+                    memory_ids=[m["memory_id"] for m in results if m.get("memory_id")],
+                    source="recall",
+                    payload={
+                        "query": query,
+                        "task_hint": task_hint,
+                        "memories": [
+                            {"memory_id": m.get("memory_id"), "score": m.get("score")}
+                            for m in results
+                        ],
+                        # chars/4 — honest heuristic, not a tokenizer
+                        "token_estimate": sum(len(m.get("content") or "") // 4 for m in results),
+                        "session_id": None,
+                        "capture_origin": None,
+                    },
+                )
+            except Exception:
+                logger.debug("event emission skipped", exc_info=True)
+
             return results
 
     def recall_cross_project(
