@@ -7,10 +7,11 @@
 # Everything runs in containers - no local Python install needed.
 #
 # DATA STORAGE:
-#   - Memory files: ~/.claude/memory/ (on your machine, survives container deletion)
-#   - Qdrant data: ~/.claude/qdrant/ (on your machine, survives container deletion)
+#   - Memory files: named volume `rekall-memory` (survives container deletion)
+#   - Qdrant data: named volume `rekall-qdrant` (survives container deletion)
 #
-# To backup: just copy ~/.claude/ somewhere safe
+# Existing installs with data at ~/.claude/: keep your bind mounts via
+# docker-compose.bind-mounts.example.yaml (see docs/MIGRATION.md).
 
 services:
   # =========================================================================
@@ -22,8 +23,7 @@ services:
       # Bind host side to loopback only — Qdrant has no auth by default
       - "127.0.0.1:6333:6333"
     volumes:
-      # Store on your machine, not in a Docker volume
-      - ${QDRANT_DATA_PATH:-~/.claude/qdrant}:/qdrant/storage
+      - rekall-qdrant:/qdrant/storage
     restart: unless-stopped
     healthcheck:
       # Qdrant image has no curl/wget; TCP check via bash built-in
@@ -52,8 +52,7 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      # Store on your machine, not in a Docker volume
-      - ${MEMORY_STORAGE_PATH:-~/.claude/memory}:/data/memory
+      - rekall-memory:/data/memory
     depends_on:
       qdrant:
         condition: service_healthy
@@ -111,7 +110,7 @@ services:
       - "8001:8000"
     volumes:
       - ./src:/app/src
-      - ${MEMORY_STORAGE_PATH:-~/.claude/memory}:/data/memory
+      - rekall-memory:/data/memory
     depends_on:
       qdrant:
         condition: service_healthy
@@ -162,4 +161,6 @@ services:
       - test
     entrypoint: ["pytest", "-v", "tests/"]
 
-# No Docker volumes needed - we mount directly to ~/.claude/
+volumes:
+  rekall-memory:
+  rekall-qdrant:
