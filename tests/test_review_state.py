@@ -89,10 +89,9 @@ def test_load_rebuilds_when_older_than_events_file(tmp_path):
     assert state["m1"]["last_verdict"] == "kill"
     assert state["m1"]["review_count"] == 2
     # and the rebuilt projection was persisted (fresh mtime)
-    assert (
-        (tmp_path / "_review_state.json").stat().st_mtime
-        >= (tmp_path / "_events.jsonl").stat().st_mtime
-    )
+    assert (tmp_path / "_review_state.json").stat().st_mtime >= (
+        tmp_path / "_events.jsonl"
+    ).stat().st_mtime
 
 
 def test_load_rebuilds_when_missing_or_unparseable(tmp_path):
@@ -210,9 +209,7 @@ def test_review_rejects_bad_verdict_and_editor(monkeypatch, tmp_path):
         == 400
     )
     assert (
-        client.post(
-            "/api/memory/review", json={"verdict": "keep", "editor": "ui"}
-        ).status_code
+        client.post("/api/memory/review", json={"verdict": "keep", "editor": "ui"}).status_code
         == 400
     )
 

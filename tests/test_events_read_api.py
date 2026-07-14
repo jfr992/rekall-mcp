@@ -120,9 +120,9 @@ def test_read_from_is_o_new_bytes_at_10k_events(tmp_path, monkeypatch):
     with (tmp_path / "_events.jsonl").open("a") as f:
         for i in range(10_000):
             f.write(
-                '{"agent": "a", "event_id": "%08d", "event_type": "memory_recalled", '
-                '"observed_at": "2026-07-14T00:00:00", "payload": {"index": %d}, '
-                '"project": "p", "source": "test"}\n' % (i, i)
+                f'{{"agent": "a", "event_id": "{i:08d}", "event_type": "memory_recalled", '
+                f'"observed_at": "2026-07-14T00:00:00", "payload": {{"index": {i}}}, '
+                '"project": "p", "source": "test"}\n'
             )
     _, cursor, _ = log.read_from(None, limit=10)
 
