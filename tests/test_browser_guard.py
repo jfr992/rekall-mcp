@@ -114,3 +114,20 @@ def test_get_with_origin_untouched():
     client = TestClient(_app())
     r = client.get("/api/x", headers={"Origin": "http://localhost:9999"})
     assert r.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Production wiring: build_app() carries the guard, exactly as main() serves it.
+# ---------------------------------------------------------------------------
+
+
+def test_build_app_enforces_guard_on_real_routes():
+    import server
+
+    client = TestClient(server.build_app())
+    r = client.post(
+        "/api/memory/prune/plan",
+        content='{"project": "p"}',
+        headers={"Origin": "http://localhost:9999", "Content-Type": "text/plain"},
+    )
+    assert r.status_code == 403
