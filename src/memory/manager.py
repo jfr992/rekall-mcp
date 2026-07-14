@@ -336,6 +336,7 @@ class MemoryManager:
         project: str | None = None,
         scope: MemoryScope | None = None,
         capture_origin: str = "rest",
+        session_id: str | None = None,
         **metadata: Any,
     ) -> str:
         """Save a memory.
@@ -346,6 +347,8 @@ class MemoryManager:
             project: Project name
             capture_origin: Which call site initiated the save
                 (observe_judge | save_memory_tool | rest | cli | hook)
+            session_id: Claude Code session id for event attribution (events only,
+                never the memory record)
             **metadata: Additional metadata
 
         Returns:
@@ -420,6 +423,7 @@ class MemoryManager:
             self.record_event(
                 event_type="memory_saved",
                 project=project_name,
+                session_id=session_id,
                 agent=str(payload.get("agent") or scope.agent or "unknown"),
                 source=str(
                     payload.get("source_tool")
