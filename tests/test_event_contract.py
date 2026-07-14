@@ -197,6 +197,24 @@ def test_save_threads_session_id_into_memory_saved_event(tmp_path, monkeypatch):
     assert events[1].payload["session_id"] is None
 
 
+def test_save_threads_evidence_class_into_memory_saved_event(tmp_path, monkeypatch):
+    manager = _real_save_manager(tmp_path, monkeypatch)
+
+    manager.save(
+        "Evidence-stamped memory",
+        type="decision",
+        project="p",
+        evidence_class="confirmed_artifact",
+    )
+    manager.save("Another memory entirely three", type="decision", project="p")
+
+    events = manager.event_log.tail(limit=2)
+    assert events[0].payload["evidence_class"] == "confirmed_artifact"
+    # missing -> null, NEVER coerced to "inferred" (old hooks must not
+    # pollute U3's queue)
+    assert events[1].payload["evidence_class"] is None
+
+
 def test_observe_threads_capture_origin_to_save():
     mgr = object.__new__(MemoryManager)
     candidate = MagicMock()
