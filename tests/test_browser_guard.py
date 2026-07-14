@@ -55,3 +55,12 @@ def test_no_browser_markers_passes():
     client = TestClient(_app())
     r = client.post("/api/x", json={"a": 1})
     assert r.status_code == 200
+
+
+def test_unlisted_host_gets_421_on_any_method():
+    """DNS-rebinding guard: a Host outside the allowlist is misdirected."""
+    client = TestClient(_app())
+    assert client.get("/api/x", headers={"Host": "evil.example.com"}).status_code == 421
+    r = client.post("/api/x", json={"a": 1}, headers={"Host": "evil.example.com:8000"})
+    assert r.status_code == 421
+    assert "error" in r.json()
