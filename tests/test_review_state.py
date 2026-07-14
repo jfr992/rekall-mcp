@@ -69,3 +69,27 @@ def test_write_then_load_roundtrip_atomic(tmp_path):
     assert (tmp_path / "_review_state.json").exists()
     assert not list(tmp_path.glob("*.tmp"))  # tmp+os.replace leaves no droppings
     assert review_state.load(tmp_path) == state
+
+
+def test_load_rebuilds_when_older_than_events_file(tmp_path):
+    """Tarball restore: a restored projection older than the log must self-heal."""
+    import json
+    import os
+
+    _write_events(tmp_path, [_reviewed("m1", "keep")])
+    review_state.write(tmp_path, review_state.rebuild(tmp_path))
+
+    with (tmp_path / "_events.jsonl").open("a") as f:
+        f.write(json.dumps(_reviewed("m1", "kill", at="2026-07-14T11:00:00")) + "\n")
+    stale = (tmp_path / "_events.jsonl").stat().st_mtime - 60
+    os.utime(tmp_path / "_review_state.json", (stale, stale))
+
+    state = review_state.load(tmp_path)
+
+    assert state["m1"]["last_verdict"] == "kill"
+    assert state["m1"]["review_count"] == 2
+    # and the rebuilt projection was persisted (fresh mtime)
+    assert (
+        (tmp_path / "_review_state.json").stat().st_mtime
+        >= (tmp_path / "_events.jsonl").stat().st_mtime
+    )
