@@ -185,6 +185,18 @@ def test_save_stamps_capture_origin_into_memory_saved_event(tmp_path, monkeypatc
     assert events[1].payload["capture_origin"] == "rest"  # documented default
 
 
+def test_save_threads_session_id_into_memory_saved_event(tmp_path, monkeypatch):
+    manager = _real_save_manager(tmp_path, monkeypatch)
+
+    manager.save("Session-stamped memory", type="decision", project="p", session_id="sess-9")
+    manager.save("Another memory entirely two", type="decision", project="p")
+
+    events = manager.event_log.tail(limit=2)
+    assert events[0].payload["session_id"] == "sess-9"
+    # old callers (no session_id) stay contract-shaped: key present, null
+    assert events[1].payload["session_id"] is None
+
+
 def test_observe_threads_capture_origin_to_save():
     mgr = object.__new__(MemoryManager)
     candidate = MagicMock()
