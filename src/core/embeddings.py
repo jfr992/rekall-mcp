@@ -141,7 +141,9 @@ class FastEmbedProvider(EmbeddingProvider):
         from fastembed import TextEmbedding
 
         self.model_name = model or self.DEFAULT_MODEL
-        self._model = TextEmbedding(model_name=self._CANONICAL.get(self.model_name, self.model_name))
+        self._model = TextEmbedding(
+            model_name=self._CANONICAL.get(self.model_name, self.model_name)
+        )
         if self.model_name == "all-MiniLM-L6-v2":
             # sentence-transformers truncates at max_seq_length=256; fastembed's
             # tokenizer config says 128 — align or long docs embed differently.
