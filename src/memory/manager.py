@@ -244,6 +244,20 @@ class MemoryManager:
             self._event_log = EventLog(self.memory_dir / "_events.jsonl")
         return self._event_log
 
+    @property
+    def reindex_sentinel(self) -> Path:
+        """In-progress reindex marker: inside the embedded store, or next to YAML."""
+        if self._qdrant_path:
+            return Path(self._qdrant_path) / ".rekall-reindex-in-progress"
+        return self.memory_dir / ".reindex-sentinel"
+
+    def _assert_reindex_complete(self) -> None:
+        if self.reindex_sentinel.exists():
+            raise RuntimeError(
+                f"an interrupted reindex left {self.reindex_sentinel} — the vector "
+                "store may be incomplete; run `rekall reindex` to rebuild it"
+            )
+
     def record_event(
         self,
         *,
@@ -297,6 +311,7 @@ class MemoryManager:
             memory.save("Chose hybrid architecture", type="decision", project="my-app")
         """
         with self._telemetry.track("memory.save"):
+            self._assert_reindex_complete()
             content = Sanitizer.sanitize(content)
             scope = scope or ScopeDetector.detect(project=project)
             project_name = project or scope.project or "general"
@@ -926,6 +941,7 @@ class MemoryManager:
             memories = memory.recall("preferences", project="my-app")
         """
         with self._telemetry.track("memory.recall"):
+            self._assert_reindex_complete()
             # Build filters
             filters = {}
             if project:
