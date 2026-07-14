@@ -113,3 +113,14 @@ def test_content_encoded_exactly_once_per_save(tmp_path):
 
     content_encodes = [c for c in mgr._embedder.encode.call_args_list if c.args[0] == content]
     assert len(content_encodes) == 1
+
+
+def test_cosine_zero_disables_guard(tmp_path, monkeypatch):
+    monkeypatch.setenv("REKALL_LOOP_GUARD_COSINE", "0")
+    mgr = _mgr(tmp_path, recalled_vec=_vec(0.99))
+    _seed_recall_event(mgr, hours_ago=1)
+
+    result = mgr.save("prefers concise replies with diagrams", project="proj-x", scope=SCOPE)
+
+    assert result != "m-old"
+    mgr._store.save.assert_called_once()
