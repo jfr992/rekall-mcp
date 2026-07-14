@@ -95,3 +95,18 @@ def test_read_from_detects_rewrite_returns_fresh_tail(tmp_path):
     events, _, truncated = log.read_from(cursor2, limit=10)
     assert [e.payload["index"] for e in events] == [14]
     assert truncated is False
+
+
+def test_read_from_detects_shrunken_file(tmp_path):
+    """Same first line but file shrank below size-at-issue → rewrite, not garbage."""
+    log = _log(tmp_path)
+    for i in range(4):
+        log.append(_event(i))
+    _, cursor, _ = log.read_from(None, limit=10)
+
+    lines = (tmp_path / "_events.jsonl").read_text().splitlines(keepends=True)
+    (tmp_path / "_events.jsonl").write_text("".join(lines[:2]))  # first line intact
+
+    events, _, truncated = log.read_from(cursor, limit=10)
+    assert truncated is True
+    assert [e.payload["index"] for e in events] == [0, 1]
