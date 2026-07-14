@@ -110,3 +110,70 @@ def test_read_from_detects_shrunken_file(tmp_path):
     events, _, truncated = log.read_from(cursor, limit=10)
     assert truncated is True
     assert [e.payload["index"] for e in events] == [0, 1]
+
+
+def test_read_from_is_o_new_bytes_at_10k_events(tmp_path, monkeypatch):
+    """Cursor reads must not reparse the file — 43MB/min/tab at 10k events killed rev 1."""
+    from pathlib import Path
+
+    log = _log(tmp_path)
+    with (tmp_path / "_events.jsonl").open("a") as f:
+        for i in range(10_000):
+            f.write(
+                '{"agent": "a", "event_id": "%08d", "event_type": "memory_recalled", '
+                '"observed_at": "2026-07-14T00:00:00", "payload": {"index": %d}, '
+                '"project": "p", "source": "test"}\n' % (i, i)
+            )
+    _, cursor, _ = log.read_from(None, limit=10)
+
+    size_at_cursor = (tmp_path / "_events.jsonl").stat().st_size
+    for i in range(10_000, 10_005):
+        log.append(_event(i))
+    new_bytes = (tmp_path / "_events.jsonl").stat().st_size - size_at_cursor
+
+    counted = {"bytes": 0}
+    real_open, real_read_bytes = Path.open, Path.read_bytes
+
+    class CountingFile:
+        def __init__(self, fh):
+            self._fh = fh
+
+        def read(self, *a):
+            data = self._fh.read(*a)
+            counted["bytes"] += len(data)
+            return data
+
+        def readline(self, *a):
+            data = self._fh.readline(*a)
+            counted["bytes"] += len(data)
+            return data
+
+        def __getattr__(self, name):
+            return getattr(self._fh, name)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return self._fh.__exit__(*a)
+
+    def counting_open(self, *a, **kw):
+        fh = real_open(self, *a, **kw)
+        return CountingFile(fh) if self.name == "_events.jsonl" else fh
+
+    def counting_read_bytes(self):
+        data = real_read_bytes(self)
+        counted["bytes"] += len(data)
+        return data
+
+    monkeypatch.setattr(Path, "open", counting_open)
+    monkeypatch.setattr(Path, "read_bytes", counting_read_bytes)
+
+    events, _, truncated = log.read_from(cursor, limit=100)
+
+    assert [e.payload["index"] for e in events] == list(range(10_000, 10_005))
+    assert truncated is False
+    total = (tmp_path / "_events.jsonl").stat().st_size
+    assert counted["bytes"] <= new_bytes + 1024, (
+        f"read {counted['bytes']}B for {new_bytes}B of new events (file is {total}B)"
+    )
