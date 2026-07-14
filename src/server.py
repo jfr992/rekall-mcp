@@ -1708,6 +1708,46 @@ async def api_observe(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+def build_app():
+    """Production ASGI app: MCP at root, custom routes, security middleware.
+
+    Used by main() AND imported by contract tests, so the middleware stack is
+    exercised exactly as deployed (SPEC U1 item 5 wiring decision).
+    """
+    # Serve MCP at root / for Claude Code, include custom routes
+    from contextlib import asynccontextmanager
+
+    from starlette.applications import Starlette
+    from starlette.middleware import Middleware
+    from starlette.routing import Route
+
+    from core.browser_guard import BrowserGuardMiddleware
+
+    original_app = mcp.streamable_http_app()
+    mcp_endpoint = original_app.routes[0].endpoint  # StreamableHTTPASGIApp
+    session_manager = mcp_endpoint.session_manager
+
+    # Get all custom routes (health, API endpoints)
+    custom_routes = [r for r in original_app.routes if r.path != "/mcp"]
+
+    @asynccontextmanager
+    async def lifespan(app):
+        # session_manager.run() is still needed for task group initialization,
+        # but stateless_http=True prevents "Session not found" errors on reconnect
+        async with session_manager.run():
+            yield
+
+    # Mount MCP at root, plus all custom routes. Optional bearer auth
+    # (no-op unless REKALL_API_TOKEN is set) guards everything but /health;
+    # the browser guard enforces origin/host rules on state-changing requests.
+    routes = [Route("/", endpoint=mcp_endpoint)] + custom_routes
+    return Starlette(
+        routes=routes,
+        lifespan=lifespan,
+        middleware=[Middleware(BearerAuthMiddleware), Middleware(BrowserGuardMiddleware)],
+    )
+
+
 def main() -> None:
     """Main entry point."""
     transport = os.getenv("MCP_TRANSPORT", "stdio")
@@ -1717,36 +1757,9 @@ def main() -> None:
     logger.info(f"Starting MCP server with {transport} transport")
 
     if transport == "streamable-http":
-        # Serve MCP at root / for Claude Code, include custom routes
-        from contextlib import asynccontextmanager
-
         import uvicorn
-        from starlette.applications import Starlette
-        from starlette.middleware import Middleware
-        from starlette.routing import Route
 
-        original_app = mcp.streamable_http_app()
-        mcp_endpoint = original_app.routes[0].endpoint  # StreamableHTTPASGIApp
-        session_manager = mcp_endpoint.session_manager
-
-        # Get all custom routes (health, API endpoints)
-        custom_routes = [r for r in original_app.routes if r.path != "/mcp"]
-
-        @asynccontextmanager
-        async def lifespan(app):
-            # session_manager.run() is still needed for task group initialization,
-            # but stateless_http=True prevents "Session not found" errors on reconnect
-            async with session_manager.run():
-                yield
-
-        # Mount MCP at root, plus all custom routes. Optional bearer auth
-        # (no-op unless REKALL_API_TOKEN is set) guards everything but /health.
-        routes = [Route("/", endpoint=mcp_endpoint)] + custom_routes
-        app = Starlette(
-            routes=routes,
-            lifespan=lifespan,
-            middleware=[Middleware(BearerAuthMiddleware)],
-        )
+        app = build_app()
         if os.getenv("REKALL_API_TOKEN"):
             logger.info("Bearer auth enabled (REKALL_API_TOKEN set) — /health stays open")
 
