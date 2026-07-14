@@ -769,6 +769,12 @@ class MemoryManager:
             payload=payload,
             content=payload["embedding_text"],
         )
+        self.record_event(
+            event_type="memory_updated",
+            project=payload.get("project") or "general",
+            memory_ids=[memory_id],
+            payload={"memory_id": memory_id},
+        )
         return payload
 
     def _mutate_in_yaml(self, memory_id: str, new_content: str, payload: dict) -> None:
