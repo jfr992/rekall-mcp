@@ -476,22 +476,7 @@ async def api_cross_project_recall(request):
             limit=limit,
         )
 
-        try:
-            ids = [
-                m["memory_id"]
-                for bucket in ("same_project", "related_projects", "global")
-                for m in (result.get(bucket) or [])
-                if m.get("memory_id")
-            ]
-            manager.record_event(
-                event_type="memory_recalled",
-                project=current_project,
-                memory_ids=ids,
-                source="cross_project",
-            )
-        except Exception:
-            logger.debug("event emission skipped", exc_info=True)
-
+        # memory_recalled emission lives in manager.recall (event contract v2)
         return _ok(result)
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -522,17 +507,7 @@ async def api_memory_reflex(request):
         manager = _get_memory_manager()
         result = manager.reflex(text=text, project=project, limit=limit)
 
-        try:
-            ids = [m["memory_id"] for m in (result.get("memories") or []) if m.get("memory_id")]
-            manager.record_event(
-                event_type="memory_recalled",
-                project=project or "general",
-                memory_ids=ids,
-                source="reflex",
-            )
-        except Exception:
-            logger.debug("event emission skipped", exc_info=True)
-
+        # memory_recalled emission lives in manager.recall (event contract v2)
         return _ok(result)
     except RequestValidationError as e:
         return _bad_request(str(e))

@@ -100,3 +100,46 @@ async def test_mcp_recall_tool_rides_on_manager_emission(tool_registry):
 
     assert provider._manager.record_event.call_count == 1
     assert provider._manager.record_event.call_args.kwargs["event_type"] == "memory_recalled"
+
+
+@pytest.fixture
+def rest_client():
+    from starlette.testclient import TestClient
+
+    from server import mcp
+
+    return TestClient(mcp.streamable_http_app())
+
+
+@pytest.fixture
+def fake_rest_manager(monkeypatch):
+    fake = MagicMock()
+    monkeypatch.setattr("memory.singleton._instance", fake)
+    return fake
+
+
+def test_cross_project_handler_does_not_emit(rest_client, fake_rest_manager):
+    """Both inner manager.recall calls emit; the handler must add nothing."""
+    fake_rest_manager.recall_cross_project.return_value = {
+        "query": "q",
+        "current_project": "p",
+        "same_project": [{"memory_id": "m1", "content": "x"}],
+        "related_projects": [],
+        "global": [],
+    }
+    r = rest_client.post(
+        "/api/memory/recall/cross-project", json={"query": "q", "current_project": "p"}
+    )
+    assert r.status_code == 200
+    fake_rest_manager.record_event.assert_not_called()
+
+
+def test_reflex_handler_does_not_emit(rest_client, fake_rest_manager):
+    """manager.recall emits once per cue; the handler must add nothing."""
+    fake_rest_manager.reflex.return_value = {
+        "cues": ["iac"],
+        "memories": [{"memory_id": "m1", "content": "x", "reason": "iac"}],
+    }
+    r = rest_client.post("/api/memory/reflex", json={"text": "terraform apply"})
+    assert r.status_code == 200
+    fake_rest_manager.record_event.assert_not_called()
