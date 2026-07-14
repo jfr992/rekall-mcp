@@ -104,6 +104,25 @@ def test_reindex_rebuilds_counts_match(tmp_path):
     assert all(any(v != 0 for v in p["vector"]) for p in sample), "vectors must be non-zero"
 
 
+def test_sentinel_blocks_every_mutator(tmp_path):
+    """YAML is the recovery source of truth — an interrupted reindex must
+    freeze delete/clear_project/update_memory_content/cleanup, not just
+    save/recall."""
+    manager = _embedded_manager(tmp_path)
+    memory_id = manager.save("memory saved before the interrupted reindex", type="note")
+
+    Path(manager._qdrant_path, ".rekall-reindex-in-progress").touch()
+
+    with pytest.raises(RuntimeError, match="rekall reindex"):
+        manager.delete(memory_id)
+    with pytest.raises(RuntimeError, match="rekall reindex"):
+        manager.clear_project("general")
+    with pytest.raises(RuntimeError, match="rekall reindex"):
+        manager.update_memory_content(memory_id, "appended")
+    with pytest.raises(RuntimeError, match="rekall reindex"):
+        manager.cleanup(max_age_days_facts=1)
+
+
 def test_sentinel_detected_on_startup(tmp_path, monkeypatch):
     from core.vector_store import VectorStore
     from memory.reindex import reindex

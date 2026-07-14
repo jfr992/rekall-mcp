@@ -23,6 +23,44 @@ def test_url_and_path_mutually_exclusive(tmp_path):
         VectorStore(collection="t", url="http://localhost:6334", path=str(tmp_path / "q"))
 
 
+def test_manager_reuses_injected_qdrant_client(tmp_path):
+    """The acquire-held client IS the store lock — the manager must reuse it;
+    a second client on the same path would hit qdrant's flock and fail."""
+    from qdrant_client import QdrantClient
+
+    from memory import MemoryManager
+
+    client = QdrantClient(path=str(tmp_path / "q"))
+    manager = MemoryManager(
+        memory_dir=tmp_path / "memory", qdrant_path=str(tmp_path / "q"), qdrant_client=client
+    )
+
+    memory_id = manager.save("injected client save works", type="note")
+
+    assert manager.store.client is client
+    assert manager.store.get_by_id(memory_id) is not None
+
+
+def test_manager_store_dimensions_follow_embedder(tmp_path):
+    """A 768-dim embedder must produce a 768-dim collection — hardcoded 384
+    would fail on the first upsert."""
+    from types import SimpleNamespace
+
+    from memory import MemoryManager
+
+    manager = MemoryManager(memory_dir=tmp_path / "memory", qdrant_path=str(tmp_path / "q"))
+    manager._embedder = SimpleNamespace(dimensions=768)
+
+    assert manager.store.embedding_dim == 768
+    manager.store.save(
+        id="2026-01-01_note_dim76800",
+        vector=[0.1] * 768,
+        payload={"memory_id": "2026-01-01_note_dim76800", "content": "x"},
+        content=None,
+    )
+    assert manager.store.get_by_id("2026-01-01_note_dim76800") is not None
+
+
 def test_manager_env_both_set_raises_on_store_access(monkeypatch, tmp_path):
     """QDRANT_URL + QDRANT_PATH both in env: mutual-exclusion error propagates."""
     from memory import MemoryManager

@@ -583,36 +583,28 @@ def serve():
 
     from core import ownership
 
-    if os.environ.get("QDRANT_URL"):
-        # Server-backed Qdrant: no embedded lock to take — just refuse a taken port.
-        state = ownership.probe_daemon(f"http://127.0.0.1:{port}")
-        if state == "rekall":
-            click.echo(
-                f"ERROR: a rekall daemon is already running on port {port} — "
-                "use it, or stop it first.",
-                err=True,
-            )
-            sys.exit(2)
-        if state == "foreign":
-            click.echo(
-                f"ERROR: something that isn't rekall answers on port {port} — set PORT.",
-                err=True,
-            )
-            sys.exit(2)
-    else:
+    qdrant_url = os.environ.get("QDRANT_URL")
+    if not qdrant_url:
         os.environ.setdefault("QDRANT_PATH", str(rekall_dir / "qdrant"))
-        try:
-            acq = ownership.acquire(rekall_dir, port=port)
-        except ownership.RekallOwnershipError as exc:
-            click.echo(f"ERROR: {exc}", err=True)
-            sys.exit(2)
-        if acq.mode == "daemon":
-            click.echo(
-                f"ERROR: a rekall daemon is already running at {acq.base_url} — "
-                "use it, or stop it first.",
-                err=True,
-            )
-            sys.exit(2)
+    try:
+        # url mode records {backend: "url", target: <url>} — the YAML store is
+        # owned either way, so embedded/url acquires cross-refuse while alive.
+        acq = ownership.acquire(rekall_dir, port=port, qdrant_url=qdrant_url)
+    except ownership.RekallOwnershipError as exc:
+        click.echo(f"ERROR: {exc}", err=True)
+        sys.exit(2)
+    if acq.mode == "daemon":
+        click.echo(
+            f"ERROR: a rekall daemon is already running at {acq.base_url} — "
+            "use it, or stop it first.",
+            err=True,
+        )
+        sys.exit(2)
+    if acq.mode == "embedded" and acq.client is not None:
+        # The acquire-held client IS the store flock — the singleton must reuse it.
+        from memory.singleton import set_memory_manager
+
+        set_memory_manager(MemoryManager(qdrant_path=str(acq.path), qdrant_client=acq.client))
 
     from server import main as server_main
 
@@ -655,7 +647,10 @@ def reindex(tarball_dir: str | None):
         if acq.mode == "daemon":
             click.echo(daemon_msg, err=True)
             sys.exit(2)
-        mgr = MemoryManager(memory_dir=memory_dir, qdrant_path=str(acq.path))
+        # acquire holds the store flock through acq.client — reuse it.
+        mgr = MemoryManager(
+            memory_dir=memory_dir, qdrant_path=str(acq.path), qdrant_client=acq.client
+        )
 
     from .reindex import reindex as run_reindex
 
@@ -726,7 +721,14 @@ def demo(clean_flag: bool, force_into_real_store: bool):
         if not manifest.exists():
             click.echo(f"ERROR: no demo manifest at {manifest} — nothing to clean.", err=True)
             sys.exit(1)
-        deleted = demo_seed.clean(MemoryManager(**manager_kwargs), manifest)
+        deleted, failed = demo_seed.clean(MemoryManager(**manager_kwargs), manifest)
+        if failed:
+            click.echo(
+                f"ERROR: {len(failed)} demo memories could not be deleted — their ids "
+                f"stay in {manifest}; re-run `rekall demo --clean` to retry.",
+                err=True,
+            )
+            sys.exit(1)
         click.echo(f"✓ Removed {deleted} demo memories (manifest: {manifest})")
         return
 

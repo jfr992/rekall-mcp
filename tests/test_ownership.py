@@ -166,6 +166,62 @@ def test_acquire_routes_to_daemon(tmp_path):
     assert not (tmp_path / "qdrant").exists()
 
 
+def test_acquire_url_mode_writes_url_record(tmp_path):
+    from core import ownership
+
+    acq = ownership.acquire(tmp_path, port=_free_port(), qdrant_url="http://localhost:6334")
+
+    assert acq.mode == "url"
+    record = json.loads((tmp_path / "active-backend.json").read_text())
+    assert record["backend"] == "url"
+    assert record["target"] == "http://localhost:6334"
+    assert record["pid"] == os.getpid()
+    # Server-backed Qdrant: no embedded store, no flock.
+    assert not (tmp_path / "qdrant").exists()
+    ownership.release(tmp_path)
+
+
+def test_embedded_acquire_refused_while_url_owner_alive(tmp_path):
+    """serve-url record (this live pid) vs a stdio-embedded acquire on the same YAML."""
+    from core import ownership
+
+    ownership.acquire(tmp_path, port=_free_port(), qdrant_url="http://localhost:6334")
+    try:
+        with pytest.raises(ownership.RekallDaemonRunningError):
+            ownership.acquire(tmp_path, port=_free_port())
+    finally:
+        ownership.release(tmp_path)
+
+
+def test_url_acquire_refused_while_embedded_owner_alive(tmp_path):
+    from core import ownership
+
+    ownership.acquire(tmp_path, port=_free_port())  # embedded record, this live pid
+    try:
+        with pytest.raises(ownership.RekallDaemonRunningError):
+            ownership.acquire(tmp_path, port=_free_port(), qdrant_url="http://localhost:6334")
+    finally:
+        ownership.release(tmp_path)
+
+
+def test_acquire_embedded_holds_the_store_lock(tmp_path):
+    """Lock-then-record: acquire owns qdrant's flock itself (via the real
+    client), so two fresh processes can never both pass a released probe and
+    both write the ownership record."""
+    from qdrant_client import QdrantClient
+
+    from core import ownership
+
+    acq = ownership.acquire(tmp_path, port=_free_port())
+    try:
+        assert acq.client is not None
+        with pytest.raises(RuntimeError, match="already accessed"):
+            QdrantClient(path=str(tmp_path / "qdrant"))
+    finally:
+        acq.client.close()
+        ownership.release(tmp_path)
+
+
 def test_acquire_refuses_live_backend_mismatch(tmp_path):
     from core import ownership
 

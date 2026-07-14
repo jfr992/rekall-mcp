@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from memory.manager import MemoryManager
 
 
@@ -34,6 +36,32 @@ def test_seed_writes_manifest_matching_store(tmp_path):
     assert sum(1 for m in stored if "TODO:" in m["content"]) == 1
 
 
+def test_seed_writes_manifest_incrementally(tmp_path, monkeypatch):
+    """A crash mid-seed must leave a manifest covering every id already saved —
+    an end-of-run write would orphan them in the store."""
+    from memory.demo_seed import seed
+
+    manager = _embedded_manager(tmp_path)
+    demo_dir = tmp_path / "demo"
+    real_save = manager.save
+    saved: list[str] = []
+
+    def flaky_save(*args, **kwargs):
+        if len(saved) == 2:
+            raise RuntimeError("disk full")
+        memory_id = real_save(*args, **kwargs)
+        saved.append(memory_id)
+        return memory_id
+
+    monkeypatch.setattr(manager, "save", flaky_save)
+
+    with pytest.raises(RuntimeError, match="disk full"):
+        seed(manager, demo_dir)
+
+    manifest = json.loads((demo_dir / "manifest.json").read_text())
+    assert manifest["memory_ids"] == saved
+
+
 def test_clean_removes_only_manifest_ids(tmp_path):
     from memory.demo_seed import clean, seed
 
@@ -44,11 +72,41 @@ def test_clean_removes_only_manifest_ids(tmp_path):
     demo_dir = tmp_path / "demo"
     ids = seed(manager, demo_dir)
 
-    deleted = clean(manager, demo_dir / "manifest.json")
+    deleted, failed = clean(manager, demo_dir / "manifest.json")
 
     assert deleted == len(ids)
+    assert failed == []
     assert manager.store.count() == 1
     assert manager.store.get_by_id(survivor) is not None
+    assert not (demo_dir / "manifest.json").exists()
+
+
+def test_clean_keeps_failed_ids_for_retry(tmp_path, monkeypatch):
+    """A failed deletion must stay in the manifest — retry-able, never orphaned."""
+    from memory.demo_seed import clean, seed
+
+    manager = _embedded_manager(tmp_path)
+    demo_dir = tmp_path / "demo"
+    ids = seed(manager, demo_dir)
+    real_delete = manager.delete
+
+    def flaky_delete(memory_id):
+        if memory_id == ids[3]:
+            raise RuntimeError("qdrant hiccup")
+        return real_delete(memory_id)
+
+    monkeypatch.setattr(manager, "delete", flaky_delete)
+    deleted, failed = clean(manager, demo_dir / "manifest.json")
+
+    assert deleted == len(ids) - 1
+    assert failed == [ids[3]]
+    manifest = json.loads((demo_dir / "manifest.json").read_text())
+    assert manifest["memory_ids"] == [ids[3]]
+
+    # Retry once the failure clears: leftover deleted, manifest removed.
+    monkeypatch.setattr(manager, "delete", real_delete)
+    deleted, failed = clean(manager, demo_dir / "manifest.json")
+    assert (deleted, failed) == (1, [])
     assert not (demo_dir / "manifest.json").exists()
 
 

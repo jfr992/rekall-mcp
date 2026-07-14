@@ -240,6 +240,28 @@ class TestFastEmbedProvider:
 
         assert Embedder().provider_name == "fastembed"
 
+    def test_full_canonical_name_gets_256_truncation(self):
+        """EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2 must align
+        truncation to 256 exactly like the short spelling — fastembed's
+        tokenizer config ships 128 and long docs would embed differently."""
+        from core.embeddings import FastEmbedProvider
+
+        provider = FastEmbedProvider(model="sentence-transformers/all-MiniLM-L6-v2")
+
+        assert provider._model.model.tokenizer.truncation["max_length"] == 256
+
+    def test_dimensions_come_from_model_registry(self):
+        """A 768-dim fastembed model must report 768 — hardcoded 384 would
+        create a mismatched collection that fails on first upsert."""
+        from core.embeddings import FastEmbedProvider
+
+        with patch("fastembed.TextEmbedding") as mock_te:
+            mock_te.get_embedding_size.return_value = 768
+
+            provider = FastEmbedProvider(model="BAAI/bge-base-en-v1.5")
+
+        assert provider.dimensions == 768
+
     def test_explicit_sentence_transformers_kept(self, monkeypatch):
         """EMBEDDING_PROVIDER=sentence-transformers keeps today's provider."""
         monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence-transformers")
