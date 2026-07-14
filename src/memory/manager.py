@@ -96,6 +96,25 @@ class Sanitizer:
         return content
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, default))
+    except ValueError:
+        logger.warning(f"Invalid {name}, using default {default}")
+        return default
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    dot = norm_a = norm_b = 0.0
+    for x, y in zip(a, b):
+        dot += x * y
+        norm_a += x * x
+        norm_b += y * y
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / ((norm_a**0.5) * (norm_b**0.5))
+
+
 def _is_project_shaped(project: str) -> bool:
     """True when a project name is safe to strip from a dense query.
 
@@ -385,6 +404,9 @@ class MemoryManager:
             # Dense-representation version: 2 = encode(content). Migration skip-marker.
             payload["repr_version"] = 2
 
+            # Hoisted: dedupe, the loop guard, and the store write share one encode.
+            vector = self.embedder.encode(content)
+
             existing_memory_id = self._find_duplicate_memory_id(
                 content=content,
                 query_text=payload["embedding_text"],
@@ -395,6 +417,14 @@ class MemoryManager:
                 self._reinforce_existing_memory(existing_memory_id)
                 logger.info(f"Duplicate memory reinforced: {existing_memory_id}")
                 return existing_memory_id
+
+            recalled_id = self._find_recently_recalled_duplicate(
+                project=project_name, vector=vector
+            )
+            if recalled_id:
+                self._reinforce_existing_memory(recalled_id)
+                logger.info(f"Loop guard: recalled memory reinforced, not re-saved: {recalled_id}")
+                return recalled_id
 
             date = datetime.now().strftime("%Y-%m-%d")
             timestamp = datetime.now().isoformat()
@@ -416,7 +446,6 @@ class MemoryManager:
             # boilerplate diluted query cosines by ~0.2); sparse BM25 keeps the
             # enriched embedding_text for lexical entity/project matching.
             embedding_text = payload["embedding_text"]
-            vector = self.embedder.encode(content)
             self.store.save(
                 id=memory_id,
                 vector=vector,
@@ -562,6 +591,65 @@ class MemoryManager:
                 return duplicate_id
 
         return None
+
+    def _find_recently_recalled_duplicate(
+        self, *, project: str, vector: list[float]
+    ) -> str | None:
+        """Feedback-loop guard (mem0 #4573): the id of a memory recalled or
+        surfaced for this project within REKALL_LOOP_GUARD_WINDOW hours whose
+        vector is within REKALL_LOOP_GUARD_COSINE of the candidate, else None.
+
+        The exact-string dedupe lets paraphrased re-saves of just-recalled
+        content through; this catches them so they reinforce instead.
+        """
+        threshold = _env_float("REKALL_LOOP_GUARD_COSINE", 0.9)
+        if threshold <= 0:  # 0 disables the guard
+            return None
+        window_hours = _env_float("REKALL_LOOP_GUARD_WINDOW", 12.0)
+        cutoff = datetime.now() - timedelta(hours=window_hours)
+
+        try:
+            events = self.event_log.tail(500)
+        except Exception:
+            logger.warning("Loop guard: event log tail failed, skipping", exc_info=True)
+            return None
+
+        candidate_ids: list[str] = []
+        seen: set[str] = set()
+        for event in events:
+            if event.event_type not in ("memory_recalled", "memory_surfaced"):
+                continue
+            if event.project != project:
+                continue
+            try:
+                if datetime.fromisoformat(event.observed_at) < cutoff:
+                    continue
+            except ValueError:
+                continue
+            for memory_id in event.payload.get("memory_ids") or []:
+                if memory_id and memory_id not in seen:
+                    seen.add(memory_id)
+                    candidate_ids.append(memory_id)
+        if not candidate_ids:
+            return None
+
+        try:
+            records = self.store.get_many(candidate_ids, with_vectors=True)
+        except Exception:
+            logger.warning("Loop guard: get_many failed, skipping", exc_info=True)
+            return None
+
+        best_id: str | None = None
+        best_cosine = threshold
+        for record in records:
+            other = record.get("_vector")
+            if not other:
+                continue
+            cosine = _cosine(vector, other)
+            if cosine >= best_cosine:
+                best_cosine = cosine
+                best_id = record.get("memory_id")
+        return best_id
 
     def _reinforce_existing_memory(self, memory_id: str) -> None:
         """Load, reinforce, reclassify, and persist the updated payload."""
