@@ -12,6 +12,7 @@ import os
 import select
 import socket
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
@@ -36,17 +37,28 @@ def test_wheel_installs_and_answers_stdio(tmp_path):
         check=True,
     )
 
-    env = {**os.environ}
-    env.pop("QDRANT_URL", None)  # conftest sets it; path mode must win in the child
-    env.pop("QDRANT_PATH", None)  # main_stdio defaults it under REKALL_DIR
-    # The wheel server is a real production process: inherited pytest markers
-    # would make server.py skip setup_tools() ("Unknown tool: save_memory").
-    env.pop("PYTEST_VERSION", None)
-    env.pop("PYTEST_CURRENT_TEST", None)
-    env["REKALL_DIR"] = str(tmp_path / "rekall")
-    env["MEMORY_STORAGE_PATH"] = str(tmp_path / "m")
-    env["MCP_TRANSPORT"] = "stdio"
-    env["PORT"] = str(_free_port())  # a real daemon may own :8000 on dev machines
+    # Minimal, explicit child env. A full os.environ copy inherits developer/CI
+    # state (QDRANT_URL, pytest markers, HOME) and made the smoke behave
+    # differently per machine — it once "passed" locally only because the child
+    # fell back to whatever listened on :6333.
+    home = tmp_path / "home"
+    home.mkdir()
+    env = {
+        "PATH": os.environ["PATH"],
+        "HOME": str(home),
+        "REKALL_DIR": str(tmp_path / "rekall"),
+        "QDRANT_PATH": str(tmp_path / "rekall" / "qdrant"),
+        "MEMORY_STORAGE_PATH": str(tmp_path / "m"),
+        "MCP_TRANSPORT": "stdio",
+        "PORT": str(_free_port()),  # a real daemon may own :8000 on dev machines
+        # fastembed's default cache is <tempdir>/fastembed_cache — reuse the
+        # machine cache (CI exports FASTEMBED_CACHE_PATH) instead of
+        # re-downloading the model under the throwaway HOME.
+        "FASTEMBED_CACHE_PATH": os.environ.get("FASTEMBED_CACHE_PATH")
+        or str(Path(tempfile.gettempdir()) / "fastembed_cache"),
+    }
+    if os.environ.get("HF_HOME"):
+        env["HF_HOME"] = os.environ["HF_HOME"]
 
     stderr_log = (tmp_path / "server-stderr.log").open("wb")
     # bufsize=0: select() must see exactly what readline() will read (no
