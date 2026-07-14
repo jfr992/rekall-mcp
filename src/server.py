@@ -404,7 +404,7 @@ async def api_save_memory(request):
             return JSONResponse({"error": "content is required"}, status_code=400)
 
         manager = _get_memory_manager()
-        memory_id = manager.save(content, type=mem_type, project=project)
+        memory_id = manager.save(content, type=mem_type, project=project, capture_origin="rest")
 
         return JSONResponse({"memory_id": memory_id, "status": "saved", "type": mem_type})
     except RequestValidationError as e:
@@ -1581,7 +1581,8 @@ async def api_observe(request):
         from memory.scope import ScopeDetector
 
         scope = ScopeDetector.detect(project=caller_project, cwd=caller_cwd)
-        memory_id = manager.save(content, type=mem_type, scope=scope)
+        # The observe endpoint's caller is the rekall-observe.sh Stop hook.
+        memory_id = manager.save(content, type=mem_type, scope=scope, capture_origin="hook")
 
         return JSONResponse(
             {

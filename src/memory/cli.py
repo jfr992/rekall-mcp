@@ -71,7 +71,7 @@ def save(ctx, content: str, memory_type: str, project: str | None):
         memory save "User prefers diagrams" --type preference --project my-app
     """
     mgr: MemoryManager = _manager(ctx)
-    memory_id = mgr.save(content, type=memory_type, project=project)
+    memory_id = mgr.save(content, type=memory_type, project=project, capture_origin="cli")
     click.echo(f"✓ Saved: {memory_id}")
 
 

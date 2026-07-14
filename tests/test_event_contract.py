@@ -192,3 +192,59 @@ def test_observe_threads_capture_origin_to_save():
     MemoryManager.observe(mgr, "judged content", capture_origin="observe_judge")
 
     assert mgr.save.call_args.kwargs["capture_origin"] == "observe_judge"
+
+
+def test_rest_save_stamps_capture_origin_rest(rest_client, fake_rest_manager):
+    fake_rest_manager.save.return_value = "mid"
+    r = rest_client.post("/api/memory/save", json={"content": "remember this"})
+    assert r.status_code == 200
+    assert fake_rest_manager.save.call_args.kwargs["capture_origin"] == "rest"
+
+
+def test_rest_observe_stamps_capture_origin_hook(rest_client, fake_rest_manager):
+    fake_rest_manager.save.return_value = "mid"
+    r = rest_client.post(
+        "/api/memory/observe",
+        json={"summary": "fixed the bug", "type": "learning", "cwd": "/tmp/x"},
+    )
+    assert r.status_code == 200
+    assert fake_rest_manager.save.call_args.kwargs["capture_origin"] == "hook"
+
+
+@pytest.mark.asyncio
+async def test_mcp_tools_stamp_capture_origin(tool_registry):
+    from tools.builtin.memory import OptimizedMemoryTools
+
+    capture_tool, registered_tools = tool_registry
+
+    class FakeMCP:
+        def tool(self, **kwargs):
+            return capture_tool()
+
+    manager = MagicMock()
+    manager.observe.return_value = "mid"
+    manager.save.return_value = "mid"
+    provider = OptimizedMemoryTools()
+    provider._manager = manager
+    provider.register(FakeMCP())
+
+    await registered_tools["observe"](summary="fixed the bug", type="learning")
+    assert manager.observe.call_args.kwargs["capture_origin"] == "observe_judge"
+
+    await registered_tools["save_memory"](content="remember this", memory_type="note")
+    assert manager.save.call_args.kwargs["capture_origin"] == "save_memory_tool"
+
+
+def test_cli_save_stamps_capture_origin_cli():
+    from unittest.mock import patch
+
+    from click.testing import CliRunner
+
+    from memory.cli import memory as memory_cli
+
+    with patch("memory.cli.MemoryManager") as manager_cls:
+        manager_cls.return_value.save.return_value = "mid"
+        result = CliRunner().invoke(memory_cli, ["save", "remember this", "--project", "p"])
+
+    assert result.exit_code == 0, result.output
+    assert manager_cls.return_value.save.call_args.kwargs["capture_origin"] == "cli"
