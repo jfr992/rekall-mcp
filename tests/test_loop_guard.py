@@ -95,3 +95,21 @@ def test_recall_outside_window_saves_normally(tmp_path):
     assert result != "m-old"
     mgr._reinforce_existing_memory.assert_not_called()
     mgr._store.save.assert_called_once()
+
+
+def test_content_encoded_exactly_once_per_save(tmp_path):
+    """The hoisted encode feeds dedupe, the guard, and the store write.
+
+    auto_link is patched out: its internal encode is a separate concern,
+    this pin covers the save path itself.
+    """
+    from unittest.mock import patch
+
+    mgr = _mgr(tmp_path, recalled_vec=_vec(0.5))
+    content = "prefers concise replies with diagrams"
+
+    with patch("memory.manager.auto_link"):
+        mgr.save(content, project="proj-x", scope=SCOPE)
+
+    content_encodes = [c for c in mgr._embedder.encode.call_args_list if c.args[0] == content]
+    assert len(content_encodes) == 1
