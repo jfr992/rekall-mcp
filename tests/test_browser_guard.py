@@ -48,3 +48,10 @@ def test_allowed_origin_with_ui_header_and_json_passes():
         headers={"Origin": "http://localhost:3333", "X-Rekall-UI": "1"},
     )
     assert r.status_code == 200
+
+
+def test_no_browser_markers_passes():
+    """Hooks' curl / CLI / MCP clients send no Origin or Sec-Fetch-Site."""
+    client = TestClient(_app())
+    r = client.post("/api/x", json={"a": 1})
+    assert r.status_code == 200
