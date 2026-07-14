@@ -284,7 +284,9 @@ That's the real data. **Back them up.** Qdrant and graph alone aren't enough.
 
 ---
 
-## Storage Management
+## Storage
+
+See [`docs/example-memory.yaml`](example-memory.yaml) for what a stored memory file looks like. Management
 
 ### Check current usage
 
