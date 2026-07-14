@@ -108,6 +108,10 @@ def reindex(manager: MemoryManager, *, tarball_dir: Path | None = None) -> dict[
     tarball_dir = Path(tarball_dir) if tarball_dir else Path.home() / "backups"
     _backup_roots(manager, tarball_dir)
 
+    # Prove the embedder loads and encodes BEFORE the collection is touched —
+    # a missing/broken model must never leave us with a destroyed collection.
+    manager.embedder.encode("rekall reindex embedder probe")
+
     memories = load_all_yaml_memories(manager.memory_dir)
     encoder = BM25Encoder()
     encoder.fit(build_corpus(memories))
