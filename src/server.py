@@ -644,15 +644,11 @@ async def api_memory_review(request):
         manager = _get_memory_manager()
         found = manager.store.get_many([memory_id])
         if not found:
-            return JSONResponse(
-                {"error": "not found", "memory_id": memory_id}, status_code=404
-            )
+            return JSONResponse({"error": "not found", "memory_id": memory_id}, status_code=404)
         project = found[0].get("project") or "general"
 
         if verdict == "kill" and not manager.delete(memory_id):
-            return JSONResponse(
-                {"error": "not found", "memory_id": memory_id}, status_code=404
-            )
+            return JSONResponse({"error": "not found", "memory_id": memory_id}, status_code=404)
 
         # Mutate-then-record: the event lands only after the mutation did.
         event_recorded = True
