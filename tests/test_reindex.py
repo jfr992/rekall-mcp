@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from memory.manager import MemoryManager
 
 
@@ -39,3 +41,25 @@ def test_reindex_tarballs_both_roots_first(tmp_path, monkeypatch):
     assert any("memory" in n for n in names)
     assert any("qdrant" in n for n in names)
     assert result["points"] == 1
+
+
+def test_reindex_loads_embedder_before_recreate(tmp_path, monkeypatch):
+    from memory.reindex import reindex
+
+    manager = _embedded_manager(tmp_path)
+    memory_id = manager.save("embedder failure must not destroy the collection", type="note")
+    assert manager.store.count() == 1
+
+    class EmbedderBroken(Exception):
+        pass
+
+    def boom(text):
+        raise EmbedderBroken(text)
+
+    monkeypatch.setattr(manager.embedder, "encode", boom)
+
+    with pytest.raises(EmbedderBroken):
+        reindex(manager, tarball_dir=tmp_path / "backups")
+
+    assert manager.store.count() == 1, "collection must be untouched when the embedder fails"
+    assert manager.store.get_by_id(memory_id) is not None
