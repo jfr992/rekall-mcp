@@ -441,18 +441,7 @@ async def api_recall_memories(request):
             query, limit=limit, project=project, type=mem_type, task_hint=task_hint
         )
 
-        try:
-            ids = [m["memory_id"] for m in results if m.get("memory_id")]
-            manager.record_event(
-                event_type="memory_recalled",
-                project=project or "general",
-                memory_ids=ids,
-                source="recall",
-                payload={"task_hint": task_hint},
-            )
-        except Exception:
-            logger.debug("event emission skipped", exc_info=True)
-
+        # memory_recalled emission lives in manager.recall (event contract v2)
         return JSONResponse({"query": query, "count": len(results), "memories": results})
     except RequestValidationError as e:
         return _bad_request(str(e))
