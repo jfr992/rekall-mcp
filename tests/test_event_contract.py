@@ -73,12 +73,19 @@ def test_recall_emits_one_memory_recalled_with_query_scores_tokens():
     payload = kwargs["payload"]
     assert payload["query"] == "auth rotation"
     assert payload["task_hint"] == "auth middleware"
-    assert payload["memories"] == [
-        {"memory_id": m["memory_id"], "score": m["score"]} for m in out
-    ]
+    assert payload["memories"] == [{"memory_id": m["memory_id"], "score": m["score"]} for m in out]
     assert payload["token_estimate"] == sum(len(m["content"]) // 4 for m in out)
     assert payload["session_id"] is None
     assert payload["capture_origin"] is None
+
+
+def test_recall_survives_event_emission_failure():
+    mgr = _mgr(HITS)
+    mgr.record_event.side_effect = RuntimeError("event log broken")
+
+    out = MemoryManager.recall(mgr, "auth rotation", limit=5)
+
+    assert [m["memory_id"] for m in out] == [f"m{i}" for i in range(5)]
 
 
 @pytest.mark.asyncio
