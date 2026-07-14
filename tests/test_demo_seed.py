@@ -72,3 +72,27 @@ def test_conflict_pair_renders_outdated_stub(tmp_path):
     assert "3 attempts" in out, f"newer conflict member missing:\n{out}"
     assert "5 attempts" not in out, f"older conflict member should be stubbed:\n{out}"
     assert "[outdated — replaced by the newer entry above]" in out
+
+
+class TestDemoCommand:
+    """`rekall demo` — isolated-by-default seeding, manifest-only clean, refusal."""
+
+    def test_demo_seeds_isolated_store_and_prints_queries(self, tmp_path, monkeypatch):
+        from click.testing import CliRunner
+
+        from memory.cli import memory
+        from memory.demo_seed import SUGGESTED_QUERIES
+
+        monkeypatch.delenv("MEMORY_STORAGE_PATH", raising=False)
+        monkeypatch.setenv("REKALL_DIR", str(tmp_path / "rekall"))
+
+        result = CliRunner().invoke(memory, ["demo"])
+
+        assert result.exit_code == 0, result.output
+        demo_dir = tmp_path / "rekall" / "demo"
+        ids = json.loads((demo_dir / "manifest.json").read_text())["memory_ids"]
+        assert len(ids) == 20
+        assert list((demo_dir / "memory").rglob("*.yaml")), "YAML must land in the demo dir"
+        assert (demo_dir / "qdrant").is_dir(), "vectors must land in the demo dir"
+        for query in SUGGESTED_QUERIES:
+            assert query in result.output
