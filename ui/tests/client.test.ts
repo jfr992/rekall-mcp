@@ -26,4 +26,11 @@ describe("fetchJson browser-guard header", () => {
     expect(headers["X-Rekall-UI"]).toBe("1");
     expect(headers["Content-Type"]).toBe("application/json");
   });
+
+  it("does not send X-Rekall-UI on reads", async () => {
+    const fn = mockFetch();
+    await fetchJson("/api/memory/stats");
+    const headers = (fn.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers["X-Rekall-UI"]).toBeUndefined();
+  });
 });
