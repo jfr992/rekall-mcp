@@ -6,8 +6,9 @@ Tests are organized to read like documentation:
     - TestVectorStore: How we store and search
 """
 
+import sys
 import time
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -143,20 +144,25 @@ class TestEmbedder:
     """Embedder converts text to vectors."""
 
     @pytest.fixture
-    def mock_sentence_transformer(self):
-        """Mock the SentenceTransformer model."""
+    def mock_sentence_transformer(self, monkeypatch):
+        """Mock the SentenceTransformer model.
+
+        A sys.modules stub, not patch("sentence_transformers...") — the CI base
+        env doesn't install the [torch] extra, so the real package may be absent.
+        """
         with patch("core.embeddings.Telemetry") as mock_tel:
             # Mock telemetry
             mock_tel.get.return_value = MagicMock(
                 track=MagicMock(return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()))
             )
 
-            with patch("sentence_transformers.SentenceTransformer") as mock_st:
-                model = MagicMock()
-                model.get_sentence_embedding_dimension.return_value = 384
-                model.encode.return_value = MagicMock(tolist=MagicMock(return_value=[0.1] * 384))
-                mock_st.return_value = model
-                yield model
+            model = MagicMock()
+            model.get_sentence_embedding_dimension.return_value = 384
+            model.encode.return_value = MagicMock(tolist=MagicMock(return_value=[0.1] * 384))
+            fake_module = ModuleType("sentence_transformers")
+            fake_module.SentenceTransformer = MagicMock(return_value=model)
+            monkeypatch.setitem(sys.modules, "sentence_transformers", fake_module)
+            yield model
 
     def test_lazy_loads_model(self, mock_sentence_transformer):
         """Provider only loads when first used."""
