@@ -190,6 +190,16 @@ def apply_plan(manager, *, plan_id: str, confirm_plan_id: str) -> dict[str, Any]
             skipped.append(candidate.memory_id)
 
     _PLAN_STORE.pop(plan_id, None)  # one-shot; plan is consumed on apply
+
+    if deleted:  # one event with the ids list — cheaper than per-id events
+        manager.record_event(
+            event_type="memory_pruned",
+            project=plan.project,
+            source="prune_apply",
+            memory_ids=deleted,
+            payload={"plan_id": plan_id},
+        )
+
     return {
         "plan_id": plan_id,
         "deleted": deleted,
