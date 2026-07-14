@@ -64,3 +64,30 @@ def test_unlisted_host_gets_421_on_any_method():
     r = client.post("/api/x", json={"a": 1}, headers={"Host": "evil.example.com:8000"})
     assert r.status_code == 421
     assert "error" in r.json()
+
+
+def test_valid_bearer_short_circuits_origin_rejection(monkeypatch):
+    """Non-loopback deployments authenticate with the token, not the origin."""
+    monkeypatch.setenv("REKALL_API_TOKEN", "s3cret")
+    client = TestClient(_app())
+    r = client.post(
+        "/api/x",
+        content="x=1",
+        headers={
+            "Origin": "http://localhost:9999",
+            "Content-Type": "text/plain",
+            "Authorization": "Bearer s3cret",
+        },
+    )
+    assert r.status_code == 200
+    # A wrong token gets no exemption.
+    r = client.post(
+        "/api/x",
+        content="x=1",
+        headers={
+            "Origin": "http://localhost:9999",
+            "Content-Type": "text/plain",
+            "Authorization": "Bearer nope",
+        },
+    )
+    assert r.status_code == 403
