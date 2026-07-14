@@ -14,29 +14,46 @@ Rekall gives local agents durable, inspectable, cross-session and cross-project 
 
 ## Install
 
-### 1. Download and Start
+### Try it — no Docker, one command
+
+```bash
+claude mcp add rekall -- uvx rekall-mcp
+```
+
+That's the trial tier: stdio transport, embedded vector store at `~/.rekall/qdrant`, memories as YAML at `~/.claude/memory`. First run downloads the ~90 MB embedding model (progress on stderr). No hooks/auto-capture, single session at a time — upgrade below when it earns a daily slot.
+
+### Daily driver — all-in-one Docker
+
+```bash
+docker run -d -v rekall-data:/data -p 127.0.0.1:8000:8000 ghcr.io/jfr992/rekall-mcp
+claude mcp add --transport http rekall http://localhost:8000
+```
+
+One container, embedding model baked in, data on a named volume. Verify with `curl http://localhost:8000/health`.
+
+### Full stack — compose (adds the cockpit UI)
 
 ```bash
 git clone https://github.com/jfr992/rekall-mcp.git
 cd rekall-mcp
 docker compose up -d    # Qdrant (:6333) + MCP backend (:8000) + cockpit (:3333)
-```
-
-That's the whole stack — three containers. Memories live at `$MEMORY_STORAGE_PATH` (default `~/.claude/memory`); set the env var before `docker compose up` to relocate. (`scripts/start-rekall.sh` remains for running the backend/UI on the host during development.)
-
-> **Need Docker?** Get it free at [docker.com/get-started](https://www.docker.com/get-started/)
-
-### 2. Tell Claude
-
-```bash
 claude mcp add --transport http rekall http://localhost:8000
 ```
 
-### 3. Verify
+Data lives on named volumes (`rekall-memory`, `rekall-qdrant`). Existing installs with data at `~/.claude/` keep their bind mounts via `docker-compose.bind-mounts.example.yaml` — see [docs/MIGRATION.md](docs/MIGRATION.md). (`scripts/start-rekall.sh` remains for running the backend/UI on the host during development.)
 
-```bash
-curl http://localhost:8000/health
-```
+> **Need Docker?** Get it free at [docker.com/get-started](https://www.docker.com/get-started/)
+
+### Which tier?
+
+| Tier | Install | Transport | Hooks / auto-capture | Embedder | Storage |
+|---|---|---|---|---|---|
+| Trial | `uvx rekall-mcp` | stdio | no | fastembed | embedded `~/.rekall/qdrant` + YAML `~/.claude/memory` |
+| Daily (pip) | `uv tool install rekall-mcp && rekall serve` | HTTP loopback | yes | fastembed | same as trial |
+| Daily (docker) | `docker run -v rekall-data:/data -p 127.0.0.1:8000:8000 ghcr.io/jfr992/rekall-mcp` | HTTP loopback | yes | fastembed (baked into the image) | named volume |
+| Full stack | `docker compose up -d` | HTTP + cockpit | yes | per compose | external Qdrant container |
+
+Trial-tier honesty: no hooks means nothing is captured automatically — you save and recall explicitly. Filtering is linear at embedded scale, and only one process can hold the embedded store (run `rekall serve` so sessions share one daemon). Shared-env `pip install` is unsupported; use isolated installs (`uvx` / `uv tool install`).
 
 **Done.** Claude now remembers things between sessions.
 
