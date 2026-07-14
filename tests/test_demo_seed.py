@@ -115,3 +115,26 @@ class TestDemoCommand:
         assert "--force-into-real-store" in result.output
         yaml_files = list(store.rglob("*.yaml"))
         assert len(yaml_files) == 1, "refusal must not write anything"
+
+    def test_demo_clean_round_trip(self, tmp_path, monkeypatch):
+        import gc
+
+        from click.testing import CliRunner
+
+        from memory.cli import memory
+
+        monkeypatch.delenv("MEMORY_STORAGE_PATH", raising=False)
+        monkeypatch.setenv("REKALL_DIR", str(tmp_path / "rekall"))
+        runner = CliRunner()
+
+        assert runner.invoke(memory, ["demo"]).exit_code == 0
+        # Drop the first invocation's embedded store handle before --clean
+        # reopens the same qdrant path (flock is per-process-handle).
+        gc.collect()
+
+        result = runner.invoke(memory, ["demo", "--clean"])
+
+        assert result.exit_code == 0, result.output
+        demo_dir = tmp_path / "rekall" / "demo"
+        assert not (demo_dir / "manifest.json").exists()
+        assert not list((demo_dir / "memory").rglob("*.yaml")), "all seeded YAML removed"
