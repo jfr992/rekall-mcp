@@ -230,6 +230,16 @@ def test_rest_observe_stamps_capture_origin_hook(rest_client, fake_rest_manager)
     assert fake_rest_manager.save.call_args.kwargs["capture_origin"] == "hook"
 
 
+def test_rest_observe_threads_session_id(rest_client, fake_rest_manager):
+    fake_rest_manager.save.return_value = "mid"
+    r = rest_client.post(
+        "/api/memory/observe",
+        json={"summary": "fixed the bug", "type": "learning", "cwd": "/tmp/x", "session_id": "s-1"},
+    )
+    assert r.status_code == 200
+    assert fake_rest_manager.save.call_args.kwargs["session_id"] == "s-1"
+
+
 @pytest.mark.asyncio
 async def test_mcp_tools_stamp_capture_origin(tool_registry):
     from tools.builtin.memory import OptimizedMemoryTools

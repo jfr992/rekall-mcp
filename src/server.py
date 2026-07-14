@@ -1551,7 +1551,15 @@ async def api_observe(request):
 
         scope = ScopeDetector.detect(project=caller_project, cwd=caller_cwd)
         # The observe endpoint's caller is the rekall-observe.sh Stop hook.
-        memory_id = manager.save(content, type=mem_type, scope=scope, capture_origin="hook")
+        # Old hooks send no session_id -> null (version skew is safe both ways:
+        # an old server simply ignores the extra body key).
+        memory_id = manager.save(
+            content,
+            type=mem_type,
+            scope=scope,
+            capture_origin="hook",
+            session_id=body.get("session_id") or None,
+        )
 
         return JSONResponse(
             {
