@@ -162,7 +162,7 @@ class TestEmbedder:
         """Provider only loads when first used."""
         from core.embeddings import Embedder
 
-        embedder = Embedder()
+        embedder = Embedder(provider="sentence-transformers")
 
         # Not loaded yet (provider pattern)
         assert embedder._provider is None
@@ -177,7 +177,7 @@ class TestEmbedder:
         """encode() returns list of floats."""
         from core.embeddings import Embedder
 
-        embedder = Embedder()
+        embedder = Embedder(provider="sentence-transformers")
         vector = embedder.encode("Hello world")
 
         assert isinstance(vector, list)
@@ -193,7 +193,7 @@ class TestEmbedder:
             tolist=MagicMock(return_value=[[0.1] * 384] * 3)
         )
 
-        embedder = Embedder()
+        embedder = Embedder(provider="sentence-transformers")
         vectors = embedder.encode_batch(["one", "two", "three"])
 
         # Should call encode once with all texts
@@ -213,6 +213,33 @@ class TestEmbedder:
 
         embedder = Embedder(model="paraphrase-MiniLM-L6-v2")
         assert embedder.model_name == "paraphrase-MiniLM-L6-v2"
+
+
+class TestFastEmbedProvider:
+    """FastEmbedProvider: no-torch ONNX embeddings, vector-identical to ST."""
+
+    def test_fastembed_provider_encodes_384(self, monkeypatch):
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "fastembed")
+        from core.embeddings import Embedder
+
+        e = Embedder(model="all-MiniLM-L6-v2")
+        assert e.provider_name == "fastembed"
+        v = e.encode("hello world")
+        assert len(v) == 384
+
+    def test_auto_resolution_prefers_fastembed(self, monkeypatch):
+        """No env, no explicit provider: fastembed wins when importable (packaged default)."""
+        monkeypatch.delenv("EMBEDDING_PROVIDER", raising=False)
+        from core.embeddings import Embedder
+
+        assert Embedder().provider_name == "fastembed"
+
+    def test_explicit_sentence_transformers_kept(self, monkeypatch):
+        """EMBEDDING_PROVIDER=sentence-transformers keeps today's provider."""
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence-transformers")
+        from core.embeddings import Embedder
+
+        assert Embedder().provider_name == "sentence-transformers"
 
 
 # =============================================================================

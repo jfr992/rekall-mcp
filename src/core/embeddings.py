@@ -127,6 +127,33 @@ class SentenceTransformerProvider(EmbeddingProvider):
         return embeddings.tolist()
 
 
+class FastEmbedProvider(EmbeddingProvider):
+    """Local embeddings using fastembed (ONNX, no torch).
+
+    Vector-identical to SentenceTransformerProvider for the canonical model
+    (fp32 ONNX export of the same weights) — see tests/test_fastembed_identity.py.
+    """
+
+    DEFAULT_MODEL = "all-MiniLM-L6-v2"
+    _CANONICAL = {"all-MiniLM-L6-v2": "sentence-transformers/all-MiniLM-L6-v2"}
+
+    def __init__(self, model: str | None = None) -> None:
+        from fastembed import TextEmbedding
+
+        self.model_name = model or self.DEFAULT_MODEL
+        self._model = TextEmbedding(model_name=self._CANONICAL.get(self.model_name, self.model_name))
+
+    @property
+    def dimensions(self) -> int:
+        return 384
+
+    def encode(self, text: str) -> list[float]:
+        return list(next(iter(self._model.embed([text]))))
+
+    def encode_batch(self, texts: list[str]) -> list[list[float]]:
+        return [list(v) for v in self._model.embed(texts)]
+
+
 class OllamaProvider(EmbeddingProvider):
     """Local embeddings using Ollama.
 
@@ -295,6 +322,7 @@ class Embedder:
 
     PROVIDERS = {
         "sentence-transformers": SentenceTransformerProvider,
+        "fastembed": FastEmbedProvider,
         "ollama": OllamaProvider,
         "gemini": GeminiProvider,
     }
@@ -306,7 +334,7 @@ class Embedder:
         self,
         model: str | None = None,
         device: str | None = None,
-        provider: str = "sentence-transformers",
+        provider: str | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
     ) -> None:
@@ -315,11 +343,14 @@ class Embedder:
         Args:
             model: Model name (varies by provider)
             device: Device to use (sentence-transformers only)
-            provider: "sentence-transformers", "ollama", or "gemini"
+            provider: "sentence-transformers", "fastembed", "ollama", or "gemini".
+                None = resolve from EMBEDDING_PROVIDER env, then auto-detect
+                (fastembed if importable — the packaged default — else
+                sentence-transformers).
             api_key: API key (gemini only)
             base_url: Base URL (ollama only)
         """
-        self.provider_name = provider
+        self.provider_name = self._resolve_provider_name(provider)
         self._provider: EmbeddingProvider | None = None
         self._telemetry = Telemetry.get()
 
@@ -337,6 +368,22 @@ class Embedder:
         # Embedding cache (avoids redundant model calls for repeated text)
         self._cache: OrderedDict[str, list[float]] = OrderedDict()
         self._cache_max = 512
+
+    @staticmethod
+    def _resolve_provider_name(requested: str | None) -> str:
+        """EMBEDDING_PROVIDER=fastembed wins; explicit request keeps today's; auto prefers fastembed."""
+        env = os.environ.get("EMBEDDING_PROVIDER", "").strip()
+        if env == "fastembed":
+            return "fastembed"
+        if requested:
+            return requested
+        if env:
+            return env
+        import importlib.util
+
+        if importlib.util.find_spec("fastembed") is not None:
+            return "fastembed"
+        return "sentence-transformers"
 
     @property
     def provider(self) -> EmbeddingProvider:
@@ -358,6 +405,8 @@ class Embedder:
                 model=self._config["model"],
                 device=self._config["device"],
             )
+        elif self.provider_name == "fastembed":
+            return provider_cls(model=self._config["model"])
         elif self.provider_name == "ollama":
             return provider_cls(
                 model=self._config["model"],
