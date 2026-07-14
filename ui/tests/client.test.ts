@@ -33,4 +33,13 @@ describe("fetchJson browser-guard header", () => {
     const headers = (fn.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
     expect(headers["X-Rekall-UI"]).toBeUndefined();
   });
+
+  it("caller-supplied headers extend, never clobber, the defaults", async () => {
+    const fn = mockFetch();
+    await fetchJson("/api/x", { method: "POST", headers: { "X-Extra": "y" } });
+    const headers = (fn.mock.calls[0][1] as RequestInit).headers as Record<string, string>;
+    expect(headers["X-Rekall-UI"]).toBe("1");
+    expect(headers["Content-Type"]).toBe("application/json");
+    expect(headers["X-Extra"]).toBe("y");
+  });
 });
