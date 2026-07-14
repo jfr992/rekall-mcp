@@ -162,25 +162,27 @@ class BM25Encoder:
 
         return sparse
 
-    def save(self, path: str) -> None:
+    def save(self, path: str, binding: dict | None = None) -> None:
         """Persist vocabulary and IDF to disk.
 
         Args:
             path: File path (JSON)
+            binding: Optional store identity ({target, collection, points}) —
+                loaders refuse a vocab bound to a different store.
         """
+        data: dict = {
+            "k1": self.k1,
+            "b": self.b,
+            "vocab": self.vocab,
+            "idf": {str(k): v for k, v in self.idf.items()},
+            "avg_doc_len": self.avg_doc_len,
+            "doc_count": self._doc_count,
+        }
+        if binding is not None:
+            data["_binding"] = binding
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         with open(path, "w") as f:
-            json.dump(
-                {
-                    "k1": self.k1,
-                    "b": self.b,
-                    "vocab": self.vocab,
-                    "idf": {str(k): v for k, v in self.idf.items()},
-                    "avg_doc_len": self.avg_doc_len,
-                    "doc_count": self._doc_count,
-                },
-                f,
-            )
+            json.dump(data, f)
 
     def load(self, path: str) -> None:
         """Load vocabulary and IDF from disk.

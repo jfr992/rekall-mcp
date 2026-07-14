@@ -6,8 +6,9 @@ Tests are organized to read like documentation:
     - TestVectorStore: How we store and search
 """
 
+import sys
 import time
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -143,26 +144,31 @@ class TestEmbedder:
     """Embedder converts text to vectors."""
 
     @pytest.fixture
-    def mock_sentence_transformer(self):
-        """Mock the SentenceTransformer model."""
+    def mock_sentence_transformer(self, monkeypatch):
+        """Mock the SentenceTransformer model.
+
+        A sys.modules stub, not patch("sentence_transformers...") — the CI base
+        env doesn't install the [torch] extra, so the real package may be absent.
+        """
         with patch("core.embeddings.Telemetry") as mock_tel:
             # Mock telemetry
             mock_tel.get.return_value = MagicMock(
                 track=MagicMock(return_value=MagicMock(__enter__=MagicMock(), __exit__=MagicMock()))
             )
 
-            with patch("sentence_transformers.SentenceTransformer") as mock_st:
-                model = MagicMock()
-                model.get_sentence_embedding_dimension.return_value = 384
-                model.encode.return_value = MagicMock(tolist=MagicMock(return_value=[0.1] * 384))
-                mock_st.return_value = model
-                yield model
+            model = MagicMock()
+            model.get_sentence_embedding_dimension.return_value = 384
+            model.encode.return_value = MagicMock(tolist=MagicMock(return_value=[0.1] * 384))
+            fake_module = ModuleType("sentence_transformers")
+            fake_module.SentenceTransformer = MagicMock(return_value=model)
+            monkeypatch.setitem(sys.modules, "sentence_transformers", fake_module)
+            yield model
 
     def test_lazy_loads_model(self, mock_sentence_transformer):
         """Provider only loads when first used."""
         from core.embeddings import Embedder
 
-        embedder = Embedder()
+        embedder = Embedder(provider="sentence-transformers")
 
         # Not loaded yet (provider pattern)
         assert embedder._provider is None
@@ -177,7 +183,7 @@ class TestEmbedder:
         """encode() returns list of floats."""
         from core.embeddings import Embedder
 
-        embedder = Embedder()
+        embedder = Embedder(provider="sentence-transformers")
         vector = embedder.encode("Hello world")
 
         assert isinstance(vector, list)
@@ -193,7 +199,7 @@ class TestEmbedder:
             tolist=MagicMock(return_value=[[0.1] * 384] * 3)
         )
 
-        embedder = Embedder()
+        embedder = Embedder(provider="sentence-transformers")
         vectors = embedder.encode_batch(["one", "two", "three"])
 
         # Should call encode once with all texts
@@ -213,6 +219,55 @@ class TestEmbedder:
 
         embedder = Embedder(model="paraphrase-MiniLM-L6-v2")
         assert embedder.model_name == "paraphrase-MiniLM-L6-v2"
+
+
+class TestFastEmbedProvider:
+    """FastEmbedProvider: no-torch ONNX embeddings, vector-identical to ST."""
+
+    def test_fastembed_provider_encodes_384(self, monkeypatch):
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "fastembed")
+        from core.embeddings import Embedder
+
+        e = Embedder(model="all-MiniLM-L6-v2")
+        assert e.provider_name == "fastembed"
+        v = e.encode("hello world")
+        assert len(v) == 384
+
+    def test_auto_resolution_prefers_fastembed(self, monkeypatch):
+        """No env, no explicit provider: fastembed wins when importable (packaged default)."""
+        monkeypatch.delenv("EMBEDDING_PROVIDER", raising=False)
+        from core.embeddings import Embedder
+
+        assert Embedder().provider_name == "fastembed"
+
+    def test_full_canonical_name_gets_256_truncation(self):
+        """EMBEDDING_MODEL=sentence-transformers/all-MiniLM-L6-v2 must align
+        truncation to 256 exactly like the short spelling — fastembed's
+        tokenizer config ships 128 and long docs would embed differently."""
+        from core.embeddings import FastEmbedProvider
+
+        provider = FastEmbedProvider(model="sentence-transformers/all-MiniLM-L6-v2")
+
+        assert provider._model.model.tokenizer.truncation["max_length"] == 256
+
+    def test_dimensions_come_from_model_registry(self):
+        """A 768-dim fastembed model must report 768 — hardcoded 384 would
+        create a mismatched collection that fails on first upsert."""
+        from core.embeddings import FastEmbedProvider
+
+        with patch("fastembed.TextEmbedding") as mock_te:
+            mock_te.get_embedding_size.return_value = 768
+
+            provider = FastEmbedProvider(model="BAAI/bge-base-en-v1.5")
+
+        assert provider.dimensions == 768
+
+    def test_explicit_sentence_transformers_kept(self, monkeypatch):
+        """EMBEDDING_PROVIDER=sentence-transformers keeps today's provider."""
+        monkeypatch.setenv("EMBEDDING_PROVIDER", "sentence-transformers")
+        from core.embeddings import Embedder
+
+        assert Embedder().provider_name == "sentence-transformers"
 
 
 # =============================================================================

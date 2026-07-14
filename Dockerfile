@@ -1,61 +1,74 @@
-# Rekall MCP - Docker Image
+# Rekall MCP - Docker Image (all-in-one)
 #
 # Build:
 #   docker build -t rekall-mcp .
 #
-# Run:
-#   docker run -p 8000:8000 \
-#     -e QDRANT_URL=http://host.docker.internal:6333 \
-#     -e MCP_TRANSPORT=streamable-http \
-#     -e HOST=0.0.0.0 \
-#     rekall-mcp
+# Run (embedded Qdrant, named volume):
+#   docker run -d -v rekall-data:/data -p 127.0.0.1:8000:8000 rekall-mcp
+#
+# Run against an external Qdrant:
+#   docker run -d -v rekall-data:/data -p 127.0.0.1:8000:8000 \
+#     -e QDRANT_URL=http://host.docker.internal:6333 rekall-mcp
 
-FROM python:3.11-slim
+FROM python:3.11-slim AS base
 
 WORKDIR /app
 
-# Install system dependencies
+# gosu: entrypoint starts as root to chown /data, then drops to mcp
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv for faster dependency management
 RUN pip install --no-cache-dir uv
 
 # Copy dependency files first for better layer caching
 COPY pyproject.toml README.md ./
 
-# Install CPU-only PyTorch first (skips ~2.5GB of NVIDIA CUDA packages)
-RUN uv pip install --system torch --index-url https://download.pytorch.org/whl/cpu
+# Prod deps only — fastembed is ONNX-based, no torch needed
+RUN uv pip install --system -r pyproject.toml
 
-# Install dependencies (includes sentence-transformers for embeddings)
-RUN uv pip install --system -e ".[dev]"
-
-# Copy source code
 COPY src/ src/
-COPY tests/ tests/
 
-# Create non-root user
 RUN useradd --create-home --shell /bin/bash mcp \
-    && mkdir -p /home/mcp/.claude/memory \
-    && chown -R mcp:mcp /home/mcp
+    && mkdir -p /data/memory /data/qdrant \
+    && chown -R mcp:mcp /data
 
-USER mcp
+# Bake the embedding model into the image. fastembed 0.8 exposes no HF
+# revision parameter (download_model always resolves the repo's current sha),
+# so the practical pin is this immutable layer: runtime loads cache-first and
+# never re-downloads. See PLAN.md Task 5 note.
+ENV FASTEMBED_CACHE_PATH=/opt/fastembed_cache
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2')" \
+    && chmod -R a+rX /opt/fastembed_cache
 
-# Pre-download the default embedding model (saves time on first run)
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
+COPY scripts/entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
 EXPOSE 8000
 
-# Default environment
+# Default environment. QDRANT_PATH/QDRANT_URL deliberately unset here:
+# entrypoint.sh defaults QDRANT_PATH=/data/qdrant only when QDRANT_URL is
+# absent (compose sets QDRANT_URL; both set trips the mutual-exclusion guard).
 ENV PYTHONPATH=/app/src
 ENV MCP_TRANSPORT=streamable-http
-ENV EMBEDDING_PROVIDER=sentence-transformers
+ENV EMBEDDING_PROVIDER=fastembed
+ENV MEMORY_STORAGE_PATH=/data/memory
 ENV HOST=0.0.0.0
 ENV PORT=8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-ENTRYPOINT ["python", "-m", "server"]
+# Root at start: entrypoint chowns /data (named volumes arrive root-owned),
+# then drops to mcp via gosu.
+USER root
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["python", "-m", "server"]
+
+# Test image (compose --profile test): prod image + dev deps
+FROM base AS test
+RUN uv pip install --system -r pyproject.toml --extra dev
+
+# Default build target = prod image
+FROM base

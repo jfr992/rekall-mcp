@@ -7,10 +7,11 @@
 # Everything runs in containers - no local Python install needed.
 #
 # DATA STORAGE:
-#   - Memory files: ~/.claude/memory/ (on your machine, survives container deletion)
-#   - Qdrant data: ~/.claude/qdrant/ (on your machine, survives container deletion)
+#   - Memory files: named volume `rekall-memory` (survives container deletion)
+#   - Qdrant data: named volume `rekall-qdrant` (survives container deletion)
 #
-# To backup: just copy ~/.claude/ somewhere safe
+# Existing installs with data at ~/.claude/: keep your bind mounts via
+# docker-compose.bind-mounts.example.yaml (see docs/MIGRATION.md).
 
 services:
   # =========================================================================
@@ -18,13 +19,11 @@ services:
   # =========================================================================
   qdrant:
     image: qdrant/qdrant:v1.13.4
-    container_name: rekall-qdrant
     ports:
       # Bind host side to loopback only — Qdrant has no auth by default
       - "127.0.0.1:6333:6333"
     volumes:
-      # Store on your machine, not in a Docker volume
-      - ${QDRANT_DATA_PATH:-~/.claude/qdrant}:/qdrant/storage
+      - rekall-qdrant:/qdrant/storage
     restart: unless-stopped
     healthcheck:
       # Qdrant image has no curl/wget; TCP check via bash built-in
@@ -39,10 +38,9 @@ services:
   # =========================================================================
   mcp:
     build: .
-    container_name: rekall-mcp
     environment:
       - QDRANT_URL=http://qdrant:6333
-      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-sentence-transformers}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-fastembed}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
       - MCP_TRANSPORT=streamable-http
@@ -54,8 +52,7 @@ services:
     ports:
       - "127.0.0.1:8000:8000"
     volumes:
-      # Store on your machine, not in a Docker volume
-      - ${MEMORY_STORAGE_PATH:-~/.claude/memory}:/data/memory
+      - rekall-memory:/data/memory
     depends_on:
       qdrant:
         condition: service_healthy
@@ -77,7 +74,6 @@ services:
       args:
         # Baked into the Next rewrite at build time (standalone output).
         REKALL_API_URL: http://mcp:8000
-    container_name: rekall-ui
     ports:
       - "127.0.0.1:3333:3333"
     depends_on:
@@ -87,12 +83,11 @@ services:
   # =========================================================================
   # OLLAMA - Local Embeddings (optional, better quality)
   # =========================================================================
-  # Uncomment to use Ollama instead of sentence-transformers
+  # Uncomment to use Ollama instead of fastembed
   # Then set EMBEDDING_PROVIDER=ollama in your .env file
   #
   # ollama:
   #   image: ollama/ollama:latest
-  #   container_name: memory-ollama
   #   ports:
   #     - "11434:11434"
   #   volumes:
@@ -105,18 +100,17 @@ services:
   # =========================================================================
   mcp-dev:
     build: .
-    container_name: rekall-mcp-dev
     environment:
       - QDRANT_URL=http://qdrant:6333
-      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-sentence-transformers}
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-fastembed}
       - MCP_TRANSPORT=streamable-http
       - LOG_LEVEL=DEBUG
       - MEMORY_STORAGE_PATH=/data/memory
     ports:
-      - "8001:8000"
+      - "127.0.0.1:8001:8000"
     volumes:
       - ./src:/app/src
-      - ${MEMORY_STORAGE_PATH:-~/.claude/memory}:/data/memory
+      - rekall-memory:/data/memory
     depends_on:
       qdrant:
         condition: service_healthy
@@ -128,9 +122,8 @@ services:
   # =========================================================================
   qdrant-test:
     image: qdrant/qdrant:v1.13.4
-    container_name: rekall-qdrant-test
     ports:
-      - "6334:6333"
+      - "127.0.0.1:6334:6333"
     tmpfs:
       - /qdrant/storage:size=1G
     healthcheck:
@@ -148,8 +141,10 @@ services:
   # TESTS
   # =========================================================================
   test:
-    build: .
-    container_name: rekall-test
+    build:
+      context: .
+      # Prod image carries no dev deps; the test stage adds pytest et al.
+      target: test
     environment:
       - QDRANT_URL=http://qdrant-test:6333
       - MEMORY_STORAGE_PATH=/tmp/test_memory
@@ -169,4 +164,6 @@ services:
       - test
     entrypoint: ["pytest", "-v", "tests/"]
 
-# No Docker volumes needed - we mount directly to ~/.claude/
+volumes:
+  rekall-memory:
+  rekall-qdrant:
