@@ -407,6 +407,34 @@ def test_startup_get_threads_session_id(rest_client, fake_rest_manager):
     assert fake_rest_manager.get_agent_startup.call_args.kwargs["session_id"] is None
 
 
+def test_nothing_coerces_null_evidence_class_to_inferred():
+    """HARD RULE: null evidence_class is NEVER mapped to "inferred" — old
+    installed hooks (no evidence_class) must not pollute U3's review queue
+    with fabricated judgments. Grep-level pin over src/ and the hooks."""
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parent.parent
+    coercion_patterns = [
+        'or "inferred"',
+        "or 'inferred'",
+        'default="inferred"',
+        "default='inferred'",
+        '// "inferred"',  # jq default
+        ":-inferred",  # bash parameter default
+    ]
+    scan_roots = [repo / "src", repo / "claude" / "hooks"]
+    offenders = []
+    for root in scan_roots:
+        for path in root.rglob("*"):
+            if path.suffix not in (".py", ".sh") or not path.is_file():
+                continue
+            text = path.read_text(encoding="utf-8", errors="replace")
+            for pattern in coercion_patterns:
+                if pattern in text:
+                    offenders.append(f"{path}: {pattern!r}")
+    assert not offenders, "null evidence_class coerced to 'inferred':\n" + "\n".join(offenders)
+
+
 def test_capsule_and_startup_handlers_do_not_emit(rest_client, fake_rest_manager):
     """Both consumers of build_project_capsule ride on its emission."""
     capsule = {
