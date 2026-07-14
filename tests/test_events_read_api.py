@@ -74,3 +74,24 @@ def test_read_from_does_not_advance_past_partial_line(tmp_path):
     events, _, truncated = log.read_from(cursor2, limit=10)
     assert [e.payload["index"] for e in events] == [1]
     assert truncated is False
+
+
+def test_read_from_detects_rewrite_returns_fresh_tail(tmp_path):
+    """Restore/rewrite invalidates the sig → truncated=True + usable reset cursor."""
+    log = _log(tmp_path)
+    for i in range(3):
+        log.append(_event(i))
+    _, cursor, _ = log.read_from(None, limit=10)
+
+    (tmp_path / "_events.jsonl").unlink()  # tarball restore rewrites the log
+    for i in range(10, 14):
+        log.append(_event(i))
+
+    events, cursor2, truncated = log.read_from(cursor, limit=2)
+    assert truncated is True
+    assert [e.payload["index"] for e in events] == [12, 13]  # fresh bounded tail
+
+    log.append(_event(14))
+    events, _, truncated = log.read_from(cursor2, limit=10)
+    assert [e.payload["index"] for e in events] == [14]
+    assert truncated is False
