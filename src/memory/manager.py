@@ -105,8 +105,10 @@ def _env_float(name: str, default: float) -> float:
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
+    if len(a) != len(b):  # dimension mismatch = incomparable, not an error
+        return 0.0
     dot = norm_a = norm_b = 0.0
-    for x, y in zip(a, b):
+    for x, y in zip(a, b, strict=True):
         dot += x * y
         norm_a += x * x
         norm_b += y * y
@@ -595,9 +597,7 @@ class MemoryManager:
 
         return None
 
-    def _find_recently_recalled_duplicate(
-        self, *, project: str, vector: list[float]
-    ) -> str | None:
+    def _find_recently_recalled_duplicate(self, *, project: str, vector: list[float]) -> str | None:
         """Feedback-loop guard (mem0 #4573): the id of a memory recalled or
         surfaced for this project within REKALL_LOOP_GUARD_WINDOW hours whose
         vector is within REKALL_LOOP_GUARD_COSINE of the candidate, else None.
