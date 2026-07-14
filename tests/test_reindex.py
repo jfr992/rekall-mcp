@@ -154,9 +154,7 @@ def test_vocab_binding_refused_on_mismatch(tmp_path, caplog):
     }
 
     # Same vocab file, different vector target: never wrong-decode — go dense-only.
-    other = MemoryManager(
-        memory_dir=manager.memory_dir, qdrant_path=str(tmp_path / "other-q")
-    )
+    other = MemoryManager(memory_dir=manager.memory_dir, qdrant_path=str(tmp_path / "other-q"))
     with caplog.at_level(logging.WARNING):
         assert other.sparse_encoder is None
         assert other.sparse_encoder is None  # repeated access must not re-log
