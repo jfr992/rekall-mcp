@@ -686,6 +686,70 @@ def warmup():
     )
 
 
+@memory.command()
+@click.option(
+    "--clean",
+    "clean_flag",
+    is_flag=True,
+    default=False,
+    help="Remove the seeded demo memories (manifest ids only)",
+)
+@click.option(
+    "--force-into-real-store",
+    is_flag=True,
+    default=False,
+    help="Seed into a non-empty existing store anyway",
+)
+def demo(clean_flag: bool, force_into_real_store: bool):
+    """Seed 20 sample memories into an isolated demo store and print starter queries.
+
+    Defaults to its own store under ~/.rekall/demo — never the real one.
+    MEMORY_STORAGE_PATH redirects the target; a non-empty store that isn't a
+    rekall demo is refused without --force-into-real-store.
+    """
+    from . import demo_seed
+
+    env_memory = os.environ.get("MEMORY_STORAGE_PATH")
+    if env_memory:
+        memory_dir = Path(env_memory).expanduser()
+        demo_dir = memory_dir.parent
+        manager_kwargs: dict = {"memory_dir": memory_dir}  # qdrant resolves from env
+    else:
+        rekall_dir = Path(os.environ.get("REKALL_DIR", str(Path.home() / ".rekall"))).expanduser()
+        demo_dir = rekall_dir / "demo"
+        memory_dir = demo_dir / "memory"
+        manager_kwargs = {"memory_dir": memory_dir, "qdrant_path": str(demo_dir / "qdrant")}
+
+    manifest = demo_dir / demo_seed.MANIFEST_NAME
+
+    if clean_flag:
+        if not manifest.exists():
+            click.echo(f"ERROR: no demo manifest at {manifest} — nothing to clean.", err=True)
+            sys.exit(1)
+        deleted = demo_seed.clean(MemoryManager(**manager_kwargs), manifest)
+        click.echo(f"✓ Removed {deleted} demo memories (manifest: {manifest})")
+        return
+
+    non_demo_store = (
+        not manifest.exists() and memory_dir.is_dir() and any(memory_dir.rglob("*.yaml"))
+    )
+    if non_demo_store and not force_into_real_store:
+        click.echo(
+            f"ERROR: {memory_dir} already holds memories that aren't a rekall demo — "
+            "refusing to mix demo data in; pass --force-into-real-store to override.",
+            err=True,
+        )
+        sys.exit(2)
+
+    ids = demo_seed.seed(MemoryManager(**manager_kwargs), demo_dir)
+    click.echo(f"✓ Seeded {len(ids)} demo memories into {memory_dir}")
+    click.echo(f"  manifest: {manifest}")
+    click.echo("\nTry these recall queries:")
+    for query in demo_seed.SUGGESTED_QUERIES:
+        click.echo(f'  • "{query}"')
+    click.echo("\nClean up with: rekall demo --clean")
+
+
 def main():
     """Entry point."""
     memory()
