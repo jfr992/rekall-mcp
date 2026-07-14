@@ -246,6 +246,15 @@ def _vector_health() -> dict[str, int]:
     return _vector_health_cache["value"]
 
 
+def _rekall_version() -> str:
+    from importlib.metadata import PackageNotFoundError, version
+
+    try:
+        return version("rekall-mcp")
+    except PackageNotFoundError:
+        return "dev"
+
+
 @mcp.custom_route("/health", methods=["GET"])
 async def health_check(request):
     """Health check endpoint."""
@@ -258,6 +267,8 @@ async def health_check(request):
     return JSONResponse(
         {
             "status": status,
+            "server": "rekall",
+            "version": _rekall_version(),
             "transport": "streamable-http",
             "tools_enabled": enabled,
             "vectors": vectors,
