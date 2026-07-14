@@ -40,6 +40,25 @@ def _mgr(hits):
     return mgr
 
 
+def test_record_event_merges_session_id_into_payload(tmp_path):
+    mgr = object.__new__(MemoryManager)
+    mgr._event_log = None
+    mgr.memory_dir = tmp_path
+
+    mgr.record_event(
+        event_type="memory_recalled",
+        project="p",
+        session_id="sess-42",
+        payload={"query": "q"},
+    )
+    mgr.record_event(event_type="memory_recalled", project="p", payload={"query": "q"})
+
+    events = mgr.event_log.tail(limit=2)
+    assert events[0].payload["session_id"] == "sess-42"
+    # absent param -> key present and null (old callers stay contract-shaped)
+    assert events[1].payload["session_id"] is None
+
+
 def test_recall_emits_one_memory_recalled_with_query_scores_tokens():
     mgr = _mgr(HITS)
     out = MemoryManager.recall(mgr, "auth rotation", limit=5, task_hint="auth middleware")

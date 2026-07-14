@@ -304,10 +304,15 @@ class MemoryManager:
         source: str = "memory_manager",
         memory_ids: list[str] | None = None,
         payload: dict[str, Any] | None = None,
+        session_id: str | None = None,
     ) -> None:
         try:
             merged: dict[str, Any] = dict(payload or {})
             merged.setdefault("memory_ids", list(memory_ids or []))
+            if session_id is not None:
+                merged["session_id"] = session_id
+            else:
+                merged.setdefault("session_id", None)
             self.event_log.append(
                 MemoryEvent(
                     event_type=event_type,
