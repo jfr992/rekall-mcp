@@ -31,7 +31,11 @@ def _prod_storage_paths() -> list[Path]:
     return paths
 
 
-def assert_not_prod(qdrant_url: str | None = None, storage_path: Path | str | None = None) -> None:
+def assert_not_prod(
+    qdrant_url: str | None = None,
+    storage_path: Path | str | None = None,
+    qdrant_path: Path | str | None = None,
+) -> None:
     """Refuse prod targets. Raises RuntimeError — there is no override flag."""
     if qdrant_url is not None and is_prod_qdrant_url(qdrant_url):
         raise RuntimeError(f"prod Qdrant refused: {qdrant_url}")
@@ -40,16 +44,26 @@ def assert_not_prod(qdrant_url: str | None = None, storage_path: Path | str | No
         for prod in _prod_storage_paths():
             if resolved.is_relative_to(prod):
                 raise RuntimeError(f"prod storage refused: {resolved}")
+    candidate = qdrant_path or os.environ.get("QDRANT_PATH")
+    if candidate:
+        resolved = Path(candidate).expanduser().resolve()
+        home = Path.home().resolve()
+        for prod in (home / ".rekall", home / ".claude"):
+            if resolved.is_relative_to(prod):
+                raise RuntimeError(f"prod embedded Qdrant path refused: {resolved}")
 
 
 def assert_test_isolation(
-    *, qdrant_url: str | None = None, storage_path: Path | str | None = None
+    *,
+    qdrant_url: str | None = None,
+    storage_path: Path | str | None = None,
+    qdrant_path: Path | str | None = None,
 ) -> None:
     """Under pytest (PYTEST_VERSION set), refuse prod storage/Qdrant targets."""
     if "PYTEST_VERSION" not in os.environ:
         return
     try:
-        assert_not_prod(qdrant_url=qdrant_url, storage_path=storage_path)
+        assert_not_prod(qdrant_url=qdrant_url, storage_path=storage_path, qdrant_path=qdrant_path)
     except RuntimeError as exc:
         raise RuntimeError(
             f"test-isolation guard: {exc}. Tests must use tmp_path storage and the "
