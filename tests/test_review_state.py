@@ -23,3 +23,38 @@ def test_apply_event_folds_review_verdicts():
     assert entry["verdict_editor"] == "ui"
     assert entry["reviewed_at"] == "2026-07-14T11:00:00"
     assert entry["review_count"] == 2
+
+
+def _write_events(tmp_path, events):
+    import json
+
+    lines = "".join(json.dumps(e) + "\n" for e in events)
+    (tmp_path / "_events.jsonl").write_text(lines)
+
+
+def test_rebuild_scans_events_jsonl(tmp_path):
+    _write_events(
+        tmp_path,
+        [
+            _reviewed("m1", "keep"),
+            {
+                "event_type": "memory_updated",
+                "observed_at": "2026-07-14T12:00:00",
+                "payload": {"memory_id": "m2"},
+            },
+            {
+                "event_type": "memory_pruned",
+                "observed_at": "2026-07-14T13:00:00",
+                "payload": {"memory_ids": ["m3", "m4"]},
+            },
+            {"event_type": "memory_recalled", "payload": {"memory_ids": ["m1"]}},  # ignored
+        ],
+    )
+
+    state = review_state.rebuild(tmp_path)
+
+    assert state["m1"]["last_verdict"] == "keep"
+    assert state["m2"]["updated_at"] == "2026-07-14T12:00:00"
+    assert state["m3"]["pruned_at"] == "2026-07-14T13:00:00"
+    assert state["m4"]["pruned_at"] == "2026-07-14T13:00:00"
+    assert set(state) == {"m1", "m2", "m3", "m4"}
