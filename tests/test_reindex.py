@@ -102,3 +102,34 @@ def test_reindex_rebuilds_counts_match(tmp_path):
     assert manager.store.get_by_id("2026-07-01_note_dead0000") is None
     sample = manager.store.scroll(limit=5, with_vectors=True)
     assert all(any(v != 0 for v in p["vector"]) for p in sample), "vectors must be non-zero"
+
+
+def test_sentinel_detected_on_startup(tmp_path, monkeypatch):
+    from core.vector_store import VectorStore
+    from memory.reindex import reindex
+
+    manager = _embedded_manager(tmp_path)
+    manager.save("memory saved before the interrupted reindex", type="note")
+
+    sentinel = Path(manager._qdrant_path) / ".rekall-reindex-in-progress"
+    sentinel.touch()
+
+    with pytest.raises(RuntimeError, match="rekall reindex"):
+        manager.recall("anything")
+    with pytest.raises(RuntimeError, match="rekall reindex"):
+        manager.save("writes are blocked too", type="note")
+
+    sentinel_during_recreate: list[bool] = []
+    original = VectorStore.recreate_collection
+
+    def recording(self):
+        sentinel_during_recreate.append(sentinel.exists())
+        return original(self)
+
+    monkeypatch.setattr(VectorStore, "recreate_collection", recording)
+
+    reindex(manager, tarball_dir=tmp_path / "backups")
+
+    assert sentinel_during_recreate == [True], "recreation must happen under the sentinel"
+    assert not sentinel.exists(), "sentinel must be removed on success"
+    assert manager.recall("memory saved before", score_threshold=0.0) != []
