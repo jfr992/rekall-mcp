@@ -15,6 +15,8 @@ When you chat with Claude, it normally forgets everything when you close the con
 
 Before configuring behavior, see `docs/CLAUDE_MEMORY_SETTINGS.md` for the canonical policy and tuning knobs.
 
+> **Just trying it out?** The trial tier needs no Docker: `claude mcp add rekall -- uvx rekall-mcp` runs over stdio with an embedded vector store at `~/.rekall/qdrant`. See the [README quickstart](../README.md#install) for the tier table and trade-offs.
+
 ---
 
 ## Quick Start with Docker (Recommended)
@@ -199,27 +201,33 @@ Later: Claude recalls by meaning + follows graph relationships
 
 ## Choosing an Embedding Provider
 
-The "embedding" converts text into searchable vectors. Three options:
+The "embedding" converts text into searchable vectors. Four options:
 
-> **Important:** Switching providers requires a migration step. See [Switching Providers](#switching-providers-important) below.
+> **Important:** Switching providers requires a migration step. See [Switching Providers](#switching-providers-important) below. Exception: fastembed ↔ sentence-transformers produce identical vectors — no migration.
 
-### Option A: sentence-transformers (Default)
+### Option A: fastembed (Default)
 
-- Runs on your computer, free, fast, just works
+- Runs on your computer, free, fast, no torch (ONNX runtime)
+- Vector-identical to sentence-transformers (fp32 ONNX export of the same `all-MiniLM-L6-v2` model)
 
-### Option B: Ollama
+### Option B: sentence-transformers (optional `[torch]` extra)
+
+- Same vectors as fastembed, but pulls in torch
+- Install: `uv sync --extra torch` or `pip install 'rekall-mcp[torch]'`
+
+### Option C: Ollama
 
 - Better quality, still free and local
 - Requires: `brew install ollama && ollama pull nomic-embed-text`
 
-### Option C: Gemini
+### Option D: Gemini
 
 - Best quality, free tier (1,500 req/day)
 - Requires: API key from https://ai.google.dev/
 
 Set via environment variable:
 ```bash
-EMBEDDING_PROVIDER=sentence-transformers  # or ollama, gemini
+EMBEDDING_PROVIDER=fastembed  # or sentence-transformers, ollama, gemini
 ```
 
 ---
@@ -305,8 +313,10 @@ curl -X POST http://localhost:8000/api/memory/graph/rebuild
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `QDRANT_URL` | `http://localhost:6333` | Qdrant endpoint |
+| `QDRANT_PATH` | (none) | Embedded (local-path) Qdrant storage dir — mutually exclusive with `QDRANT_URL` |
+| `REKALL_DIR` | `~/.rekall` | Rekall home for the uvx/serve tiers (embedded store, active-backend record) |
 | `MEMORY_STORAGE_PATH` | `~/.claude/memory` | YAML storage path |
-| `EMBEDDING_PROVIDER` | `sentence-transformers` | Embedding backend |
+| `EMBEDDING_PROVIDER` | `fastembed` | Embedding backend (`sentence-transformers` needs the `[torch]` extra) |
 | `GEMINI_API_KEY` | (none) | Gemini provider API key |
 | `OLLAMA_URL` | `http://localhost:11434` | Ollama endpoint |
 | `MCP_TRANSPORT` | `stdio` | Protocol (stdio or streamable-http; Docker and start scripts set `streamable-http`) |
@@ -324,6 +334,6 @@ curl -X POST http://localhost:8000/api/memory/graph/rebuild
 
 **Graph has 0 edges** - Rebuild: `curl -X POST http://localhost:8000/api/memory/graph/rebuild`
 
-**"Rate limit exceeded" (Gemini)** - Switch to sentence-transformers, run migrate, rebuild graph
+**"Rate limit exceeded" (Gemini)** - Switch to fastembed, run migrate, rebuild graph
 
 **Debug logging:** `LOG_LEVEL=DEBUG python -m server`

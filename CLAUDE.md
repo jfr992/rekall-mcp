@@ -5,8 +5,10 @@
 ## Before you change anything
 
 ```bash
-uv run --extra dev pytest -v                  # all tests, fast
-docker compose --profile test run --rm test   # isolated Docker
+uv run --extra dev pytest -v                             # all tests, fast
+REKALL_TEST_LANE=embedded uv run --extra dev pytest -q   # embedded-qdrant lane (CI runs both)
+uv run --extra dev pytest -m wheel                       # wheel gate: build + clean-venv stdio smoke
+docker compose --profile test run --rm test              # isolated Docker
 ```
 
 Tests must pass before you commit. The test profile uses Qdrant on `localhost:6334` (tmpfs) — **never** point tests at production Qdrant on `6333`.
@@ -93,6 +95,8 @@ A memory record has:
 - Knowledge graph at `~/.claude/memory/_graph.json` (always there, even when YAML moves).
 - Production Qdrant at `localhost:6333` → `~/.claude/qdrant`. **Read-only from tests.**
 - Test Qdrant at `localhost:6334` → tmpfs. Wiped on stop.
+- Embedded vector store (uvx/serve tiers) at `~/.rekall/qdrant` (`QDRANT_PATH`); YAML home unchanged at `~/.claude/memory`.
+- The ownership protocol (`src/core/ownership.py`) is the only sanctioned way for entry points to decide daemon-vs-embedded — never construct a second store on a locked path.
 
 ## Hook discipline (claude/hooks/)
 
@@ -141,6 +145,8 @@ Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/h
 | Stop hook fires per turn at $0.001/each → ~$30/month/dev | `rekall-observe.sh` (fixed in v1.5.0) | Cheap signal gate before Haiku call |
 | `claude -p` from a Stop hook recursively fires its own Stop hook | `rekall-observe.sh` | `REKALL_JUDGE_INFLIGHT=1` env var guard |
 | Restore hook fetches 12KB of "proactive context" but echoes only the status line | pre-v1.5.0 `rekall-restore.sh` | Either drop the fetch entirely (current — nuclear mode) or actually inject (was the bug we caught) |
+| Compose defaults to named volumes → existing installs mount empty stores and "all memories are gone" | `docker-compose.yaml` (v1.11) | Layer `docker-compose.bind-mounts.example.yaml` (or copy it to `docker-compose.override.yaml`) to keep the `~/.claude/` bind mounts |
+| Stale `.env` `EMBEDDING_PROVIDER=sentence-transformers` on the slim image (no torch) silently degrades endpoints to zero | v1.11 deploy | Remove the var or set `fastembed` (vectors are identical); #57 tracks making the failure loud |
 
 ## Where to read next
 
