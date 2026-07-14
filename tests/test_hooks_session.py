@@ -203,3 +203,51 @@ def test_observe_post_carries_session_id(tmp_path):
     observe_bodies = _observe_bodies(url_lines, bodies)
     assert len(observe_bodies) == 1, bodies
     assert observe_bodies[0]["session_id"] == OBSERVE_SESSION
+
+
+# ---------------------------------------------------------------------------
+# session-start-memory.sh — session_id on capsule GET and startup fallback GET
+# ---------------------------------------------------------------------------
+
+
+def _run_session_start(tmp_path: Path, stdin_payload: dict) -> tuple[
+    subprocess.CompletedProcess, list[str]
+]:
+    fakebin, calls, _ = _make_fake_curl(tmp_path)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fakebin}:{env['PATH']}",
+            "REKALL_API_URL": "http://rekall.test",
+            "REKALL_AUTOSAVE": "1",
+        }
+    )
+    env.pop("CLAUDE_PROJECT_NAME", None)
+    result = subprocess.run(
+        ["bash", str(SESSION_START_HOOK)],
+        input=json.dumps(stdin_payload),
+        text=True,
+        capture_output=True,
+        env=env,
+        cwd=tmp_path,
+        timeout=10,
+        check=False,
+    )
+    url_lines = calls.read_text(encoding="utf-8").splitlines() if calls.exists() else []
+    return result, url_lines
+
+
+def test_session_start_appends_session_id_to_both_gets(tmp_path):
+    """Empty capsule response forces the startup fallback, so one run pins
+    the session_id param on BOTH GETs."""
+    result, url_lines = _run_session_start(
+        tmp_path, {"cwd": str(tmp_path), "session_id": "start-sess-5"}
+    )
+    assert result.returncode == 0, result.stderr
+
+    capsule_gets = [u for u in url_lines if "/api/memory/capsule?" in u]
+    startup_gets = [u for u in url_lines if "/api/memory/context/startup?" in u]
+    assert len(capsule_gets) == 1, url_lines
+    assert len(startup_gets) == 1, url_lines
+    assert "session_id=start-sess-5" in capsule_gets[0]
+    assert "session_id=start-sess-5" in startup_gets[0]
