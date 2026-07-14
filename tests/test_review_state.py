@@ -144,3 +144,38 @@ def test_review_keep_records_event_only(monkeypatch, tmp_path):
     assert events[0].payload["editor"] == "ui"
     # server-only writer: the projection is refreshed in the same request
     assert review_state.load(tmp_path)["m1"]["last_verdict"] == "keep"
+
+
+def test_review_kill_deletes_then_records(monkeypatch, tmp_path):
+    client, manager = _review_client(monkeypatch, tmp_path)
+    events_path = tmp_path / "_events.jsonl"
+
+    def _delete(memory_id):
+        # mutate-then-record: at delete time the review event must not exist yet
+        assert not events_path.exists() or "memory_reviewed" not in events_path.read_text()
+        return True
+
+    manager.delete.side_effect = _delete
+
+    r = client.post(
+        "/api/memory/review", json={"memory_id": "m1", "verdict": "kill", "editor": "agent"}
+    )
+
+    assert r.status_code == 200
+    assert r.json()["deleted"] is True
+    manager.delete.assert_called_once_with("m1")
+    events = manager.event_log.tail(limit=1)
+    assert events[0].payload["verdict"] == "kill"
+    assert events[0].payload["editor"] == "agent"
+
+
+def test_review_kill_not_found_returns_404_no_event(monkeypatch, tmp_path):
+    client, manager = _review_client(monkeypatch, tmp_path)
+    manager.delete.return_value = False
+
+    r = client.post(
+        "/api/memory/review", json={"memory_id": "m1", "verdict": "kill", "editor": "ui"}
+    )
+
+    assert r.status_code == 404
+    assert not (tmp_path / "_events.jsonl").exists()
