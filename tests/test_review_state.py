@@ -179,3 +179,39 @@ def test_review_kill_not_found_returns_404_no_event(monkeypatch, tmp_path):
 
     assert r.status_code == 404
     assert not (tmp_path / "_events.jsonl").exists()
+
+
+def test_review_fix_returns_501_with_honest_message(monkeypatch, tmp_path):
+    client, manager = _review_client(monkeypatch, tmp_path)
+
+    r = client.post(
+        "/api/memory/review", json={"memory_id": "m1", "verdict": "fix", "editor": "ui"}
+    )
+
+    assert r.status_code == 501
+    assert "U3" in r.json()["error"]
+    manager.delete.assert_not_called()
+    assert not (tmp_path / "_events.jsonl").exists()
+
+
+def test_review_rejects_bad_verdict_and_editor(monkeypatch, tmp_path):
+    client, _ = _review_client(monkeypatch, tmp_path)
+
+    assert (
+        client.post(
+            "/api/memory/review", json={"memory_id": "m1", "verdict": "yeet", "editor": "ui"}
+        ).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            "/api/memory/review", json={"memory_id": "m1", "verdict": "keep", "editor": "cli"}
+        ).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            "/api/memory/review", json={"verdict": "keep", "editor": "ui"}
+        ).status_code
+        == 400
+    )
