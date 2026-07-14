@@ -1684,7 +1684,10 @@ def main() -> None:
 def main_stdio() -> None:
     """uvx entry: embedded storage default, eager warmup, stdio transport."""
     rekall_dir = Path(os.environ.get("REKALL_DIR", str(Path.home() / ".rekall"))).expanduser()
-    os.environ.setdefault("QDRANT_PATH", str(rekall_dir / "qdrant"))
+    # QDRANT_URL set = server-backed store; defaulting QDRANT_PATH too would
+    # trip the mutual-exclusion guard (mirrors memory/cli.py).
+    if not os.environ.get("QDRANT_URL"):
+        os.environ.setdefault("QDRANT_PATH", str(rekall_dir / "qdrant"))
     os.environ.setdefault("MCP_TRANSPORT", "stdio")
     from core import ownership
 

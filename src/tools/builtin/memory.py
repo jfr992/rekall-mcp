@@ -987,8 +987,6 @@ class OptimizedMemoryTools(BaseToolProvider):
 
         registered.append("memory_kb")
 
-        _detail_fn = _make_memory_detail_fn(self.manager)
-
         @mcp.tool(structured_output=False)
         async def memory_detail(memory_id: str) -> str:
             """Fetch a single memory by id with relationships, provenance, lifecycle, and storage.
@@ -996,7 +994,9 @@ class OptimizedMemoryTools(BaseToolProvider):
             Args:
                 memory_id: The memory id to fetch
             """
-            return await _detail_fn(memory_id)
+            # self.manager stays lazy: register() runs at server import, before
+            # main_stdio() applies the embedded-storage env defaults.
+            return await _make_memory_detail_fn(self.manager)(memory_id)
 
         registered.append("memory_detail")
 

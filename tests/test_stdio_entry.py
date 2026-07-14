@@ -96,6 +96,37 @@ def test_main_stdio_embedded_warms_up_then_serves(stdio_env, monkeypatch, capsys
     assert "ready" in err
 
 
+def test_main_stdio_qdrant_url_set_skips_path_default(monkeypatch, tmp_path):
+    """QDRANT_URL set: no QDRANT_PATH default — both set would trip mutual exclusion."""
+    import os
+
+    import server
+
+    rekall_dir = tmp_path / "rekall"
+    monkeypatch.setenv("REKALL_DIR", str(rekall_dir))
+    monkeypatch.setenv("QDRANT_URL", "http://localhost:6334")
+    monkeypatch.delenv("QDRANT_PATH", raising=False)
+    monkeypatch.setenv("MCP_TRANSPORT", "stdio")
+    monkeypatch.setattr(
+        "core.ownership.acquire",
+        lambda *a, **k: Acquisition(mode="embedded", path=rekall_dir / "qdrant"),
+    )
+
+    class _FakeEmbedder:
+        def encode(self, text):
+            return [0.0]
+
+    class _FakeManager:
+        embedder = _FakeEmbedder()
+
+    monkeypatch.setattr("memory.singleton.get_memory_manager", lambda: _FakeManager())
+    monkeypatch.setattr(server, "main", lambda: None)
+
+    server.main_stdio()
+
+    assert "QDRANT_PATH" not in os.environ
+
+
 def test_main_stdio_defaults_qdrant_path_and_stdio_transport(monkeypatch, tmp_path):
     """With no env set, QDRANT_PATH defaults under REKALL_DIR; setdefault never overrides."""
     import os
@@ -104,6 +135,7 @@ def test_main_stdio_defaults_qdrant_path_and_stdio_transport(monkeypatch, tmp_pa
 
     rekall_dir = tmp_path / "rekall"
     monkeypatch.setenv("REKALL_DIR", str(rekall_dir))
+    monkeypatch.delenv("QDRANT_URL", raising=False)  # conftest autouse sets it
     monkeypatch.delenv("QDRANT_PATH", raising=False)
     monkeypatch.setenv("MCP_TRANSPORT", "streamable-http")  # setdefault must NOT override
     monkeypatch.setattr(

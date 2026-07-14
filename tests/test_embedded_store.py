@@ -23,6 +23,17 @@ def test_url_and_path_mutually_exclusive(tmp_path):
         VectorStore(collection="t", url="http://localhost:6334", path=str(tmp_path / "q"))
 
 
+def test_manager_env_both_set_raises_on_store_access(monkeypatch, tmp_path):
+    """QDRANT_URL + QDRANT_PATH both in env: mutual-exclusion error propagates."""
+    from memory import MemoryManager
+
+    monkeypatch.setenv("QDRANT_URL", "http://localhost:6334")
+    monkeypatch.setenv("QDRANT_PATH", str(tmp_path / "q"))
+    manager = MemoryManager(memory_dir=tmp_path / "memory")
+    with pytest.raises(ValueError, match="mutually exclusive"):
+        _ = manager.store
+
+
 def test_guard_refuses_home_rekall_qdrant_path_under_pytest(monkeypatch, tmp_path):
     from core.utils import assert_test_isolation
 
