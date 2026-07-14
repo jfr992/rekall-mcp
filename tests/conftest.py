@@ -64,6 +64,9 @@ def _storage_isolation(tmp_path, monkeypatch):
     The shared singleton is reset so no test inherits another's storage path.
     """
     monkeypatch.setenv("MEMORY_STORAGE_PATH", str(tmp_path / "memory-store"))
+    # A developer-exported QDRANT_PATH must never leak into tests (it would
+    # collide with the conftest QDRANT_URL and point at a real local store).
+    monkeypatch.delenv("QDRANT_PATH", raising=False)
     from memory import singleton
 
     singleton.reset_memory_manager()
@@ -100,8 +103,22 @@ def temp_memory_dir():
 
 
 @pytest.fixture
-def memory_manager(temp_memory_dir: Path) -> MemoryManager:
-    """Create a MemoryManager instance for testing (test Qdrant only)."""
+def embedded_store(tmp_path):
+    """VectorStore in embedded (local-path) mode, isolated per test."""
+    from core.vector_store import VectorStore
+
+    return VectorStore(collection="agent_memory", path=str(tmp_path / "qdrant"))
+
+
+@pytest.fixture
+def memory_manager(temp_memory_dir: Path, tmp_path: Path) -> MemoryManager:
+    """Create a MemoryManager instance for testing.
+
+    Default lane targets the disposable test Qdrant; REKALL_TEST_LANE=embedded
+    swaps in the embedded (local-path) store instead (CI embedded lane).
+    """
+    if os.environ.get("REKALL_TEST_LANE") == "embedded":
+        return MemoryManager(memory_dir=temp_memory_dir, qdrant_path=str(tmp_path / "q"))
     return MemoryManager(memory_dir=temp_memory_dir, qdrant_url=TEST_QDRANT_URL)
 
 
