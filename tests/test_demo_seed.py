@@ -138,3 +138,23 @@ class TestDemoCommand:
         demo_dir = tmp_path / "rekall" / "demo"
         assert not (demo_dir / "manifest.json").exists()
         assert not list((demo_dir / "memory").rglob("*.yaml")), "all seeded YAML removed"
+
+    def test_demo_force_seeds_into_non_empty_store(self, tmp_path, monkeypatch):
+        from click.testing import CliRunner
+
+        from memory.cli import memory
+
+        store = tmp_path / "real-memory"
+        (store / "real-project").mkdir(parents=True)
+        (store / "real-project" / "2026-07-01.yaml").write_text(
+            "date: '2026-07-01'\nnotes:\n- id: 2026-07-01_note_rea10000\n  content: real memory\n"
+        )
+        monkeypatch.setenv("MEMORY_STORAGE_PATH", str(store))
+        monkeypatch.delenv("QDRANT_URL", raising=False)
+        monkeypatch.setenv("QDRANT_PATH", str(tmp_path / "q"))
+
+        result = CliRunner().invoke(memory, ["demo", "--force-into-real-store"])
+
+        assert result.exit_code == 0, result.output
+        ids = json.loads((store.parent / "manifest.json").read_text())["memory_ids"]
+        assert len(ids) == 20
