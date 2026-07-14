@@ -220,6 +220,22 @@ def test_observe_post_carries_judge_evidence_class(tmp_path):
     assert observe_bodies[0]["evidence_class"] == "explicit_user"
 
 
+def test_observe_shell_override_confirmed_artifact_beats_judge(tmp_path):
+    """Gate Signal 1 fired (new commits) -> evidence_class=confirmed_artifact
+    regardless of what the judge claimed. Objective artifact beats judgment."""
+    judge = (
+        '{"observe": true, "type": "learning", '
+        '"content": "Shipped the session attribution feature.", '
+        '"evidence_class": "inferred"}'
+    )
+    result, url_lines, bodies = _run_observe_judge(tmp_path, judge_json=judge, git_commits=3)
+
+    assert result.returncode == 0, result.stderr
+    observe_bodies = _observe_bodies(url_lines, bodies)
+    assert len(observe_bodies) == 1, bodies
+    assert observe_bodies[0]["evidence_class"] == "confirmed_artifact"
+
+
 # ---------------------------------------------------------------------------
 # session-start-memory.sh — session_id on capsule GET and startup fallback GET
 # ---------------------------------------------------------------------------
