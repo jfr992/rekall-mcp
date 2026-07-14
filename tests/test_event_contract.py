@@ -248,3 +248,69 @@ def test_cli_save_stamps_capture_origin_cli():
 
     assert result.exit_code == 0, result.output
     assert manager_cls.return_value.save.call_args.kwargs["capture_origin"] == "cli"
+
+
+def _capsule_manager():
+    mgr = MagicMock()
+    mgr.store.scroll.return_value = [
+        {
+            "memory_id": "m1",
+            "content": "Decided to use capsules",
+            "type": "decision",
+            "date": "2026-07-10",
+            "tier": "semantic",
+            "entities": [],
+        },
+        {
+            "memory_id": "m2",
+            "content": "never point tests at production qdrant",
+            "type": "learning",
+            "date": "2026-07-09",
+            "tier": "semantic",
+            "entities": [],
+        },
+    ]
+    mgr.knowledge_graph.get_importance.return_value = 0.5
+    return mgr
+
+
+def test_build_project_capsule_emits_one_memory_surfaced():
+    from memory.capsules import build_project_capsule
+
+    mgr = _capsule_manager()
+    capsule = build_project_capsule(mgr, project="p", session_id="sess-7")
+
+    surfaced = [
+        {"memory_id": m["memory_id"], "content": m["content"]}
+        for bucket in ("standing_context", "danger_zones", "open_loops")
+        for m in capsule[bucket]
+    ]
+    assert surfaced  # fixture must actually surface something
+
+    assert mgr.record_event.call_count == 1
+    kwargs = mgr.record_event.call_args.kwargs
+    assert kwargs["event_type"] == "memory_surfaced"
+    assert kwargs["project"] == "p"
+    payload = kwargs["payload"]
+    assert payload["memory_ids"] == [m["memory_id"] for m in surfaced]
+    assert payload["token_estimate"] == sum(len(m["content"]) // 4 for m in surfaced)
+    assert kwargs["session_id"] == "sess-7"
+
+
+def test_capsule_and_startup_handlers_do_not_emit(rest_client, fake_rest_manager):
+    """Both consumers of build_project_capsule ride on its emission."""
+    capsule = {
+        "project": "p",
+        "entities": [],
+        "standing_context": [{"memory_id": "m1", "content": "x"}],
+        "danger_zones": [],
+        "open_loops": [],
+    }
+    fake_rest_manager.get_project_capsule.return_value = capsule
+    fake_rest_manager.get_agent_startup.return_value = {"project_capsule": capsule}
+
+    r = rest_client.get("/api/memory/capsule?project=p")
+    assert r.status_code == 200
+    r = rest_client.get("/api/memory/context/startup?project=p")
+    assert r.status_code == 200
+    fake_rest_manager.record_event.assert_not_called()

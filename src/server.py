@@ -1052,23 +1052,7 @@ async def api_agent_startup(request):
         manager = _get_memory_manager()
         payload = manager.get_agent_startup(project=project, agent=agent, limit=limit)
 
-        try:
-            capsule = payload.get("project_capsule") or {}
-            ids = [
-                m["memory_id"]
-                for bucket in ("standing_context", "danger_zones", "open_loops")
-                for m in (capsule.get(bucket) or [])
-                if m.get("memory_id")
-            ]
-            manager.record_event(
-                event_type="memory_surfaced",
-                project=project or "general",
-                memory_ids=ids,
-                source="startup",
-            )
-        except Exception:
-            logger.debug("event emission skipped", exc_info=True)
-
+        # memory_surfaced emission lives in build_project_capsule (event contract v2)
         return JSONResponse(payload)
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -1086,22 +1070,7 @@ async def api_project_capsule(request):
         manager = _get_memory_manager()
         result = manager.get_project_capsule(project=project, limit=limit)
 
-        try:
-            ids = [
-                m["memory_id"]
-                for bucket in ("standing_context", "danger_zones", "open_loops")
-                for m in (result.get(bucket) or [])
-                if m.get("memory_id")
-            ]
-            manager.record_event(
-                event_type="memory_surfaced",
-                project=project,
-                memory_ids=ids,
-                source="capsule",
-            )
-        except Exception:
-            logger.debug("event emission skipped", exc_info=True)
-
+        # memory_surfaced emission lives in build_project_capsule (event contract v2)
         return _ok(result)
     except RequestValidationError as e:
         return _bad_request(str(e))
