@@ -337,6 +337,7 @@ class MemoryManager:
         scope: MemoryScope | None = None,
         capture_origin: str = "rest",
         session_id: str | None = None,
+        evidence_class: str | None = None,
         **metadata: Any,
     ) -> str:
         """Save a memory.
@@ -349,6 +350,9 @@ class MemoryManager:
                 (observe_judge | save_memory_tool | rest | cli | hook)
             session_id: Claude Code session id for event attribution (events only,
                 never the memory record)
+            evidence_class: How grounded the save is
+                (confirmed_artifact | explicit_user | inferred). None when the
+                caller has no grounding signal — never coerced to "inferred".
             **metadata: Additional metadata
 
         Returns:
@@ -437,6 +441,7 @@ class MemoryManager:
                     "cwd": payload.get("cwd"),
                     "repo_name": payload.get("repo_name"),
                     "capture_origin": capture_origin,
+                    "evidence_class": evidence_class,
                 },
             )
 
