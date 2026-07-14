@@ -80,22 +80,27 @@ class VectorStore:
     def __init__(
         self,
         collection: str,
-        url: str = "http://localhost:6333",
+        url: str | None = None,
         api_key: str | None = None,
         embedding_dim: int = 384,
         sparse_encoder: Any | None = None,
+        path: str | None = None,
     ) -> None:
         """Initialize vector store.
 
         Args:
             collection: Collection name (e.g., "memories", "docs")
-            url: Qdrant server URL
+            url: Qdrant server URL (mutually exclusive with path)
             api_key: Optional API key for Qdrant Cloud
             embedding_dim: Vector dimensions (default: 384 for MiniLM)
             sparse_encoder: BM25Encoder for hybrid search (optional)
+            path: Local directory for embedded (in-process) Qdrant
         """
+        if url is not None and path is not None:
+            raise ValueError("QDRANT_URL and QDRANT_PATH are mutually exclusive")
         self.collection = collection
-        self.url = url
+        self.path = path
+        self.url = url if (url is not None or path is not None) else "http://localhost:6333"
         self.api_key = api_key
         self.embedding_dim = embedding_dim
         self.sparse_encoder = sparse_encoder
@@ -116,10 +121,14 @@ class VectorStore:
         return self._client
 
     def _connect(self) -> None:
-        """Connect to Qdrant and ensure collection exists."""
-        assert_test_isolation(qdrant_url=self.url)
-        logger.info(f"Connecting to Qdrant at {self.url}")
-        self._client = QdrantClient(url=self.url, api_key=self.api_key)
+        """Connect to Qdrant (server url or embedded path) and ensure collection exists."""
+        if self.path is not None:
+            logger.info(f"Opening embedded Qdrant at {self.path}")
+            self._client = QdrantClient(path=self.path)
+        else:
+            assert_test_isolation(qdrant_url=self.url)
+            logger.info(f"Connecting to Qdrant at {self.url}")
+            self._client = QdrantClient(url=self.url, api_key=self.api_key)
         self._ensure_collection()
 
     def _ensure_collection(self) -> None:

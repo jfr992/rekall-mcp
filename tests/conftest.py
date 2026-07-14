@@ -37,6 +37,9 @@ def _qdrant_isolation(monkeypatch):
     original_connect = VectorStore._connect
 
     def guarded_connect(self):
+        if getattr(self, "path", None) is not None:
+            # Embedded (local-path) mode never talks to a Qdrant server.
+            return original_connect(self)
         if self.url in {HOST_TEST_QDRANT_URL, "http://127.0.0.1:6334"}:
             self.url = TEST_QDRANT_URL
         if _is_production_qdrant_url(self.url):
