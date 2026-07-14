@@ -96,6 +96,34 @@ def test_main_stdio_embedded_warms_up_then_serves(stdio_env, monkeypatch, capsys
     assert "ready" in err
 
 
+def test_main_stdio_seeds_singleton_with_acquired_client(stdio_env, monkeypatch):
+    """The acquire-held client (the store flock) must become the singleton's
+    client — a second client on the same path would be refused by qdrant."""
+    import server
+    from memory import singleton
+
+    sentinel_client = object()
+    qdrant_path = Path(stdio_env) / "rekall" / "qdrant"
+    monkeypatch.setattr(
+        "core.ownership.acquire",
+        lambda *a, **k: Acquisition(mode="embedded", path=qdrant_path, client=sentinel_client),
+    )
+
+    class _FakeEmbedder:
+        def encode(self, text):
+            return [0.0]
+
+    monkeypatch.setattr(
+        "memory.manager.MemoryManager.embedder", property(lambda self: _FakeEmbedder())
+    )
+    monkeypatch.setattr(server, "main", lambda: None)
+
+    server.main_stdio()
+
+    assert singleton._instance is not None
+    assert singleton._instance._qdrant_client is sentinel_client
+
+
 def test_main_stdio_qdrant_url_set_skips_path_default(monkeypatch, tmp_path):
     """QDRANT_URL set: no QDRANT_PATH default — both set would trip mutual exclusion."""
     import os
@@ -127,8 +155,9 @@ def test_main_stdio_qdrant_url_set_skips_path_default(monkeypatch, tmp_path):
     assert "QDRANT_PATH" not in os.environ
 
 
-def test_main_stdio_defaults_qdrant_path_and_stdio_transport(monkeypatch, tmp_path):
-    """With no env set, QDRANT_PATH defaults under REKALL_DIR; setdefault never overrides."""
+def test_main_stdio_defaults_qdrant_path_and_forces_stdio_transport(monkeypatch, tmp_path):
+    """QDRANT_PATH defaults under REKALL_DIR; an inherited MCP_TRANSPORT never
+    wins — a streamable-http leak would leave the MCP client hanging on stdio."""
     import os
 
     import server
@@ -137,7 +166,7 @@ def test_main_stdio_defaults_qdrant_path_and_stdio_transport(monkeypatch, tmp_pa
     monkeypatch.setenv("REKALL_DIR", str(rekall_dir))
     monkeypatch.delenv("QDRANT_URL", raising=False)  # conftest autouse sets it
     monkeypatch.delenv("QDRANT_PATH", raising=False)
-    monkeypatch.setenv("MCP_TRANSPORT", "streamable-http")  # setdefault must NOT override
+    monkeypatch.setenv("MCP_TRANSPORT", "streamable-http")  # inherited — must be forced back
     monkeypatch.setattr(
         "core.ownership.acquire",
         lambda *a, **k: Acquisition(mode="embedded", path=rekall_dir / "qdrant"),
@@ -156,4 +185,4 @@ def test_main_stdio_defaults_qdrant_path_and_stdio_transport(monkeypatch, tmp_pa
     server.main_stdio()
 
     assert os.environ["QDRANT_PATH"] == str(rekall_dir / "qdrant")
-    assert os.environ["MCP_TRANSPORT"] == "streamable-http"
+    assert os.environ["MCP_TRANSPORT"] == "stdio"

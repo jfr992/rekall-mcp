@@ -135,21 +135,39 @@ SUGGESTED_QUERIES: list[str] = [
 
 
 def seed(manager: MemoryManager, demo_dir: Path | None = None) -> list[str]:
-    """Save the demo corpus and record the exact ids in <demo_dir>/manifest.json."""
+    """Save the demo corpus and record the exact ids in <demo_dir>/manifest.json.
+
+    The manifest is rewritten after every save — a crash mid-seed leaves it
+    covering every id already in the store, so --clean can still remove them.
+    """
     demo_dir = Path(demo_dir) if demo_dir is not None else manager.memory_dir.parent
-    ids = [
-        manager.save(entry["content"], type=entry["type"], project=entry["project"])
-        for entry in DEMO_MEMORIES
-    ]
     demo_dir.mkdir(parents=True, exist_ok=True)
-    (demo_dir / MANIFEST_NAME).write_text(json.dumps({"memory_ids": ids}, indent=2))
+    manifest = demo_dir / MANIFEST_NAME
+    ids: list[str] = []
+    for entry in DEMO_MEMORIES:
+        ids.append(manager.save(entry["content"], type=entry["type"], project=entry["project"]))
+        manifest.write_text(json.dumps({"memory_ids": ids}, indent=2))
     return ids
 
 
-def clean(manager: MemoryManager, manifest_path: Path) -> int:
-    """Delete exactly the manifest's ids; anything else in the store survives."""
+def clean(manager: MemoryManager, manifest_path: Path) -> tuple[int, list[str]]:
+    """Delete exactly the manifest's ids; anything else in the store survives.
+
+    Ids whose deletion raised stay in the manifest so a re-run can retry them;
+    the manifest is removed only when nothing failed. Returns (deleted, failed).
+    """
     manifest_path = Path(manifest_path)
     ids = json.loads(manifest_path.read_text())["memory_ids"]
-    deleted = sum(1 for memory_id in ids if manager.delete(memory_id))
-    manifest_path.unlink()
-    return deleted
+    deleted = 0
+    failed: list[str] = []
+    for memory_id in ids:
+        try:
+            if manager.delete(memory_id):
+                deleted += 1
+        except Exception:
+            failed.append(memory_id)
+    if failed:
+        manifest_path.write_text(json.dumps({"memory_ids": failed}, indent=2))
+    else:
+        manifest_path.unlink()
+    return deleted, failed

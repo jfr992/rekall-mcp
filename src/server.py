@@ -1684,15 +1684,20 @@ def main() -> None:
 def main_stdio() -> None:
     """uvx entry: embedded storage default, eager warmup, stdio transport."""
     rekall_dir = Path(os.environ.get("REKALL_DIR", str(Path.home() / ".rekall"))).expanduser()
+    qdrant_url = os.environ.get("QDRANT_URL")
     # QDRANT_URL set = server-backed store; defaulting QDRANT_PATH too would
     # trip the mutual-exclusion guard (mirrors memory/cli.py).
-    if not os.environ.get("QDRANT_URL"):
+    if not qdrant_url:
         os.environ.setdefault("QDRANT_PATH", str(rekall_dir / "qdrant"))
-    os.environ.setdefault("MCP_TRANSPORT", "stdio")
+    # Forced, not setdefault: an inherited streamable-http would leave the MCP
+    # client hanging on stdio. `rekall serve` is the explicit HTTP entry.
+    os.environ["MCP_TRANSPORT"] = "stdio"
     from core import ownership
 
     try:
-        acq = ownership.acquire(rekall_dir, port=int(os.environ.get("PORT", "8000")))
+        acq = ownership.acquire(
+            rekall_dir, port=int(os.environ.get("PORT", "8000")), qdrant_url=qdrant_url
+        )
     except ownership.ForeignServiceError as exc:
         sys.stderr.write(f"rekall: {exc}\n")
         sys.exit(2)
@@ -1705,7 +1710,13 @@ def main_stdio() -> None:
             f"claude mcp add --transport http rekall {acq.base_url}/  (or stop the daemon)\n"
         )
         sys.exit(2)
-    # acquire() already wrote active-backend.json for the embedded store.
+    # acquire() already wrote active-backend.json (embedded or url backend).
+    if acq.mode == "embedded" and acq.client is not None:
+        # The acquire-held client IS the store flock — the singleton must reuse it.
+        from memory.manager import MemoryManager
+        from memory.singleton import set_memory_manager
+
+        set_memory_manager(MemoryManager(qdrant_path=str(acq.path), qdrant_client=acq.client))
     sys.stderr.write("rekall: warming up embedder (first run downloads ~90MB)...\n")
     from memory.singleton import get_memory_manager
 

@@ -388,6 +388,30 @@ class TestServeCommand:
         assert ran == [True]
         assert "QDRANT_PATH" not in os.environ
 
+    def test_serve_with_qdrant_url_writes_url_ownership_record(
+        self, cli_runner, monkeypatch, tmp_path
+    ):
+        """serve in url mode must own the YAML store on record — a later
+        embedded acquire against the same rekall_dir has to see it and refuse."""
+        import json
+
+        import server
+        from memory.cli import memory
+
+        rekall_dir = tmp_path / "rekall"
+        monkeypatch.setenv("QDRANT_URL", "http://localhost:6334")
+        monkeypatch.delenv("QDRANT_PATH", raising=False)
+        monkeypatch.setenv("REKALL_DIR", str(rekall_dir))
+        monkeypatch.setattr("core.ownership.probe_daemon", lambda *a, **k: "absent")
+        monkeypatch.setattr(server, "main", lambda: None)
+
+        result = cli_runner.invoke(memory, ["serve"])
+
+        assert result.exit_code == 0, result.output
+        record = json.loads((rekall_dir / "active-backend.json").read_text())
+        assert record["backend"] == "url"
+        assert record["target"] == "http://localhost:6334"
+
 
 class TestWarmupCommand:
     """Test the 'warmup' CLI command (model pre-download)."""
@@ -455,3 +479,25 @@ class TestReindexCommand:
         assert '"points": 0' in result.output
         assert '"verified": true' in result.output
         assert list((tmp_path / "backups").glob("*.tar.gz")), "tarballs must be written"
+
+    def test_reindex_embedded_reuses_acquire_client(self, cli_runner, monkeypatch, tmp_path):
+        """Real acquire holds the embedded flock through its client; the reindex
+        manager must reuse it — a second client on the same path is refused."""
+        from memory.cli import memory
+
+        monkeypatch.delenv("QDRANT_URL", raising=False)
+        monkeypatch.delenv("QDRANT_PATH", raising=False)
+        monkeypatch.setenv("REKALL_DIR", str(tmp_path / "rekall"))
+        monkeypatch.setenv("MEMORY_STORAGE_PATH", str(tmp_path / "memory"))
+        monkeypatch.setattr("core.ownership.probe_daemon", lambda *a, **k: "absent")
+
+        connected = []
+        monkeypatch.setattr(
+            "memory.reindex.reindex",
+            lambda mgr, tarball_dir=None: connected.append(mgr.store.client) or {"ok": True},
+        )
+
+        result = cli_runner.invoke(memory, ["reindex"])
+
+        assert result.exit_code == 0, result.output
+        assert connected, "reindex body never touched the store"

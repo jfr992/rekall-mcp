@@ -20,6 +20,12 @@ def get_memory_manager():
     return _instance
 
 
+def set_memory_manager(manager) -> None:
+    """Seed the shared instance (entrypoints hand over the acquire-held client)."""
+    global _instance
+    _instance = manager
+
+
 def reset_memory_manager() -> None:
     """Test hook — drop the shared instance."""
     global _instance
