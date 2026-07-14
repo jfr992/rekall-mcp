@@ -29,3 +29,12 @@ def test_no_prod_data_paths_in_volume_defaults():
             if "~/.claude" in entry or "$HOME" in entry:
                 offenders.append(f"{name}: {vol}")
     assert offenders == [], f"volume defaults point at prod data: {offenders}"
+
+
+def test_published_ports_are_loopback_only():
+    offenders = []
+    for name, svc in _services().items():
+        for port in svc.get("ports", []):
+            if not str(port).startswith("127.0.0.1:"):
+                offenders.append(f"{name}: {port}")
+    assert offenders == [], f"ports published beyond loopback: {offenders}"
