@@ -1555,14 +1555,20 @@ async def api_observe(request):
 
         scope = ScopeDetector.detect(project=caller_project, cwd=caller_cwd)
         # The observe endpoint's caller is the rekall-observe.sh Stop hook.
-        # Old hooks send no session_id -> null (version skew is safe both ways:
-        # an old server simply ignores the extra body key).
+        # Old hooks send no session_id/evidence_class -> null (version skew is
+        # safe both ways: an old server simply ignores the extra body keys).
+        # Unknown evidence_class values also null out — null is honest;
+        # null is NEVER coerced to "inferred" downstream.
+        evidence_class = body.get("evidence_class")
+        if evidence_class not in ("confirmed_artifact", "explicit_user", "inferred"):
+            evidence_class = None
         memory_id = manager.save(
             content,
             type=mem_type,
             scope=scope,
             capture_origin="hook",
             session_id=body.get("session_id") or None,
+            evidence_class=evidence_class,
         )
 
         return JSONResponse(
