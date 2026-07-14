@@ -350,6 +350,19 @@ def test_capsule_get_threads_session_id(rest_client, fake_rest_manager):
     assert fake_rest_manager.get_project_capsule.call_args.kwargs["session_id"] is None
 
 
+def test_startup_get_threads_session_id(rest_client, fake_rest_manager):
+    """?session_id= reaches get_agent_startup; absent -> None (skew pin)."""
+    fake_rest_manager.get_agent_startup.return_value = {"project_capsule": {}}
+
+    r = rest_client.get("/api/memory/context/startup?project=p&session_id=s-3")
+    assert r.status_code == 200
+    assert fake_rest_manager.get_agent_startup.call_args.kwargs["session_id"] == "s-3"
+
+    r = rest_client.get("/api/memory/context/startup?project=p")
+    assert r.status_code == 200
+    assert fake_rest_manager.get_agent_startup.call_args.kwargs["session_id"] is None
+
+
 def test_capsule_and_startup_handlers_do_not_emit(rest_client, fake_rest_manager):
     """Both consumers of build_project_capsule ride on its emission."""
     capsule = {

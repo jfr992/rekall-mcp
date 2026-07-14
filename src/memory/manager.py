@@ -1741,9 +1741,12 @@ class MemoryManager:
         project: str | None = None,
         agent: str | None = None,
         limit: int = 12,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
         """Return a single startup payload for agent clients."""
-        return build_agent_startup(self, project=project, agent=agent, limit=limit)
+        return build_agent_startup(
+            self, project=project, agent=agent, limit=limit, session_id=session_id
+        )
 
     def get_project_capsule(
         self, project: str, limit: int = 300, session_id: str | None = None

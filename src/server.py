@@ -1048,9 +1048,12 @@ async def api_agent_startup(request):
         project = _safe_project(query.get("project"))
         agent = query.get("agent")
         limit = _read_int(query, "limit", 12)
+        session_id = query.get("session_id") or None
 
         manager = _get_memory_manager()
-        payload = manager.get_agent_startup(project=project, agent=agent, limit=limit)
+        payload = manager.get_agent_startup(
+            project=project, agent=agent, limit=limit, session_id=session_id
+        )
 
         # memory_surfaced emission lives in build_project_capsule (event contract v2)
         return JSONResponse(payload)
