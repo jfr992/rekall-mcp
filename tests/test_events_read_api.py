@@ -50,3 +50,27 @@ def test_read_from_cursor_returns_only_new_events(tmp_path):
     events, _, truncated = log.read_from(cursor2, limit=10)
     assert events == []
     assert truncated is False
+
+
+def test_read_from_does_not_advance_past_partial_line(tmp_path):
+    """A concurrent append caught mid-write must not be consumed or skipped."""
+    log = _log(tmp_path)
+    log.append(_event(0))
+    _, cursor, _ = log.read_from(None, limit=10)
+
+    log.append(_event(1))
+    full_line = (tmp_path / "_events.jsonl").read_text().splitlines()[-1]
+    half = full_line[: len(full_line) // 2]
+    with (tmp_path / "_events.jsonl").open("a") as f:
+        f.write(half)  # no trailing newline — writer still in flight
+
+    events, cursor2, truncated = log.read_from(cursor, limit=10)
+    assert [e.payload["index"] for e in events] == [1]
+    assert truncated is False
+
+    # writer finishes the line — the same cursor picks it up intact
+    with (tmp_path / "_events.jsonl").open("a") as f:
+        f.write(full_line[len(full_line) // 2 :] + "\n")
+    events, _, truncated = log.read_from(cursor2, limit=10)
+    assert [e.payload["index"] for e in events] == [1]
+    assert truncated is False
