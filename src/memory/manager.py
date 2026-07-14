@@ -275,11 +275,14 @@ class MemoryManager:
     @property
     def reindex_sentinel(self) -> Path:
         """In-progress reindex marker: inside the embedded store, or next to YAML."""
-        if self._qdrant_path:
+        if getattr(self, "_qdrant_path", None):
             return Path(self._qdrant_path) / ".rekall-reindex-in-progress"
         return self.memory_dir / ".reindex-sentinel"
 
     def _assert_reindex_complete(self) -> None:
+        # Bare test doubles (object.__new__) have no storage roots to check.
+        if getattr(self, "memory_dir", None) is None:
+            return
         if self.reindex_sentinel.exists():
             raise RuntimeError(
                 f"an interrupted reindex left {self.reindex_sentinel} — the vector "
@@ -457,8 +460,9 @@ class MemoryManager:
 
         from memory.reindex import BOOTSTRAP_THRESHOLD, bootstrap_sparse
 
-        count = self.store.count()
-        # Mocked stores in tests return non-int counts — a real store never does.
+        # Test doubles may lack count() or return non-ints — a real store never does.
+        counter = getattr(self.store, "count", None)
+        count = counter() if callable(counter) else None
         if not isinstance(count, int) or count < BOOTSTRAP_THRESHOLD:
             return
         bootstrap_sparse(self)
