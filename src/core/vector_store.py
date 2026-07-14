@@ -123,6 +123,7 @@ class VectorStore:
     def _connect(self) -> None:
         """Connect to Qdrant (server url or embedded path) and ensure collection exists."""
         if self.path is not None:
+            assert_test_isolation(qdrant_path=self.path)
             logger.info(f"Opening embedded Qdrant at {self.path}")
             self._client = QdrantClient(path=self.path)
         else:
