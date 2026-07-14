@@ -142,6 +142,7 @@ class MemoryManager:
         self,
         memory_dir: str | Path | None = None,
         qdrant_url: str | None = None,
+        qdrant_path: str | None = None,
         embedding_model: str | None = None,
     ) -> None:
         """Initialize memory manager.
@@ -149,11 +150,18 @@ class MemoryManager:
         Args:
             memory_dir: Where to store memory files (default: MEMORY_STORAGE_PATH or ~/.claude/memory)
             qdrant_url: Qdrant server URL (default: QDRANT_URL or http://localhost:6333)
+            qdrant_path: Local directory for embedded Qdrant (default: QDRANT_PATH env).
+                Mutually exclusive with qdrant_url — both set raises when the store connects.
             embedding_model: Model for embeddings (default: EMBEDDING_MODEL or all-MiniLM-L6-v2)
         """
-        # Read from environment with sensible defaults
+        # Read from environment with sensible defaults.
+        # Resolution: explicit args → QDRANT_PATH env → QDRANT_URL env → url default.
         memory_dir = memory_dir or os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory")
-        qdrant_url = qdrant_url or os.environ.get("QDRANT_URL", "http://localhost:6333")
+        if qdrant_url is None and qdrant_path is None:
+            qdrant_path = os.environ.get("QDRANT_PATH") or None
+            qdrant_url = os.environ.get("QDRANT_URL") or None
+            if qdrant_path is None and qdrant_url is None:
+                qdrant_url = "http://localhost:6333"
         embedding_model = embedding_model or os.environ.get("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
         # File storage
@@ -164,6 +172,7 @@ class MemoryManager:
         # Vector store (uses core infrastructure)
         self._store: VectorStore | None = None
         self._qdrant_url = qdrant_url
+        self._qdrant_path = qdrant_path
 
         # Embeddings (uses core infrastructure)
         self._embedder: Embedder | None = None
@@ -202,6 +211,7 @@ class MemoryManager:
             self._store = VectorStore(
                 collection=self.COLLECTION,
                 url=self._qdrant_url,
+                path=self._qdrant_path,
                 sparse_encoder=self.sparse_encoder,
             )
             # Create indexes for filtering

@@ -35,3 +35,12 @@ def test_store_refuses_prod_qdrant_path_under_pytest():
     vs = VectorStore(collection="t", path=str(Path.home() / ".rekall" / "qdrant"))
     with pytest.raises(RuntimeError, match="prod"):
         _ = vs.client
+
+
+def test_manager_qdrant_path_roundtrip(tmp_path):
+    from memory import MemoryManager
+
+    manager = MemoryManager(memory_dir=tmp_path / "memory", qdrant_path=str(tmp_path / "q"))
+    memory_id = manager.save("Decided to use embedded Qdrant for the trial tier", type="decision")
+    results = manager.recall("embedded qdrant trial tier")
+    assert any(r.get("memory_id", r.get("id")) == memory_id for r in results)
