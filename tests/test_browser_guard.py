@@ -38,3 +38,13 @@ def test_cross_origin_text_plain_post_rejected():
     )
     assert r.status_code == 403
     assert "error" in r.json()
+
+
+def test_allowed_origin_with_ui_header_and_json_passes():
+    client = TestClient(_app())
+    r = client.post(
+        "/api/x",
+        json={"a": 1},
+        headers={"Origin": "http://localhost:3333", "X-Rekall-UI": "1"},
+    )
+    assert r.status_code == 200
