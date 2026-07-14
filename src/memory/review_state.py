@@ -67,3 +67,23 @@ def apply_event(state: State, event: dict[str, Any]) -> State:
         return new_state
 
     return state
+
+
+def rebuild(memory_dir: Path | str) -> State:
+    """Fold the full event log into a fresh projection."""
+    events_path = Path(memory_dir) / EVENTS_FILENAME
+    if not events_path.exists():
+        return {}
+
+    state: State = {}
+    with events_path.open("r", encoding="utf-8") as file:
+        for line in file:
+            if not line.strip():
+                continue
+            try:
+                event = json.loads(line)
+            except ValueError:
+                logger.warning("rebuild: skipping malformed event line: %.200s", line)
+                continue
+            state = apply_event(state, event)
+    return state
