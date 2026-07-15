@@ -169,6 +169,54 @@ export const KbResponseSchema = z.object({
   truncated: z.boolean().optional(),
 });
 
+// ----- Sessions ------------------------------------------------------------
+
+export const SessionTotalsSchema = z.object({
+  recalls: z.number(),
+  injected: z.number(),
+  tokens: z.number(),
+});
+
+export const SessionRowSchema = z.object({
+  session_id: z.string(),
+  project: z.string(),
+  started_at: z.string().nullable(),
+  last_at: z.string().nullable(),
+  totals: SessionTotalsSchema,
+});
+
+export const SessionsResponseSchema = z.object({
+  sessions: z.array(SessionRowSchema),
+  window: z.number(),
+});
+
+export const SessionInjectedSchema = z.object({
+  memory_id: z.string(),
+  token_estimate: z.number().nullable(),
+});
+
+export const SessionRecallMemorySchema = z.object({
+  memory_id: z.string(),
+  score: z.number(),
+});
+
+export const SessionRecallSchema = z.object({
+  query: z.string().nullable(),
+  memories: z.array(SessionRecallMemorySchema),
+  token_estimate: z.number().nullable(),
+  observed_at: z.string(),
+});
+
+export const SessionDetailSchema = SessionRowSchema.extend({
+  injected: z.array(SessionInjectedSchema),
+  recalls: z.array(SessionRecallSchema),
+  window: z.number().optional(),
+});
+
+export const FeedbackVerdictSchema = z.enum(["useful", "wrong", "stale"]);
+
+export const FeedbackResponseSchema = z.object({ recorded: z.boolean() });
+
 // ----- Pressure ------------------------------------------------------------
 
 export const PressureResponseSchema = z.object({
@@ -271,6 +319,15 @@ export type Storage = z.infer<typeof StorageSchema>;
 export type DetailResponseV2 = z.infer<typeof DetailResponseV2Schema>;
 export type KbEntry = z.infer<typeof KbEntrySchema>;
 export type KbResponse = z.infer<typeof KbResponseSchema>;
+export type SessionTotals = z.infer<typeof SessionTotalsSchema>;
+export type SessionRow = z.infer<typeof SessionRowSchema>;
+export type SessionsResponse = z.infer<typeof SessionsResponseSchema>;
+export type SessionInjected = z.infer<typeof SessionInjectedSchema>;
+export type SessionRecallMemory = z.infer<typeof SessionRecallMemorySchema>;
+export type SessionRecall = z.infer<typeof SessionRecallSchema>;
+export type SessionDetail = z.infer<typeof SessionDetailSchema>;
+export type FeedbackVerdict = z.infer<typeof FeedbackVerdictSchema>;
+export type FeedbackResponse = z.infer<typeof FeedbackResponseSchema>;
 export type PressureResponse = z.infer<typeof PressureResponseSchema>;
 export type PruneCandidate = z.infer<typeof PruneCandidateSchema>;
 export type PrunePlan = z.infer<typeof PrunePlanSchema>;
