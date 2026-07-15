@@ -41,6 +41,7 @@ services:
     environment:
       - QDRANT_URL=http://qdrant:6333
       - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-fastembed}
+      - REKALL_ALLOWED_HOSTS=${REKALL_ALLOWED_HOSTS:-mcp}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
       - MCP_TRANSPORT=streamable-http
