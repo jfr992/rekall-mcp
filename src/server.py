@@ -1690,6 +1690,8 @@ async def api_memory_kb(request):
         cap = 2000
         filters = {"project": project} if project else None
         points = manager.store.scroll(filters=filters, limit=cap)
+        # Newest-first within each slice; date is YYYY-MM-DD so string sort works.
+        points.sort(key=lambda m: m.get("date") or "", reverse=True)
 
         def _summarize(m: dict) -> dict:
             out = {
