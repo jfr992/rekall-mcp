@@ -142,3 +142,85 @@ def test_non_matching_recalls_land_in_per_project_unattributed_bucket():
     assert bucket_a["totals"]["recalls"] == 1
     assert bucket_a["injected"] == []
     assert by_id["s1"]["recalls"] == []
+
+
+# ---------------------------------------------------------------------------
+# REST endpoints: GET /api/memory/sessions + GET /api/memory/sessions/{id}
+# ---------------------------------------------------------------------------
+
+
+def _rest_client(monkeypatch, tmp_path):
+    from unittest.mock import MagicMock
+
+    from starlette.testclient import TestClient
+
+    import server
+    from memory.events import EventLog
+
+    manager = MagicMock()
+    manager.event_log = EventLog(tmp_path / "_events.jsonl")
+    monkeypatch.setattr("memory.singleton._instance", manager)
+    return TestClient(server.mcp.streamable_http_app()), manager
+
+
+def test_get_sessions_list_shape_limit_and_window(monkeypatch, tmp_path):
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    log = manager.event_log
+    log.append(_surfaced("s1", "proj-a", ["m1"], "2026-07-14T09:00:00", tokens=10))
+    log.append(_summary("s1", "proj-a", ["m1"], "2026-07-14T09:10:00"))
+    log.append(_summary("s2", "proj-a", ["m2"], "2026-07-14T09:20:00"))
+
+    r = tc.get("/api/memory/sessions", params={"limit": 1})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["window"] == 5000
+    assert len(body["sessions"]) == 1
+    row = body["sessions"][0]
+    assert row["session_id"] == "s2"  # newest activity first
+    assert row["project"] == "proj-a"
+    assert set(row) == {"session_id", "project", "started_at", "last_at", "totals"}
+    assert row["totals"] == {"recalls": 0, "injected": 0, "tokens": 0}
+
+
+def test_get_session_detail_returns_full_object(monkeypatch, tmp_path):
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    log = manager.event_log
+    log.append(_surfaced("s1", "proj-a", ["m1"], "2026-07-14T09:00:00", tokens=10))
+    log.append(_summary("s1", "proj-a", ["m1"], "2026-07-14T09:10:00"))
+    log.append(_recalled("proj-a", ["m1"], "2026-07-14T09:05:00", query="why m1", tokens=5))
+
+    r = tc.get("/api/memory/sessions/s1")
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["session_id"] == "s1"
+    assert body["injected"] == [{"memory_id": "m1", "token_estimate": None}]
+    assert body["recalls"][0]["query"] == "why m1"
+    assert body["recalls"][0]["memories"] == [{"memory_id": "m1", "score": 0.9}]
+    assert body["totals"] == {"recalls": 1, "injected": 1, "tokens": 15}
+    assert body["window"] == 5000
+
+
+def test_get_session_detail_unknown_id_404(monkeypatch, tmp_path):
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    manager.event_log.append(_summary("s1", "proj-a", ["m1"], "2026-07-14T09:10:00"))
+
+    r = tc.get("/api/memory/sessions/nope")
+
+    assert r.status_code == 404
+    assert r.json()["session_id"] == "nope"
+
+
+def test_sessions_list_get_emits_view_opened_counter(monkeypatch, tmp_path):
+    """The U2 phase metric: % of sessions where the view was opened."""
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    manager.event_log.append(_summary("s1", "proj-a", ["m1"], "2026-07-14T09:10:00"))
+
+    r = tc.get("/api/memory/sessions")
+
+    assert r.status_code == 200
+    manager.record_event.assert_called_once()
+    kw = manager.record_event.call_args.kwargs
+    assert kw["event_type"] == "view_opened"
+    assert kw["payload"]["view"] == "sessions"
