@@ -11,6 +11,7 @@ import detailV2Fixture from "./fixtures/detail-v2.json";
 import * as sessionsApi from "@/lib/api/sessions";
 import * as feedbackApi from "@/lib/api/feedback";
 import * as detailApi from "@/lib/api/detail";
+import { useProjectStore } from "@/lib/project-store";
 import type { SessionDetail, SessionsResponse } from "@/lib/schemas";
 
 vi.mock("@/lib/api/sessions");
@@ -35,6 +36,7 @@ function renderSessions() {
 describe("Sessions surface", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    useProjectStore.setState({ project: "" });
     vi.mocked(sessionsApi.getSessions).mockResolvedValue(
       sessionsFixture as SessionsResponse
     );
@@ -55,6 +57,26 @@ describe("Sessions surface", () => {
     expect(screen.getByText(/2 recalls/i)).toBeInTheDocument();
     expect(screen.getByText(/3 injected/i)).toBeInTheDocument();
     expect(screen.getByText(/1450 tok/i)).toBeInTheDocument();
+  });
+
+  test("sidebar scope filters the list to the selected project", async () => {
+    useProjectStore.setState({ project: "byte-edge" });
+    // Backend contract: ?project= returns only that project's sessions.
+    vi.mocked(sessionsApi.getSessions).mockImplementation((project) => {
+      const all = (sessionsFixture as SessionsResponse).sessions;
+      return Promise.resolve({
+        sessions: project ? all.filter((s) => s.project === project) : all,
+        window: 5000,
+      });
+    });
+    renderSessions();
+
+    await waitFor(() => {
+      expect(screen.getByText(/sess-be-777/)).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/sess-abc123/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/unattributed · rekall-mcp/i)).not.toBeInTheDocument();
+    expect(sessionsApi.getSessions).toHaveBeenCalledWith("byte-edge", 50);
   });
 
   test("clicking a session shows recall cards with scores", async () => {

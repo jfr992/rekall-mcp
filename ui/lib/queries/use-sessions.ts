@@ -1,10 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { getSessions, getSessionDetail } from "@/lib/api/sessions";
 
-export function useSessions(limit = 50) {
+export function useSessions(project: string, limit = 50) {
   return useQuery({
-    queryKey: ["sessions", limit],
-    queryFn: () => getSessions(limit),
+    queryKey: ["sessions", project, limit],
+    queryFn: () => getSessions(project, limit),
     staleTime: 30_000,
   });
 }
