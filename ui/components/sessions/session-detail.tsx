@@ -74,15 +74,21 @@ export function SessionDetail({ session, onExpandMemory }: Props) {
                   className="rounded-md border border-[var(--border)] p-3"
                 >
                   <div className="flex items-baseline justify-between gap-3">
-                    <p className="text-sm text-[var(--fg)]">
-                      {recall.query ?? "(no query)"}
-                    </p>
+                    {recall.query === null ? (
+                      <p className="text-xs italic text-[var(--fg-muted)]">
+                        legacy event (recorded before v1.12 — no query/score data)
+                      </p>
+                    ) : (
+                      <p className="text-sm text-[var(--fg)]">{recall.query}</p>
+                    )}
                     <span className="flex shrink-0 items-center gap-2">
-                      <MonoLabel>
-                        {recall.token_estimate === null
-                          ? "—"
-                          : `${recall.token_estimate} tok`}
-                      </MonoLabel>
+                      {recall.query === null ? null : (
+                        <MonoLabel>
+                          {recall.token_estimate === null
+                            ? "—"
+                            : `${recall.token_estimate} tok`}
+                        </MonoLabel>
+                      )}
                       <MonoLabel>{relativeTime(recall.observed_at)}</MonoLabel>
                     </span>
                   </div>
@@ -92,7 +98,7 @@ export function SessionDetail({ session, onExpandMemory }: Props) {
                         key={m.memory_id}
                         memoryId={m.memory_id}
                         sessionId={feedbackSessionId}
-                        score={m.score}
+                        score={recall.query === null ? undefined : m.score}
                         onExpand={onExpandMemory}
                       />
                     ))}
