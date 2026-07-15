@@ -15,6 +15,8 @@ def _manager_with_vectors(tmp_path, vectors):
     store.count.return_value = len(vectors)
     store.scroll.return_value = [{"memory_id": f"m{i}", "vector": v} for i, v in enumerate(vectors)]
     manager._store = store
+    # Stub the embedder so the /health embedder probe never loads a real model here.
+    manager._embedder = MagicMock(encode=MagicMock(return_value=[0.1, 0.2]))
     kg = MagicMock()
     kg.stats.return_value = {"nodes": 0, "edges": 0, "relations": {}}
     manager._knowledge_graph = kg
@@ -41,6 +43,7 @@ def test_health_endpoint_degrades_on_zero_vectors(monkeypatch, tmp_path):
     manager = _manager_with_vectors(tmp_path, [[0.0, 0.0], [0.0, 0.0]])
     monkeypatch.setattr("memory.singleton._instance", manager)
     server._reset_vector_health_cache()
+    server._reset_embedder_health_cache()
 
     app = Starlette(routes=[Route("/health", server.health_check)])
     body = TestClient(app).get("/health").json()
@@ -55,6 +58,7 @@ def test_health_endpoint_healthy_with_real_vectors(monkeypatch, tmp_path):
     manager = _manager_with_vectors(tmp_path, [[0.3, 0.7]])
     monkeypatch.setattr("memory.singleton._instance", manager)
     server._reset_vector_health_cache()
+    server._reset_embedder_health_cache()
 
     app = Starlette(routes=[Route("/health", server.health_check)])
     body = TestClient(app).get("/health").json()

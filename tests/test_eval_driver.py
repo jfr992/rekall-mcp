@@ -334,8 +334,11 @@ def test_preamble_matches_hook_echo_line_shape():
     # Simulate what the hook would print for known stats/vectors values.
     # stats = "5 memories · 3 nodes · 2 edges"  (from jq -r '"\(.total...) · \(.nodes) · \(.edges)"')
     # vectors = " · vectors OK"  (from jq when .vectors.zero_vectors == 0)
-    hook_rendered = hook_template.replace("${stats}", "5 memories · 3 nodes · 2 edges").replace(
-        "${vectors}", " · vectors OK"
+    # embedder = ""  (from jq when .embedder is "ok" — healthy case)
+    hook_rendered = (
+        hook_template.replace("${stats}", "5 memories · 3 nodes · 2 edges")
+        .replace("${vectors}", " · vectors OK")
+        .replace("${embedder}", "")
     )
 
     eval_rendered = REKALL_SESSION_PREAMBLE.format(n=5, nodes=3, edges=2)

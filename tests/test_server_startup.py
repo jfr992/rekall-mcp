@@ -46,6 +46,7 @@ async def test_health_carries_rekall_signature(monkeypatch):
     import server
 
     monkeypatch.setattr("server._vector_health", lambda: {"sampled": 0, "zero_vectors": 0})
+    monkeypatch.setattr("server._embedder_health", lambda: "ok")
     response = await server.health_check(SimpleNamespace())
     body = json.loads(response.body)
     assert body["server"] == "rekall"

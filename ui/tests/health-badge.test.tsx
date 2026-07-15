@@ -19,6 +19,37 @@ describe("HealthBadge", () => {
     expect(screen.getByText(/degraded · 12 dead vectors/i)).toBeInTheDocument();
   });
 
+  test("degraded status surfaces embedder failure without fake vector count", () => {
+    mockUseHealth.mockReturnValue({
+      data: {
+        status: "degraded",
+        vectors: { sampled: 5, zero_vectors: 0 },
+        embedder: { error: "ImportError: sentence-transformers required" },
+      },
+      isError: false,
+      isLoading: false,
+    });
+    render(<HealthBadge />);
+    expect(screen.getByText(/degraded · embedder down/i)).toBeInTheDocument();
+    expect(screen.queryByText(/0 dead vectors/i)).not.toBeInTheDocument();
+  });
+
+  test("embedder failure tooltip carries the error detail", () => {
+    mockUseHealth.mockReturnValue({
+      data: {
+        status: "degraded",
+        vectors: { sampled: 5, zero_vectors: 0 },
+        embedder: { error: "ImportError: sentence-transformers required" },
+      },
+      isError: false,
+      isLoading: false,
+    });
+    const { container } = render(<HealthBadge />);
+    expect(container.firstElementChild?.getAttribute("title")).toContain(
+      "ImportError: sentence-transformers required"
+    );
+  });
+
   test("healthy status stays plain", () => {
     mockUseHealth.mockReturnValue({
       data: { status: "healthy", vectors: { sampled: 256, zero_vectors: 0 } },

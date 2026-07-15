@@ -9,6 +9,10 @@ export const HealthSchema = z.object({
   vectors: z
     .object({ sampled: z.number(), zero_vectors: z.number() })
     .optional(),
+  // "ok" or { error } — see /health embedder probe (#57).
+  embedder: z
+    .union([z.literal("ok"), z.object({ error: z.string() })])
+    .optional(),
 });
 
 // ----- Projects ------------------------------------------------------------

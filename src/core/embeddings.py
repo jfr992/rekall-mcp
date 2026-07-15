@@ -477,3 +477,33 @@ class Embedder:
     def __repr__(self) -> str:
         loaded = "loaded" if self._provider else "not loaded"
         return f"Embedder(provider={self.provider_name}, {loaded})"
+
+
+# Providers whose import can fail on a slim install; ollama/gemini only need httpx.
+_PROVIDER_IMPORTS = {
+    "sentence-transformers": "sentence_transformers",
+    "fastembed": "fastembed",
+}
+
+
+def validate_provider_importable(provider: str | None = None) -> str | None:
+    """Import-only preflight: error string if the resolved provider can't load, else None.
+
+    Never downloads or loads a model — safe to run at container start (#57).
+    """
+    import importlib.util
+
+    name = Embedder._resolve_provider_name(provider)
+    if name not in Embedder.PROVIDERS:
+        available = ", ".join(sorted(Embedder.PROVIDERS))
+        return f"EMBEDDING_PROVIDER={name!r} is not a known provider (available: {available})"
+    module = _PROVIDER_IMPORTS.get(name)
+    if module and importlib.util.find_spec(module) is None:
+        importable = sorted(
+            p for p, m in _PROVIDER_IMPORTS.items() if importlib.util.find_spec(m) is not None
+        )
+        return (
+            f"EMBEDDING_PROVIDER={name!r} requires the '{module}' package, which is not "
+            f"installed (importable providers here: {', '.join(importable) or 'none'})"
+        )
+    return None
