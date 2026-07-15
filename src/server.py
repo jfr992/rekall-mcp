@@ -404,7 +404,7 @@ async def api_save_memory(request):
             return JSONResponse({"error": "content is required"}, status_code=400)
 
         manager = _get_memory_manager()
-        memory_id = manager.save(content, type=mem_type, project=project)
+        memory_id = manager.save(content, type=mem_type, project=project, capture_origin="rest")
 
         return JSONResponse({"memory_id": memory_id, "status": "saved", "type": mem_type})
     except RequestValidationError as e:
@@ -441,18 +441,7 @@ async def api_recall_memories(request):
             query, limit=limit, project=project, type=mem_type, task_hint=task_hint
         )
 
-        try:
-            ids = [m["memory_id"] for m in results if m.get("memory_id")]
-            manager.record_event(
-                event_type="memory_recalled",
-                project=project or "general",
-                memory_ids=ids,
-                source="recall",
-                payload={"task_hint": task_hint},
-            )
-        except Exception:
-            logger.debug("event emission skipped", exc_info=True)
-
+        # memory_recalled emission lives in manager.recall (event contract v2)
         return JSONResponse({"query": query, "count": len(results), "memories": results})
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -487,22 +476,7 @@ async def api_cross_project_recall(request):
             limit=limit,
         )
 
-        try:
-            ids = [
-                m["memory_id"]
-                for bucket in ("same_project", "related_projects", "global")
-                for m in (result.get(bucket) or [])
-                if m.get("memory_id")
-            ]
-            manager.record_event(
-                event_type="memory_recalled",
-                project=current_project,
-                memory_ids=ids,
-                source="cross_project",
-            )
-        except Exception:
-            logger.debug("event emission skipped", exc_info=True)
-
+        # memory_recalled emission lives in manager.recall (event contract v2)
         return _ok(result)
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -533,17 +507,7 @@ async def api_memory_reflex(request):
         manager = _get_memory_manager()
         result = manager.reflex(text=text, project=project, limit=limit)
 
-        try:
-            ids = [m["memory_id"] for m in (result.get("memories") or []) if m.get("memory_id")]
-            manager.record_event(
-                event_type="memory_recalled",
-                project=project or "general",
-                memory_ids=ids,
-                source="reflex",
-            )
-        except Exception:
-            logger.debug("event emission skipped", exc_info=True)
-
+        # memory_recalled emission lives in manager.recall (event contract v2)
         return _ok(result)
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -604,6 +568,128 @@ async def api_record_events(request):
         return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error recording event: {e}")
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/memory/events", methods=["GET"])
+async def api_read_events(request):
+    """REST API: Cursor-paginated read of the event log.
+
+    Coexists with POST /api/memory/events (session_summary append) via
+    Starlette method routing. No cursor → bounded tail; a rewritten/restored
+    log returns truncated=True plus a reset cursor.
+    """
+    from dataclasses import asdict
+
+    from memory.events import CursorError
+
+    try:
+        cursor = request.query_params.get("cursor")
+        limit = _read_int(request.query_params, "limit", 100, lo=1, hi=1000)
+
+        manager = _get_memory_manager()
+        try:
+            events, next_cursor, truncated = manager.event_log.read_from(cursor, limit=limit)
+        except CursorError:
+            return _bad_request("invalid cursor")
+
+        return _ok(
+            {
+                "events": [asdict(e) for e in events],
+                "cursor": next_cursor,
+                "truncated": truncated,
+            }
+        )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error reading events: {e}")
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/memory/review", methods=["POST"])
+async def api_memory_review(request):
+    """REST API: record a review verdict for a memory. Server-only writer.
+
+    keep → record only; kill → delete then record (mutate-then-record);
+    fix → 501 until supersede semantics land in U3.
+    """
+    from starlette.responses import JSONResponse
+
+    from memory import review_state
+    from memory.events import MemoryEvent
+
+    try:
+        body = await request.json()
+        memory_id = body.get("memory_id")
+        verdict = body.get("verdict")
+        editor = body.get("editor")
+
+        if not memory_id or not isinstance(memory_id, str):
+            return _bad_request("memory_id is required")
+        if verdict not in ("keep", "fix", "kill"):
+            return _bad_request("verdict must be one of ['fix', 'keep', 'kill']")
+        if editor not in ("ui", "agent"):
+            return _bad_request("editor must be one of ['agent', 'ui']")
+        if verdict == "fix":
+            return JSONResponse(
+                {
+                    "error": "verdict=fix is not implemented in U1 — fix means supersede "
+                    "(corrected memory + superseded edge), which arrives in U3. "
+                    "Use keep or kill for now."
+                },
+                status_code=501,
+            )
+
+        manager = _get_memory_manager()
+        found = manager.store.get_many([memory_id])
+        if not found:
+            return JSONResponse({"error": "not found", "memory_id": memory_id}, status_code=404)
+        project = found[0].get("project") or "general"
+
+        if verdict == "kill" and not manager.delete(memory_id):
+            return JSONResponse({"error": "not found", "memory_id": memory_id}, status_code=404)
+
+        # Mutate-then-record: the event lands only after the mutation did.
+        event_recorded = True
+        try:
+            manager.event_log.append(
+                MemoryEvent(
+                    event_type="memory_reviewed",
+                    project=project,
+                    agent="unknown",
+                    source="review_endpoint",
+                    payload={
+                        "memory_id": memory_id,
+                        "verdict": verdict,
+                        "editor": editor,
+                        "memory_ids": [memory_id],
+                        "session_id": None,
+                    },
+                )
+            )
+        except Exception:
+            event_recorded = False
+            logger.error(
+                f"memory_reviewed event write FAILED for {memory_id} (verdict={verdict}) "
+                "— the mutation stands but audit/projection missed this review",
+                exc_info=True,
+            )
+
+        if event_recorded:
+            try:
+                review_state.load(manager.memory_dir)
+            except Exception:
+                logger.error("review-state projection refresh failed", exc_info=True)
+
+        result = {"memory_id": memory_id, "verdict": verdict, "event_recorded": event_recorded}
+        if verdict == "kill":
+            result["deleted"] = True
+        return _ok(result)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error recording review: {e}")
         return _server_error(str(e))
 
 
@@ -1084,27 +1170,14 @@ async def api_agent_startup(request):
         project = _safe_project(query.get("project"))
         agent = query.get("agent")
         limit = _read_int(query, "limit", 12)
+        session_id = query.get("session_id") or None
 
         manager = _get_memory_manager()
-        payload = manager.get_agent_startup(project=project, agent=agent, limit=limit)
+        payload = manager.get_agent_startup(
+            project=project, agent=agent, limit=limit, session_id=session_id
+        )
 
-        try:
-            capsule = payload.get("project_capsule") or {}
-            ids = [
-                m["memory_id"]
-                for bucket in ("standing_context", "danger_zones", "open_loops")
-                for m in (capsule.get(bucket) or [])
-                if m.get("memory_id")
-            ]
-            manager.record_event(
-                event_type="memory_surfaced",
-                project=project or "general",
-                memory_ids=ids,
-                source="startup",
-            )
-        except Exception:
-            logger.debug("event emission skipped", exc_info=True)
-
+        # memory_surfaced emission lives in build_project_capsule (event contract v2)
         return JSONResponse(payload)
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -1119,25 +1192,11 @@ async def api_project_capsule(request):
     try:
         project = _safe_project(request.query_params.get("project")) or "general"
         limit = _read_int(request.query_params, "limit", 300, lo=1, hi=2000)
+        session_id = request.query_params.get("session_id") or None
         manager = _get_memory_manager()
-        result = manager.get_project_capsule(project=project, limit=limit)
+        result = manager.get_project_capsule(project=project, limit=limit, session_id=session_id)
 
-        try:
-            ids = [
-                m["memory_id"]
-                for bucket in ("standing_context", "danger_zones", "open_loops")
-                for m in (result.get(bucket) or [])
-                if m.get("memory_id")
-            ]
-            manager.record_event(
-                event_type="memory_surfaced",
-                project=project,
-                memory_ids=ids,
-                source="capsule",
-            )
-        except Exception:
-            logger.debug("event emission skipped", exc_info=True)
-
+        # memory_surfaced emission lives in build_project_capsule (event contract v2)
         return _ok(result)
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -1617,7 +1676,22 @@ async def api_observe(request):
         from memory.scope import ScopeDetector
 
         scope = ScopeDetector.detect(project=caller_project, cwd=caller_cwd)
-        memory_id = manager.save(content, type=mem_type, scope=scope)
+        # The observe endpoint's caller is the rekall-observe.sh Stop hook.
+        # Old hooks send no session_id/evidence_class -> null (version skew is
+        # safe both ways: an old server simply ignores the extra body keys).
+        # Unknown evidence_class values also null out — null is honest;
+        # null is NEVER coerced to "inferred" downstream.
+        evidence_class = body.get("evidence_class")
+        if evidence_class not in ("confirmed_artifact", "explicit_user", "inferred"):
+            evidence_class = None
+        memory_id = manager.save(
+            content,
+            type=mem_type,
+            scope=scope,
+            capture_origin="hook",
+            session_id=body.get("session_id") or None,
+            evidence_class=evidence_class,
+        )
 
         return JSONResponse(
             {
@@ -1634,6 +1708,46 @@ async def api_observe(request):
         return JSONResponse({"error": str(e)}, status_code=500)
 
 
+def build_app():
+    """Production ASGI app: MCP at root, custom routes, security middleware.
+
+    Used by main() AND imported by contract tests, so the middleware stack is
+    exercised exactly as deployed (SPEC U1 item 5 wiring decision).
+    """
+    # Serve MCP at root / for Claude Code, include custom routes
+    from contextlib import asynccontextmanager
+
+    from starlette.applications import Starlette
+    from starlette.middleware import Middleware
+    from starlette.routing import Route
+
+    from core.browser_guard import BrowserGuardMiddleware
+
+    original_app = mcp.streamable_http_app()
+    mcp_endpoint = original_app.routes[0].endpoint  # StreamableHTTPASGIApp
+    session_manager = mcp_endpoint.session_manager
+
+    # Get all custom routes (health, API endpoints)
+    custom_routes = [r for r in original_app.routes if r.path != "/mcp"]
+
+    @asynccontextmanager
+    async def lifespan(app):
+        # session_manager.run() is still needed for task group initialization,
+        # but stateless_http=True prevents "Session not found" errors on reconnect
+        async with session_manager.run():
+            yield
+
+    # Mount MCP at root, plus all custom routes. Optional bearer auth
+    # (no-op unless REKALL_API_TOKEN is set) guards everything but /health;
+    # the browser guard enforces origin/host rules on state-changing requests.
+    routes = [Route("/", endpoint=mcp_endpoint)] + custom_routes
+    return Starlette(
+        routes=routes,
+        lifespan=lifespan,
+        middleware=[Middleware(BearerAuthMiddleware), Middleware(BrowserGuardMiddleware)],
+    )
+
+
 def main() -> None:
     """Main entry point."""
     transport = os.getenv("MCP_TRANSPORT", "stdio")
@@ -1643,36 +1757,9 @@ def main() -> None:
     logger.info(f"Starting MCP server with {transport} transport")
 
     if transport == "streamable-http":
-        # Serve MCP at root / for Claude Code, include custom routes
-        from contextlib import asynccontextmanager
-
         import uvicorn
-        from starlette.applications import Starlette
-        from starlette.middleware import Middleware
-        from starlette.routing import Route
 
-        original_app = mcp.streamable_http_app()
-        mcp_endpoint = original_app.routes[0].endpoint  # StreamableHTTPASGIApp
-        session_manager = mcp_endpoint.session_manager
-
-        # Get all custom routes (health, API endpoints)
-        custom_routes = [r for r in original_app.routes if r.path != "/mcp"]
-
-        @asynccontextmanager
-        async def lifespan(app):
-            # session_manager.run() is still needed for task group initialization,
-            # but stateless_http=True prevents "Session not found" errors on reconnect
-            async with session_manager.run():
-                yield
-
-        # Mount MCP at root, plus all custom routes. Optional bearer auth
-        # (no-op unless REKALL_API_TOKEN is set) guards everything but /health.
-        routes = [Route("/", endpoint=mcp_endpoint)] + custom_routes
-        app = Starlette(
-            routes=routes,
-            lifespan=lifespan,
-            middleware=[Middleware(BearerAuthMiddleware)],
-        )
+        app = build_app()
         if os.getenv("REKALL_API_TOKEN"):
             logger.info("Bearer auth enabled (REKALL_API_TOKEN set) — /health stays open")
 

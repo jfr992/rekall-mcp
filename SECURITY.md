@@ -23,6 +23,22 @@ authentication. `REKALL_API_TOKEN` enables bearer auth on every route except
 Note that Qdrant (`:6333`) is also unauthenticated; exposing it has the same
 consequences as exposing the API itself.
 
+## Browser-originated requests
+
+Localhost is not a browser auth boundary: any web page can POST to
+`127.0.0.1` (CSRF), and DNS rebinding defeats same-origin assumptions. The
+server rejects state-changing requests (POST/PUT/DELETE/PATCH) carrying
+browser markers (`Origin` or `Sec-Fetch-Site`) unless they come from an
+allowlisted exact origin (`http://localhost:3333`, `http://127.0.0.1:3333`,
+extendable via the `REKALL_UI_ORIGINS` csv) with the `X-Rekall-UI` header and
+`application/json` (403 otherwise), and answers 421 to any request whose
+`Host` is outside the allowlist (loopback names, extendable via the
+`REKALL_ALLOWED_HOSTS` csv). Requests without browser markers — hooks' curl,
+the CLI, MCP clients — pass untouched, and a valid `REKALL_API_TOKEN` bearer
+takes precedence over origin rejection for non-loopback deployments. The
+cockpit sends the header from `ui/lib/api/client.ts`; an older cockpit
+against a newer server will 403 on mutations — upgrade both together.
+
 ## Reporting a vulnerability
 
 Report vulnerabilities privately via

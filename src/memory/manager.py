@@ -96,6 +96,27 @@ class Sanitizer:
         return content
 
 
+def _env_float(name: str, default: float) -> float:
+    try:
+        return float(os.getenv(name, default))
+    except ValueError:
+        logger.warning(f"Invalid {name}, using default {default}")
+        return default
+
+
+def _cosine(a: list[float], b: list[float]) -> float:
+    if len(a) != len(b):  # dimension mismatch = incomparable, not an error
+        return 0.0
+    dot = norm_a = norm_b = 0.0
+    for x, y in zip(a, b, strict=True):
+        dot += x * y
+        norm_a += x * x
+        norm_b += y * y
+    if norm_a == 0 or norm_b == 0:
+        return 0.0
+    return dot / ((norm_a**0.5) * (norm_b**0.5))
+
+
 def _is_project_shaped(project: str) -> bool:
     """True when a project name is safe to strip from a dense query.
 
@@ -304,10 +325,15 @@ class MemoryManager:
         source: str = "memory_manager",
         memory_ids: list[str] | None = None,
         payload: dict[str, Any] | None = None,
+        session_id: str | None = None,
     ) -> None:
         try:
             merged: dict[str, Any] = dict(payload or {})
             merged.setdefault("memory_ids", list(memory_ids or []))
+            if session_id is not None:
+                merged["session_id"] = session_id
+            else:
+                merged.setdefault("session_id", None)
             self.event_log.append(
                 MemoryEvent(
                     event_type=event_type,
@@ -330,6 +356,9 @@ class MemoryManager:
         type: str = "note",
         project: str | None = None,
         scope: MemoryScope | None = None,
+        capture_origin: str = "rest",
+        session_id: str | None = None,
+        evidence_class: str | None = None,
         **metadata: Any,
     ) -> str:
         """Save a memory.
@@ -338,6 +367,13 @@ class MemoryManager:
             content: What to remember (will be sanitized)
             type: Memory type (note, decision, learning, preference, session)
             project: Project name
+            capture_origin: Which call site initiated the save
+                (observe_judge | save_memory_tool | rest | cli | hook)
+            session_id: Claude Code session id for event attribution (events only,
+                never the memory record)
+            evidence_class: How grounded the save is
+                (confirmed_artifact | explicit_user | inferred). None when the
+                caller has no grounding signal — never coerced to "inferred".
             **metadata: Additional metadata
 
         Returns:
@@ -370,16 +406,28 @@ class MemoryManager:
             # Dense-representation version: 2 = encode(content). Migration skip-marker.
             payload["repr_version"] = 2
 
+            # Hoisted: dedupe, the loop guard, and the store write share one encode.
+            vector = self.embedder.encode(content)
+
             existing_memory_id = self._find_duplicate_memory_id(
                 content=content,
                 query_text=payload["embedding_text"],
                 project=project_name,
                 memory_type=type,
+                content_vector=vector,  # hoisted encode reused — never encode twice
             )
             if existing_memory_id:
                 self._reinforce_existing_memory(existing_memory_id)
                 logger.info(f"Duplicate memory reinforced: {existing_memory_id}")
                 return existing_memory_id
+
+            recalled_id = self._find_recently_recalled_duplicate(
+                project=project_name, vector=vector
+            )
+            if recalled_id:
+                self._reinforce_existing_memory(recalled_id)
+                logger.info(f"Loop guard: recalled memory reinforced, not re-saved: {recalled_id}")
+                return recalled_id
 
             date = datetime.now().strftime("%Y-%m-%d")
             timestamp = datetime.now().isoformat()
@@ -401,7 +449,6 @@ class MemoryManager:
             # boilerplate diluted query cosines by ~0.2); sparse BM25 keeps the
             # enriched embedding_text for lexical entity/project matching.
             embedding_text = payload["embedding_text"]
-            vector = self.embedder.encode(content)
             self.store.save(
                 id=memory_id,
                 vector=vector,
@@ -412,6 +459,7 @@ class MemoryManager:
             self.record_event(
                 event_type="memory_saved",
                 project=project_name,
+                session_id=session_id,
                 agent=str(payload.get("agent") or scope.agent or "unknown"),
                 source=str(
                     payload.get("source_tool")
@@ -424,6 +472,8 @@ class MemoryManager:
                     "tier": payload.get("tier"),
                     "cwd": payload.get("cwd"),
                     "repo_name": payload.get("repo_name"),
+                    "capture_origin": capture_origin,
+                    "evidence_class": evidence_class,
                 },
             )
 
@@ -508,15 +558,17 @@ class MemoryManager:
         query_text: str | None = None,
         project: str,
         memory_type: str,
+        content_vector: list[float] | None = None,
     ) -> str | None:
         """Return existing memory id for near-identical memories in same project/type.
 
         Raw content first: repr v2 stores encode(content), so that's the dense
         leg's match. embedding_text second: BM25 leg + pre-migration vectors.
+        content_vector: caller-provided encode(content), so it isn't re-encoded.
         """
-        search_texts = [content]
+        search_texts = [(content, content_vector)]
         if query_text and query_text != content:
-            search_texts.append(query_text)
+            search_texts.append((query_text, None))
 
         normalized = " ".join(content.split()).strip().lower()
 
@@ -527,10 +579,10 @@ class MemoryManager:
                     return match.get("memory_id")
             return None
 
-        for search_text in search_texts:
+        for search_text, vector in search_texts:
             try:
                 matches = self.store.search(
-                    vector=self.embedder.encode(search_text),
+                    vector=vector if vector is not None else self.embedder.encode(search_text),
                     limit=3,
                     filters={"project": project, "type": memory_type},
                     score_threshold=0.97,
@@ -544,6 +596,63 @@ class MemoryManager:
                 return duplicate_id
 
         return None
+
+    def _find_recently_recalled_duplicate(self, *, project: str, vector: list[float]) -> str | None:
+        """Feedback-loop guard (mem0 #4573): the id of a memory recalled or
+        surfaced for this project within REKALL_LOOP_GUARD_WINDOW hours whose
+        vector is within REKALL_LOOP_GUARD_COSINE of the candidate, else None.
+
+        The exact-string dedupe lets paraphrased re-saves of just-recalled
+        content through; this catches them so they reinforce instead.
+        """
+        threshold = _env_float("REKALL_LOOP_GUARD_COSINE", 0.9)
+        if threshold <= 0:  # 0 disables the guard
+            return None
+        window_hours = _env_float("REKALL_LOOP_GUARD_WINDOW", 12.0)
+        cutoff = datetime.now() - timedelta(hours=window_hours)
+
+        try:
+            events = self.event_log.tail(500)
+        except Exception:
+            logger.warning("Loop guard: event log tail failed, skipping", exc_info=True)
+            return None
+
+        candidate_ids: list[str] = []
+        seen: set[str] = set()
+        for event in events:
+            if event.event_type not in ("memory_recalled", "memory_surfaced"):
+                continue
+            if event.project != project:
+                continue
+            try:
+                if datetime.fromisoformat(event.observed_at) < cutoff:
+                    continue
+            except ValueError:
+                continue
+            for memory_id in event.payload.get("memory_ids") or []:
+                if memory_id and memory_id not in seen:
+                    seen.add(memory_id)
+                    candidate_ids.append(memory_id)
+        if not candidate_ids:
+            return None
+
+        try:
+            records = self.store.get_many(candidate_ids, with_vectors=True)
+        except Exception:
+            logger.warning("Loop guard: get_many failed, skipping", exc_info=True)
+            return None
+
+        best_id: str | None = None
+        best_cosine = threshold
+        for record in records:
+            other = record.get("_vector")
+            if not other:
+                continue
+            cosine = _cosine(vector, other)
+            if cosine >= best_cosine:
+                best_cosine = cosine
+                best_id = record.get("memory_id")
+        return best_id
 
     def _reinforce_existing_memory(self, memory_id: str) -> None:
         """Load, reinforce, reclassify, and persist the updated payload."""
@@ -750,6 +859,12 @@ class MemoryManager:
             vector=vector,
             payload=payload,
             content=payload["embedding_text"],
+        )
+        self.record_event(
+            event_type="memory_updated",
+            project=payload.get("project") or "general",
+            memory_ids=[memory_id],
+            payload={"memory_id": memory_id},
         )
         return payload
 
@@ -1173,6 +1288,28 @@ class MemoryManager:
                 mark_outdated(results, groups)
             except Exception:
                 logger.debug("freshness annotation skipped", exc_info=True)
+
+            try:
+                self.record_event(
+                    event_type="memory_recalled",
+                    project=project or "general",
+                    memory_ids=[m["memory_id"] for m in results if m.get("memory_id")],
+                    source="recall",
+                    payload={
+                        "query": query,
+                        "task_hint": task_hint,
+                        "memories": [
+                            {"memory_id": m.get("memory_id"), "score": m.get("score")}
+                            for m in results
+                        ],
+                        # chars/4 — honest heuristic, not a tokenizer
+                        "token_estimate": sum(len(m.get("content") or "") // 4 for m in results),
+                        "session_id": None,
+                        "capture_origin": None,
+                    },
+                )
+            except Exception:
+                logger.debug("event emission skipped", exc_info=True)
 
             return results
 
@@ -1706,14 +1843,19 @@ class MemoryManager:
         project: str | None = None,
         agent: str | None = None,
         limit: int = 12,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
         """Return a single startup payload for agent clients."""
-        return build_agent_startup(self, project=project, agent=agent, limit=limit)
+        return build_agent_startup(
+            self, project=project, agent=agent, limit=limit, session_id=session_id
+        )
 
-    def get_project_capsule(self, project: str, limit: int = 300) -> dict[str, Any]:
+    def get_project_capsule(
+        self, project: str, limit: int = 300, session_id: str | None = None
+    ) -> dict[str, Any]:
         from memory.capsules import build_project_capsule
 
-        return build_project_capsule(self, project=project, limit=limit)
+        return build_project_capsule(self, project=project, limit=limit, session_id=session_id)
 
     def doctor(self, project: str | None = None) -> dict[str, Any]:
         from memory.doctor import run_memory_doctor

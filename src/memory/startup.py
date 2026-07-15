@@ -29,12 +29,17 @@ SYSTEM_HINTS = {
 
 
 def build_agent_startup(
-    manager, *, project: str | None = None, agent: str | None = None, limit: int = 12
+    manager,
+    *,
+    project: str | None = None,
+    agent: str | None = None,
+    limit: int = 12,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     scope = ScopeDetector.detect(project=project, agent=agent)
     packet = manager.get_resume_packet(project=scope.project, scope=scope, limit=limit)
     try:
-        capsule = manager.get_project_capsule(scope.project, limit=300)
+        capsule = manager.get_project_capsule(scope.project, limit=300, session_id=session_id)
     except Exception:
         capsule = {}
     doctor: dict[str, Any] = {}

@@ -20,9 +20,23 @@ PROJECT_DIR="$(
 PROJECT="${CLAUDE_PROJECT_NAME:-$(basename "${PROJECT_DIR:-$(pwd)}")}"
 PROJECT_ENCODED="$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$PROJECT")"
 
-CAPSULE="$(curl -fsS --max-time 2 "$MEMORY_API/api/memory/capsule?project=$PROJECT_ENCODED" 2>/dev/null || true)"
+# session_id from the SessionStart payload -> ?session_id= on both GETs so
+# memory_surfaced events attribute the injected capsule to this session.
+# Absent -> no param (old server ignores it; new server nulls it).
+SESSION_ID="$(
+  printf '%s' "$INPUT" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("session_id") or "")' \
+      2>/dev/null \
+    || true
+)"
+SESSION_PARAM=""
+if [[ -n "$SESSION_ID" ]]; then
+  SESSION_PARAM="&session_id=$(python3 -c 'import sys,urllib.parse; print(urllib.parse.quote(sys.argv[1]))' "$SESSION_ID")"
+fi
+
+CAPSULE="$(curl -fsS --max-time 2 "$MEMORY_API/api/memory/capsule?project=$PROJECT_ENCODED$SESSION_PARAM" 2>/dev/null || true)"
 if [[ -z "$CAPSULE" ]]; then
-  CAPSULE="$(curl -fsS --max-time 2 "$MEMORY_API/api/memory/context/startup?project=$PROJECT_ENCODED&agent=claude-code&limit=8" 2>/dev/null || true)"
+  CAPSULE="$(curl -fsS --max-time 2 "$MEMORY_API/api/memory/context/startup?project=$PROJECT_ENCODED&agent=claude-code&limit=8$SESSION_PARAM" 2>/dev/null || true)"
 fi
 [[ -z "$CAPSULE" ]] && exit 0
 

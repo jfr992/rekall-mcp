@@ -11,8 +11,14 @@ API="${REKALL_API_URL:-http://localhost:8000}"
 [[ "${REKALL_AUTOSAVE:-1}" == "0" ]] && exit 0
 
 # Session marker — skip if we already restored in this session.
-# Uses $CLAUDE_SESSION_ID if available, falls back to PID-based marker.
-SESSION_ID="${CLAUDE_SESSION_ID:-$$}"
+# The name must come from the stdin payload's session_id: the observe hook
+# looks the marker up by payload session_id, and $CLAUDE_SESSION_ID is
+# usually absent — env-named markers never match and session_summary
+# silently never fires. Env var, then PID, only as fallbacks.
+payload=""
+[[ -t 0 ]] || payload="$(cat 2>/dev/null || true)"
+SESSION_ID="$(jq -r '.session_id // ""' <<<"$payload" 2>/dev/null || true)"
+[[ -z "$SESSION_ID" ]] && SESSION_ID="${CLAUDE_SESSION_ID:-$$}"
 MARKER="${REKALL_MARKER_DIR:-/tmp}/rekall-restored-${SESSION_ID}"
 
 if [[ -f "$MARKER" ]]; then
