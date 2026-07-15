@@ -236,6 +236,51 @@ def test_get_sessions_list_shape_limit_and_window(monkeypatch, tmp_path):
     assert row["totals"] == {"recalls": 0, "injected": 0, "tokens": 0}
 
 
+def test_get_sessions_project_filter_returns_scoped_plus_unattributed(monkeypatch, tmp_path):
+    """?project= filters AFTER folding (join needs all events) — the selected
+    project's sessions plus its honest unattributed bucket, nothing else."""
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    log = manager.event_log
+    log.append(_summary("s1", "proj-a", ["m1"], "2026-07-14T09:10:00"))
+    log.append(_summary("s2", "proj-b", ["m2"], "2026-07-14T09:20:00"))
+    # no id intersection with s1's summary → unattributed:proj-a
+    log.append(_recalled("proj-a", ["m9"], "2026-07-14T09:30:00", query="lost"))
+
+    r = tc.get("/api/memory/sessions", params={"project": "proj-a"})
+
+    assert r.status_code == 200
+    body = r.json()
+    ids = {s["session_id"] for s in body["sessions"]}
+    assert ids == {"s1", "unattributed:proj-a"}
+    assert all(s["project"] == "proj-a" for s in body["sessions"])
+
+
+def test_get_sessions_limit_applies_after_project_filter(monkeypatch, tmp_path):
+    """Newer sessions from other projects must not starve the scoped list."""
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    log = manager.event_log
+    log.append(_summary("s1", "proj-a", ["m1"], "2026-07-14T09:10:00"))
+    log.append(_summary("s2", "proj-b", ["m2"], "2026-07-14T09:20:00"))  # newest
+
+    r = tc.get("/api/memory/sessions", params={"project": "proj-a", "limit": 1})
+
+    assert r.status_code == 200
+    assert [s["session_id"] for s in r.json()["sessions"]] == ["s1"]
+
+
+def test_get_sessions_project_all_returns_every_project(monkeypatch, tmp_path):
+    """?project=all is the explicit 'all memories' scope — no filtering."""
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    log = manager.event_log
+    log.append(_summary("s1", "proj-a", ["m1"], "2026-07-14T09:10:00"))
+    log.append(_summary("s2", "proj-b", ["m2"], "2026-07-14T09:20:00"))
+
+    r = tc.get("/api/memory/sessions", params={"project": "all"})
+
+    assert r.status_code == 200
+    assert {s["session_id"] for s in r.json()["sessions"]} == {"s1", "s2"}
+
+
 def test_get_session_detail_returns_full_object(monkeypatch, tmp_path):
     tc, manager = _rest_client(monkeypatch, tmp_path)
     log = manager.event_log
