@@ -441,6 +441,9 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/publish/status` | GET | Poll a synthesis job's progress |
 | `/api/memory/events` | GET, POST | GET: cursor-paginated event feed (`cursor=&limit=`, truncation-safe); POST: append a client-side session-summary event |
 | `/api/memory/review` | POST | Record a review verdict (`keep\|fix\|kill`; kill deletes then records, fix is 501 until U3) |
+| `/api/memory/sessions` | GET | Session transparency list folded from events (`?limit=`; `window` = event-tail cap; emits a `view_opened` counter) |
+| `/api/memory/sessions/{id}` | GET | Full session detail: injected memories + recall cards with scores; unattributed recalls under `unattributed:<project>` |
+| `/api/memory/feedback` | POST | One-click recall feedback (`useful\|wrong\|stale`) → `memory_feedback` event; labeled evidence only, never read into ranking |
 
 </details>
 

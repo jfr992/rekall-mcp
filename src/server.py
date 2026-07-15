@@ -693,6 +693,109 @@ async def api_memory_review(request):
         return _server_error(str(e))
 
 
+# Bounded event tail folded into sessions — 5k events covers weeks at current
+# volumes; the cap is surfaced as `window` so the UI can say what it can't see.
+_SESSIONS_EVENT_WINDOW = 5000
+
+
+def _folded_sessions(limit: int = 50):
+    from memory.sessions import fold_sessions
+
+    manager = _get_memory_manager()
+    events, _cursor, _truncated = manager.event_log.read_from(None, limit=_SESSIONS_EVENT_WINDOW)
+    return fold_sessions(events, limit=limit)
+
+
+@mcp.custom_route("/api/memory/sessions", methods=["GET"])
+async def api_list_sessions(request):
+    """REST API: Session transparency list — U1 events folded into sessions."""
+    try:
+        limit = _read_int(request.query_params, "limit", 50, lo=1, hi=500)
+        sessions = _folded_sessions(limit=limit)
+        # U2 phase metric: server-side hit counter for the transparency view.
+        _get_memory_manager().record_event(
+            event_type="view_opened",
+            project="general",
+            source="sessions_view",
+            payload={"view": "sessions"},
+        )
+        rows = [
+            {key: s[key] for key in ("session_id", "project", "started_at", "last_at", "totals")}
+            for s in sessions
+        ]
+        return _ok({"sessions": rows, "window": _SESSIONS_EVENT_WINDOW})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error listing sessions: {e}")
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/memory/sessions/{session_id}", methods=["GET"])
+async def api_session_detail(request):
+    """REST API: Full session object — injected memories + recall cards."""
+    from starlette.responses import JSONResponse
+
+    try:
+        session_id = request.path_params["session_id"]
+        # Detail lookup must not be blinded by the list limit.
+        match = next(
+            (
+                s
+                for s in _folded_sessions(limit=_SESSIONS_EVENT_WINDOW)
+                if s["session_id"] == session_id
+            ),
+            None,
+        )
+        if match is None:
+            return JSONResponse({"error": "not found", "session_id": session_id}, status_code=404)
+        return _ok({**match, "window": _SESSIONS_EVENT_WINDOW})
+    except Exception as e:
+        logger.error(f"Error fetching session detail: {e}")
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/memory/feedback", methods=["POST"])
+async def api_memory_feedback(request):
+    """REST API: one-click recall feedback (useful|wrong|stale).
+
+    Labeled evidence only — nothing reads memory_feedback into ranking
+    (weights frozen until the 500-pair gate; grep-pinned in tests).
+    """
+    from starlette.responses import JSONResponse
+
+    try:
+        body = await request.json()
+        memory_id = body.get("memory_id")
+        verdict = body.get("verdict")
+        session_id = body.get("session_id")
+
+        if not memory_id or not isinstance(memory_id, str):
+            return _bad_request("memory_id is required")
+        if verdict not in ("useful", "wrong", "stale"):
+            return _bad_request("verdict must be one of ['stale', 'useful', 'wrong']")
+
+        manager = _get_memory_manager()
+        found = manager.store.get_many([memory_id])
+        if not found:
+            return JSONResponse({"error": "not found", "memory_id": memory_id}, status_code=404)
+
+        manager.record_event(
+            event_type="memory_feedback",
+            project=found[0].get("project") or "general",
+            memory_ids=[memory_id],
+            source="feedback_endpoint",
+            session_id=session_id,
+            payload={"verdict": verdict, "editor": "ui"},
+        )
+        return _ok({"recorded": True})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error recording feedback: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/context", methods=["GET"])
 async def api_get_context(request):
     """REST API: Get cached context for a project."""
