@@ -42,6 +42,38 @@ def test_kb_returns_four_slices(client):
         assert isinstance(body[slice_name], list)
 
 
+def test_kb_slices_sort_newest_first(client):
+    from memory.singleton import get_memory_manager
+
+    manager = get_memory_manager()
+    dim = manager.store.embedding_dim
+    seeded = {
+        "decision": ["2026-03-05", "2026-07-01", "2025-12-31"],
+        "learning": ["2026-01-15", "2026-06-20"],
+    }
+    for mem_type, dates in seeded.items():
+        for i, date in enumerate(dates):
+            memory_id = f"{date}_{mem_type}_sort{i}"
+            manager.store.save(
+                id=memory_id,
+                vector=[float(i + 1) / 10.0] * dim,
+                payload={
+                    "memory_id": memory_id,
+                    "content": f"{mem_type} seeded {date}",
+                    "type": mem_type,
+                    "project": "kb-sort-test",
+                    "date": date,
+                    "tier": "episodic",
+                },
+            )
+
+    response = client.get("/api/memory/kb?project=kb-sort-test")
+    assert response.status_code == 200
+    body = response.json()
+    assert [d["date"] for d in body["decisions"]] == ["2026-07-01", "2026-03-05", "2025-12-31"]
+    assert [d["date"] for d in body["learnings"]] == ["2026-06-20", "2026-01-15"]
+
+
 # ---------- Task 18: GET /api/memory/pressure ----------
 
 
