@@ -711,7 +711,13 @@ async def api_list_sessions(request):
     """REST API: Session transparency list — U1 events folded into sessions."""
     try:
         limit = _read_int(request.query_params, "limit", 50, lo=1, hi=500)
-        sessions = _folded_sessions(limit=limit)
+        project = request.query_params.get("project")
+        # Fold the full window, filter, then limit — the recall join needs all
+        # events, and a pre-filter limit would starve the scoped list.
+        sessions = _folded_sessions(limit=_SESSIONS_EVENT_WINDOW)
+        if project and project != "all":
+            sessions = [s for s in sessions if s["project"] == project]
+        sessions = sessions[:limit]
         # U2 phase metric: server-side hit counter for the transparency view.
         _get_memory_manager().record_event(
             event_type="view_opened",

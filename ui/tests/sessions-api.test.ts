@@ -15,14 +15,28 @@ describe("sessions api", () => {
       .mockResolvedValue(new Response(JSON.stringify(sessionsFixture)));
     vi.stubGlobal("fetch", fetchMock);
 
-    const res = await getSessions(50);
+    const res = await getSessions("", 50);
 
     expect(fetchMock).toHaveBeenCalledWith(
       "/api/memory/sessions?limit=50",
       expect.anything()
     );
-    expect(res.sessions).toHaveLength(2);
+    expect(res.sessions).toHaveLength(3);
     expect(res.window).toBe(5000);
+  });
+
+  test("getSessions passes the selected scope as ?project=", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(sessionsFixture)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getSessions("byte-edge", 50);
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/memory/sessions?limit=50&project=byte-edge",
+      expect.anything()
+    );
   });
 
   test("getSessionDetail hits the id route and parses recalls", async () => {

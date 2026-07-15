@@ -9,9 +9,11 @@ import { SessionDetail } from "@/components/sessions/session-detail";
 import { MemoryInspector } from "@/components/memory-inspector/memory-inspector";
 import { useSessions, useSessionDetail } from "@/lib/queries/use-sessions";
 import { useMemoryDetail } from "@/lib/queries/use-memory-detail";
+import { useProjectStore } from "@/lib/project-store";
 
 export default function SessionsPage() {
-  const { data, isLoading, isError } = useSessions();
+  const project = useProjectStore((s) => s.project);
+  const { data, isLoading, isError } = useSessions(project);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedMemoryId, setSelectedMemoryId] = useState<string | null>(null);
   const detail = useSessionDetail(selectedId);

@@ -6,8 +6,9 @@ import {
   type SessionDetail,
 } from "@/lib/schemas";
 
-export function getSessions(limit = 50): Promise<SessionsResponse> {
+export function getSessions(project: string, limit = 50): Promise<SessionsResponse> {
   const qs = new URLSearchParams({ limit: String(limit) });
+  if (project) qs.set("project", project);
   return fetchJson(`/api/memory/sessions?${qs}`, undefined, (d) =>
     SessionsResponseSchema.parse(d)
   );
