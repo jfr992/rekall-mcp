@@ -8,6 +8,13 @@
       "totals": { "recalls": 2, "injected": 3, "tokens": 1450 }
     },
     {
+      "session_id": "sess-be-777",
+      "project": "byte-edge",
+      "started_at": "2026-07-12T10:00:00+00:00",
+      "last_at": "2026-07-12T10:30:00+00:00",
+      "totals": { "recalls": 1, "injected": 2, "tokens": 300 }
+    },
+    {
       "session_id": "unattributed:rekall-mcp",
       "project": "rekall-mcp",
       "started_at": "2026-07-13T14:00:00+00:00",
