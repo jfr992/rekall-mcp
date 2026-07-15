@@ -25,6 +25,15 @@
 - **The image embeds fastembed, not sentence-transformers.** Compose's
   `EMBEDDING_PROVIDER` default changed accordingly. Vectors are identical
   (fp32 ONNX export of the same model) — no reindex needed.
+- **`/health` gained an `embedder` field** (`"ok"` or `{"error": "<class>: <msg>"}`)
+  and reports `"status": "degraded"` when the configured embedding provider
+  can't encode (#57 — a stale `EMBEDDING_PROVIDER` previously failed silently:
+  0 memories, empty recall, green health). The probe is cached (60 s TTL) and
+  bounded (5 s); a first-run model load/download surfaces as a distinct
+  `timeout:` error until the model is ready. The container entrypoint also
+  fails fast (`FATAL: EMBEDDING_PROVIDER=...`) when the provider package
+  isn't installed. If you script against `/health`, keep treating `degraded`
+  as up-but-unhealthy.
 
 ---
 
