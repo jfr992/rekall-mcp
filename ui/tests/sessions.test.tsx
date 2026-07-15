@@ -165,6 +165,24 @@ describe("Sessions surface", () => {
     expect(screen.getAllByText("—")).toHaveLength(3);
   });
 
+  test("legacy null-query recalls render a subdued caption instead of (no query)", async () => {
+    const user = userEvent.setup();
+    renderSessions();
+    await user.click(await screen.findByText(/sess-abc123/));
+    await screen.findByText(/vector corruption tripwire/i);
+
+    expect(
+      screen.getByText(/legacy event \(recorded before v1\.12 — no query\/score data\)/i)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/\(no query\)/)).not.toBeInTheDocument();
+    // The meaningless 0-token / 0.00-score labels stay hidden for legacy rows.
+    expect(screen.queryByText(/^0 tok$/)).not.toBeInTheDocument();
+    expect(screen.queryByText("0.00")).not.toBeInTheDocument();
+    // Normal recalls keep their query + token header.
+    expect(screen.getByText(/freshness-aware recall gate/i)).toBeInTheDocument();
+    expect(screen.getByText(/640 tok/i)).toBeInTheDocument();
+  });
+
   test("clicking a memory id expands it in the inspector", async () => {
     vi.mocked(detailApi.getMemoryDetail).mockResolvedValue(
       detailV2Fixture as Awaited<ReturnType<typeof detailApi.getMemoryDetail>>
