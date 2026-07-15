@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Brain, BookOpen, Clock, Sparkles } from "lucide-react";
+import { Brain, BookOpen, Clock, History, Sparkles } from "lucide-react";
 
 const navItems = [
   { href: "/brain", label: "Brain", icon: Brain },
   { href: "/kb", label: "Knowledge", icon: BookOpen },
   { href: "/continuity", label: "Continuity", icon: Clock },
+  { href: "/sessions", label: "Sessions", icon: History },
   { href: "/hygiene", label: "Hygiene", icon: Sparkles },
 ] as const;
 

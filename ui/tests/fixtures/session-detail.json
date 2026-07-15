@@ -1,0 +1,30 @@
+{
+  "session_id": "sess-abc123",
+  "project": "rekall-mcp",
+  "started_at": "2026-07-14T09:00:00+00:00",
+  "last_at": "2026-07-14T09:45:00+00:00",
+  "injected": [
+    { "memory_id": "2026-07-10_decision_a1b2c3", "token_estimate": null },
+    { "memory_id": "2026-07-08_learning_d4e5f6", "token_estimate": null },
+    { "memory_id": "2026-07-01_fact_g7h8i9", "token_estimate": null }
+  ],
+  "recalls": [
+    {
+      "query": "vector corruption tripwire",
+      "memories": [
+        { "memory_id": "2026-07-10_decision_a1b2c3", "score": 0.91 },
+        { "memory_id": "2026-07-08_learning_d4e5f6", "score": 0.84 }
+      ],
+      "token_estimate": 640,
+      "observed_at": "2026-07-14T09:10:00+00:00"
+    },
+    {
+      "query": "freshness-aware recall gate",
+      "memories": [{ "memory_id": "2026-07-01_fact_g7h8i9", "score": 0.77 }],
+      "token_estimate": 810,
+      "observed_at": "2026-07-14T09:30:00+00:00"
+    }
+  ],
+  "totals": { "recalls": 2, "injected": 3, "tokens": 1450 },
+  "window": 5000
+}
