@@ -130,6 +130,24 @@ def build_surfaced_counts(events: list[dict]) -> dict[str, int]:
     return dict(counts)
 
 
+_FEEDBACK_VERDICTS = ("useful", "wrong", "stale")
+
+
+def build_feedback_tallies(events: list[dict]) -> dict[str, dict[str, int]]:
+    """Per-memory verdict counts from memory_feedback events (labeled evidence)."""
+    tallies: dict[str, dict[str, int]] = {}
+    for e in events:
+        if e.get("event_type") != "memory_feedback":
+            continue
+        payload = e.get("payload", {})
+        verdict = payload.get("verdict")
+        if verdict not in _FEEDBACK_VERDICTS:
+            continue
+        for mid in payload.get("memory_ids", []):
+            tallies.setdefault(mid, dict.fromkeys(_FEEDBACK_VERDICTS, 0))[verdict] += 1
+    return tallies
+
+
 def build_universe(events: list[dict]) -> list[str]:
     """Sorted unique memory_ids from all events (for null baseline sampling)."""
     universe: set[str] = set()
@@ -195,18 +213,30 @@ def print_report(
     surfaced_counts: dict[str, int],
     null_utilities: list[float],
     progress: str,
+    feedback_tallies: dict[str, dict[str, int]] | None = None,
 ) -> None:
     """Print the full report to stdout."""
     print(f"Exit criterion: {progress}")
     print()
 
-    print("Recall Utility (denominator: distinct sessions with recall)")
+    # The two evidence classes never mix: the heuristic infers utility from
+    # co-occurrence; feedback verdicts are explicit human labels (U2).
+    print("Recall Utility — heuristic co-occurrence (denominator: distinct sessions with recall)")
     if utility_map:
         print(f"  {'memory_id':<45} {'utility':>7}")
         for mid, u in sorted(utility_map.items(), key=lambda kv: -kv[1]):
             print(f"  {mid:<45} {u:>7.3f}")
     else:
         print("  (no session_summary data)")
+    print()
+
+    print("Labeled evidence — memory_feedback verdicts")
+    if feedback_tallies:
+        print(f"  {'memory_id':<45} {'useful':>6} {'wrong':>6} {'stale':>6}")
+        for mid, t in sorted(feedback_tallies.items()):
+            print(f"  {mid:<45} {t['useful']:>6} {t['wrong']:>6} {t['stale']:>6}")
+    else:
+        print("  (no feedback events)")
     print()
 
     real_vals = list(utility_map.values())
@@ -267,8 +297,9 @@ def main(argv=None) -> None:
     utility_map = compute_utility_map(summaries)
     null_utilities = compute_null_baseline(summaries, universe, random.Random(42))
     progress = progress_line(summaries)
+    feedback_tallies = build_feedback_tallies(events)
 
-    print_report(utility_map, surfaced_counts, null_utilities, progress)
+    print_report(utility_map, surfaced_counts, null_utilities, progress, feedback_tallies)
 
 
 if __name__ == "__main__":
