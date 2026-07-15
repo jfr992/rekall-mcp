@@ -62,12 +62,18 @@ def _join_target(
     memory_ids intersection is the discriminator — project+time alone would
     cross-attribute concurrent sessions. Ties resolve to the session whose
     summary fired soonest after the recall (smallest window end).
+
+    Unscoped recalls are stamped project='general' by manager.recall while
+    summaries carry the real project — 'general' passes the project check
+    (the intersection stays the required strong condition). A mismatched
+    project on a SCOPED recall is a real signal and still blocks the join.
     """
     recall_ids = set((event.payload or {}).get("memory_ids") or [])
+    unscoped = event.project in (None, "general")
     candidates = [
         sid
         for sid, end in window_end.items()
-        if sessions[sid]["project"] == event.project
+        if (unscoped or sessions[sid]["project"] == event.project)
         and event.observed_at <= end
         and recall_ids & summary_ids.get(sid, set())
     ]
