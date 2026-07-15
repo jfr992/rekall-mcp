@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 import re
 from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 _DANGER_PATTERNS = tuple(
     re.compile(p)
@@ -62,7 +65,9 @@ def _item(point: dict[str, Any], importance: float) -> dict[str, Any]:
     }
 
 
-def build_project_capsule(manager, project: str, limit: int = 300) -> dict[str, Any]:
+def build_project_capsule(
+    manager, project: str, limit: int = 300, session_id: str | None = None
+) -> dict[str, Any]:
     scan_limit = max(limit, 2000)
     points = manager.store.scroll(filters={"project": project}, limit=scan_limit)
     enriched: list[tuple[dict[str, Any], float]] = []
@@ -103,13 +108,38 @@ def build_project_capsule(manager, project: str, limit: int = 300) -> dict[str, 
         elif memory_type in _STANDING_TYPES:
             standing_context.append(row)
 
-    return {
+    capsule = {
         "project": project,
         "entities": [entity for entity, _count in entity_counts.most_common(16)],
         "standing_context": standing_context[: _SECTION_LIMITS["standing_context"]],
         "danger_zones": danger_zones[: _SECTION_LIMITS["danger_zones"]],
         "open_loops": open_loops[: _SECTION_LIMITS["open_loops"]],
     }
+
+    # memory_surfaced emission lives here so every consumer (capsule GET,
+    # agent startup) rides on it — event contract v2.
+    try:
+        surfaced = [
+            item
+            for key in ("standing_context", "danger_zones", "open_loops")
+            for item in capsule[key]
+        ]
+        manager.record_event(
+            event_type="memory_surfaced",
+            project=project,
+            memory_ids=[item["memory_id"] for item in surfaced if item.get("memory_id")],
+            source="capsule",
+            session_id=session_id,
+            payload={
+                "memory_ids": [item["memory_id"] for item in surfaced if item.get("memory_id")],
+                # chars/4 — honest heuristic, not a tokenizer
+                "token_estimate": sum(len(item.get("content") or "") // 4 for item in surfaced),
+            },
+        )
+    except Exception:
+        logger.debug("event emission skipped", exc_info=True)
+
+    return capsule
 
 
 def render_project_capsule(capsule: dict[str, Any]) -> str:

@@ -285,3 +285,51 @@ def test_plan_to_dict_is_json_serializable():
     assert d["plan_id"] == plan.plan_id
     assert d["project"] == "test"
     assert isinstance(d["candidates"], list)
+
+
+def test_apply_emits_one_memory_pruned_event_with_ids():
+    mgr = _fake_manager(
+        [
+            {
+                "memory_id": f"w{i}",
+                "tier": "working",
+                "type": "note",
+                "salience": 0.1,
+                "date": _old_date(),
+                "reinforcement_count": 0,
+            }
+            for i in range(3)
+        ]
+    )
+    plan = build_plan(mgr, project="test")
+
+    result = apply_plan(mgr, plan_id=plan.plan_id, confirm_plan_id=plan.plan_id)
+
+    mgr.record_event.assert_called_once()
+    kwargs = mgr.record_event.call_args.kwargs
+    assert kwargs["event_type"] == "memory_pruned"
+    assert kwargs["project"] == "test"
+    assert kwargs["source"] == "prune_apply"
+    assert kwargs["memory_ids"] == result["deleted"] == ["w0", "w1", "w2"]
+    assert kwargs["payload"]["plan_id"] == plan.plan_id
+
+
+def test_apply_with_nothing_deleted_emits_no_event():
+    mgr = _fake_manager(
+        [
+            {
+                "memory_id": "w0",
+                "tier": "working",
+                "type": "note",
+                "salience": 0.1,
+                "date": _old_date(),
+                "reinforcement_count": 0,
+            }
+        ]
+    )
+    mgr.delete.return_value = False
+    plan = build_plan(mgr, project="test")
+
+    apply_plan(mgr, plan_id=plan.plan_id, confirm_plan_id=plan.plan_id)
+
+    mgr.record_event.assert_not_called()
