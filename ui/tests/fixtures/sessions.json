@@ -1,0 +1,19 @@
+{
+  "sessions": [
+    {
+      "session_id": "sess-abc123",
+      "project": "rekall-mcp",
+      "started_at": "2026-07-14T09:00:00+00:00",
+      "last_at": "2026-07-14T09:45:00+00:00",
+      "totals": { "recalls": 2, "injected": 3, "tokens": 1450 }
+    },
+    {
+      "session_id": "unattributed:rekall-mcp",
+      "project": "rekall-mcp",
+      "started_at": "2026-07-13T14:00:00+00:00",
+      "last_at": "2026-07-13T14:05:00+00:00",
+      "totals": { "recalls": 1, "injected": 0, "tokens": 120 }
+    }
+  ],
+  "window": 5000
+}

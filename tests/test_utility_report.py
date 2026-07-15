@@ -395,6 +395,129 @@ def test_utility_uses_collapsed_outcomes():
     assert abs(utility["mem-y"] - 1.0) < 0.001
 
 
+def _fb(memory_id, verdict, project="proj-a", eid="ev-f", session_id=None):
+    return json.dumps(
+        {
+            "agent": "unknown",
+            "event_id": eid,
+            "event_type": "memory_feedback",
+            "observed_at": "2026-07-14T10:00:00",
+            "payload": {
+                "verdict": verdict,
+                "editor": "ui",
+                "memory_ids": [memory_id],
+                "session_id": session_id,
+            },
+            "project": project,
+            "source": "feedback_endpoint",
+        }
+    )
+
+
+def test_build_feedback_tallies_counts_verdicts_per_memory(tmp_path):
+    """memory_feedback events tally into per-memory useful/wrong/stale counts."""
+    from scripts.utility_report import build_feedback_tallies, parse_events
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(
+        "\n".join(
+            [
+                _fb("mem-x", "useful", eid="f1"),
+                _fb("mem-x", "useful", eid="f2"),
+                _fb("mem-x", "stale", eid="f3"),
+                _fb("mem-y", "wrong", eid="f4"),
+            ]
+        )
+        + "\n"
+    )
+
+    tallies = build_feedback_tallies(parse_events(f))
+
+    assert tallies["mem-x"] == {"useful": 2, "wrong": 0, "stale": 1}
+    assert tallies["mem-y"] == {"useful": 0, "wrong": 1, "stale": 0}
+
+
+def test_main_labeled_evidence_section_separate_from_heuristic(tmp_path, capsys):
+    """Feedback tallies print under 'labeled evidence', apart from the
+    co-occurrence heuristic section — the two evidence classes never mix."""
+    from scripts.utility_report import main
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(
+        "\n".join(
+            [
+                _ss("sess-1", "proj-a", ["mem-x"], edits=1, eid="e1"),
+                _fb("mem-x", "useful", eid="f1"),
+                _fb("mem-x", "wrong", eid="f2"),
+                _fb("mem-z", "stale", eid="f3"),  # feedback-only memory
+            ]
+        )
+        + "\n"
+    )
+
+    main(["--events-file", str(f)])
+
+    out = capsys.readouterr().out
+    lower = out.lower()
+    assert "labeled evidence" in lower
+    assert "heuristic co-occurrence" in lower
+    # labeled section renders per-memory verdict counts, incl. feedback-only ids
+    labeled = lower.split("labeled evidence")[1]
+    assert "mem-z" in labeled
+    assert "useful" in labeled and "wrong" in labeled and "stale" in labeled
+    # the heuristic section comes first and does not contain the labeled tallies
+    heuristic = lower.split("labeled evidence")[0]
+    assert "mem-z" not in heuristic
+
+
+def test_feedback_events_leave_exit_criterion_line_unchanged(tmp_path, capsys):
+    """Feedback is labeled evidence — it must not count toward the 500-pair gate."""
+    from scripts.utility_report import main
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(
+        "\n".join(
+            [
+                _ss("sess-1", "proj-a", ["mem-x"], edits=1, eid="e1"),
+                _fb("mem-x", "useful", eid="f1"),
+                _fb("mem-x", "wrong", eid="f2"),
+            ]
+        )
+        + "\n"
+    )
+
+    main(["--events-file", str(f)])
+
+    out = capsys.readouterr().out
+    assert "pairs=1" in out
+    assert "sessions=1" in out
+    assert "need 500/20/3" in out
+
+
+def test_default_events_path_resolves_from_memory_storage_path(tmp_path, capsys, monkeypatch):
+    """No --events-file → the report reads <MEMORY_STORAGE_PATH>/_events.jsonl,
+    same resolution as the manager. A hardcoded ~/.claude/memory default read
+    PROD events in the live smoke."""
+    from scripts.utility_report import main
+
+    storage = tmp_path / "relocated-store"
+    storage.mkdir()
+    monkeypatch.setenv("MEMORY_STORAGE_PATH", str(storage))
+    (storage / "_events.jsonl").write_text(
+        _ss("sess-1", "proj-a", ["mem-x"], edits=1, eid="e1")
+        + "\n"
+        + _fb("mem-x", "useful", eid="f1")
+        + "\n"
+    )
+
+    main([])
+
+    out = capsys.readouterr().out
+    assert "labeled evidence" in out.lower()
+    labeled = out.lower().split("labeled evidence")[1]
+    assert "mem-x" in labeled
+
+
 def test_main_pairs_collapsed_in_output(tmp_path, capsys):
     """End-to-end: repeated Stop fires → stdout shows pairs=3, not pairs=4."""
     from scripts.utility_report import main

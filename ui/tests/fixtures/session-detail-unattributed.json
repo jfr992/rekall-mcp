@@ -1,0 +1,17 @@
+{
+  "session_id": "unattributed:rekall-mcp",
+  "project": "rekall-mcp",
+  "started_at": "2026-07-13T14:00:00+00:00",
+  "last_at": "2026-07-13T14:05:00+00:00",
+  "injected": [],
+  "recalls": [
+    {
+      "query": "orphan recall",
+      "memories": [{ "memory_id": "2026-06-20_note_j1k2l3", "score": 0.66 }],
+      "token_estimate": 120,
+      "observed_at": "2026-07-13T14:05:00+00:00"
+    }
+  ],
+  "totals": { "recalls": 1, "injected": 0, "tokens": 120 },
+  "window": 5000
+}
