@@ -494,6 +494,30 @@ def test_feedback_events_leave_exit_criterion_line_unchanged(tmp_path, capsys):
     assert "need 500/20/3" in out
 
 
+def test_default_events_path_resolves_from_memory_storage_path(tmp_path, capsys, monkeypatch):
+    """No --events-file → the report reads <MEMORY_STORAGE_PATH>/_events.jsonl,
+    same resolution as the manager. A hardcoded ~/.claude/memory default read
+    PROD events in the live smoke."""
+    from scripts.utility_report import main
+
+    storage = tmp_path / "relocated-store"
+    storage.mkdir()
+    monkeypatch.setenv("MEMORY_STORAGE_PATH", str(storage))
+    (storage / "_events.jsonl").write_text(
+        _ss("sess-1", "proj-a", ["mem-x"], edits=1, eid="e1")
+        + "\n"
+        + _fb("mem-x", "useful", eid="f1")
+        + "\n"
+    )
+
+    main([])
+
+    out = capsys.readouterr().out
+    assert "labeled evidence" in out.lower()
+    labeled = out.lower().split("labeled evidence")[1]
+    assert "mem-x" in labeled
+
+
 def test_main_pairs_collapsed_in_output(tmp_path, capsys):
     """End-to-end: repeated Stop fires → stdout shows pairs=3, not pairs=4."""
     from scripts.utility_report import main

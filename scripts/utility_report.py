@@ -9,16 +9,25 @@ Usage:
     python scripts/utility_report.py [--events-file PATH]
 
     --events-file  Path to the JSONL event log.
-                   Default: ~/.claude/memory/_events.jsonl
+                   Default: <MEMORY_STORAGE_PATH or ~/.claude/memory>/_events.jsonl
 """
 
 from __future__ import annotations
 
 import json
+import os
 from collections import defaultdict
 from pathlib import Path
 
-DEFAULT_EVENTS_FILE = Path.home() / ".claude" / "memory" / "_events.jsonl"
+
+def default_events_file() -> Path:
+    """Same storage resolution as the manager: MEMORY_STORAGE_PATH or ~/.claude/memory.
+
+    Resolved at call time, not import — a hardcoded module constant silently
+    read prod events when the store was relocated (live-smoke bug).
+    """
+    storage = os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory")
+    return Path(storage).expanduser() / "_events.jsonl"
 
 
 def parse_events(events_file: Path) -> list[dict]:
@@ -278,13 +287,13 @@ def main(argv=None) -> None:
     parser.add_argument(
         "--events-file",
         type=Path,
-        default=DEFAULT_EVENTS_FILE,
+        default=None,
         metavar="PATH",
-        help="Path to the JSONL event log (default: %(default)s)",
+        help="Path to the JSONL event log (default: <MEMORY_STORAGE_PATH>/_events.jsonl)",
     )
     args = parser.parse_args(argv)
 
-    events = parse_events(args.events_file)
+    events = parse_events(args.events_file or default_events_file())
     raw_summaries = build_session_summaries(events)
 
     if not raw_summaries:
