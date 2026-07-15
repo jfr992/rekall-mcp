@@ -90,6 +90,57 @@ def test_restore_marker_falls_back_to_env_when_stdin_has_no_session(tmp_path):
     assert (tmp_path / "rekall-restored-env-sess-2").exists()
 
 
+def test_restore_surfaces_embedder_degradation(tmp_path):
+    """#57: a broken embedder must be loud in the status line, not silent."""
+    fakebin = tmp_path / "fakebin"
+    fakebin.mkdir()
+    health = {
+        "status": "degraded",
+        "vectors": {"sampled": 5, "zero_vectors": 0},
+        "embedder": {"error": "ImportError: sentence-transformers required"},
+    }
+    stats = {"total_memories": 0, "knowledge_graph": {"nodes": 0, "edges": 0}}
+    (tmp_path / "health.json").write_text(json.dumps(health), encoding="utf-8")
+    (tmp_path / "stats.json").write_text(json.dumps(stats), encoding="utf-8")
+    curl = fakebin / "curl"
+    curl.write_text(
+        f"""#!/usr/bin/env bash
+for arg in "$@"; do
+    case "$arg" in
+        */health) cat "{tmp_path}/health.json"; exit 0 ;;
+        */api/memory/stats) cat "{tmp_path}/stats.json"; exit 0 ;;
+    esac
+done
+exit 0
+""",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fakebin}:{env['PATH']}",
+            "REKALL_API_URL": "http://rekall.test",
+            "REKALL_AUTOSAVE": "1",
+            "REKALL_MARKER_DIR": str(tmp_path),
+        }
+    )
+    result = subprocess.run(
+        ["bash", str(RESTORE_HOOK)],
+        input=json.dumps({"session_id": "degraded-sess", "cwd": str(tmp_path)}),
+        text=True,
+        capture_output=True,
+        env=env,
+        cwd=tmp_path,
+        timeout=10,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "embedder DOWN" in result.stdout
+    assert "ImportError: sentence-transformers required" in result.stdout
+
+
 # ---------------------------------------------------------------------------
 # rekall-observe.sh — judge path (session_id + evidence_class in observe POST)
 # ---------------------------------------------------------------------------

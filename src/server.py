@@ -246,6 +246,56 @@ def _vector_health() -> dict[str, int]:
     return _vector_health_cache["value"]
 
 
+_embedder_health_cache: dict[str, object] = {"at": 0.0, "value": None, "probe": None}
+_EMBEDDER_HEALTH_TTL_S = 60.0
+_EMBEDDER_PROBE_TIMEOUT_S = 5.0
+
+
+def _reset_embedder_health_cache() -> None:
+    _embedder_health_cache["at"] = 0.0
+    _embedder_health_cache["value"] = None
+    _embedder_health_cache["probe"] = None
+
+
+def _embedder_health() -> str | dict[str, str]:
+    """Probe the embedder, cached — a broken provider means dead recall (#57).
+
+    First-run encode may load (or download) the model, so the probe runs in a
+    worker thread bounded by _EMBEDDER_PROBE_TIMEOUT_S. A timeout is reported
+    distinctly and not cached — the still-running probe is re-checked next poll.
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from concurrent.futures import TimeoutError as FutureTimeoutError
+
+    now = time.monotonic()
+    if (
+        _embedder_health_cache["value"] is not None
+        and now - _embedder_health_cache["at"] <= _EMBEDDER_HEALTH_TTL_S
+    ):
+        return _embedder_health_cache["value"]
+
+    probe = _embedder_health_cache["probe"]
+    if probe is None:
+        pool = ThreadPoolExecutor(max_workers=1, thread_name_prefix="rekall-embedder-probe")
+        probe = pool.submit(lambda: _get_memory_manager().embedder.encode("rekall embedder probe"))
+        pool.shutdown(wait=False)
+        _embedder_health_cache["probe"] = probe
+    try:
+        probe.result(timeout=_EMBEDDER_PROBE_TIMEOUT_S)
+        value: str | dict[str, str] = "ok"
+    except FutureTimeoutError:
+        return {
+            "error": f"timeout: probe still running after {_EMBEDDER_PROBE_TIMEOUT_S:.0f}s "
+            "(model load/download in progress?)"
+        }
+    except Exception as e:
+        value = {"error": f"{type(e).__name__}: {e}"}
+    _embedder_health_cache["probe"] = None
+    _embedder_health_cache["value"] = value
+    _embedder_health_cache["at"] = now
+    return value
+
+
 def _rekall_version() -> str:
     from importlib.metadata import PackageNotFoundError, version
 
@@ -263,7 +313,8 @@ async def health_check(request):
     registry = ToolRegistry.get()
     enabled = registry.get_enabled()
     vectors = _vector_health()
-    status = "degraded" if vectors["zero_vectors"] > 0 else "healthy"
+    embedder = _embedder_health()
+    status = "degraded" if vectors["zero_vectors"] > 0 or embedder != "ok" else "healthy"
     return JSONResponse(
         {
             "status": status,
@@ -272,6 +323,7 @@ async def health_check(request):
             "transport": "streamable-http",
             "tools_enabled": enabled,
             "vectors": vectors,
+            "embedder": embedder,
         }
     )
 
