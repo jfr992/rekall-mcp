@@ -102,6 +102,59 @@ def test_null_session_recall_joins_via_memory_ids_intersection():
     assert s1["totals"]["tokens"] == 25
 
 
+def test_unscoped_recall_stamped_general_joins_via_intersection():
+    """manager.recall stamps project or 'general' — an unscoped recall_memories
+    call emits project='general' while the summary carries the real project.
+    The intersection stays the strong condition; 'general' must not block it."""
+    from memory.sessions import fold_sessions
+
+    events = [
+        _summary("s1", "proj-a", ["m1"], "2026-07-14T10:00:00"),
+        _recalled("general", ["m1"], "2026-07-14T09:45:00", query="unscoped"),
+    ]
+
+    sessions = fold_sessions(events)
+
+    by_id = {s["session_id"]: s for s in sessions}
+    assert "unattributed:general" not in by_id
+    assert len(by_id["s1"]["recalls"]) == 1
+    assert by_id["s1"]["recalls"][0]["query"] == "unscoped"
+
+
+def test_unscoped_recall_without_intersection_stays_unattributed():
+    """Relaxing the project check must not weaken the join: an unscoped recall
+    whose ids intersect no summary still lands in the honest bucket."""
+    from memory.sessions import fold_sessions
+
+    events = [
+        _summary("s1", "proj-a", ["m1"], "2026-07-14T10:00:00"),
+        _recalled("general", ["m9"], "2026-07-14T09:45:00"),
+    ]
+
+    sessions = fold_sessions(events)
+
+    by_id = {s["session_id"]: s for s in sessions}
+    assert by_id["s1"]["recalls"] == []
+    assert by_id["unattributed:general"]["totals"]["recalls"] == 1
+
+
+def test_scoped_recall_with_mismatched_project_stays_unattributed():
+    """A project mismatch on a SCOPED recall is a real signal — intersecting
+    ids alone must not attach it to another project's session."""
+    from memory.sessions import fold_sessions
+
+    events = [
+        _summary("s1", "proj-a", ["m1"], "2026-07-14T10:00:00"),
+        _recalled("proj-b", ["m1"], "2026-07-14T09:45:00"),
+    ]
+
+    sessions = fold_sessions(events)
+
+    by_id = {s["session_id"]: s for s in sessions}
+    assert by_id["s1"]["recalls"] == []
+    assert by_id["unattributed:proj-b"]["totals"]["recalls"] == 1
+
+
 def test_concurrent_same_project_sessions_do_not_cross_attribute():
     """Project+time alone would attach the recall to both windows; memory_ids
     intersection (SPEC 1a) must route it only to the session that recalled it."""
