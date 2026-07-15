@@ -755,6 +755,47 @@ async def api_session_detail(request):
         return _server_error(str(e))
 
 
+@mcp.custom_route("/api/memory/feedback", methods=["POST"])
+async def api_memory_feedback(request):
+    """REST API: one-click recall feedback (useful|wrong|stale).
+
+    Labeled evidence only — nothing reads memory_feedback into ranking
+    (weights frozen until the 500-pair gate; grep-pinned in tests).
+    """
+    from starlette.responses import JSONResponse
+
+    try:
+        body = await request.json()
+        memory_id = body.get("memory_id")
+        verdict = body.get("verdict")
+        session_id = body.get("session_id")
+
+        if not memory_id or not isinstance(memory_id, str):
+            return _bad_request("memory_id is required")
+        if verdict not in ("useful", "wrong", "stale"):
+            return _bad_request("verdict must be one of ['stale', 'useful', 'wrong']")
+
+        manager = _get_memory_manager()
+        found = manager.store.get_many([memory_id])
+        if not found:
+            return JSONResponse({"error": "not found", "memory_id": memory_id}, status_code=404)
+
+        manager.record_event(
+            event_type="memory_feedback",
+            project=found[0].get("project") or "general",
+            memory_ids=[memory_id],
+            source="feedback_endpoint",
+            session_id=session_id,
+            payload={"verdict": verdict, "editor": "ui"},
+        )
+        return _ok({"recorded": True})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error recording feedback: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/context", methods=["GET"])
 async def api_get_context(request):
     """REST API: Get cached context for a project."""
