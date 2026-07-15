@@ -12,7 +12,7 @@ def test_build_agent_startup_returns_summary():
         "handoff": "## Handoff Summary\n",
         "summary": "# Resume Packet: brain\n",
     }
-    manager.get_project_capsule = lambda project, limit=300: {
+    manager.get_project_capsule = lambda project, limit=300, session_id=None: {
         "project": project,
         "entities": ["Codex"],
         "standing_context": [

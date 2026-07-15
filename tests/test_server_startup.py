@@ -36,7 +36,9 @@ async def test_api_agent_startup(monkeypatch):
     assert isinstance(response, JSONResponse)
     payload = json.loads(response.body)
     assert payload["scope"]["project"] == "brain"
-    manager.get_agent_startup.assert_called_once_with(project="brain", agent="claude-code", limit=7)
+    manager.get_agent_startup.assert_called_once_with(
+        project="brain", agent="claude-code", limit=7, session_id=None
+    )
 
 
 @pytest.mark.asyncio
@@ -70,4 +72,4 @@ async def test_api_project_capsule(monkeypatch):
     assert isinstance(response, JSONResponse)
     payload = json.loads(response.body)
     assert payload["project"] == "brain"
-    manager.get_project_capsule.assert_called_once_with(project="brain", limit=9)
+    manager.get_project_capsule.assert_called_once_with(project="brain", limit=9, session_id=None)

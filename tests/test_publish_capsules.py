@@ -94,3 +94,20 @@ async def test_publish_team_memory_tool_uses_project_capsule(tool_registry):
     assert bundle["project"] == "rekall-mcp"
     assert bundle["playbooks"] == []
     assert bundle["privacy"]["raw_event_log_included"] is False
+
+
+def test_team_publish_strips_review_state():
+    """U1: review verdicts are private curation signals — never in team bundles."""
+    from memory.publish import build_team_memory_bundle
+
+    capsule = {
+        **_capsule(),
+        "_review_state": {"m1": {"last_verdict": "kill"}},
+        "_review_state.json": {"m1": {"last_verdict": "kill"}},
+    }
+
+    bundle = build_team_memory_bundle(capsule=capsule, playbooks=[])
+    serialized = json.dumps(bundle)
+
+    assert "_review_state" not in serialized
+    assert "last_verdict" not in serialized

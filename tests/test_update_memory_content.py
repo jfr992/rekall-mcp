@@ -143,3 +143,17 @@ def test_update_unknown_id_raises(tmp_path):
     except ValueError as e:
         assert "not found" in str(e)
     mgr._store.save.assert_not_called()
+
+
+def test_update_emits_memory_updated_event(tmp_path):
+    _seed_yaml(tmp_path)
+    mgr = _mgr(tmp_path, _payload())
+
+    mgr.update_memory_content(MEMORY_ID, "RESOLVED 2026-07-14")
+
+    mgr.record_event.assert_called_once()
+    kwargs = mgr.record_event.call_args.kwargs
+    assert kwargs["event_type"] == "memory_updated"
+    assert kwargs["project"] == "my-app"
+    assert kwargs["memory_ids"] == [MEMORY_ID]
+    assert kwargs["payload"]["memory_id"] == MEMORY_ID

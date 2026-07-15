@@ -439,7 +439,8 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/publish` | GET, POST | Export memory to an OKF v0.1 bundle (`mode=preview\|tar\|dir`) |
 | `/api/memory/publish/synthesize` | POST | Start (or report) a background LLM synthesis job for a project scope |
 | `/api/memory/publish/status` | GET | Poll a synthesis job's progress |
-| `/api/memory/events` | POST | Append a client-side session-summary event to the event log |
+| `/api/memory/events` | GET, POST | GET: cursor-paginated event feed (`cursor=&limit=`, truncation-safe); POST: append a client-side session-summary event |
+| `/api/memory/review` | POST | Record a review verdict (`keep\|fix\|kill`; kill deletes then records, fix is 501 until U3) |
 
 </details>
 

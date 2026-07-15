@@ -23,6 +23,8 @@ _PRIVATE_TEAM_BUNDLE_KEYS = frozenset(
     {
         "_events",
         "_events.jsonl",
+        "_review_state",
+        "_review_state.json",
         "events",
         "private_prompt",
         "private_prompts",
