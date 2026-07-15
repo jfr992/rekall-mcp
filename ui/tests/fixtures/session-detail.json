@@ -23,8 +23,14 @@
       "memories": [{ "memory_id": "2026-07-01_fact_g7h8i9", "score": 0.77 }],
       "token_estimate": 810,
       "observed_at": "2026-07-14T09:30:00+00:00"
+    },
+    {
+      "query": null,
+      "memories": [{ "memory_id": "2026-05-02_note_j0k1l2", "score": 0 }],
+      "token_estimate": 0,
+      "observed_at": "2026-05-02T08:00:00+00:00"
     }
   ],
-  "totals": { "recalls": 2, "injected": 3, "tokens": 1450 },
+  "totals": { "recalls": 3, "injected": 3, "tokens": 1450 },
   "window": 5000
 }

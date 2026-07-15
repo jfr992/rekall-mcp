@@ -51,7 +51,7 @@ describe("sessions api", () => {
       "/api/memory/sessions/sess-abc123",
       expect.anything()
     );
-    expect(res.recalls).toHaveLength(2);
+    expect(res.recalls).toHaveLength(3);
     expect(res.injected[0].token_estimate).toBeNull();
   });
 
