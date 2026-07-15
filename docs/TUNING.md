@@ -295,3 +295,16 @@ rm -rf ~/.claude/memory/*
 rm -rf ~/.claude/qdrant/*
 docker compose restart
 ```
+
+## Resolving contradictions
+
+When the cockpit's memory inspector shows *"This memory has contradicting relationships"*, the knowledge graph holds a `contradicts` edge between this memory and another — two memories make claims that can't both be current. Contradictions are **flagged, never auto-deleted**: the system won't guess which claim is true, but it does serve its best guess at recall (newest wins; the older memory's content is stubbed as outdated).
+
+Four ways to resolve, in order of frequency:
+
+1. **Do nothing** — if the newest memory is correct, recall already serves the right answer. The badge is informational.
+2. **Re-state the truth** — tell your agent the correct fact ("the retry limit is 3 — remember that"). The fresh save becomes newest and wins all future recalls; history is preserved.
+3. **Delete the wrong one** — when the *older* memory is correct, recency is lying. `curl -X DELETE http://localhost:8000/api/memory/<memory_id>` (id shown in the inspector) removes it from YAML, vectors, and graph.
+4. **Superseded pairs** (clear replacement rather than disagreement) are retired automatically by the gated prune — no action needed.
+
+Review all pairs at once: `curl http://localhost:8000/api/memory/consolidate` or the Hygiene page.
