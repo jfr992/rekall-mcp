@@ -112,3 +112,24 @@ async def test_save_during_resparse_queues_and_lands_with_new_vocab(tmp_path, mo
     expected = manager.store.sparse_encoder.encode_document(point.payload["embedding_text"])
     assert got == pytest.approx(expected)  # the queued save used the NEW vocab
     assert manager.store.sparse_encoder.vocab[QUERY] in got
+
+
+async def test_observe_route_waits_for_the_maintenance_barrier(monkeypatch):
+    import server
+
+    manager = MagicMock()
+    manager.save.return_value = "2026-07-17_note_abcd1234"
+    monkeypatch.setattr("memory.singleton._instance", manager)
+
+    transport = httpx.ASGITransport(app=server.build_app())
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        async with server._maintenance_barrier():
+            task = asyncio.create_task(
+                client.post("/api/memory/observe", json={"summary": "queued", "type": "note"})
+            )
+            await asyncio.sleep(0.2)
+            assert not task.done()  # queued while the barrier is held
+        response = await task
+
+    assert response.status_code == 200
+    assert response.json()["memory_id"] == "2026-07-17_note_abcd1234"

@@ -20,6 +20,7 @@ import os
 import re
 import sys
 import time
+import weakref
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -445,7 +446,16 @@ def _server_error(message: str):
 # Exclusive maintenance barrier: resparse holds this for its whole transaction,
 # so mutation routes (save/observe/delete) queue behind it and land on the new
 # vocab generation. Single-process daemon makes an in-process lock sufficient.
-_maintenance_barrier = asyncio.Lock()
+# Per-loop because asyncio.Lock binds to the first loop that contends on it.
+_maintenance_barriers: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _maintenance_barrier() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lock = _maintenance_barriers.get(loop)
+    if lock is None:
+        lock = _maintenance_barriers[loop] = asyncio.Lock()
+    return lock
 
 
 @mcp.custom_route("/api/memory/resparse", methods=["POST"])
@@ -455,7 +465,7 @@ async def api_memory_resparse(request):
 
     try:
         manager = _get_memory_manager()
-        async with _maintenance_barrier:
+        async with _maintenance_barrier():
             result = await asyncio.to_thread(resparse, manager)
         return _ok(result)
     except Exception as e:
@@ -478,7 +488,7 @@ async def api_save_memory(request):
             return JSONResponse({"error": "content is required"}, status_code=400)
 
         manager = _get_memory_manager()
-        async with _maintenance_barrier:
+        async with _maintenance_barrier():
             memory_id = manager.save(
                 content, type=mem_type, project=project, capture_origin="rest"
             )
@@ -1051,7 +1061,7 @@ async def api_delete_memory(request):
             return JSONResponse({"error": "memory_id is required"}, status_code=400)
 
         manager = _get_memory_manager()
-        async with _maintenance_barrier:
+        async with _maintenance_barrier():
             deleted = manager.delete(memory_id)
 
         if not deleted:
@@ -1916,14 +1926,15 @@ async def api_observe(request):
         evidence_class = body.get("evidence_class")
         if evidence_class not in ("confirmed_artifact", "explicit_user", "inferred"):
             evidence_class = None
-        memory_id = manager.save(
-            content,
-            type=mem_type,
-            scope=scope,
-            capture_origin="hook",
-            session_id=body.get("session_id") or None,
-            evidence_class=evidence_class,
-        )
+        async with _maintenance_barrier():
+            memory_id = manager.save(
+                content,
+                type=mem_type,
+                scope=scope,
+                capture_origin="hook",
+                session_id=body.get("session_id") or None,
+                evidence_class=evidence_class,
+            )
 
         return JSONResponse(
             {
