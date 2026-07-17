@@ -211,3 +211,18 @@ def test_vocab_lifecycle_oov_identifier_miss_to_hit_via_resparse(tmp_path):
     assert result["oov_identifier_reset"] is True
     assert target_id in _top5_ids(manager, INSTANCE_ID)
     assert _drift(manager)["oov_identifier_seen"] is False  # drift resets only after verified refit
+
+
+def test_missing_vocab_serves_dense_results_and_doctor_reports_missing(tmp_path):
+    """Regression pin: no vocab -> identifier queries degrade to dense, loudly diagnosed."""
+    manager = _build_manager(tmp_path)  # no vocab, sub-threshold corpus
+    for content in DISTRACTORS[:3]:
+        manager.save(content, type="note", scope=SCOPE)
+
+    assert manager.sparse_encoder is None
+    results = manager.store.search(
+        vector=manager.embedder.encode(INSTANCE_ID), query_text=INSTANCE_ID, limit=5
+    )
+    assert results  # dense hits, no crash, even with query_text set
+    assert isinstance(manager.recall(INSTANCE_ID, score_threshold=0.0), list)  # full path survives
+    assert manager.doctor()["bm25"]["verdict"] == "missing"
