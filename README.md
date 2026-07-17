@@ -115,6 +115,7 @@ python -m memory.cli stats
 
 Software evals: `uv run --extra dev pytest tests/test_software_evals.py`
 Utility report: `uv run python scripts/utility_report.py`
+Conflict-edge repair: `QDRANT_URL=... uv run python scripts/repair_contradicts.py` — re-judges unrefined `contradicts` edges, dry-run by default (see [docs/TUNING.md](docs/TUNING.md))
 
 ---
 
