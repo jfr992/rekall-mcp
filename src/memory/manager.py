@@ -312,6 +312,11 @@ class MemoryManager:
         return self._event_log
 
     @property
+    def resparse_sentinel(self) -> Path:
+        """In-progress resparse marker, beside the vocab (distinct from reindex's)."""
+        return self._bm25_path.with_name(".resparse-in-progress")
+
+    @property
     def reindex_sentinel(self) -> Path:
         """In-progress reindex marker: inside the embedded store, or next to YAML."""
         if getattr(self, "_qdrant_path", None):
