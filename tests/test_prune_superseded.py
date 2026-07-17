@@ -107,3 +107,22 @@ def test_gate_provisional_band_supersedes_refused():
         {"relation": "supersedes", "created": "2026-06-01", "band": "provisional"},
     )
     assert build_candidates([edge], _lookup(table), TODAY) == []
+
+
+def test_provisional_band_refusal_survives_graph_reload(tmp_path):
+    """The v1.12 _load bug dropped the band attr on reload, silently re-arming
+    deletion after a restart. The refusal must survive a save+reload cycle,
+    fed exactly as the endpoint feeds it (graph._graph.edges(data=True))."""
+    from memory.knowledge_graph import KnowledgeGraph
+
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    kg.add_node("new")
+    kg.add_node("old")
+    kg.add_edge("new", "old", "supersedes", 0.87, band="provisional")
+    kg._graph.edges["new", "old"]["created"] = "2026-06-01"
+    kg.save()
+
+    kg2 = KnowledgeGraph(tmp_path / "_graph.json")
+    edges = list(kg2._graph.edges(data=True))
+    table = {"new": _mem("2026-06-01"), "old": _mem("2026-01-01")}
+    assert build_candidates(edges, _lookup(table), TODAY) == []
