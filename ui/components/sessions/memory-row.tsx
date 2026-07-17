@@ -39,7 +39,7 @@ export function MemoryRow({ memoryId, sessionId, score, tokenEstimate, onExpand 
   }
 
   return (
-    <li className="flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)] py-2 last:border-b-0">
+    <li className="flex flex-wrap items-center justify-between gap-2 rounded-[7px] border border-[var(--border)] bg-[var(--bg-elevated)] px-3 py-2 transition-colors hover:border-[rgba(45,212,160,0.4)]">
       <button
         type="button"
         aria-label={`Expand ${memoryId}`}
@@ -62,7 +62,7 @@ export function MemoryRow({ memoryId, sessionId, score, tokenEstimate, onExpand 
             onClick={() => give(v)}
             className={`rounded px-1.5 py-0.5 font-mono text-[11px] transition-colors ${
               verdict === v
-                ? "bg-foreground text-background"
+                ? "bg-[var(--accent-primary)] text-[var(--bg-deep)]"
                 : "border border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg)]"
             }`}
           >
