@@ -1,6 +1,6 @@
 // @ts-nocheck — @playwright/test is not installed; this file is always skipped in CI.
 /**
- * E2E: responsive shell at 390×844 (iPhone 14 viewport).
+ * E2E: top-nav shell at 390×844 (iPhone 14 viewport).
  * Skipped by default; run with PLAYWRIGHT=1 in CI when a browser is available.
  *
  * To run manually:
@@ -14,39 +14,44 @@ const skip = !process.env.PLAYWRIGHT;
 test.describe("Responsive shell — mobile viewport", () => {
   test.skip(skip, "Set PLAYWRIGHT=1 to run browser-based responsive checks");
 
-  test("no horizontal overflow at 390px width", async ({ page }) => {
+  test("no horizontal body overflow at 390px width", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/brain");
 
-    const bodyWidth = await page.evaluate(
-      () => document.body.scrollWidth,
-    );
+    const bodyWidth = await page.evaluate(() => document.body.scrollWidth);
     const viewportWidth = await page.evaluate(() => window.innerWidth);
     expect(bodyWidth).toBeLessThanOrEqual(viewportWidth);
   });
 
-  test("sidebar is hidden, mobile nav is visible", async ({ page }) => {
+  test("top bar is sticky and the primary tab row scrolls horizontally", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/brain");
 
-    // Desktop sidebar should not be visible
-    const sidebar = page.locator("aside").first();
-    await expect(sidebar).not.toBeVisible();
+    const header = page.locator("header").first();
+    await expect(header).toBeVisible();
+    const position = await header.evaluate((el) => getComputedStyle(el).position);
+    expect(position).toBe("sticky");
 
-    // Mobile header should be visible
-    const mobileHeader = page.locator("header").first();
-    await expect(mobileHeader).toBeVisible();
+    const nav = page.locator('nav[aria-label="Primary"]');
+    await expect(nav).toBeVisible();
+    // All six tabs live in one horizontally scrollable row
+    await expect(nav.locator("a")).toHaveCount(6);
+    const { scrollWidth, clientWidth, overflowX } = await nav.evaluate((el) => ({
+      scrollWidth: el.scrollWidth,
+      clientWidth: el.clientWidth,
+      overflowX: getComputedStyle(el).overflowX,
+    }));
+    expect(overflowX).toBe("auto");
+    expect(scrollWidth).toBeGreaterThanOrEqual(clientWidth);
   });
 
-  test("inspector drawer opens full-width on mobile", async ({ page }) => {
+  test("scope counts are collapsed at 390px", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/brain");
-    // Trigger a node click to open the inspector (implementation-dependent)
-    // This is a structural check — if the drawer renders full-width
-    const drawer = page.locator('[role="dialog"]');
-    if (await drawer.count() > 0) {
-      const box = await drawer.boundingBox();
-      expect(box?.width).toBeCloseTo(390, -1);
+
+    const counts = page.getByText(/in scope · .* total/);
+    if ((await counts.count()) > 0) {
+      await expect(counts.first()).toBeHidden();
     }
   });
 });

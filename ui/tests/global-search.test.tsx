@@ -2,7 +2,7 @@ import { describe, test, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GlobalSearch } from "@/components/shell/global-search";
-import { HeaderBar } from "@/components/shell/header-bar";
+import { CockpitShell } from "@/components/shell/cockpit-shell";
 import { useProjectStore } from "@/lib/project-store";
 import * as searchApi from "@/lib/api/search";
 import * as detailApi from "@/lib/api/detail";
@@ -12,6 +12,16 @@ import type { RecallResponse } from "@/lib/schemas";
 
 vi.mock("@/lib/api/search");
 vi.mock("@/lib/api/detail");
+// Shell children that make their own network calls — stubbed for the mount pin
+vi.mock("@/components/shell/project-switcher", () => ({
+  ProjectSwitcher: () => <div data-testid="project-switcher" />,
+}));
+vi.mock("@/components/shell/health-badge", () => ({
+  HealthBadge: () => <div data-testid="health-badge" />,
+}));
+vi.mock("@/lib/queries/use-insights", () => ({
+  useInsights: () => ({ data: undefined }),
+}));
 
 function renderSearch() {
   const client = new QueryClient({
@@ -118,13 +128,15 @@ describe("GlobalSearch palette", () => {
     expect(await screen.findByText("Memory details")).toBeInTheDocument();
   });
 
-  test("HeaderBar renders the global search button", () => {
+  test("CockpitShell top bar renders the global search trigger", () => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
     render(
       <QueryClientProvider client={client}>
-        <HeaderBar />
+        <CockpitShell>
+          <div>page</div>
+        </CockpitShell>
       </QueryClientProvider>
     );
     expect(
