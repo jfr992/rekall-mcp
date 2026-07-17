@@ -106,3 +106,37 @@ def test_resparse_refuses_on_orphan_qdrant_points_before_mutation(tmp_path):
         resparse(manager)
 
     assert not manager.resparse_sentinel.exists()
+
+
+def _identifier_hits(manager: MemoryManager) -> list[str]:
+    results = manager.store.search(
+        vector=manager.embedder.encode(QUERY), query_text=QUERY, limit=3
+    )
+    return [r["memory_id"] for r in results]
+
+
+def test_resparse_happy_path_repairs_identifier_recall(tmp_path):
+    from memory.resparse import resparse
+
+    manager = _build_manager(tmp_path)
+    target_id = _seed(manager)
+
+    # Stale vocab: the identifier is OOV on both query and point side — miss.
+    assert target_id not in _identifier_hits(manager)
+
+    result = resparse(manager)
+
+    assert result["points_updated"] == 5 == manager.store.count()
+    assert result["vocab_size"] > 0
+    assert result["oov_identifier_reset"] is True
+    assert target_id in _identifier_hits(manager)
+
+    binding = json.loads(manager._bm25_path.read_text())["_binding"]
+    assert binding["target"] == str(manager._qdrant_path or manager._qdrant_url)
+    assert binding["collection"] == manager.COLLECTION
+
+    drift = json.loads(manager._bm25_path.with_name("_bm25_drift.json").read_text())
+    assert drift["window"] == []
+    assert drift["saves_since_fit"] == 0
+    assert drift["oov_identifier_seen"] is False
+    assert not manager.resparse_sentinel.exists()
