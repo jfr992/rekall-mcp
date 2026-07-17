@@ -206,3 +206,20 @@ def test_resparse_swaps_both_encoder_refs_and_new_saves_use_new_vocab(tmp_path):
     expected = manager.store.sparse_encoder.encode_document(point.payload["embedding_text"])
     assert got == pytest.approx(expected)  # encoded with the NEW vocab, in-process
     assert manager.store.sparse_encoder.vocab[QUERY] in got  # identifier now in-vocab
+
+
+def _dense_vectors(manager: MemoryManager) -> dict[str, list[float]]:
+    points = manager.store.scroll(limit=100, with_vectors=True)
+    return {p["memory_id"]: p["vector"] for p in points}
+
+
+def test_dense_vectors_are_byte_identical_after_resparse(tmp_path):
+    from memory.resparse import resparse
+
+    manager = _build_manager(tmp_path)
+    _seed(manager)
+    before = _dense_vectors(manager)
+
+    resparse(manager)
+
+    assert _dense_vectors(manager) == before
