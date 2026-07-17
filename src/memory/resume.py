@@ -20,7 +20,7 @@ MAX_RESUME_SCROLL = 2000
 def build_resume_packet(
     manager,
     *,
-    scope: MemoryScope,
+    scope: MemoryScope | None,
     limit: int = 12,
 ) -> dict[str, Any]:
     """Build an agent-facing resume packet for session start.
@@ -28,8 +28,8 @@ def build_resume_packet(
     Bounded scroll + Python-side sort by (date, importance) — fixes C2
     where the old 24-point slice was in Qdrant point-id order.
     """
-    project = scope.project or "general"
-    filters = {"project": project}
+    project = scope.project or "general" if scope else None
+    filters = {"project": project} if project else None
 
     # Fetch up to MAX_RESUME_SCROLL points, bounded so "recent" is truthful at scale.
     points = manager.store.scroll(filters=filters, limit=MAX_RESUME_SCROLL)
@@ -100,7 +100,7 @@ def build_resume_packet(
     pressure = identify_pressure(points)
 
     return {
-        "scope": scope.to_metadata(),
+        "scope": scope.to_metadata() if scope else None,
         "recent": dedup_recent,
         "important": dedup_important,
         "unresolved": dedup_unresolved,

@@ -3,6 +3,7 @@
 import { ChevronRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { MonoLabel } from "@/components/ui/mono-label";
+import { ageBadge } from "@/components/continuity/staleness";
 
 type Props = {
   memoryId: string;
@@ -14,6 +15,7 @@ type Props = {
 };
 
 export function MemoryRow({ memoryId, content, type, tier, date, onSelect }: Props) {
+  const age = ageBadge(date);
   return (
     <button
       type="button"
@@ -23,9 +25,12 @@ export function MemoryRow({ memoryId, content, type, tier, date, onSelect }: Pro
     >
       {type ? <Badge kind="type" value={type} /> : null}
       {tier && tier !== "working" ? <Badge kind="tier" value={tier} /> : null}
-      <span className="min-w-0 flex-1 truncate font-serif text-sm text-[var(--fg)]">
+      <span
+        className={`min-w-0 flex-1 truncate font-serif text-sm ${age ? "text-[var(--fg-muted)]" : "text-[var(--fg)]"}`}
+      >
         {content}
       </span>
+      {age ? <Badge kind="tier" value={age} /> : null}
       <MonoLabel>{date ?? ""}</MonoLabel>
       <ChevronRight size={14} className="shrink-0 text-[var(--fg-muted)]" />
     </button>
