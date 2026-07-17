@@ -22,3 +22,17 @@ def test_resparse_route_returns_transaction_result(monkeypatch):
 
     assert response.status_code == 200
     assert response.json() == result
+
+
+def test_resparse_route_maps_failures_to_500_with_remediation(monkeypatch):
+    from memory.resparse import ResparsePreflightError
+
+    def refuse(manager):
+        raise ResparsePreflightError("no 'bm25' sparse field — run a full reindex")
+
+    monkeypatch.setattr("memory.resparse.resparse", refuse)
+
+    response = _client(monkeypatch).post("/api/memory/resparse")
+
+    assert response.status_code == 500
+    assert "reindex" in response.json()["error"]
