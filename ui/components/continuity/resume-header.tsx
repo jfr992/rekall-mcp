@@ -2,7 +2,7 @@ import { MonoLabel } from "@/components/ui/mono-label";
 import { Card } from "@/components/ui/card";
 
 type Props = {
-  scope: Record<string, unknown>;
+  scope: Record<string, unknown> | null;
 };
 
 const FIELDS: Array<[string, string]> = [
@@ -14,6 +14,7 @@ const FIELDS: Array<[string, string]> = [
 ];
 
 export function ResumeHeader({ scope }: Props) {
+  if (!scope) return null;
   return (
     <Card variant="glass">
       <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
