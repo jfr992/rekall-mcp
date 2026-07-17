@@ -219,3 +219,81 @@ class TestHybridScoreContract:
         hybrid_by_id = {h["memory_id"]: h for h in hybrid}
         assert "edge" in hybrid_by_id
         assert hybrid_by_id["edge"]["score"] == pytest.approx(id_cosine, abs=1e-6)
+
+
+class TestSparseCoverageSurvivesThreshold:
+    """Prod regression (2026-07-17): the recall gate (0.35 cosine) killed every
+    sparse-found identifier memory, because such memories have low dense cosine
+    BY DEFINITION — that is why the sparse leg exists. Threshold governs the
+    dense leg only; sparse-matched candidates bypass it, carrying their true
+    (low) cosine downstream for ranking."""
+
+    @pytest.fixture(params=["server", "embedded"])
+    def store(self, request, tmp_path):
+        from core import BM25Encoder, VectorStore
+
+        corpus = [
+            "EdgeHostDeviceAlreadyInUse stuck DELETING palette fix",
+            "PostgreSQL database optimization tips",
+            "Memory leak in worker process identified",
+        ]
+        encoder = BM25Encoder()
+        encoder.fit(corpus)
+        if request.param == "server":
+            s = VectorStore(
+                collection="test_sparse_coverage",
+                url="http://localhost:6334",
+                sparse_encoder=encoder,
+            )
+        else:
+            s = VectorStore(
+                collection="test_sparse_coverage",
+                path=str(tmp_path / "qdrant"),
+                sparse_encoder=encoder,
+            )
+        dims = 8
+        # Identifier doc dense-orthogonal to the query axis; distractors near it.
+        vecs = [
+            [0.0] * 7 + [1.0],
+            [1.0] + [0.0] * 7,
+            [0.9, 0.1] + [0.0] * 6,
+        ]
+        s.embedding_dim = dims
+        for i, (content, vec) in enumerate(zip(corpus, vecs, strict=True)):
+            s.save(
+                id=f"m{i}",
+                vector=vec,
+                payload={"content": content, "memory_id": f"m{i}"},
+                content=content,
+            )
+        yield s
+        try:
+            s.delete_collection()
+        except Exception:
+            pass
+
+    def test_sparse_found_low_cosine_hit_survives_recall_gate(self, store):
+        query_vec = [1.0] + [0.0] * 7  # cosine 0.0 to the identifier doc
+        hits = store.search(
+            vector=query_vec,
+            query_text="EdgeHostDeviceAlreadyInUse",
+            limit=5,
+            score_threshold=0.35,
+        )
+        ids = [h["memory_id"] for h in hits]
+        assert "m0" in ids, f"sparse-found identifier memory was thresholded away: {ids}"
+        m0 = next(h for h in hits if h["memory_id"] == "m0")
+        assert -1.0 <= m0["score"] <= 1.0
+        assert m0["score"] < 0.35  # true cosine preserved, not inflated past the gate
+
+    def test_dense_leg_still_respects_threshold(self, store):
+        # No sparse match for this query (OOV falls through to pure dense).
+        query_vec = [1.0] + [0.0] * 7
+        hits = store.search(
+            vector=query_vec,
+            query_text="zzzunknowntoken",
+            limit=5,
+            score_threshold=0.35,
+        )
+        assert all(h["score"] >= 0.35 for h in hits)
+        assert "m0" not in [h["memory_id"] for h in hits]
