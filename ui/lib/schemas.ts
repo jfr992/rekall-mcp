@@ -324,7 +324,7 @@ export const ResumeScopeSchema = z.object({
 }).passthrough();
 
 export const ResumeResponseSchema = z.object({
-  scope: ResumeScopeSchema,
+  scope: ResumeScopeSchema.nullable(),
   recent: z.array(ResumeMemorySchema),
   important: z.array(ResumeMemorySchema),
   unresolved: z.array(ResumeConflictSchema),

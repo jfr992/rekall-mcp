@@ -1863,8 +1863,15 @@ class MemoryManager:
         project: str | None = None,
         scope: MemoryScope | None = None,
         limit: int = 12,
+        all_scopes: bool = False,
     ) -> dict[str, Any]:
-        """Return a continuity-oriented startup packet for an agent session."""
+        """Return a continuity-oriented startup packet for an agent session.
+
+        all_scopes=True builds an unscoped packet (no project filter, scope=None)
+        instead of fabricating a scope from the server's own cwd.
+        """
+        if all_scopes and scope is None and project is None:
+            return build_resume_packet(self, scope=None, limit=limit)
         scope = scope or ScopeDetector.detect(project=project)
         return build_resume_packet(self, scope=scope, limit=limit)
 
