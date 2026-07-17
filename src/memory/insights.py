@@ -138,3 +138,108 @@ def build_insights(
         "tier_counts": tier_counts,
         "event_window": {"events": len(snapshot.events), "oldest_at": snapshot.oldest_at},
     }
+
+
+def build_stream(
+    records: list[dict[str, Any]],
+    snapshot: EventSnapshot,
+    *,
+    project: str | None,
+    limit: int = 50,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Newest-first merged activity rows + the honest event-window marker."""
+    now = now or datetime.now()
+    # A compaction summary IS a memory record — surface it once, as its own kind.
+    rows = [
+        _consolidated_row(r) if r.get("type") == "summary" else _saved_row(r, now)
+        for r in records
+    ]
+    for event in scoped_events(snapshot, project):
+        if event.event_type == "memory_recalled":
+            rows.append(_recalled_row(event))
+        elif event.event_type == "memory_promoted":
+            rows.append(_promoted_row(event))
+    rows.sort(key=lambda row: row["at"], reverse=True)
+    return {
+        "rows": rows[:limit],
+        "event_window": {"events": len(snapshot.events), "oldest_at": snapshot.oldest_at},
+    }
+
+
+_PREVIEW_CHARS = 120
+
+
+def _record_at(record: dict[str, Any]) -> str:
+    return record.get("timestamp") or f"{record.get('date') or '1970-01-01'}T00:00:00"
+
+
+def _fades_in_hours(record: dict[str, Any], now: datetime) -> int | None:
+    """Hours until a working-tier memory's retention fuse runs out (display-only)."""
+    if record.get("tier") != "working":
+        return None
+    from memory.lifecycle import compute_retention_days
+
+    retention_days = record.get("retention_days") or compute_retention_days(
+        record.get("type", "note"), "working"
+    )
+    try:
+        saved_at = datetime.fromisoformat(_record_at(record))
+    except ValueError:
+        return None
+    remaining = saved_at + timedelta(days=int(retention_days)) - now
+    return max(0, round(remaining.total_seconds() / 3600))
+
+
+def _recalled_row(event: MemoryEvent) -> dict[str, Any]:
+    return {
+        "kind": "recalled",
+        "at": event.observed_at,
+        "payload": {
+            "query": event.payload.get("query"),
+            "memory_ids": list(event.payload.get("memory_ids") or []),
+            "top_score": _top_score(event),
+            "project": event.project,
+        },
+    }
+
+
+def _consolidated_row(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "kind": "consolidated",
+        "at": _record_at(record),
+        "payload": {
+            "memory_id": record.get("memory_id"),
+            "preview": (record.get("content") or "")[:_PREVIEW_CHARS],
+            "project": record.get("project"),
+        },
+    }
+
+
+def _promoted_row(event: MemoryEvent) -> dict[str, Any]:
+    return {
+        "kind": "promoted",
+        "at": event.observed_at,
+        "payload": {
+            "memory_id": event.payload.get("memory_id"),
+            "from_tier": event.payload.get("from_tier"),
+            "to_tier": event.payload.get("to_tier"),
+            "project": event.project,
+        },
+    }
+
+
+def _saved_row(record: dict[str, Any], now: datetime) -> dict[str, Any]:
+    return {
+        "kind": "saved",
+        "at": _record_at(record),
+        "payload": {
+            "memory_id": record.get("memory_id"),
+            "type": record.get("type"),
+            "tier": record.get("tier"),
+            "project": record.get("project"),
+            "preview": (record.get("content") or "")[:_PREVIEW_CHARS],
+            "durability": record.get("durability"),
+            "fades_in_hours": _fades_in_hours(record, now),
+        },
+    }

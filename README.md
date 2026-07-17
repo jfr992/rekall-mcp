@@ -448,6 +448,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/sessions/{id}` | GET | Full session detail: injected memories + recall cards with scores; unattributed recalls under `unattributed:<project>` |
 | `/api/memory/feedback` | POST | One-click recall feedback (`useful\|wrong\|stale`) → `memory_feedback` event; labeled evidence only, never read into ranking |
 | `/api/memory/insights` | GET | Cockpit aggregates (`?project=`): totals, per-week counts, 7d recall/miss/promotion stats with honest denominators, tier counts; `event_window` = bounded event-tail truncation info |
+| `/api/memory/stream` | GET | Newest-first activity feed (`?project=&limit=`): `saved\|recalled\|promoted\|consolidated` rows merged from memory records + the bounded event tail; working-tier saves carry `fades_in_hours` |
 
 </details>
 

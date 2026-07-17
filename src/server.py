@@ -875,6 +875,28 @@ async def api_memory_insights(request):
         return _server_error(str(e))
 
 
+@mcp.custom_route("/api/memory/stream", methods=["GET"])
+async def api_memory_stream(request):
+    """REST API: newest-first merged activity feed (saved|recalled|promoted|
+    consolidated) from memory records + the shared bounded event tail."""
+    from memory.insights import build_stream, event_snapshot
+
+    try:
+        project = _safe_project(request.query_params.get("project"))
+        scoped = project not in (None, "all")
+        limit = _read_int(request.query_params, "limit", 50, lo=1, hi=500)
+        manager = _get_memory_manager()
+
+        records = manager.store.scroll_all(filters={"project": project} if scoped else None)
+        snapshot = event_snapshot(manager.event_log)
+        return _ok(build_stream(records, snapshot, project=project, limit=limit))
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error building stream: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/feedback", methods=["POST"])
 async def api_memory_feedback(request):
     """REST API: one-click recall feedback (useful|wrong|stale).
