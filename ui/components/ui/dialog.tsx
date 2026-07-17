@@ -8,10 +8,12 @@ type Props = {
   open: boolean;
   onClose: () => void;
   title: ReactNode;
+  /** Keep the title for screen readers but let the caller render its own header. */
+  titleHidden?: boolean;
   children: ReactNode;
 };
 
-export function Dialog({ open, onClose, title, children }: Props) {
+export function Dialog({ open, onClose, title, titleHidden, children }: Props) {
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -47,7 +49,7 @@ export function Dialog({ open, onClose, title, children }: Props) {
             exit={{ scale: 0.96, y: 8 }}
             transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
           >
-            <h2 className="mb-4 font-serif text-2xl">{title}</h2>
+            <h2 className={titleHidden ? "sr-only" : "mb-4 font-serif text-2xl"}>{title}</h2>
             {children}
           </motion.div>
         </motion.div>
