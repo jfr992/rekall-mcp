@@ -31,8 +31,7 @@ def _recalled(project, memory_ids, observed_at, scores=None):
             "query": "q",
             "memory_ids": memory_ids,
             "memories": [
-                {"memory_id": m, "score": s}
-                for m, s in zip(memory_ids, scores or [], strict=False)
+                {"memory_id": m, "score": s} for m, s in zip(memory_ids, scores or [], strict=False)
             ],
             "session_id": None,
         },
