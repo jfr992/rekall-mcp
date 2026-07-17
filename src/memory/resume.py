@@ -121,18 +121,19 @@ def build_resume_packet(
 
 def render_resume_packet(
     *,
-    scope: MemoryScope,
+    scope: MemoryScope | None,
     recent: list[dict[str, Any]],
     important: list[dict[str, Any]],
     unresolved: list[dict[str, Any]],
 ) -> str:
-    lines = [f"# Resume Packet: {scope.project}", ""]
-    lines.append(f"- agent: {scope.agent}")
-    if scope.branch:
-        lines.append(f"- branch: {scope.branch}")
-    if scope.repo_name:
-        lines.append(f"- repo: {scope.repo_name}")
-    lines.append(f"- trust_boundary: {scope.trust_boundary}")
+    lines = [f"# Resume Packet: {scope.project if scope else 'all projects'}", ""]
+    if scope:
+        lines.append(f"- agent: {scope.agent}")
+        if scope.branch:
+            lines.append(f"- branch: {scope.branch}")
+        if scope.repo_name:
+            lines.append(f"- repo: {scope.repo_name}")
+        lines.append(f"- trust_boundary: {scope.trust_boundary}")
     lines.append("")
 
     if important:
