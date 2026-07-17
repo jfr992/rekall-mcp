@@ -1313,6 +1313,36 @@ class MemoryManager:
 
             return results
 
+    ENTITY_SCAN_CAP = 2000
+
+    def find_by_entity(
+        self,
+        entity: str,
+        *,
+        project: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Backlinks: memories whose entities array contains entity, case-insensitive.
+
+        Stored casing is first-occurrence (extract_entities preserves source
+        casing), so an indexed MatchValue on `entities` would miss variant
+        casings; compare casefolded post-retrieval instead (same pattern as
+        the string-date filter).
+        """
+        with self._telemetry.track("memory.find_by_entity"):
+            target = entity.strip().casefold()
+            if not target:
+                return []
+            filters = {"project": project} if project else None
+            candidates = self.store.scroll(filters=filters, limit=self.ENTITY_SCAN_CAP)
+            hits = [
+                m
+                for m in candidates
+                if any(e.casefold() == target for e in m.get("entities") or [])
+            ]
+            hits.sort(key=lambda m: m.get("date") or "", reverse=True)
+            return hits[:limit]
+
     def recall_cross_project(
         self,
         query: str,

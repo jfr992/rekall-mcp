@@ -1784,6 +1784,34 @@ async def api_memory_kb(request):
         return _server_error(str(e))
 
 
+@mcp.custom_route("/api/memory/by-entity", methods=["GET"])
+async def api_memory_by_entity(request):
+    """REST API: Backlinks — memories whose entities array contains ?entity=."""
+    try:
+        query = request.query_params
+        entity = (query.get("entity") or "").strip()
+        if not entity:
+            return _bad_request("entity is required")
+        project = _safe_project(query.get("project"))
+        limit = _read_int(query, "limit", 20, lo=1, hi=100)
+
+        manager = _get_memory_manager()
+        memories = manager.find_by_entity(entity, project=project, limit=limit)
+        return _ok(
+            {
+                "entity": entity,
+                "project": project or "all",
+                "count": len(memories),
+                "memories": memories,
+            }
+        )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error fetching by-entity backlinks: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/detail/{memory_id}", methods=["GET"])
 async def api_memory_detail(request):
     """REST API: Enriched single-memory detail (v2).
