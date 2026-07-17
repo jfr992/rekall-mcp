@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { MonoLabel } from "@/components/ui/mono-label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MemoryContent } from "./memory-content";
+import { EntityBacklinks } from "./entity-backlinks";
 import { EvidenceRail } from "./evidence-rail";
 import { RelationshipList } from "./relationship-list";
 import type { DetailResponseV2 } from "@/lib/schemas";
@@ -30,6 +31,7 @@ export function MemoryInspector({
 }: Props) {
   const [copied, setCopied] = useState<"id" | "content" | null>(null);
   const [copyFailed, setCopyFailed] = useState<"id" | "content" | null>(null);
+  const [backlinkEntity, setBacklinkEntity] = useState<string | null>(null);
   const memory = detail?.memory;
 
   // Compute status: contradicted > superseded > legacy > current
@@ -161,6 +163,34 @@ export function MemoryInspector({
 
           {/* Memory text — rendered once */}
           <MemoryContent content={memory.content ?? ""} />
+
+          {/* Entity chips — each opens the backlinks slide-over */}
+          {memory.entities?.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {memory.entities.map((entity) => (
+                <button
+                  key={entity}
+                  type="button"
+                  aria-label={`Backlinks for ${entity}`}
+                  onClick={() => setBacklinkEntity(entity)}
+                  className="rounded-full border border-[var(--border)] bg-[var(--surface-0)] px-2.5 py-0.5 font-mono text-[11px] text-[var(--fg-muted)] hover:border-[var(--border-strong)] hover:text-[var(--fg)]"
+                >
+                  {entity}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {backlinkEntity && (
+            <EntityBacklinks
+              entity={backlinkEntity}
+              project={currentProject}
+              onClose={() => setBacklinkEntity(null)}
+              onSelectMemory={(memoryId) => {
+                setBacklinkEntity(null);
+                onSelectMemory(memoryId);
+              }}
+            />
+          )}
 
           {/* Evidence rail */}
           <EvidenceRail
