@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import re
 from collections import Counter
 from pathlib import Path
@@ -102,7 +103,16 @@ class BM25Encoder:
 
         Args:
             corpus: List of documents (memory content strings)
+
+        Raises:
+            ValueError: If already fitted — refit reassigns token IDs; use a
+                fresh encoder per vocab generation.
         """
+        if self.vocab:
+            raise ValueError(
+                "Encoder already fitted; fit() reassigns token IDs. "
+                "Create a fresh BM25Encoder per vocab generation."
+            )
         if not corpus:
             return
 
@@ -126,11 +136,11 @@ class BM25Encoder:
             # Smoothed IDF: avoids negative values for high-freq terms
             self.idf[token_id] = math.log((self._doc_count - df + 0.5) / (df + 0.5) + 1)
 
-    def encode(self, text: str) -> dict[int, float]:
-        """Encode text to sparse BM25 vector.
+    def encode_document(self, text: str) -> dict[int, float]:
+        """Encode a document to a sparse BM25 vector (IDF x TF saturation x length norm).
 
         Args:
-            text: Text to encode
+            text: Document text to encode
 
         Returns:
             Dict mapping token_id -> BM25 weight. Empty if vocab not built.
@@ -162,6 +172,28 @@ class BM25Encoder:
 
         return sparse
 
+    def encode_query(self, text: str) -> dict[int, float]:
+        """Encode a query to a sparse vector of raw term counts.
+
+        No IDF and no length normalization — the document side carries both,
+        so IDF appears exactly once in the sparse dot product.
+
+        Args:
+            text: Query text to encode
+
+        Returns:
+            Dict mapping token_id -> query term count. Empty if vocab not built.
+        """
+        if not self.vocab:
+            return {}
+
+        tf: Counter[str] = Counter(self._tokenize(text))
+        return {self.vocab[token]: float(freq) for token, freq in tf.items() if token in self.vocab}
+
+    def encode(self, text: str) -> dict[int, float]:
+        """Deprecated alias for encode_document(); queries should use encode_query()."""
+        return self.encode_document(text)
+
     def save(self, path: str, binding: dict | None = None) -> None:
         """Persist vocabulary and IDF to disk.
 
@@ -180,9 +212,19 @@ class BM25Encoder:
         }
         if binding is not None:
             data["_binding"] = binding
-        Path(path).parent.mkdir(parents=True, exist_ok=True)
-        with open(path, "w") as f:
-            json.dump(data, f)
+        target = Path(path)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # Atomic publish: same-dir temp + fsync + os.replace so a crash mid-save
+        # never leaves a truncated vocab (which would brick every save/recall).
+        tmp = target.with_name(f".{target.name}.tmp")
+        try:
+            with open(tmp, "w") as f:
+                json.dump(data, f)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, target)
+        finally:
+            tmp.unlink(missing_ok=True)
 
     def load(self, path: str) -> None:
         """Load vocabulary and IDF from disk.

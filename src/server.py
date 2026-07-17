@@ -14,11 +14,13 @@ Usage:
     MCP_CONFIG=tools.yaml python -m server
 """
 
+import asyncio
 import logging
 import os
 import re
 import sys
 import time
+import weakref
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
@@ -441,6 +443,36 @@ def _server_error(message: str):
     return JSONResponse({"error": message}, status_code=500)
 
 
+# Exclusive maintenance barrier: resparse holds this for its whole transaction,
+# so mutation routes (save/observe/delete) queue behind it and land on the new
+# vocab generation. Single-process daemon makes an in-process lock sufficient.
+# Per-loop because asyncio.Lock binds to the first loop that contends on it.
+_maintenance_barriers: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
+
+
+def _maintenance_barrier() -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    lock = _maintenance_barriers.get(loop)
+    if lock is None:
+        lock = _maintenance_barriers[loop] = asyncio.Lock()
+    return lock
+
+
+@mcp.custom_route("/api/memory/resparse", methods=["POST"])
+async def api_memory_resparse(request):
+    """REST API: transactional BM25 vocab refit. Maintenance op — REST only, no MCP tool."""
+    from memory.resparse import resparse
+
+    try:
+        manager = _get_memory_manager()
+        async with _maintenance_barrier():
+            result = await asyncio.to_thread(resparse, manager)
+        return _ok(result)
+    except Exception as e:
+        logger.error(f"Error running resparse: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/save", methods=["POST"])
 async def api_save_memory(request):
     """REST API: Save a memory."""
@@ -456,7 +488,8 @@ async def api_save_memory(request):
             return JSONResponse({"error": "content is required"}, status_code=400)
 
         manager = _get_memory_manager()
-        memory_id = manager.save(content, type=mem_type, project=project, capture_origin="rest")
+        async with _maintenance_barrier():
+            memory_id = manager.save(content, type=mem_type, project=project, capture_origin="rest")
 
         return JSONResponse({"memory_id": memory_id, "status": "saved", "type": mem_type})
     except RequestValidationError as e:
@@ -1026,7 +1059,8 @@ async def api_delete_memory(request):
             return JSONResponse({"error": "memory_id is required"}, status_code=400)
 
         manager = _get_memory_manager()
-        deleted = manager.delete(memory_id)
+        async with _maintenance_barrier():
+            deleted = manager.delete(memory_id)
 
         if not deleted:
             return JSONResponse(
@@ -1890,14 +1924,15 @@ async def api_observe(request):
         evidence_class = body.get("evidence_class")
         if evidence_class not in ("confirmed_artifact", "explicit_user", "inferred"):
             evidence_class = None
-        memory_id = manager.save(
-            content,
-            type=mem_type,
-            scope=scope,
-            capture_origin="hook",
-            session_id=body.get("session_id") or None,
-            evidence_class=evidence_class,
-        )
+        async with _maintenance_barrier():
+            memory_id = manager.save(
+                content,
+                type=mem_type,
+                scope=scope,
+                capture_origin="hook",
+                session_id=body.get("session_id") or None,
+                evidence_class=evidence_class,
+            )
 
         return JSONResponse(
             {

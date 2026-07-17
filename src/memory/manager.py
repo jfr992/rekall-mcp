@@ -24,6 +24,7 @@ All operations:
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import re
@@ -50,6 +51,9 @@ if TYPE_CHECKING:
     from memory.knowledge_graph import KnowledgeGraph
 
 logger = logging.getLogger(__name__)
+
+# Identifier-shaped token: hyphen/underscore joining alnum runs (i-03470c..., stable_hash_id)
+_BM25_IDENTIFIER_RE = re.compile(r"[a-z0-9]+[-_][a-z0-9_-]+")
 
 
 # =============================================================================
@@ -158,6 +162,7 @@ class MemoryManager:
     """
 
     COLLECTION = "agent_memory"
+    BM25_DRIFT_WINDOW = 50
 
     def __init__(
         self,
@@ -226,14 +231,18 @@ class MemoryManager:
         A vocab carrying a ``_binding`` for a different store is refused
         (dense-only, logged once) — decoding with the wrong vocab would return
         silently wrong sparse matches. Headerless vocabs load as always.
+
+        An in-progress resparse marker means the collection holds mixed-generation
+        sparse vectors — dense-only until a rerun completes and clears it.
         """
+        # Bare test doubles (object.__new__) have no vocab path to check.
+        if getattr(self, "_bm25_path", None) is not None and self.resparse_sentinel.exists():
+            return None
         if (
             self._sparse_encoder is None
             and not self._sparse_vocab_rejected
             and self._bm25_path.exists()
         ):
-            import json
-
             from core import BM25Encoder
 
             try:
@@ -253,7 +262,16 @@ class MemoryManager:
                 self._sparse_vocab_rejected = True
                 return None
             enc = BM25Encoder()
-            enc.load(str(self._bm25_path))
+            try:
+                enc.load(str(self._bm25_path))
+            except (OSError, ValueError, TypeError):
+                logger.warning(
+                    f"BM25 vocab at {self._bm25_path} is corrupt/unreadable — "
+                    "running dense-only; run `rekall reindex` to rebuild it",
+                    exc_info=True,
+                )
+                self._sparse_vocab_rejected = True
+                return None
             self._sparse_encoder = enc
         return self._sparse_encoder
 
@@ -298,6 +316,11 @@ class MemoryManager:
         if self._event_log is None:
             self._event_log = EventLog(self.memory_dir / "_events.jsonl")
         return self._event_log
+
+    @property
+    def resparse_sentinel(self) -> Path:
+        """In-progress resparse marker, beside the vocab (distinct from reindex's)."""
+        return self._bm25_path.with_name(".resparse-in-progress")
 
     @property
     def reindex_sentinel(self) -> Path:
@@ -505,9 +528,55 @@ class MemoryManager:
 
             # Post-save hook: fires only AFTER the vector write completed.
             self._maybe_bootstrap_sparse()
+            self._record_bm25_drift(embedding_text)
 
             logger.info(f"Saved memory: {memory_id}")
             return memory_id
+
+    def _record_bm25_drift(self, embedding_text: str) -> None:
+        """Track per-save OOV rate against the fitted vocab (drift signal)."""
+        encoder = self.sparse_encoder
+        if encoder is None:
+            return
+        tokens = encoder._tokenize(embedding_text)
+        if len(tokens) == 0:  # explicit: test doubles can be truthy yet length-zero
+            return
+        oov_tokens = [t for t in tokens if t not in encoder.vocab]
+        oov_rate = len(oov_tokens) / len(tokens)
+
+        drift_path = self._bm25_path.with_name("_bm25_drift.json")
+        state = {
+            "window": [],
+            "saves_since_fit": 0,
+            "corpus_count_at_fit": None,
+            "oov_identifier_seen": False,
+            "oov_identifier_tokens": [],
+        }
+        try:
+            stored = json.loads(drift_path.read_text())
+        except (OSError, ValueError):
+            stored = None
+        if isinstance(stored, dict) and isinstance(stored.get("window"), list):
+            state = {**state, **stored}
+        state["window"] = (state["window"] + [round(oov_rate, 4)])[-self.BM25_DRIFT_WINDOW :]
+        state["saves_since_fit"] += 1
+        if state["corpus_count_at_fit"] is None:
+            state["corpus_count_at_fit"] = getattr(encoder, "_doc_count", 0) or None
+
+        oov_identifiers = [
+            t
+            for t in oov_tokens
+            if _BM25_IDENTIFIER_RE.search(t) and t not in state["oov_identifier_tokens"]
+        ]
+        if oov_identifiers:
+            state["oov_identifier_seen"] = True
+            state["oov_identifier_tokens"] = (state["oov_identifier_tokens"] + oov_identifiers)[
+                -20:
+            ]
+
+        tmp = drift_path.with_name(drift_path.name + ".tmp")
+        tmp.write_text(json.dumps(state))
+        os.replace(tmp, drift_path)
 
     def _maybe_bootstrap_sparse(self) -> None:
         """BM25 bootstrap: 50th vector write on a vocab-less store goes hybrid."""

@@ -114,6 +114,53 @@ class TestBM25EncoderHybridFlow:
         assert all(v > 0 for v in result.values())
 
 
+class AsymmetricFakeEncoder:
+    """Fake with distinct outputs per side, so call-site routing is observable."""
+
+    def encode_document(self, text: str) -> dict[int, float]:
+        return {1: 9.9}
+
+    def encode_query(self, text: str) -> dict[int, float]:
+        return {2: 1.0}
+
+    def encode(self, text: str) -> dict[int, float]:
+        return {3: 0.5}
+
+
+class TestAsymmetricCallSites:
+    """save() encodes with encode_document; search() with encode_query."""
+
+    def test_search_uses_encode_query(self):
+        """The sparse prefetch leg carries the query-side encoding."""
+        from unittest.mock import MagicMock
+
+        from core.vector_store import VectorStore
+
+        store = VectorStore(collection="t", sparse_encoder=AsymmetricFakeEncoder())
+        store._client = MagicMock()
+        store._client.query_points.return_value.points = []
+
+        store.search(vector=[0.1] * 384, limit=5, query_text="TOPE-123")
+
+        kwargs = store._client.query_points.call_args.kwargs
+        sparse_prefetch = kwargs["prefetch"][1]
+        assert sparse_prefetch.query.indices == [2]
+
+    def test_save_uses_encode_document(self):
+        """The stored sparse vector carries the document-side encoding."""
+        from unittest.mock import MagicMock
+
+        from core.vector_store import VectorStore
+
+        store = VectorStore(collection="t", sparse_encoder=AsymmetricFakeEncoder())
+        store._client = MagicMock()
+
+        store.save(id="m1", vector=[0.1] * 384, payload={}, content="TOPE-123 issue")
+
+        points = store._client.upsert.call_args.kwargs["points"]
+        assert points[0].vector["bm25"].indices == [1]
+
+
 @pytest.mark.integration
 class TestHybridSearchIntegration:
     """Integration tests requiring running Qdrant on port 6334."""
