@@ -1282,6 +1282,7 @@ class MemoryManager:
                             "project": result.get("project"),
                             "memory_id": memory_id,
                             "entities": result.get("entities") or [],
+                            "sparse_rescued": bool(result.get("sparse_rescued")),
                         }
                     )
                     continue
@@ -1328,6 +1329,7 @@ class MemoryManager:
                         "memory_id": memory_id,
                         "tier": tier,
                         "entities": result.get("entities") or [],
+                        "sparse_rescued": bool(result.get("sparse_rescued")),
                     }
                 )
 
@@ -1342,6 +1344,19 @@ class MemoryManager:
             from memory.context_match import partition_by_context
 
             results = partition_by_context(scored, task_hint, limit)
+
+            # Coverage guarantee (2026-07-17): an exact-term hit the sparse leg
+            # rescued below the dense floor must not lose the final cut to the
+            # frozen blend weights — reserve the last slot for the best one.
+            if limit and len(results) >= limit:
+                in_results = {r.get("memory_id") for r in results}
+                dropped_rescued = [
+                    r
+                    for r in scored
+                    if r.get("sparse_rescued") and r.get("memory_id") not in in_results
+                ]
+                if dropped_rescued and not any(r.get("sparse_rescued") for r in results):
+                    results[-1] = dropped_rescued[0]
 
             # Stage B freshness annotation (read-only; spec 2026-07-06)
             try:
