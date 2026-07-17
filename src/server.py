@@ -29,6 +29,7 @@ from pathlib import Path
 from mcp.server.fastmcp import FastMCP
 
 from core import Telemetry
+from memory.insights import EVENT_WINDOW
 from memory.types import VALID_MEMORY_TYPES
 from tools import ToolConfig, ToolLoader, ToolRegistry
 
@@ -778,17 +779,19 @@ async def api_memory_review(request):
         return _server_error(str(e))
 
 
-# Bounded event tail folded into sessions — 5k events covers weeks at current
-# volumes; the cap is surfaced as `window` so the UI can say what it can't see.
-_SESSIONS_EVENT_WINDOW = 5000
+# Bounded event tail shared by sessions/insights/stream — 5k events covers
+# weeks at current volumes; the cap is surfaced so the UI can say what it
+# can't see. One cached snapshot serves all three routes (memory.insights).
+_SESSIONS_EVENT_WINDOW = EVENT_WINDOW
 
 
 def _folded_sessions(limit: int = 50):
+    from memory.insights import event_snapshot
     from memory.sessions import fold_sessions
 
     manager = _get_memory_manager()
-    events, _cursor, _truncated = manager.event_log.read_from(None, limit=_SESSIONS_EVENT_WINDOW)
-    return fold_sessions(events, limit=limit)
+    snapshot = event_snapshot(manager.event_log)
+    return fold_sessions(list(snapshot.events), limit=limit)
 
 
 @mcp.custom_route("/api/memory/sessions", methods=["GET"])
@@ -843,6 +846,32 @@ async def api_session_detail(request):
         return _ok({**match, "window": _SESSIONS_EVENT_WINDOW})
     except Exception as e:
         logger.error(f"Error fetching session detail: {e}")
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/memory/insights", methods=["GET"])
+async def api_memory_insights(request):
+    """REST API: cockpit aggregates from one filtered store scroll + the
+    shared bounded event tail. Honest numbers only (see memory.insights)."""
+    from memory.insights import build_insights, event_snapshot
+
+    try:
+        project = _safe_project(request.query_params.get("project"))
+        scoped = project not in (None, "all")
+        manager = _get_memory_manager()
+
+        records = manager.store.scroll_all(filters={"project": project} if scoped else None)
+        try:
+            total = int(manager.store.count())
+        except Exception:
+            total = len(records)
+
+        snapshot = event_snapshot(manager.event_log)
+        return _ok(build_insights(records, snapshot, total=total, project=project))
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error building insights: {e}")
         return _server_error(str(e))
 
 
