@@ -41,7 +41,36 @@ export const MemorySchema = z.object({
   date: z.string().optional(),
   project: z.string().optional(),
   salience: z.number().optional(),
+  entities: z.array(z.string()).optional(),
 }).passthrough();
+
+// ----- Recall (global search) ----------------------------------------------
+
+export const RecallMemorySchema = MemorySchema.extend({
+  score: z.number().optional(),
+});
+
+export const RecallResponseSchema = z.object({
+  query: z.string(),
+  count: z.number(),
+  memories: z.array(RecallMemorySchema),
+});
+
+// ----- Delete ---------------------------------------------------------------
+
+export const DeleteResponseSchema = z.object({
+  deleted: z.boolean(),
+  memory_id: z.string(),
+});
+
+// ----- Entity backlinks ----------------------------------------------------
+
+export const ByEntityResponseSchema = z.object({
+  entity: z.string(),
+  project: z.string(),
+  count: z.number(),
+  memories: z.array(MemorySchema),
+});
 
 // ----- Graph ---------------------------------------------------------------
 
@@ -223,6 +252,14 @@ export const FeedbackResponseSchema = z.object({ recorded: z.boolean() });
 
 // ----- Pressure ------------------------------------------------------------
 
+export const FlaggedMemorySchema = z.object({
+  memory_id: z.string(),
+  content: z.string(),
+  type: z.string().optional().nullable(),
+  tier: z.string().optional().nullable(),
+  date: z.string().optional().nullable(),
+});
+
 export const PressureResponseSchema = z.object({
   project: z.string(),
   load_score: z.number(),
@@ -231,6 +268,9 @@ export const PressureResponseSchema = z.object({
     stale_working_count: z.number(),
     low_value_count: z.number(),
     contradiction_count: z.number(),
+    stale_working: z.array(FlaggedMemorySchema).default([]),
+    low_value: z.array(FlaggedMemorySchema).default([]),
+    conflict: z.array(FlaggedMemorySchema).default([]),
   }),
   candidates: z.array(z.record(z.string(), z.any())),
   truncated: z.boolean().optional(),
@@ -295,7 +335,7 @@ export const ResumeScopeSchema = z.object({
 }).passthrough();
 
 export const ResumeResponseSchema = z.object({
-  scope: ResumeScopeSchema,
+  scope: ResumeScopeSchema.nullable(),
   recent: z.array(ResumeMemorySchema),
   important: z.array(ResumeMemorySchema),
   unresolved: z.array(ResumeConflictSchema),
@@ -312,6 +352,10 @@ export type Health = z.infer<typeof HealthSchema>;
 export type ProjectInfo = z.infer<typeof ProjectInfoSchema>;
 export type ProjectsResponse = z.infer<typeof ProjectsResponseSchema>;
 export type Memory = z.infer<typeof MemorySchema>;
+export type RecallMemory = z.infer<typeof RecallMemorySchema>;
+export type RecallResponse = z.infer<typeof RecallResponseSchema>;
+export type ByEntityResponse = z.infer<typeof ByEntityResponseSchema>;
+export type DeleteResponse = z.infer<typeof DeleteResponseSchema>;
 export type GraphNode = z.infer<typeof GraphNodeSchema>;
 export type GraphLink = z.infer<typeof GraphLinkSchema>;
 export type GraphResponse = z.infer<typeof GraphResponseSchema>;

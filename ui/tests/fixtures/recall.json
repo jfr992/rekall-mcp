@@ -1,0 +1,24 @@
+{
+  "query": "metallb",
+  "count": 2,
+  "memories": [
+    {
+      "memory_id": "2026-07-10_decision_a1b2c3",
+      "content": "Decided to use MetalLB for bare-metal load balancing",
+      "type": "decision",
+      "tier": "semantic",
+      "date": "2026-07-10",
+      "project": "byte-edge",
+      "score": 0.91
+    },
+    {
+      "memory_id": "2026-07-02_learning_d4e5f6",
+      "content": "MetalLB speaker pods need the memberlist secret before join",
+      "type": "learning",
+      "tier": "working",
+      "date": "2026-07-02",
+      "project": "byte-edge",
+      "score": 0.84
+    }
+  ]
+}

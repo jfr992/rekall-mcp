@@ -202,6 +202,7 @@ DO NOT save:
 - Temporary/session-only context
 - Things trivially derivable from code or docs
 - Vague or speculative observations
+- Session-parking / scratch notes ("TOMORROW: ...", "SESSION PARK", running TODO lists, "pick up here next time") — these are working state, not durable knowledge
 
 For evidence_class, claim ONLY:
 - "explicit_user" when the user stated the fact directly (preference, correction, explicit decision)

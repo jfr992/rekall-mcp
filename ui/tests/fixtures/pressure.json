@@ -5,7 +5,18 @@
   "flagged": {
     "stale_working_count": 8,
     "low_value_count": 10,
-    "contradiction_count": 1
+    "contradiction_count": 1,
+    "stale_working": [],
+    "low_value": [],
+    "conflict": [
+      {
+        "memory_id": "c1",
+        "content": "conflicting memory about MetalLB pool",
+        "type": "decision",
+        "tier": "semantic",
+        "date": "2026-07-01"
+      }
+    ]
   },
   "candidates": []
 }

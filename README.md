@@ -115,6 +115,7 @@ python -m memory.cli stats
 
 Software evals: `uv run --extra dev pytest tests/test_software_evals.py`
 Utility report: `uv run python scripts/utility_report.py`
+Conflict-edge repair: `QDRANT_URL=... uv run python scripts/repair_contradicts.py` — re-judges unrefined `contradicts` edges, dry-run by default (see [docs/TUNING.md](docs/TUNING.md))
 
 ---
 
@@ -421,6 +422,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/context/skills` | GET | Inferred skill context from memory clusters |
 | `/api/memory/context/startup` | GET | Unified agent startup payload |
 | `/api/memory/capsule` | GET | Thin project familiarity capsule |
+| `/api/memory/by-entity` | GET | Entity backlinks: memories whose `entities` contain `?entity=` (case-insensitive; `?project=&limit=`) |
 | `/api/memory/detail/{id}` | GET | Full memory + v2 blocks: relationships (both in/out directions), provenance, lifecycle, storage, warnings; `neighbors` alias for backward compat |
 | `/api/memory/kb` | GET | Typed slices |
 | `/api/memory/pressure` | GET | Pressure metrics + flagged candidates |

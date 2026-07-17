@@ -10,7 +10,7 @@ import contextlib
 import json
 import os
 import tempfile
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -71,6 +71,11 @@ class Edge:
     band: str | None = None
 
 
+# Edge attrs beyond these (repair markers like negation_matched) live only in
+# the raw graph data — get_edges must not choke on them.
+_EDGE_FIELDS = frozenset(f.name for f in fields(Edge)) - {"source", "target"}
+
+
 class KnowledgeGraph:
     """Persistent directed graph of memory relationships."""
 
@@ -95,15 +100,13 @@ class KnowledgeGraph:
             self._graph.add_node(node_id, **attrs)
 
         for edge in data.get("edges", []):
-            self._graph.add_edge(
-                edge["source"],
-                edge["target"],
-                relation=edge["relation"],
-                weight=edge["weight"],
-                auto=edge.get("auto", True),
-                llm_refined=edge.get("llm_refined", False),
-                created=edge.get("created", date.today().isoformat()),
-            )
+            # Round-trip ALL attrs (band, negation_matched, ...) — dropping
+            # them here erased provisional-band markers on every restart.
+            attrs = {k: v for k, v in edge.items() if k not in ("source", "target")}
+            attrs.setdefault("auto", True)
+            attrs.setdefault("llm_refined", False)
+            attrs.setdefault("created", date.today().isoformat())
+            self._graph.add_edge(edge["source"], edge["target"], **attrs)
 
     def save(self) -> None:
         if not self._dirty:
@@ -218,16 +221,42 @@ class KnowledgeGraph:
         self._graph.add_edge(source, target, **attrs)
         self._dirty = True
 
+    def set_edge_relation(self, source: str, target: str, relation: str, **attrs: Any) -> bool:
+        """Explicitly set an existing edge's relation, bypassing add_edge's
+        priority guard (which refuses downgrades like contradicts→related_to).
+
+        Returns True when the edge existed and was updated. A stale band
+        marker is dropped on relation change unless a new one is supplied.
+        """
+        if relation not in RELATION_TYPES:
+            raise ValueError(f"Unknown relation: {relation}")
+        if not self._graph.has_edge(source, target):
+            return False
+        data = self._graph.edges[source, target]
+        if data.get("relation") != relation and "band" not in attrs:
+            data.pop("band", None)
+        data["relation"] = relation
+        data.update(attrs)
+        self._dirty = True
+        return True
+
+    def remove_edge(self, source: str, target: str) -> None:
+        if self._graph.has_edge(source, target):
+            self._graph.remove_edge(source, target)
+            self._dirty = True
+
     def get_edges(self, memory_id: str, direction: str = "both") -> list[Edge]:
         edges: list[Edge] = []
 
         if direction in {"out", "both"}:
             for _, target, data in self._graph.out_edges(memory_id, data=True):
-                edges.append(Edge(source=memory_id, target=target, **data))
+                known = {k: v for k, v in data.items() if k in _EDGE_FIELDS}
+                edges.append(Edge(source=memory_id, target=target, **known))
 
         if direction in {"in", "both"}:
             for source, _, data in self._graph.in_edges(memory_id, data=True):
-                edges.append(Edge(source=source, target=memory_id, **data))
+                known = {k: v for k, v in data.items() if k in _EDGE_FIELDS}
+                edges.append(Edge(source=source, target=memory_id, **known))
 
         return edges
 
