@@ -14,6 +14,8 @@ import {
   DetailResponseV2Schema,
   ResumeResponseSchema,
   ByEntityResponseSchema,
+  InsightsResponseSchema,
+  StreamResponseSchema,
 } from "@/lib/schemas";
 
 const FIXTURES = path.join(__dirname, "fixtures");
@@ -108,5 +110,33 @@ describe("schemas parse real fixtures", () => {
     expect(parsed.relationships).toBeUndefined();
     expect(parsed.provenance).toBeUndefined();
     expect(parsed.lifecycle).toBeUndefined();
+  });
+
+  test("InsightsResponseSchema", () => {
+    const parsed = InsightsResponseSchema.parse(load("insights.json"));
+    expect(parsed.in_scope).toBe(41);
+    expect(parsed.per_week.length).toBe(10);
+    expect(parsed.avg_top_score_denominator).toBe(19);
+    expect(parsed.tier_counts.identity).toBe(2);
+    expect(parsed.event_window.events).toBe(5000);
+  });
+
+  test("StreamResponseSchema parses every row kind", () => {
+    const parsed = StreamResponseSchema.parse(load("stream.json"));
+    expect(parsed.rows.map((r) => r.kind)).toEqual([
+      "saved",
+      "recalled",
+      "recalled",
+      "promoted",
+      "consolidated",
+    ]);
+    const saved = parsed.rows[0];
+    if (saved.kind !== "saved") throw new Error("expected saved row");
+    expect(saved.payload.fades_in_hours).toBe(311);
+    const miss = parsed.rows[2];
+    if (miss.kind !== "recalled") throw new Error("expected recalled row");
+    expect(miss.payload.memory_ids).toEqual([]);
+    expect(miss.payload.top_score).toBeNull();
+    expect(parsed.event_window.events).toBe(4211);
   });
 });
