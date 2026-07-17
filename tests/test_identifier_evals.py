@@ -53,8 +53,7 @@ TARGETS = {
 # Hyphen/underscore-free so no distractor save ever records an
 # identifier-shaped OOV token (keeps the drift assertions unambiguous).
 DISTRACTORS = [
-    f"distractor note number {i} about the deployment pipeline review topic {i}"
-    for i in range(8)
+    f"distractor note number {i} about the deployment pipeline review topic {i}" for i in range(8)
 ]
 
 SCOPE = MemoryScope(agent="test", project="proj")
@@ -109,9 +108,7 @@ def _build_manager(tmp_path: Path, *, vocab_corpus: list[str] | None = None) -> 
 
 
 def _top5_ids(manager: MemoryManager, query: str) -> list[str]:
-    results = manager.store.search(
-        vector=manager.embedder.encode(query), query_text=query, limit=5
-    )
+    results = manager.store.search(vector=manager.embedder.encode(query), query_text=query, limit=5)
     return [r["memory_id"] for r in results]
 
 
@@ -130,7 +127,9 @@ def test_bootstrap_threshold_save_path_exercises_sparse_leg_for_identifier_query
     manager = _build_manager(tmp_path)
     target_id = manager.save(TARGETS[ERROR_CLASS], type="note", scope=SCOPE)
     for i in range(BOOTSTRAP_THRESHOLD - 1):
-        manager.save(f"corpus note number {i} covering the rollout window", type="note", scope=SCOPE)
+        manager.save(
+            f"corpus note number {i} covering the rollout window", type="note", scope=SCOPE
+        )
 
     assert manager.store.count() == BOOTSTRAP_THRESHOLD
     assert manager._bm25_path.exists()  # bootstrap fired at the threshold
