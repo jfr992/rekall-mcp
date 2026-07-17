@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { MonoLabel } from "@/components/ui/mono-label";
 import { MemoryInspector } from "@/components/memory-inspector/memory-inspector";
@@ -48,18 +47,18 @@ export function GlobalSearch() {
 
   return (
     <>
-      <Button
-        variant="ghost"
-        size="sm"
+      <button
+        type="button"
         onClick={() => setOpen(true)}
         aria-label="Search memories"
+        className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg border border-[rgba(125,200,170,0.18)] px-3 py-1.5 text-[11px] text-[var(--fg-muted)] transition-colors hover:border-[rgba(45,212,160,0.5)] hover:text-[var(--fg-soft)]"
       >
-        <Search size={14} />
-        Search
-        <kbd className="rounded border border-[var(--border)] px-1 font-mono text-[10px] text-[var(--fg-muted)]">
+        <Search size={12} />
+        <span className="hidden md:inline">recall anything</span>
+        <kbd className="hidden rounded border border-[var(--border)] px-1 font-mono text-[9px] font-medium text-[var(--fg-dim)] md:inline">
           ⌘K
         </kbd>
-      </Button>
+      </button>
 
       <Dialog open={open} onClose={close} title="Search memories">
         <input
