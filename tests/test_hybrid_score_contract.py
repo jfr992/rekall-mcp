@@ -221,6 +221,7 @@ class TestHybridScoreContract:
         assert hybrid_by_id["edge"]["score"] == pytest.approx(id_cosine, abs=1e-6)
 
 
+@pytest.mark.integration
 class TestSparseCoverageSurvivesThreshold:
     """Prod regression (2026-07-17): the recall gate (0.35 cosine) killed every
     sparse-found identifier memory, because such memories have low dense cosine
