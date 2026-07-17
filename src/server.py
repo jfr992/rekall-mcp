@@ -1700,12 +1700,24 @@ async def api_memory_pressure(request):
         )
 
         graph_has_nodes = manager.knowledge_graph.stats()["nodes"] > 0
-        contradiction_count = 0
+        conflict: list[dict] = []
         if graph_has_nodes:
             for m in memories:
                 mid = m.get("memory_id", "")
                 if mid and manager.knowledge_graph.count_contradicts(mid) > 0:
-                    contradiction_count += 1
+                    conflict.append(m)
+
+        def _slim(items: list[dict]) -> list[dict]:
+            return [
+                {
+                    "memory_id": m.get("memory_id"),
+                    "content": (m.get("content") or "")[:160],
+                    "type": m.get("type"),
+                    "tier": m.get("tier"),
+                    "date": m.get("date"),
+                }
+                for m in items[:50]
+            ]
 
         return _ok(
             {
@@ -1715,7 +1727,10 @@ async def api_memory_pressure(request):
                 "flagged": {
                     "stale_working_count": pressure.get("stale_working_count", 0),
                     "low_value_count": pressure.get("low_value_count", 0),
-                    "contradiction_count": contradiction_count,
+                    "contradiction_count": len(conflict),
+                    "stale_working": _slim(pressure.get("stale_working", [])),
+                    "low_value": _slim(pressure.get("low_value", [])),
+                    "conflict": _slim(conflict),
                 },
                 "candidates": pressure.get("candidates", [])[:50],
                 "truncated": len(memories) >= cap,
