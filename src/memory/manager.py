@@ -1313,6 +1313,36 @@ class MemoryManager:
 
             return results
 
+    ENTITY_SCAN_CAP = 2000
+
+    def find_by_entity(
+        self,
+        entity: str,
+        *,
+        project: str | None = None,
+        limit: int = 20,
+    ) -> list[dict[str, Any]]:
+        """Backlinks: memories whose entities array contains entity, case-insensitive.
+
+        Stored casing is first-occurrence (extract_entities preserves source
+        casing), so an indexed MatchValue on `entities` would miss variant
+        casings; compare casefolded post-retrieval instead (same pattern as
+        the string-date filter).
+        """
+        with self._telemetry.track("memory.find_by_entity"):
+            target = entity.strip().casefold()
+            if not target:
+                return []
+            filters = {"project": project} if project else None
+            candidates = self.store.scroll(filters=filters, limit=self.ENTITY_SCAN_CAP)
+            hits = [
+                m
+                for m in candidates
+                if any(e.casefold() == target for e in m.get("entities") or [])
+            ]
+            hits.sort(key=lambda m: m.get("date") or "", reverse=True)
+            return hits[:limit]
+
     def recall_cross_project(
         self,
         query: str,
@@ -1833,8 +1863,15 @@ class MemoryManager:
         project: str | None = None,
         scope: MemoryScope | None = None,
         limit: int = 12,
+        all_scopes: bool = False,
     ) -> dict[str, Any]:
-        """Return a continuity-oriented startup packet for an agent session."""
+        """Return a continuity-oriented startup packet for an agent session.
+
+        all_scopes=True builds an unscoped packet (no project filter, scope=None)
+        instead of fabricating a scope from the server's own cwd.
+        """
+        if all_scopes and scope is None and project is None:
+            return build_resume_packet(self, scope=None, limit=limit)
         scope = scope or ScopeDetector.detect(project=project)
         return build_resume_packet(self, scope=scope, limit=limit)
 

@@ -1447,7 +1447,7 @@ async def api_memory_resume(request):
         limit = _read_int(query, "limit", 12)
 
         manager = _get_memory_manager()
-        packet = manager.get_resume_packet(project=project, limit=limit)
+        packet = manager.get_resume_packet(project=project, limit=limit, all_scopes=project is None)
         return _ok(packet)
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -1698,12 +1698,24 @@ async def api_memory_pressure(request):
         )
 
         graph_has_nodes = manager.knowledge_graph.stats()["nodes"] > 0
-        contradiction_count = 0
+        conflict: list[dict] = []
         if graph_has_nodes:
             for m in memories:
                 mid = m.get("memory_id", "")
                 if mid and manager.knowledge_graph.count_contradicts(mid) > 0:
-                    contradiction_count += 1
+                    conflict.append(m)
+
+        def _slim(items: list[dict]) -> list[dict]:
+            return [
+                {
+                    "memory_id": m.get("memory_id"),
+                    "content": (m.get("content") or "")[:160],
+                    "type": m.get("type"),
+                    "tier": m.get("tier"),
+                    "date": m.get("date"),
+                }
+                for m in items[:50]
+            ]
 
         return _ok(
             {
@@ -1713,7 +1725,10 @@ async def api_memory_pressure(request):
                 "flagged": {
                     "stale_working_count": pressure.get("stale_working_count", 0),
                     "low_value_count": pressure.get("low_value_count", 0),
-                    "contradiction_count": contradiction_count,
+                    "contradiction_count": len(conflict),
+                    "stale_working": _slim(pressure.get("stale_working", [])),
+                    "low_value": _slim(pressure.get("low_value", [])),
+                    "conflict": _slim(conflict),
                 },
                 "candidates": pressure.get("candidates", [])[:50],
                 "truncated": len(memories) >= cap,
@@ -1781,6 +1796,34 @@ async def api_memory_kb(request):
         return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error fetching kb: {e}")
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/memory/by-entity", methods=["GET"])
+async def api_memory_by_entity(request):
+    """REST API: Backlinks — memories whose entities array contains ?entity=."""
+    try:
+        query = request.query_params
+        entity = (query.get("entity") or "").strip()
+        if not entity:
+            return _bad_request("entity is required")
+        project = _safe_project(query.get("project"))
+        limit = _read_int(query, "limit", 20, lo=1, hi=100)
+
+        manager = _get_memory_manager()
+        memories = manager.find_by_entity(entity, project=project, limit=limit)
+        return _ok(
+            {
+                "entity": entity,
+                "project": project or "all",
+                "count": len(memories),
+                "memories": memories,
+            }
+        )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error fetching by-entity backlinks: {e}")
         return _server_error(str(e))
 
 
