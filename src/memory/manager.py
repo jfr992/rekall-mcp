@@ -235,7 +235,8 @@ class MemoryManager:
         An in-progress resparse marker means the collection holds mixed-generation
         sparse vectors — dense-only until a rerun completes and clears it.
         """
-        if self.resparse_sentinel.exists():
+        # Bare test doubles (object.__new__) have no vocab path to check.
+        if getattr(self, "_bm25_path", None) is not None and self.resparse_sentinel.exists():
             return None
         if (
             self._sparse_encoder is None
