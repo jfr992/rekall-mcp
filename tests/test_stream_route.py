@@ -231,8 +231,13 @@ def test_stream_merges_newest_first_and_honors_limit(monkeypatch, tmp_path):
         _ev(
             "memory_promoted",
             "proj-a",
-            {"memory_id": "m1", "from_tier": "working", "to_tier": "episodic",
-             "memory_ids": ["m1"], "session_id": None},
+            {
+                "memory_id": "m1",
+                "from_tier": "working",
+                "to_tier": "episodic",
+                "memory_ids": ["m1"],
+                "session_id": None,
+            },
             _at(1),
         )
     )
