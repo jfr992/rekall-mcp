@@ -398,7 +398,7 @@ class VectorStore:
             vec = vec.get("") or next((v for v in vec.values() if isinstance(v, list)), None)
         if not vec:
             return 0.0
-        dot = sum(q * h for q, h in zip(query_vector, vec))
+        dot = sum(q * h for q, h in zip(query_vector, vec, strict=True))
         norm_q = math.sqrt(sum(q * q for q in query_vector))
         norm_h = math.sqrt(sum(h * h for h in vec))
         if norm_q == 0.0 or norm_h == 0.0:
