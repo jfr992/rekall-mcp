@@ -175,3 +175,34 @@ def test_interrupted_resparse_holds_sentinel_and_rerun_recovers(tmp_path):
     assert manager.sparse_encoder is not None
     assert manager.doctor()["bm25"]["verdict"] != "resparse_incomplete"
     assert target_id in _identifier_hits(manager)
+
+
+def test_resparse_swaps_both_encoder_refs_and_new_saves_use_new_vocab(tmp_path):
+    from core.utils import stable_hash_id
+    from memory.resparse import resparse
+
+    manager = _build_manager(tmp_path)
+    _seed(manager)
+    manager._sparse_vocab_rejected = True  # publish must reset the latch
+
+    resparse(manager)
+
+    assert manager._sparse_encoder is not None
+    assert manager._sparse_encoder is manager.store.sparse_encoder
+    assert manager.sparse_encoder is manager.store.sparse_encoder
+    assert manager._sparse_vocab_rejected is False
+
+    follow_up = manager.save(
+        "follow-up on i-03470c789e7b72080 remediation completed", type="note", scope=SCOPE
+    )
+    point = manager.store.client.retrieve(
+        collection_name=manager.store.collection,
+        ids=[stable_hash_id(follow_up)],
+        with_payload=True,
+        with_vectors=True,
+    )[0]
+    sparse = point.vector["bm25"]
+    got = dict(zip(sparse.indices, sparse.values, strict=True))
+    expected = manager.store.sparse_encoder.encode_document(point.payload["embedding_text"])
+    assert got == pytest.approx(expected)  # encoded with the NEW vocab, in-process
+    assert manager.store.sparse_encoder.vocab[QUERY] in got  # identifier now in-vocab
