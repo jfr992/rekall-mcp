@@ -1447,9 +1447,7 @@ async def api_memory_resume(request):
         limit = _read_int(query, "limit", 12)
 
         manager = _get_memory_manager()
-        packet = manager.get_resume_packet(
-            project=project, limit=limit, all_scopes=project is None
-        )
+        packet = manager.get_resume_packet(project=project, limit=limit, all_scopes=project is None)
         return _ok(packet)
     except RequestValidationError as e:
         return _bad_request(str(e))
