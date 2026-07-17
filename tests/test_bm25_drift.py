@@ -130,6 +130,23 @@ def test_no_encoder_loaded_skips_drift_tracking(drift_manager):
     assert not drift_manager._bm25_path.with_name("_bm25_drift.json").exists()
 
 
+def test_corrupt_vocab_degrades_to_dense_only_with_one_loud_warning(tmp_path, caplog):
+    import logging
+
+    manager = MemoryManager(memory_dir=tmp_path / "memory", qdrant_path=str(tmp_path / "qdrant"))
+    manager._embedder = FakeEmbedder()
+    manager._bm25_path.write_text("{definitely not json[")
+
+    with caplog.at_level(logging.WARNING):
+        memory_id = manager.save("survives a corrupt vocab file", project="proj")
+        results = manager.recall("corrupt vocab", project="proj")
+
+    assert memory_id
+    assert isinstance(results, list)
+    corrupt_warnings = [r for r in caplog.records if "dense-only" in r.getMessage()]
+    assert len(corrupt_warnings) == 1
+
+
 def test_corrupt_drift_state_is_treated_as_empty_window(drift_manager):
     _install_vocab(drift_manager)
     drift_manager._bm25_path.with_name("_bm25_drift.json").write_text("{not json[")

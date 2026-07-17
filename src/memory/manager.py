@@ -211,6 +211,7 @@ class MemoryManager:
         # BM25 sparse encoder for hybrid search
         self._sparse_encoder = None
         self._sparse_vocab_rejected = False
+        self._sparse_vocab_corrupt = False
         self._bm25_path = self.memory_dir / "_bm25_vocab.json"
         self._event_log: EventLog | None = None
 
@@ -237,8 +238,6 @@ class MemoryManager:
             and not self._sparse_vocab_rejected
             and self._bm25_path.exists()
         ):
-            import json
-
             from core import BM25Encoder
 
             try:
@@ -258,7 +257,17 @@ class MemoryManager:
                 self._sparse_vocab_rejected = True
                 return None
             enc = BM25Encoder()
-            enc.load(str(self._bm25_path))
+            try:
+                enc.load(str(self._bm25_path))
+            except (OSError, ValueError, TypeError):
+                logger.warning(
+                    f"BM25 vocab at {self._bm25_path} is corrupt/unreadable — "
+                    "running dense-only; run `rekall reindex` to rebuild it",
+                    exc_info=True,
+                )
+                self._sparse_vocab_rejected = True
+                self._sparse_vocab_corrupt = True
+                return None
             self._sparse_encoder = enc
         return self._sparse_encoder
 
