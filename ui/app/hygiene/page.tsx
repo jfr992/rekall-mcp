@@ -81,25 +81,27 @@ export default function HygienePage() {
         )}
       </section>
 
-      <section className="space-y-4">
-        {plan === null ? (
-          <PruneBuilder onBuild={handleBuild} loading={planMutation.isPending} />
-        ) : (
-          <PrunePlanReview plan={plan}>
-            {({ expired }) => (
-              <PruneApplyGate
-                planId={plan.plan_id}
-                candidateCount={plan.candidates.length}
-                expired={expired}
-                loading={applyMutation.isPending}
-                onRequestApply={() => setDialogOpen(true)}
-              />
-            )}
-          </PrunePlanReview>
-        )}
+      {/* Stable children order keeps BackfillRunner mounted (dry-run gate state) */}
+      <section className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
+        <div className={plan === null ? "" : "md:col-span-2"}>
+          {plan === null ? (
+            <PruneBuilder onBuild={handleBuild} loading={planMutation.isPending} />
+          ) : (
+            <PrunePlanReview plan={plan}>
+              {({ expired }) => (
+                <PruneApplyGate
+                  planId={plan.plan_id}
+                  candidateCount={plan.candidates.length}
+                  expired={expired}
+                  loading={applyMutation.isPending}
+                  onRequestApply={() => setDialogOpen(true)}
+                />
+              )}
+            </PrunePlanReview>
+          )}
+        </div>
+        <BackfillRunner project={project} />
       </section>
-
-      <BackfillRunner project={project} />
 
       <PruneApplyDialog
         open={dialogOpen}
