@@ -50,3 +50,28 @@ def test_build_resume_packet_groups_recent_important_and_conflicts(tmp_path):
     assert "pressure" in packet
     assert "pressure_report" in packet
     assert "Resume Packet" in packet["summary"]
+
+
+def test_build_resume_packet_none_scope_renders_summary(tmp_path):
+    """Live bug: all-scopes resume (scope=None) crashed on scope.project in the summary."""
+    from memory.knowledge_graph import KnowledgeGraph
+    from memory.manager import MemoryManager
+
+    manager = MemoryManager(memory_dir=tmp_path, qdrant_url="http://localhost:6333")
+    manager._store = MagicMock()
+    manager._embedder = MagicMock()
+    manager._knowledge_graph = KnowledgeGraph(tmp_path / "_graph.json")
+    manager._store.scroll.return_value = [
+        {
+            "memory_id": "a",
+            "type": "decision",
+            "date": "2026-04-10",
+            "content": "Use PostgreSQL",
+            "project": "brain",
+        },
+    ]
+
+    packet = build_resume_packet(manager, scope=None)
+
+    assert packet["scope"] is None
+    assert packet["summary"].startswith("# Resume Packet: all projects")
