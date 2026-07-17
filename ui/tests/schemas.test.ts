@@ -13,6 +13,7 @@ import {
   DetailResponseSchema,
   DetailResponseV2Schema,
   ResumeResponseSchema,
+  ByEntityResponseSchema,
 } from "@/lib/schemas";
 
 const FIXTURES = path.join(__dirname, "fixtures");
@@ -67,6 +68,12 @@ describe("schemas parse real fixtures", () => {
 
   test("ResumeResponseSchema", () => {
     expect(ResumeResponseSchema.parse(load("resume.json")).truncated).toBe(false);
+  });
+
+  test("ByEntityResponseSchema", () => {
+    const parsed = ByEntityResponseSchema.parse(load("by-entity.json"));
+    expect(parsed.entity).toBe("MetalLB");
+    expect(parsed.memories[0].entities).toContain("MetalLB");
   });
 
   test("DetailResponseV2Schema parses v2 fixture with all new fields", () => {

@@ -41,6 +41,7 @@ export const MemorySchema = z.object({
   date: z.string().optional(),
   project: z.string().optional(),
   salience: z.number().optional(),
+  entities: z.array(z.string()).optional(),
 }).passthrough();
 
 // ----- Recall (global search) ----------------------------------------------
@@ -53,6 +54,15 @@ export const RecallResponseSchema = z.object({
   query: z.string(),
   count: z.number(),
   memories: z.array(RecallMemorySchema),
+});
+
+// ----- Entity backlinks ----------------------------------------------------
+
+export const ByEntityResponseSchema = z.object({
+  entity: z.string(),
+  project: z.string(),
+  count: z.number(),
+  memories: z.array(MemorySchema),
 });
 
 // ----- Graph ---------------------------------------------------------------
@@ -326,6 +336,7 @@ export type ProjectsResponse = z.infer<typeof ProjectsResponseSchema>;
 export type Memory = z.infer<typeof MemorySchema>;
 export type RecallMemory = z.infer<typeof RecallMemorySchema>;
 export type RecallResponse = z.infer<typeof RecallResponseSchema>;
+export type ByEntityResponse = z.infer<typeof ByEntityResponseSchema>;
 export type GraphNode = z.infer<typeof GraphNodeSchema>;
 export type GraphLink = z.infer<typeof GraphLinkSchema>;
 export type GraphResponse = z.infer<typeof GraphResponseSchema>;
