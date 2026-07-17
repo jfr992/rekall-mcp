@@ -26,6 +26,7 @@ All operations are traced via Telemetry.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 from qdrant_client import QdrantClient
@@ -212,7 +213,7 @@ class VectorStore:
 
             # Build sparse vector if encoder and content available
             if self.sparse_encoder is not None and content:
-                sparse = self.sparse_encoder.encode(content)
+                sparse = self.sparse_encoder.encode_document(content)
                 if sparse:
                     # PointStruct (not a raw dict): the embedded local client
                     # rejects dict points; the HTTP client merely tolerates them.
@@ -310,12 +311,13 @@ class VectorStore:
             vector: Query vector (dense)
             limit: Maximum results
             filters: Filter by payload fields {"field": "value"}
-            score_threshold: Minimum similarity (0-1). In hybrid mode this gates the dense
-                candidates; BM25 candidates are exempt (RRF scores are rank-based).
+            score_threshold: Minimum cosine similarity. Applied identically in both
+                paths: server-side on the dense path, post-scoring on the hybrid path.
             query_text: Original query text for BM25 sparse search
 
         Returns:
-            List of results with score and payload
+            List of results with score and payload. Score is always cosine —
+            hybrid uses RRF only to select candidates, never as the score.
 
         Example:
             results = store.search(
@@ -329,7 +331,7 @@ class VectorStore:
 
             # Hybrid search if encoder + query text available
             if self.sparse_encoder is not None and query_text:
-                sparse = self.sparse_encoder.encode(query_text)
+                sparse = self.sparse_encoder.encode_query(query_text)
                 if sparse:
                     prefetch_limit = limit * 2
                     results = self.client.query_points(
@@ -340,9 +342,6 @@ class VectorStore:
                                 using="",
                                 limit=prefetch_limit,
                                 filter=query_filter,
-                                # RRF-fused scores are rank-based; cosine thresholds only
-                                # make sense on the dense candidate set.
-                                score_threshold=score_threshold or None,
                             ),
                             Prefetch(
                                 query=SparseVector(
@@ -357,9 +356,18 @@ class VectorStore:
                         query=FusionQuery(fusion=Fusion.RRF),
                         query_filter=query_filter,
                         limit=limit,
+                        # RRF selects candidates; scores are re-computed as cosine
+                        # locally so every search path returns one score space.
+                        with_vectors=[""],
                     ).points
 
-                    return [{"score": hit.score, **hit.payload} for hit in results]
+                    scored = [
+                        {"score": self._cosine_to(vector, hit.vector), **hit.payload}
+                        for hit in results
+                    ]
+                    # Same cosine threshold semantics as the dense path (Qdrant
+                    # drops hits scoring below score_threshold, ties kept).
+                    return [hit for hit in scored if hit["score"] >= score_threshold]
 
             # Dense-only search
             results = self.client.query_points(
@@ -377,6 +385,25 @@ class VectorStore:
                 }
                 for hit in results
             ]
+
+    @staticmethod
+    def _cosine_to(query_vector: list[float], hit_vector: Any) -> float:
+        """Cosine between the query and a hit's dense vector.
+
+        Scale-invariant, so it matches Qdrant's cosine score whether or not the
+        stored vector was normalized. Named-vector hits carry {"": dense, ...}.
+        """
+        vec = hit_vector
+        if isinstance(vec, dict):
+            vec = vec.get("") or next((v for v in vec.values() if isinstance(v, list)), None)
+        if not vec:
+            return 0.0
+        dot = sum(q * h for q, h in zip(query_vector, vec, strict=True))
+        norm_q = math.sqrt(sum(q * q for q in query_vector))
+        norm_h = math.sqrt(sum(h * h for h in vec))
+        if norm_q == 0.0 or norm_h == 0.0:
+            return 0.0
+        return dot / (norm_q * norm_h)
 
     def scroll(
         self,
