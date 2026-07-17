@@ -347,6 +347,101 @@ export const ResumeResponseSchema = z.object({
   summary: z.string().optional(),
 }).passthrough();
 
+// ----- Insights ------------------------------------------------------------
+
+export const WeekBucketSchema = z.object({
+  week_start: z.string(),
+  count: z.number(),
+});
+
+export const TierCountsSchema = z.object({
+  working: z.number(),
+  episodic: z.number(),
+  semantic: z.number(),
+  identity: z.number(),
+});
+
+export const EventWindowSchema = z.object({
+  events: z.number(),
+  oldest_at: z.string().nullable(),
+});
+
+export const InsightsResponseSchema = z.object({
+  total: z.number(),
+  in_scope: z.number(),
+  weekly_delta: z.number(),
+  per_week: z.array(WeekBucketSchema),
+  recalls_7d: z.number(),
+  avg_top_score_7d: z.number().nullable(),
+  avg_top_score_denominator: z.number(),
+  recalls_with_hits_7d: z.number(),
+  misses_7d: z.number(),
+  promotions_7d: z.number(),
+  episodics_created_7d: z.number(),
+  tier_counts: TierCountsSchema,
+  event_window: EventWindowSchema,
+});
+
+// ----- Stream --------------------------------------------------------------
+
+export const StreamSavedRowSchema = z.object({
+  kind: z.literal("saved"),
+  at: z.string(),
+  payload: z.object({
+    memory_id: z.string(),
+    type: z.string(),
+    tier: z.string().nullable(),
+    project: z.string().nullable(),
+    preview: z.string(),
+    durability: z.number().nullable(),
+    fades_in_hours: z.number().nullable(),
+  }),
+});
+
+export const StreamRecalledRowSchema = z.object({
+  kind: z.literal("recalled"),
+  at: z.string(),
+  payload: z.object({
+    query: z.string().nullable(),
+    memory_ids: z.array(z.string()),
+    top_score: z.number().nullable(),
+    project: z.string().nullable(),
+  }),
+});
+
+export const StreamPromotedRowSchema = z.object({
+  kind: z.literal("promoted"),
+  at: z.string(),
+  payload: z.object({
+    memory_id: z.string(),
+    from_tier: z.string().nullable(),
+    to_tier: z.string().nullable(),
+    project: z.string().nullable(),
+  }),
+});
+
+export const StreamConsolidatedRowSchema = z.object({
+  kind: z.literal("consolidated"),
+  at: z.string(),
+  payload: z.object({
+    memory_id: z.string(),
+    preview: z.string(),
+    project: z.string().nullable(),
+  }),
+});
+
+export const StreamRowSchema = z.discriminatedUnion("kind", [
+  StreamSavedRowSchema,
+  StreamRecalledRowSchema,
+  StreamPromotedRowSchema,
+  StreamConsolidatedRowSchema,
+]);
+
+export const StreamResponseSchema = z.object({
+  rows: z.array(StreamRowSchema),
+  event_window: EventWindowSchema,
+});
+
 // Types
 export type Health = z.infer<typeof HealthSchema>;
 export type ProjectInfo = z.infer<typeof ProjectInfoSchema>;
@@ -382,6 +477,12 @@ export type PrunePlan = z.infer<typeof PrunePlanSchema>;
 export type PruneApplyResponse = z.infer<typeof PruneApplyResponseSchema>;
 export type BackfillReport = z.infer<typeof BackfillReportSchema>;
 export type ResumeResponse = z.infer<typeof ResumeResponseSchema>;
+export type WeekBucket = z.infer<typeof WeekBucketSchema>;
+export type TierCounts = z.infer<typeof TierCountsSchema>;
+export type EventWindow = z.infer<typeof EventWindowSchema>;
+export type InsightsResponse = z.infer<typeof InsightsResponseSchema>;
+export type StreamRow = z.infer<typeof StreamRowSchema>;
+export type StreamResponse = z.infer<typeof StreamResponseSchema>;
 
 export const PublishResponseSchema = z
   .object({
