@@ -34,13 +34,15 @@ export function BackfillRunner({ project }: { project?: string }) {
   };
 
   return (
-    <Card variant="flat" className="space-y-4">
-      <SerifHeading title="Lifecycle backfill" size="section" eyebrow="ONE-SHOT MIGRATION" />
-      <p className="text-sm text-[var(--fg-muted)]">
-        Compute tier / durability / retention_days for every existing memory. Safe. Idempotent.
-      </p>
+    <Card variant="flat" className="flex h-full flex-col gap-4">
+      <div>
+        <SerifHeading title="Lifecycle backfill" size="section" eyebrow="ONE-SHOT MIGRATION" />
+        <p className="mt-1.5 text-sm text-[var(--fg-muted)]">
+          Compute tier / durability / retention_days for every existing memory. Safe. Idempotent.
+        </p>
+      </div>
 
-      <div className="flex gap-3">
+      <div className="mt-auto flex gap-3 pt-1">
         <Button variant="ghost" onClick={() => run(true)} loading={backfill.isPending}>
           Dry run
         </Button>
