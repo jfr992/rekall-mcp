@@ -41,7 +41,7 @@ export function Dialog({ open, onClose, title, titleHidden, children }: Props) {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
         >
-          <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+          <div className="absolute inset-0 bg-[var(--scrim)] backdrop-blur-[3px]" onClick={onClose} />
           <motion.div
             className="relative w-full max-w-2xl rounded-[var(--radius-lg)] border border-[var(--border-strong)] bg-[var(--bg-elevated)] p-6 shadow-[0_20px_60px_rgba(0,0,0,0.6)]"
             initial={{ scale: 0.96, y: 8 }}

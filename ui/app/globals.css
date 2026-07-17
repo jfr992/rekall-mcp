@@ -15,6 +15,7 @@
   --bg-elevated: #0f1714;
   --bg-raised: #141e1a;
   --bg-frost: rgba(10, 16, 14, 0.92);
+  --scrim: rgba(3, 8, 6, 0.75);
 
   /* Surfaces */
   --surface-0: rgba(125, 200, 170, 0.04);
