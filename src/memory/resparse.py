@@ -43,8 +43,7 @@ def _assert_sparse_schema(store) -> None:
     sparse_fields = getattr(info.config.params, "sparse_vectors", None) or {}
     if "bm25" not in sparse_fields:
         raise ResparsePreflightError(
-            f"collection {store.collection!r} has no 'bm25' sparse field — "
-            f"{REMEDIATION_REINDEX}"
+            f"collection {store.collection!r} has no 'bm25' sparse field — {REMEDIATION_REINDEX}"
         )
 
 
@@ -127,14 +126,10 @@ def _rewrite_sparse_vectors(
             for sparse in [encoder.encode_document(_sparse_text(memory))]
         ]
         try:
-            store.client.update_vectors(
-                collection_name=store.collection, points=batch, wait=True
-            )
+            store.client.update_vectors(collection_name=store.collection, points=batch, wait=True)
         except Exception:
             logger.warning("resparse batch %d failed — retrying once", start, exc_info=True)
-            store.client.update_vectors(
-                collection_name=store.collection, points=batch, wait=True
-            )
+            store.client.update_vectors(collection_name=store.collection, points=batch, wait=True)
         points_updated += len(batch)
     return points_updated
 

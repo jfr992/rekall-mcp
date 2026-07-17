@@ -7,18 +7,19 @@ import os
 from pathlib import Path
 
 import pytest
+from tests.conftest import TEST_QDRANT_URL
 
 from core import BM25Encoder
 from memory import MemoryManager
 from memory.scope import MemoryScope
 
-from tests.conftest import TEST_QDRANT_URL
-
 pytestmark = pytest.mark.integration
 
 QUERY = "i-03470c789e7b72080"
 TARGET_CONTENT = "Instance i-03470c789e7b72080 hit EdgeHostDeviceAlreadyInUse on the edge host"
-FILLER_CONTENTS = [f"filler note number {i} about the deployment pipeline rollout" for i in range(4)]
+FILLER_CONTENTS = [
+    f"filler note number {i} about the deployment pipeline rollout" for i in range(4)
+]
 INITIAL_CORPUS = [
     "filler note deployment pipeline rollout postgres",
     "docker compose deployment pipeline notes",
@@ -109,9 +110,7 @@ def test_resparse_refuses_on_orphan_qdrant_points_before_mutation(tmp_path):
 
 
 def _identifier_hits(manager: MemoryManager) -> list[str]:
-    results = manager.store.search(
-        vector=manager.embedder.encode(QUERY), query_text=QUERY, limit=3
-    )
+    results = manager.store.search(vector=manager.embedder.encode(QUERY), query_text=QUERY, limit=3)
     return [r["memory_id"] for r in results]
 
 
