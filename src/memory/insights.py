@@ -19,9 +19,7 @@ EVENT_WINDOW = 5000
 
 TIERS = ("working", "episodic", "semantic", "identity")
 
-TIERS = ("working", "episodic", "semantic", "identity")
-
-_cache: dict[Path, tuple[tuple[int, int, int], "EventSnapshot"]] = {}
+_cache: dict[Path, tuple[tuple[int, int, int], EventSnapshot]] = {}
 
 
 @dataclass(frozen=True, slots=True)
@@ -152,8 +150,7 @@ def build_stream(
     now = now or datetime.now()
     # A compaction summary IS a memory record — surface it once, as its own kind.
     rows = [
-        _consolidated_row(r) if r.get("type") == "summary" else _saved_row(r, now)
-        for r in records
+        _consolidated_row(r) if r.get("type") == "summary" else _saved_row(r, now) for r in records
     ]
     for event in scoped_events(snapshot, project):
         if event.event_type == "memory_recalled":

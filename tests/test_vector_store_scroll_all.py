@@ -17,7 +17,12 @@ def scroll_store():
         store.save(
             id=memory_id,
             vector=[float(i + 1)] * 384,
-            payload={"memory_id": memory_id, "type": "fact", "project": "proj-a", "tier": "working"},
+            payload={
+                "memory_id": memory_id,
+                "type": "fact",
+                "project": "proj-a",
+                "tier": "working",
+            },
         )
     yield store
     try:
