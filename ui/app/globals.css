@@ -6,56 +6,66 @@
 /* ---------------------------------------------------------------------- */
 
 :root {
-  /* Fonts (wired up by next/font in layout.tsx) */
-  --font-serif: "IBM Plex Serif", Georgia, serif;
-  --font-sans: "Inter", system-ui, sans-serif;
-  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  /* Fonts: --font-serif / --font-sans / --font-mono are set on <html> by
+     next/font in layout.tsx (Newsreader / Space Grotesk / JetBrains Mono). */
 
-  /* Backgrounds — cinematic dark, no pure #000 */
-  --bg-deep: #020617;
-  --bg-base: #0a0f1f;
-  --bg-elevated: #0f172a;
-  --bg-frost: rgba(15, 23, 42, 0.72);
+  /* Backgrounds — dark green, no pure #000 */
+  --bg-deep: #0a100e;
+  --bg-base: #0c1310;
+  --bg-elevated: #0f1714;
+  --bg-raised: #141e1a;
+  --bg-frost: rgba(10, 16, 14, 0.92);
+  --scrim: rgba(3, 8, 6, 0.75);
 
   /* Surfaces */
-  --surface-0: rgba(148, 163, 184, 0.03);
-  --surface-1: rgba(148, 163, 184, 0.06);
-  --surface-2: rgba(148, 163, 184, 0.09);
-  --border: rgba(148, 163, 184, 0.12);
-  --border-strong: rgba(148, 163, 184, 0.24);
+  --surface-0: rgba(125, 200, 170, 0.04);
+  --surface-1: rgba(125, 200, 170, 0.07);
+  --surface-2: rgba(125, 200, 170, 0.11);
+  --border: rgba(125, 200, 170, 0.1);
+  --border-strong: rgba(125, 200, 170, 0.25);
 
-  /* Foreground */
-  --fg: #f1f5f9;
-  --fg-muted: #94a3b8;
-  --fg-dim: #64748b;
-  --fg-serif: #f8fafc;
+  /* Foreground — muted/dim are AA-safe (≥4.5:1 on #0a100e) for sub-18px text;
+     faint (#5f7269, 3.75:1) is large/decorative only. */
+  --fg: #e6efe9;
+  --fg-soft: #bccac2;
+  --fg-muted: #84988d;
+  --fg-dim: #75897f;
+  --fg-faint: #5f7269;
+  --fg-serif: #e6efe9;
 
   /* Accents */
-  --accent-primary: #60a5fa;
+  --accent-primary: #2dd4a0;
+  --accent-bright: #7fe8c3;
   --accent-secondary: #a78bfa;
   --accent-danger: #f87171;
-  --accent-warning: #f59e0b;
-  --accent-success: #34d399;
+  --accent-warning: #f2c14e;
+  --accent-success: #a3e635;
 
-  /* Tier colors */
-  --tier-identity: #fbbf24;
-  --tier-semantic: #a78bfa;
-  --tier-episodic: #60a5fa;
-  --tier-working: #94a3b8;
+  /* Tier colors — re-derived for the dark-green palette (old → new):
+     identity  #fbbf24 amber  → #a78bfa violet (mockup ladder)
+     semantic  #a78bfa violet → #2dd4a0 mint   (primary accent)
+     episodic  #60a5fa blue   → #38bdf8 sky    (mockup ladder)
+     working   #94a3b8 slate  → #75897f moss   (AA-safe; mockup's #5f7269 fails 4.5:1) */
+  --tier-identity: #a78bfa;
+  --tier-semantic: #2dd4a0;
+  --tier-episodic: #38bdf8;
+  --tier-working: #75897f;
 
-  /* Memory type colors */
-  --type-fact: #60a5fa;
-  --type-decision: #f59e0b;
-  --type-preference: #c084fc;
-  --type-learning: #34d399;
-  --type-requirement: #f87171;
-  --type-note: #94a3b8;
-  --type-session: #cbd5e1;
+  /* Memory type colors — from the design source; session/summary are
+     design-consistent muted picks (summary ties to the consolidation violet) */
+  --type-preference: #f2c14e;
+  --type-decision: #2dd4a0;
+  --type-requirement: #fb7185;
+  --type-learning: #a3e635;
+  --type-fact: #38bdf8;
+  --type-note: #8fa39a;
+  --type-session: #7fb4d8;
+  --type-summary: #c4b5fd;
 
-  /* Aurora mesh stops — punched up for visibility */
-  --aurora-1: rgba(96, 165, 250, 0.30);
-  --aurora-2: rgba(167, 139, 250, 0.24);
-  --aurora-3: rgba(34, 211, 238, 0.18);
+  /* Aurora mesh stops — retinted to the green family */
+  --aurora-1: rgba(45, 212, 160, 0.22);
+  --aurora-2: rgba(56, 189, 248, 0.14);
+  --aurora-3: rgba(167, 139, 250, 0.12);
 
   /* Motion */
   --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
@@ -90,7 +100,7 @@ body {
   padding: 0;
   background: var(--bg-deep);
   color: var(--fg);
-  font-family: var(--font-sans);
+  font-family: var(--font-sans), system-ui, sans-serif;
   font-size: 15px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -102,7 +112,7 @@ h1,
 h2,
 h3,
 h4 {
-  font-family: var(--font-serif);
+  font-family: var(--font-serif), Georgia, serif;
   color: var(--fg-serif);
   line-height: 1.2;
   font-weight: 500;
@@ -112,7 +122,7 @@ code,
 kbd,
 samp,
 .mono {
-  font-family: var(--font-mono);
+  font-family: var(--font-mono), ui-monospace, monospace;
   font-variant-numeric: tabular-nums;
 }
 

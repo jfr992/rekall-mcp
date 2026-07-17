@@ -1,0 +1,26 @@
+{
+  "total": 132,
+  "in_scope": 41,
+  "weekly_delta": 6,
+  "per_week": [
+    { "week_start": "2026-05-11", "count": 2 },
+    { "week_start": "2026-05-18", "count": 0 },
+    { "week_start": "2026-05-25", "count": 4 },
+    { "week_start": "2026-06-01", "count": 3 },
+    { "week_start": "2026-06-08", "count": 5 },
+    { "week_start": "2026-06-15", "count": 1 },
+    { "week_start": "2026-06-22", "count": 7 },
+    { "week_start": "2026-06-29", "count": 8 },
+    { "week_start": "2026-07-06", "count": 5 },
+    { "week_start": "2026-07-13", "count": 6 }
+  ],
+  "recalls_7d": 23,
+  "avg_top_score_7d": 0.8412,
+  "avg_top_score_denominator": 19,
+  "recalls_with_hits_7d": 20,
+  "misses_7d": 3,
+  "promotions_7d": 2,
+  "episodics_created_7d": 4,
+  "tier_counts": { "working": 12, "episodic": 18, "semantic": 9, "identity": 2 },
+  "event_window": { "events": 5000, "oldest_at": "2026-06-30T08:12:44.123456" }
+}

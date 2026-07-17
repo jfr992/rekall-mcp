@@ -751,6 +751,18 @@ class MemoryManager:
             self.store.update_payload(memory_id, updated)
         except Exception:
             logger.warning(f"Could not persist reinforcement for {memory_id}", exc_info=True)
+            return
+
+        # Durable write site: the tier bump persisted, so the event is true.
+        from_tier, to_tier = existing.get("tier"), updated.get("tier")
+        if from_tier != to_tier:
+            self.record_event(
+                event_type="memory_promoted",
+                project=str(existing.get("project") or "general"),
+                source="reinforcement",
+                memory_ids=[memory_id],
+                payload={"memory_id": memory_id, "from_tier": from_tier, "to_tier": to_tier},
+            )
 
     def backfill_lifecycle(
         self,
@@ -782,6 +794,8 @@ class MemoryManager:
         }
         skipped: list[str] = []
         errors: list[dict[str, str]] = []
+        tier_changes = {"promoted": 0, "demoted": 0, "unchanged": 0}
+        tier_order = ["working", "episodic", "semantic", "identity"]
 
         points = self.store.scroll(filters=filters, limit=batch_size)
         graph_has_nodes = self.knowledge_graph.stats()["nodes"] > 0
@@ -817,6 +831,14 @@ class MemoryManager:
             result = classify(signals)
 
             updated_by_tier[result.tier] += 1
+            if existing_tier == result.tier:
+                tier_changes["unchanged"] += 1
+            elif existing_tier in tier_order and tier_order.index(existing_tier) > tier_order.index(
+                result.tier
+            ):
+                tier_changes["demoted"] += 1
+            else:
+                tier_changes["promoted"] += 1
             if dry_run:
                 continue
 
@@ -833,6 +855,16 @@ class MemoryManager:
                 self.store.update_payload(memory_id, new_payload)
             except Exception as e:  # noqa: BLE001
                 errors.append({"memory_id": memory_id, "error": str(e)})
+
+        if not dry_run:
+            # ONE summary event — a per-memory flood would drown the event tail
+            # (the backfill route processes 500 records per request).
+            self.record_event(
+                event_type="lifecycle_backfilled",
+                project=project or "general",
+                source="backfill_lifecycle",
+                payload=dict(tier_changes),
+            )
 
         return {
             "dry_run": dry_run,
