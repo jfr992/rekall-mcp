@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400;1,6..72,500&family=Space+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+html{background:#0a100e}
+body{margin:0;background:#0a100e;color:#e6efe9;font-family:"Space Grotesk",system-ui,sans-serif}
+a{color:#9db4ff}a:hover{color:#c6d4ff}
+@keyframes pulse{0%,100%{opacity:.5}50%{opacity:1}}
+@keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+</style>
+</helmet>
+
+<div style="min-height:100vh;display:flex;flex-direction:column;background:#0a100e">
+  <!-- top bar -->
+  <div style="display:flex;align-items:center;gap:20px;padding:13px 24px;border-bottom:1px solid rgba(125,200,170,.1);position:sticky;top:0;background:rgba(10,16,14,.92);backdrop-filter:blur(8px);z-index:20">
+    <div style="display:flex;align-items:baseline;gap:8px"><span style="font:italic 500 20px Newsreader,serif">Rekall</span><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.18em;color:#5f7269">{{ viewTag }}</span></div>
+    <div style="display:flex;gap:4px;margin-left:16px">
+      <span onClick="{{ goCortex }}" style="font:500 12px 'Space Grotesk',sans-serif;padding:6px 13px;border-radius:7px;cursor:pointer;color:{{ cortexTabColor }};background:{{ cortexTabBg }}" style-hover="color:#e6efe9">Cockpit</span>
+      <span onClick="{{ goRecall }}" style="font:500 12px 'Space Grotesk',sans-serif;padding:6px 13px;border-radius:7px;cursor:pointer;color:{{ recallTabColor }};background:{{ recallTabBg }}" style-hover="color:#e6efe9">Knowledge Base</span>
+      <span onClick="{{ goStream }}" style="font:500 12px 'Space Grotesk',sans-serif;padding:6px 13px;border-radius:7px;cursor:pointer;color:{{ streamTabColor }};background:{{ streamTabBg }}" style-hover="color:#e6efe9">Stream</span>
+      <span onClick="{{ goSessions }}" style="font:500 12px 'Space Grotesk',sans-serif;padding:6px 13px;border-radius:7px;cursor:pointer;color:{{ sessionsTabColor }};background:{{ sessionsTabBg }}" style-hover="color:#e6efe9">Sessions</span>
+      <span onClick="{{ goHygiene }}" style="font:500 12px 'Space Grotesk',sans-serif;padding:6px 13px;border-radius:7px;cursor:pointer;color:{{ hygieneTabColor }};background:{{ hygieneTabBg }}" style-hover="color:#e6efe9">Hygiene</span>
+    </div>
+    <div style="position:relative">
+      <div onClick="{{ toggleScope }}" style="display:flex;align-items:center;gap:8px;font:500 11px 'JetBrains Mono',monospace;color:#7fe8c3;border:1px solid rgba(45,212,160,.3);border-radius:8px;padding:6px 12px;cursor:pointer;background:rgba(45,212,160,.08)" style-hover="border-color:rgba(45,212,160,.55)"><span style="color:#5f7269;letter-spacing:.12em;font-size:9px">SCOPE</span>{{ scope }}<span style="color:#5f7269">▾</span></div>
+      <sc-if value="{{ scopeOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="position:absolute;top:calc(100% + 6px);left:0;min-width:180px;background:#141e1a;border:1px solid rgba(45,212,160,.3);border-radius:9px;box-shadow:0 16px 44px rgba(0,0,0,.6);padding:5px;z-index:40;display:flex;flex-direction:column;gap:1px">
+        <sc-for list="{{ scopeOptions }}" as="o" hint-placeholder-count="5">
+          <div onClick="{{ o.pick }}" style="display:flex;align-items:center;gap:8px;font:400 12px 'Space Grotesk',sans-serif;color:{{ o.color }};padding:7px 10px;border-radius:6px;cursor:pointer" style-hover="background:rgba(45,212,160,.1);color:#e6efe9"><span style="width:5px;height:5px;border-radius:50%;background:{{ o.dotColor }}"></span>{{ o.name }}<span style="margin-left:auto;font:400 10px 'JetBrains Mono',monospace;color:#5f7269">{{ o.count }}</span></div>
+        </sc-for>
+      </div>
+      </sc-if>
+    </div>
+    <div style="flex:1"></div>
+    <div onClick="{{ openPalette }}" style="display:flex;align-items:center;gap:10px;font:400 11px 'Space Grotesk',sans-serif;color:#84988d;border:1px solid rgba(125,200,170,.18);border-radius:8px;padding:6px 12px;cursor:pointer" style-hover="border-color:rgba(45,212,160,.5);color:#bccac2">⌕ recall anything<span style="font:500 9.5px 'JetBrains Mono',monospace;border:1px solid rgba(125,200,170,.2);border-radius:4px;padding:2px 5px;color:#5f7269">⌘K</span></div>
+    <div style="display:flex;align-items:center;gap:6px;font:500 10px 'JetBrains Mono',monospace;color:#a3e635"><span style="width:6px;height:6px;border-radius:50%;background:#a3e635;animation:pulse 2s infinite"></span>MCP</div>
+    <div style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269">{{ topCount }}</div>
+  </div>
+
+  <!-- ============ CORTEX ============ -->
+  <sc-if value="{{ isCortex }}" hint-placeholder-val="{{ true }}">
+  <div data-screen-label="Cortex" style="padding:26px 28px;display:flex;flex-direction:column;gap:18px;flex:1;animation:fadein .25s ease">
+    <div style="display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr;gap:14px">
+      <div style="background:radial-gradient(ellipse 90% 140% at 20% 0%,rgba(45,212,160,.14),rgba(13,17,32,.6));border:1px solid rgba(45,212,160,.25);border-radius:11px;padding:18px 20px">
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#84988d">TOTAL MEMORIES</div>
+        <div style="display:flex;align-items:baseline;gap:10px;margin-top:6px"><span style="font:400 44px/1 Newsreader,serif">870</span><span style="font:500 11px 'JetBrains Mono',monospace;color:#a3e635">+38 this week</span></div>
+        <div style="display:flex;gap:3px;align-items:flex-end;height:34px;margin-top:14px">
+          <div style="flex:1;height:30%;background:rgba(45,212,160,.35);border-radius:2px"></div><div style="flex:1;height:45%;background:rgba(45,212,160,.35);border-radius:2px"></div><div style="flex:1;height:38%;background:rgba(45,212,160,.35);border-radius:2px"></div><div style="flex:1;height:60%;background:rgba(45,212,160,.35);border-radius:2px"></div><div style="flex:1;height:52%;background:rgba(45,212,160,.35);border-radius:2px"></div><div style="flex:1;height:74%;background:rgba(45,212,160,.5);border-radius:2px"></div><div style="flex:1;height:66%;background:rgba(45,212,160,.5);border-radius:2px"></div><div style="flex:1;height:88%;background:rgba(45,212,160,.6);border-radius:2px"></div><div style="flex:1;height:78%;background:rgba(45,212,160,.6);border-radius:2px"></div><div style="flex:1;height:100%;background:#2dd4a0;border-radius:2px"></div>
+        </div>
+      </div>
+      <div style="background:#0f1714;border:1px solid rgba(125,200,170,.12);border-radius:11px;padding:18px 20px">
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#84988d">RECALLS · 7D</div>
+        <div style="font:400 36px/1.1 Newsreader,serif;margin-top:6px">212</div>
+        <div style="font:400 11px 'Space Grotesk',sans-serif;color:#84988d;margin-top:8px">avg. top match <span style="color:#7fe8c3;font-family:'JetBrains Mono',monospace">0.88</span></div>
+      </div>
+      <div style="background:#0f1714;border:1px solid rgba(125,200,170,.12);border-radius:11px;padding:18px 20px">
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#84988d">HIT RATE</div>
+        <div style="font:400 36px/1.1 Newsreader,serif;margin-top:6px;color:#a3e635">91%</div>
+        <div style="font:400 11px 'Space Grotesk',sans-serif;color:#84988d;margin-top:8px">recalls that surfaced a used memory</div>
+      </div>
+      <div style="background:#0f1714;border:1px solid rgba(248,113,113,.25);border-radius:11px;padding:18px 20px">
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#f87171">NEEDS ATTENTION</div>
+        <div style="font:400 36px/1.1 Newsreader,serif;margin-top:6px;color:#f87171">19</div>
+        <div style="font:400 11px 'Space Grotesk',sans-serif;color:#84988d;margin-top:8px">5 possible duplicates · 14 decaying</div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1.5fr 1fr;gap:14px;flex:1">
+      <div style="background:#0f1714;border:1px solid rgba(125,200,170,.12);border-radius:11px;padding:18px 20px">
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#84988d;margin-bottom:16px">TIER COMPOSITION</div>
+        <div style="display:flex;height:12px;border-radius:6px;overflow:hidden;margin-bottom:16px">
+          <div style="width:4%;background:#a78bfa"></div><div style="width:46%;background:#2dd4a0"></div><div style="width:42%;background:#38bdf8"></div><div style="width:8%;background:#33443c"></div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:9px;font:400 12px 'Space Grotesk',sans-serif">
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:2px;background:#a78bfa"></span><span>identity</span><span style="margin-left:auto;font:500 11px 'JetBrains Mono',monospace;color:#84988d">31</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:2px;background:#2dd4a0"></span><span>semantic</span><span style="margin-left:auto;font:500 11px 'JetBrains Mono',monospace;color:#84988d">402</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:2px;background:#38bdf8"></span><span>episodic</span><span style="margin-left:auto;font:500 11px 'JetBrains Mono',monospace;color:#84988d">371</span></div>
+          <div style="display:flex;align-items:center;gap:8px"><span style="width:8px;height:8px;border-radius:2px;background:#33443c"></span><span>working</span><span style="margin-left:auto;font:500 11px 'JetBrains Mono',monospace;color:#84988d">66</span></div>
+        </div>
+        <div style="border-top:1px solid rgba(125,200,170,.1);margin-top:16px;padding-top:12px;font:400 11px/1.5 'Space Grotesk',sans-serif;color:#84988d">Consolidation is keeping pace: <span style="color:#7fe8c3">13 promotions</span> this week vs. 38 new episodes.</div>
+      </div>
+      <div style="background:#0f1714;border:1px solid rgba(125,200,170,.12);border-radius:11px;padding:18px 20px;display:flex;flex-direction:column">
+        <div style="display:flex;align-items:baseline;margin-bottom:14px"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#84988d">LIVE RECALL FEED</span><span style="margin-left:auto;font:400 10px 'JetBrains Mono',monospace;color:#a3e635;animation:pulse 2s infinite">● streaming</span></div>
+        <div style="display:flex;flex-direction:column;gap:2px;font:400 12px 'Space Grotesk',sans-serif;flex:1">
+          <sc-for list="{{ feed }}" as="f" hint-placeholder-count="5">
+            <div style="display:grid;grid-template-columns:52px 1fr 60px 44px;gap:10px;padding:8px 6px;border-radius:6px;background:{{ f.bg }}">
+              <span style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269">{{ f.time }}</span><span style="color:{{ f.color }}">{{ f.q }}</span><span style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269">{{ f.hits }}</span><span style="font:500 10px 'JetBrains Mono',monospace;color:{{ f.scoreColor }}">{{ f.score }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="border-top:1px solid rgba(125,200,170,.1);padding-top:10px;font:400 11px 'Space Grotesk',sans-serif;color:#84988d">1 miss today — consider capturing infra preferences.</div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div style="background:#0a100d;border:1px solid rgba(125,200,170,.18);border-radius:11px;flex:1;position:relative;overflow:hidden;min-height:180px">
+          <canvas ref="{{ graphRef }}" style="position:absolute;inset:0;width:100%;height:100%"></canvas>
+          <div style="position:absolute;left:18px;top:14px;font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#84988d">NEURAL GRAPH</div>
+          <div style="position:absolute;left:18px;bottom:12px;font:400 10px 'JetBrains Mono',monospace;color:#5f7269;text-shadow:0 1px 4px #0a100d">870 nodes · brightness = recall freq</div>
+
+        </div>
+        <div style="background:#0f1714;border:1px solid rgba(125,200,170,.12);border-radius:11px;padding:16px 18px">
+          <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#84988d;margin-bottom:10px">HYGIENE QUEUE</div>
+          <div style="display:flex;flex-direction:column;gap:8px;font:400 12px 'Space Grotesk',sans-serif;color:#bccac2">
+            <div style="display:flex;gap:8px;align-items:center"><span style="font:500 10px 'JetBrains Mono',monospace;color:#f2c14e;border:1px solid rgba(242,193,78,.3);border-radius:4px;padding:1px 6px">5</span>possible duplicates to merge</div>
+            <div style="display:flex;gap:8px;align-items:center"><span style="font:500 10px 'JetBrains Mono',monospace;color:#f87171;border:1px solid rgba(248,113,113,.3);border-radius:4px;padding:1px 6px">14</span>working memories decaying</div>
+            <div style="display:flex;gap:8px;align-items:center"><span style="font:500 10px 'JetBrains Mono',monospace;color:#84988d;border:1px solid rgba(125,200,170,.2);border-radius:4px;padding:1px 6px">2</span>contradictions detected</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ RECALL ============ -->
+  <sc-if value="{{ isRecall }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Recall" style="flex:1;display:flex;flex-direction:column;animation:fadein .25s ease">
+    <div style="padding:26px 24px 18px;border-bottom:1px solid rgba(125,200,170,.1);background:radial-gradient(ellipse 60% 120% at 50% 0%,rgba(45,212,160,.08),transparent)">
+      <div style="max-width:860px;margin:0 auto">
+        <div style="display:flex;align-items:center;gap:14px;background:#141e1a;border:1px solid rgba(45,212,160,.35);border-radius:10px;padding:15px 18px;box-shadow:0 0 0 4px rgba(45,212,160,.06)">
+          <span style="font:500 13px 'JetBrains Mono',monospace;color:#2dd4a0">recall ▸</span>
+          <span style="font:400 16px 'Space Grotesk',sans-serif;flex:1">{{ kbQuery }}<span style="display:inline-block;width:2px;height:18px;background:#2dd4a0;vertical-align:-3px;margin-left:2px;animation:pulse 1s infinite"></span></span>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:12px;align-items:center">
+          <span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.14em;color:#5f7269">MODE</span>
+          <sc-for list="{{ kbModes }}" as="m" hint-placeholder-count="3">
+            <span onClick="{{ m.pick }}" style="font:500 11px 'JetBrains Mono',monospace;padding:4px 10px;border-radius:99px;background:{{ m.bg }};color:{{ m.color }};border:1px solid {{ m.border }};cursor:pointer" style-hover="color:#7fe8c3">{{ m.name }}</span>
+          </sc-for>
+          <span style="flex:1"></span>
+          <span style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269">{{ resultCount }}</span>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:200px 1fr 360px;flex:1;min-height:0">
+      <div style="border-right:1px solid rgba(125,200,170,.1);padding:18px 16px;display:flex;flex-direction:column;gap:22px">
+        <div>
+          <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#5f7269;margin-bottom:10px">TYPE</div>
+          <div style="display:flex;flex-direction:column;gap:7px;font:400 12px 'Space Grotesk',sans-serif">
+            <sc-for list="{{ typeFacets }}" as="t" hint-placeholder-count="6">
+              <div onClick="{{ t.pick }}" style="display:flex;align-items:center;gap:8px;cursor:pointer" style-hover="color:#e6efe9"><span style="width:7px;height:7px;border-radius:50%;background:{{ t.color }};box-shadow:{{ t.ring }}"></span><span style="color:{{ t.textColor }}">{{ t.name }}</span><span style="margin-left:auto;color:#5f7269;font:400 10px 'JetBrains Mono',monospace">{{ t.count }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+        <div>
+          <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#5f7269;margin-bottom:10px">TIER</div>
+          <div style="display:flex;flex-direction:column;gap:7px;font:400 12px 'Space Grotesk',sans-serif;color:#84988d">
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;background:#a78bfa;transform:rotate(45deg)"></span>identity<span style="margin-left:auto;font:400 10px 'JetBrains Mono',monospace;color:#5f7269">31</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;background:#2dd4a0;transform:rotate(45deg)"></span>semantic<span style="margin-left:auto;font:400 10px 'JetBrains Mono',monospace;color:#5f7269">402</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;background:#38bdf8;transform:rotate(45deg)"></span>episodic<span style="margin-left:auto;font:400 10px 'JetBrains Mono',monospace;color:#5f7269">371</span></div>
+            <div style="display:flex;align-items:center;gap:8px"><span style="width:7px;height:7px;background:#5f7269;transform:rotate(45deg)"></span>working<span style="margin-left:auto;font:400 10px 'JetBrains Mono',monospace;color:#5f7269">66</span></div>
+          </div>
+        </div>
+        <div>
+          <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#5f7269;margin-bottom:10px">RECENCY</div>
+          <div style="display:flex;flex-direction:column;gap:7px;font:400 12px 'Space Grotesk',sans-serif;color:#84988d">
+            <sc-for list="{{ recencyOptions }}" as="r" hint-placeholder-count="4">
+              <span onClick="{{ r.pick }}" style="cursor:pointer;color:{{ r.color }}" style-hover="color:#e6efe9">{{ r.name }}</span>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:10px">
+        <sc-for list="{{ results }}" as="r" hint-placeholder-count="4">
+          <div onClick="{{ r.select }}" style="background:{{ r.cardBg }};border:1px solid {{ r.cardBorder }};border-radius:9px;padding:14px 16px;position:relative;cursor:pointer;opacity:{{ r.opacity }}" style-hover="border-color:rgba(45,212,160,.5)">
+            <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:{{ r.railColor }};border-radius:3px 0 0 3px"></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+              <span style="font:600 12px 'JetBrains Mono',monospace;color:{{ r.scoreColor }}">{{ r.score }}</span>
+              <div style="width:64px;height:3px;background:rgba(45,212,160,.15);border-radius:2px"><div style="width:{{ r.barPct }};height:100%;background:{{ r.barColor }};border-radius:2px"></div></div>
+              <span style="display:flex;align-items:center;gap:5px;font:500 10px 'JetBrains Mono',monospace;color:{{ r.typeColor }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ r.typeColor }}"></span>{{ r.type }}</span>
+              <span style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269">{{ r.meta }}</span>
+              <span style="margin-left:auto;font:400 10px 'JetBrains Mono',monospace;color:#5f7269">{{ r.age }}</span>
+            </div>
+            <div style="font:400 14px/1.45 'Space Grotesk',sans-serif;color:{{ r.textColor }}">{{ r.content }}</div>
+          </div>
+        </sc-for>
+        <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ true }}"><div style="text-align:center;font:400 11px 'JetBrains Mono',monospace;color:#5f7269;padding:6px">↓ 8 more below threshold 0.70</div></sc-if>
+        <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center;padding:60px 20px;display:flex;flex-direction:column;gap:8px;align-items:center">
+            <div style="font:italic 400 18px Newsreader,serif;color:#84988d">No memories in this scope</div>
+            <div style="font:400 12px 'Space Grotesk',sans-serif;color:#5f7269">Nothing matches “{{ kbQuery }}” in <span style="color:#7fe8c3">{{ scope }}</span> — try “all projects” or a different query.</div>
+          </div>
+        </sc-if>
+      </div>
+      <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ true }}">
+      <div style="border-left:1px solid rgba(125,200,170,.1);padding:18px;display:flex;flex-direction:column;gap:16px;background:#0c1310">
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#5f7269">MEMORY</span>
+          <span style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269">{{ sel.id }}</span>
+          <sc-if value="{{ sel.pinned }}" hint-placeholder-val="{{ true }}"><span style="margin-left:auto;font:500 10px 'JetBrains Mono',monospace;color:#f2c14e;border:1px solid rgba(242,193,78,.35);border-radius:5px;padding:2px 7px">★ pinned</span></sc-if>
+        </div>
+        <div style="font:italic 400 17px/1.5 Newsreader,serif;color:#e6efe9">“{{ sel.content }}”</div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:7px 14px;font:400 11px 'JetBrains Mono',monospace">
+          <span style="color:#5f7269">type</span><span style="color:{{ sel.typeColor }}">{{ sel.type }}</span>
+          <span style="color:#5f7269">tier</span><span style="color:#7fe8c3">{{ sel.tier }}</span>
+          <span style="color:#5f7269">created</span><span style="color:#bccac2">{{ sel.created }}</span>
+          <span style="color:#5f7269">last recall</span><span style="color:#bccac2">{{ sel.lastRecall }}</span>
+          <span style="color:#5f7269">recalls</span><span style="color:#bccac2">{{ sel.recalls }}</span>
+          <span style="color:#5f7269">strength</span><span style="color:#a3e635">{{ sel.strength }} ▂▃▅▆█</span>
+          <span style="color:#5f7269">source</span><span style="color:#bccac2">{{ sel.source }}</span>
+        </div>
+        <div>
+          <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#5f7269;margin-bottom:9px">LINKED MEMORIES</div>
+          <div style="display:flex;flex-direction:column;gap:6px;font:400 11.5px 'Space Grotesk',sans-serif;color:#bccac2">
+            <sc-for list="{{ selLinked }}" as="l" hint-placeholder-count="3">
+              <div style="display:flex;gap:8px;align-items:center;background:#141e1a;border:1px solid rgba(125,200,170,.1);border-radius:7px;padding:8px 10px"><span style="width:6px;height:6px;border-radius:50%;background:{{ l.color }};flex:none"></span>{{ l.text }}<span style="margin-left:auto;font:400 9px 'JetBrains Mono',monospace;color:#5f7269">{{ l.score }}</span></div>
+            </sc-for>
+          </div>
+        </div>
+        <div style="margin-top:auto;display:flex;gap:8px">
+          <span onClick="{{ forgetSel }}" style="flex:1;text-align:center;font:500 11px 'JetBrains Mono',monospace;color:#f87171;border:1px solid rgba(248,113,113,.3);border-radius:7px;padding:9px 0;cursor:pointer" style-hover="background:rgba(248,113,113,.1)">forget this memory</span>
+        </div>
+      </div>
+      </sc-if>
+      <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}"><div style="border-left:1px solid rgba(125,200,170,.1);background:#0c1310"></div></sc-if>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ STREAM ============ -->
+  <sc-if value="{{ isStream }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Stream" style="display:grid;grid-template-columns:230px 1fr;flex:1;animation:fadein .25s ease">
+    <div style="border-right:1px solid rgba(125,200,170,.1);padding:22px 18px;display:flex;flex-direction:column;gap:8px;background:#0c1310">
+      <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#5f7269;margin-bottom:8px">CONSOLIDATION LADDER</div>
+      <div style="border:1px solid rgba(167,139,250,.4);background:linear-gradient(180deg,rgba(167,139,250,.14),rgba(167,139,250,.04));border-radius:9px;padding:12px 13px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:500 12px 'Space Grotesk',sans-serif;color:#ddd6fe">identity</span><span style="font:600 14px 'JetBrains Mono',monospace;color:#ddd6fe">31</span></div>
+        <div style="font:400 10px 'Space Grotesk',sans-serif;color:#84988d;margin-top:3px">who you are · never decays</div>
+      </div>
+      <div style="text-align:center;color:#5f7269;font:400 11px 'JetBrains Mono',monospace">▲ 2 promoted this week</div>
+      <div style="border:1px solid rgba(45,212,160,.35);background:linear-gradient(180deg,rgba(45,212,160,.12),rgba(45,212,160,.03));border-radius:9px;padding:12px 13px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:500 12px 'Space Grotesk',sans-serif;color:#7fe8c3">semantic</span><span style="font:600 14px 'JetBrains Mono',monospace;color:#7fe8c3">402</span></div>
+        <div style="font:400 10px 'Space Grotesk',sans-serif;color:#84988d;margin-top:3px">distilled knowledge</div>
+      </div>
+      <div style="text-align:center;color:#5f7269;font:400 11px 'JetBrains Mono',monospace">▲ 11 promoted</div>
+      <div style="border:1px solid rgba(56,189,248,.3);background:linear-gradient(180deg,rgba(56,189,248,.1),rgba(56,189,248,.02));border-radius:9px;padding:12px 13px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:500 12px 'Space Grotesk',sans-serif;color:#7dd3fc">episodic</span><span style="font:600 14px 'JetBrains Mono',monospace;color:#7dd3fc">371</span></div>
+        <div style="font:400 10px 'Space Grotesk',sans-serif;color:#84988d;margin-top:3px">events &amp; sessions</div>
+      </div>
+      <div style="text-align:center;color:#5f7269;font:400 11px 'JetBrains Mono',monospace">▲ from stream</div>
+      <div style="border:1px dashed rgba(125,200,170,.25);border-radius:9px;padding:12px 13px">
+        <div style="display:flex;justify-content:space-between;align-items:baseline"><span style="font:500 12px 'Space Grotesk',sans-serif;color:#84988d">working</span><span style="font:600 14px 'JetBrains Mono',monospace;color:#84988d">66</span></div>
+        <div style="font:400 10px 'Space Grotesk',sans-serif;color:#5f7269;margin-top:3px">volatile · decays in days</div>
+      </div>
+      <div style="margin-top:auto;border-top:1px solid rgba(125,200,170,.1);padding-top:14px">
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#5f7269;margin-bottom:8px">DECAY QUEUE</div>
+        <div style="font:400 11.5px 'Space Grotesk',sans-serif;color:#84988d;line-height:1.5">14 working memories fade in &lt; 48h. <span onClick="{{ goHygiene }}" style="color:#7fe8c3;cursor:pointer" style-hover="color:#e6efe9">Review →</span></div>
+      </div>
+    </div>
+    <div style="padding:22px 28px;position:relative;overflow:hidden">
+      <div style="position:absolute;left:139px;top:0;bottom:0;width:1px;background:linear-gradient(180deg,rgba(45,212,160,.4),rgba(45,212,160,.08))"></div>
+      <div style="display:flex;flex-direction:column;gap:14px;position:relative">
+        <div style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.14em;color:#7fe8c3">TODAY · JUL 17</div>
+        <div style="display:grid;grid-template-columns:96px 30px 1fr;align-items:start">
+          <div style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269;text-align:right;padding-top:14px">13:58</div>
+          <div style="display:flex;justify-content:center;padding-top:15px"><span style="width:9px;height:9px;border-radius:50%;background:#f2c14e;box-shadow:0 0 0 4px rgba(242,193,78,.15)"></span></div>
+          <div style="background:#141e1a;border:1px solid rgba(125,200,170,.14);border-radius:9px;padding:12px 15px">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:5px;font:500 10px 'JetBrains Mono',monospace"><span style="color:#f2c14e">preference</span><span style="color:#5f7269">· working · session s_0498</span><span style="margin-left:auto;color:#5f7269">strength ▓▓▓▓░ 0.8</span></div>
+            <div style="font:400 13.5px/1.45 'Space Grotesk',sans-serif">Wants dashboards dark-mode-first; light mode is a nice-to-have, not a launch requirement.</div>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:96px 30px 1fr;align-items:start">
+          <div style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269;text-align:right;padding-top:10px">11:20</div>
+          <div style="display:flex;justify-content:center;padding-top:11px"><span style="width:9px;height:9px;background:#a78bfa;transform:rotate(45deg);box-shadow:0 0 0 4px rgba(167,139,250,.15)"></span></div>
+          <div style="border:1px solid rgba(167,139,250,.35);background:linear-gradient(90deg,rgba(167,139,250,.1),transparent);border-radius:9px;padding:10px 15px;display:flex;align-items:center;gap:10px">
+            <span style="font:500 10px 'JetBrains Mono',monospace;color:#ddd6fe;letter-spacing:.1em">CONSOLIDATED</span>
+            <span style="font:400 13px 'Space Grotesk',sans-serif;color:#bccac2">3 episodic memories about testing habits merged → semantic <span style="font:italic 400 13px Newsreader,serif;color:#e6efe9">“Writes tests before refactors, never after.”</span></span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:96px 30px 1fr;align-items:start">
+          <div style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269;text-align:right;padding-top:14px">09:47</div>
+          <div style="display:flex;justify-content:center;padding-top:15px"><span style="width:9px;height:9px;border-radius:50%;background:#2dd4a0;box-shadow:0 0 0 4px rgba(45,212,160,.15)"></span></div>
+          <div style="background:#141e1a;border:1px solid rgba(125,200,170,.14);border-radius:9px;padding:12px 15px">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:5px;font:500 10px 'JetBrains Mono',monospace"><span style="color:#2dd4a0">decision</span><span style="color:#5f7269">· episodic · session s_0497</span><span style="margin-left:auto;color:#5f7269">strength ▓▓▓▓▓ 1.0</span></div>
+            <div style="font:400 13.5px/1.45 'Space Grotesk',sans-serif">Chose SQLite + sqlite-vec for Rekall's local store; Postgres only if multi-device sync ships.</div>
+          </div>
+        </div>
+        <div style="font:500 10px 'JetBrains Mono',monospace;letter-spacing:.14em;color:#5f7269;margin-top:6px">YESTERDAY</div>
+        <div style="display:grid;grid-template-columns:96px 30px 1fr;align-items:start">
+          <div style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269;text-align:right;padding-top:10px">17:32</div>
+          <div style="display:flex;justify-content:center;padding-top:11px"><span style="width:9px;height:9px;border-radius:50%;border:2px solid #a3e635;background:transparent;box-sizing:border-box"></span></div>
+          <div style="border:1px dashed rgba(163,230,53,.3);border-radius:9px;padding:10px 15px;display:flex;align-items:center;gap:10px">
+            <span style="font:500 10px 'JetBrains Mono',monospace;color:#a3e635;letter-spacing:.1em">RECALLED</span>
+            <span style="font:400 13px 'Space Grotesk',sans-serif;color:#84988d">claude-code asked “deployment preferences” → 4 memories surfaced, top match 0.91</span>
+          </div>
+        </div>
+        <div style="display:grid;grid-template-columns:96px 30px 1fr;align-items:start;opacity:.45">
+          <div style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269;text-align:right;padding-top:14px">10:04</div>
+          <div style="display:flex;justify-content:center;padding-top:15px"><span style="width:9px;height:9px;border-radius:50%;background:#5f7269"></span></div>
+          <div style="background:#0f1714;border:1px dashed rgba(125,200,170,.2);border-radius:9px;padding:12px 15px">
+            <div style="display:flex;gap:8px;align-items:center;margin-bottom:5px;font:500 10px 'JetBrains Mono',monospace"><span style="color:#8fa39a">note</span><span style="color:#5f7269">· working · decaying</span><span style="margin-left:auto;color:#f87171">fades in 31h · keep?</span></div>
+            <div style="font:400 13.5px/1.45 'Space Grotesk',sans-serif;color:#84988d">Mentioned a conference talk deadline “sometime in September” — unconfirmed.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+  <!-- ============ SESSIONS ============ -->
+  <sc-if value="{{ isSessions }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Sessions" style="display:grid;grid-template-columns:380px 1fr;flex:1;animation:fadein .25s ease">
+    <div style="border-right:1px solid rgba(125,200,170,.1);display:flex;flex-direction:column;background:#0c1310">
+      <div style="display:flex;align-items:baseline;gap:8px;padding:16px 18px;border-bottom:1px solid rgba(125,200,170,.1)">
+        <span style="font:400 17px Newsreader,serif">Sessions</span>
+        <span style="margin-left:auto;font:400 10px 'JetBrains Mono',monospace;color:#5f7269">{{ sessCount }} · 7d window</span>
+      </div>
+      <sc-for list="{{ sessions }}" as="s" hint-placeholder-count="4">
+        <div onClick="{{ s.select }}" style="padding:12px 18px;border-bottom:1px solid rgba(125,200,170,.07);cursor:pointer;background:{{ s.bg }};box-shadow:{{ s.rail }}" style-hover="background:rgba(45,212,160,.05)">
+          <div style="font:500 11.5px 'JetBrains Mono',monospace;color:{{ s.idColor }};word-break:break-all">{{ s.session_id }}</div>
+          <div style="display:flex;align-items:baseline;gap:8px;margin-top:4px">
+            <span style="font:400 11px 'Space Grotesk',sans-serif;color:#84988d">{{ s.totalsLine }}</span>
+            <span style="margin-left:auto;font:400 10px 'JetBrains Mono',monospace;color:#5f7269">{{ s.lastAt }}</span>
+          </div>
+          <div style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269;margin-top:3px">{{ s.project }}</div>
+        </div>
+      </sc-for>
+    </div>
+    <div style="padding:22px 26px;display:flex;flex-direction:column;gap:20px;overflow:hidden">
+      <div>
+        <div style="font:500 15px 'JetBrains Mono',monospace;color:#e6efe9;word-break:break-all">{{ sSel.session_id }}</div>
+        <div style="display:flex;gap:14px;margin-top:6px;font:400 10.5px 'JetBrains Mono',monospace;color:#5f7269"><span style="color:#7fe8c3">{{ sSel.project }}</span><span>{{ sSel.lastAt }}</span><span>{{ sSel.totalsLine }}</span></div>
+      </div>
+      <div>
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#5f7269;margin-bottom:9px">INJECTED AT START · {{ sSel.injectedCount }}</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <sc-for list="{{ sSelInjected }}" as="m" hint-placeholder-count="2">
+            <div style="display:flex;gap:9px;align-items:center;background:#0f1714;border:1px solid rgba(125,200,170,.1);border-radius:7px;padding:9px 12px;font:400 12px 'Space Grotesk',sans-serif;color:#bccac2" style-hover="border-color:rgba(45,212,160,.4)"><span style="width:6px;height:6px;border-radius:50%;background:{{ m.color }};flex:none"></span>{{ m.text }}<span style="margin-left:auto;font:400 9.5px 'JetBrains Mono',monospace;color:#5f7269">{{ m.tok }}</span></div>
+          </sc-for>
+        </div>
+      </div>
+      <div>
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#5f7269;margin-bottom:9px">RECALLS · {{ sSel.recallCount }}</div>
+        <div style="display:flex;flex-direction:column;gap:10px">
+          <sc-for list="{{ sSelRecalls }}" as="r" hint-placeholder-count="2">
+            <div style="background:#0f1714;border:1px solid rgba(125,200,170,.12);border-radius:9px;padding:12px 14px">
+              <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px">
+                <span style="font:400 13px 'Space Grotesk',sans-serif;color:#e6efe9">“{{ r.query }}”</span>
+                <span style="margin-left:auto;font:400 10px 'JetBrains Mono',monospace;color:#5f7269;flex:none">{{ r.tok }} · {{ r.time }}</span>
+              </div>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <sc-for list="{{ r.memories }}" as="m" hint-placeholder-count="2">
+                  <div style="display:flex;gap:9px;align-items:center;font:400 11.5px 'Space Grotesk',sans-serif;color:#84988d;padding:3px 0"><span style="width:5px;height:5px;border-radius:50%;background:{{ m.color }};flex:none"></span>{{ m.text }}<span style="margin-left:auto;font:500 10px 'JetBrains Mono',monospace;color:#5f7269">{{ m.score }}</span></div>
+                </sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+
+  <!-- ============ HYGIENE ============ -->
+  <sc-if value="{{ isHygiene }}" hint-placeholder-val="{{ false }}">
+  <div data-screen-label="Hygiene" style="padding:26px 28px;display:flex;flex-direction:column;gap:18px;flex:1;animation:fadein .25s ease;max-width:1100px;margin:0 auto;width:100%;box-sizing:border-box">
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px">
+      <div style="background:#0f1714;border:1px solid rgba(125,200,170,.12);border-radius:11px;padding:18px 20px">
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#84988d">LOAD SCORE</div>
+        <div style="font:400 36px/1.1 Newsreader,serif;margin-top:6px;color:#a3e635">0.04</div>
+        <div style="height:4px;background:rgba(45,212,160,.12);border-radius:2px;margin-top:12px"><div style="width:4%;height:100%;background:#a3e635;border-radius:2px"></div></div>
+      </div>
+      <div style="background:#0f1714;border:1px solid rgba(125,200,170,.12);border-radius:11px;padding:18px 20px">
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#84988d">CAPACITY</div>
+        <div style="font:400 36px/1.1 Newsreader,serif;margin-top:6px">844</div>
+        <div style="height:4px;background:rgba(45,212,160,.12);border-radius:2px;margin-top:12px"><div style="width:42%;height:100%;background:#2dd4a0;border-radius:2px"></div></div>
+      </div>
+      <div style="background:#0f1714;border:1px solid rgba(248,113,113,.25);border-radius:11px;padding:18px 20px">
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#f87171">FLAGGED</div>
+        <div style="font:400 36px/1.1 Newsreader,serif;margin-top:6px;color:#f87171">105</div>
+        <div style="display:flex;gap:12px;font:400 10.5px 'JetBrains Mono',monospace;color:#84988d;margin-top:10px"><span>stale 14</span><span>low 16</span><span style="color:#f87171">conflict 75</span></div>
+      </div>
+    </div>
+    <div style="font:400 13px 'Space Grotesk',sans-serif;color:#84988d">This project is <span style="color:#a3e635">quiet</span>. 30 memories are candidates for prune.</div>
+    <div style="background:#0f1714;border:1px solid rgba(125,200,170,.12);border-radius:11px;padding:18px 20px">
+      <div style="display:flex;align-items:baseline;margin-bottom:14px"><span style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#84988d">CONFLICTS · 75 — CARRY A CONTRADICTS EDGE</span></div>
+      <div style="display:flex;flex-direction:column;gap:7px">
+        <sc-for list="{{ flagged }}" as="f" hint-placeholder-count="5">
+          <div style="display:flex;gap:10px;align-items:center;background:#141e1a;border:1px solid rgba(125,200,170,.1);border-radius:8px;padding:9px 12px">
+            <span style="display:flex;align-items:center;gap:5px;font:500 9.5px 'JetBrains Mono',monospace;color:{{ f.typeColor }};flex:none"><span style="width:5px;height:5px;border-radius:50%;background:{{ f.typeColor }}"></span>{{ f.type }}</span>
+            <span style="font:500 9.5px 'JetBrains Mono',monospace;color:#7fe8c3;flex:none">{{ f.tier }}</span>
+            <span style="font:400 12.5px 'Space Grotesk',sans-serif;color:#bccac2;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ f.text }}</span>
+            <span style="font:500 9.5px 'JetBrains Mono',monospace;color:#f2c14e;border:1px solid rgba(242,193,78,.3);border-radius:99px;padding:2px 7px;flex:none">{{ f.age }}</span>
+            <span style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269;flex:none">{{ f.date }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div style="background:#0f1714;border:1px solid rgba(125,200,170,.12);border-radius:11px;padding:18px 20px">
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#2dd4a0">DRY RUN</div>
+        <div style="font:400 20px Newsreader,serif;margin-top:6px">Build a prune plan</div>
+        <div style="font:400 12px/1.5 'Space Grotesk',sans-serif;color:#84988d;margin-top:6px">Selects up to 200 candidates. Identity tier and memories with no salience are never selected.</div>
+        <sc-if value="{{ hasPruneMsg }}" hint-placeholder-val="{{ false }}"><div style="font:400 11px 'JetBrains Mono',monospace;color:#a3e635;margin-top:12px">{{ pruneMsg }}</div></sc-if>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:14px">
+          <span style="font:400 10px 'JetBrains Mono',monospace;color:#5f7269">MAX 200</span>
+          <span onClick="{{ buildPlan }}" style="margin-left:auto;font:500 11px 'JetBrains Mono',monospace;color:#0a100e;background:#2dd4a0;border-radius:7px;padding:8px 18px;cursor:pointer" style-hover="background:#4ce0b0">build plan</span>
+        </div>
+      </div>
+      <div style="background:#0f1714;border:1px solid rgba(125,200,170,.12);border-radius:11px;padding:18px 20px">
+        <div style="font:500 9px 'JetBrains Mono',monospace;letter-spacing:.16em;color:#2dd4a0">ONE-SHOT MIGRATION</div>
+        <div style="font:400 20px Newsreader,serif;margin-top:6px">Lifecycle backfill</div>
+        <div style="font:400 12px/1.5 'Space Grotesk',sans-serif;color:#84988d;margin-top:6px">Compute tier / durability / retention_days for every existing memory. Safe. Idempotent.</div>
+        <sc-if value="{{ hasMigrateMsg }}" hint-placeholder-val="{{ false }}"><div style="font:400 11px 'JetBrains Mono',monospace;color:#a3e635;margin-top:12px">{{ migrateMsg }}</div></sc-if>
+        <div style="display:flex;gap:8px;margin-top:14px">
+          <span onClick="{{ migrateDry }}" style="font:500 11px 'JetBrains Mono',monospace;color:#e6efe9;border:1px solid rgba(45,212,160,.4);border-radius:7px;padding:8px 16px;cursor:pointer" style-hover="background:rgba(45,212,160,.1)">dry run</span>
+          <span onClick="{{ migrateApply }}" style="font:500 11px 'JetBrains Mono',monospace;color:#84988d;border:1px solid rgba(125,200,170,.15);border-radius:7px;padding:8px 16px;cursor:pointer" style-hover="color:#e6efe9">apply</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  </sc-if>
+</div>
+
+<!-- ============ ⌘K PALETTE (2b) ============ -->
+<sc-if value="{{ paletteOpen }}" hint-placeholder-val="{{ false }}">
+<div onClick="{{ closePalette }}" style="position:fixed;inset:0;background:rgba(3,8,6,.75);backdrop-filter:blur(3px);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding-top:9vh">
+  <div onClick="{{ stop }}" style="width:900px;max-width:92vw;background:#141e1a;border:1px solid rgba(45,212,160,.3);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.7);overflow:hidden;animation:fadein .18s ease">
+    <div style="display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid rgba(125,200,170,.12)">
+      <span style="font:500 11px 'JetBrains Mono',monospace;color:#2dd4a0;letter-spacing:.1em">RECALL</span>
+      <input value="{{ pQuery }}" onChange="{{ setQuery }}" placeholder="search your memories…" style="font:400 16px 'Space Grotesk',sans-serif;color:#e6efe9;flex:1;background:transparent;border:none;outline:none" />
+      <sc-for list="{{ pModes }}" as="m" hint-placeholder-count="2">
+        <span onClick="{{ m.pick }}" style="font:500 10px 'JetBrains Mono',monospace;padding:3px 9px;border-radius:99px;background:{{ m.bg }};color:{{ m.color }};border:1px solid {{ m.border }};cursor:pointer" style-hover="color:#7fe8c3">{{ m.name }}</span>
+      </sc-for>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1.1fr;min-height:430px">
+      <div style="border-right:1px solid rgba(125,200,170,.1);padding:8px;display:flex;flex-direction:column;gap:2px">
+        <sc-for list="{{ pRows }}" as="p" hint-placeholder-count="6">
+          <div onClick="{{ p.select }}" style="display:flex;gap:10px;align-items:center;padding:10px 12px;border-radius:8px;background:{{ p.bg }};border:1px solid {{ p.border }};cursor:pointer" style-hover="background:rgba(45,212,160,.07)">
+            <span style="width:7px;height:7px;border-radius:50%;background:{{ p.typeColor }};flex:none"></span>
+            <span style="font:400 13px/1.35 'Space Grotesk',sans-serif;color:{{ p.textColor }};flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ p.content }}</span>
+            <span style="font:600 10.5px 'JetBrains Mono',monospace;color:{{ p.scoreColor }};flex:none">{{ p.score }}</span>
+          </div>
+        </sc-for>
+        <sc-if value="{{ pEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:20px 12px;font:400 12px 'Space Grotesk',sans-serif;color:#5f7269;text-align:center">no memories match — try semantic mode or fewer words</div></sc-if>
+        <div style="margin-top:auto;padding:10px 12px;font:400 10px 'JetBrains Mono',monospace;color:#5f7269">↑↓ navigate · ↵ open · esc close</div>
+      </div>
+      <div style="padding:20px 22px;display:flex;flex-direction:column;gap:14px;background:#0f1714">
+        <div style="display:flex;align-items:center;gap:8px;font:500 10px 'JetBrains Mono',monospace">
+          <span style="display:flex;align-items:center;gap:5px;color:{{ pSel.typeColor }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ pSel.typeColor }}"></span>{{ pSel.type }}</span>
+          <span style="color:#5f7269">· {{ pSel.tier }} tier · {{ pSel.scope }}</span>
+          <span style="margin-left:auto;color:#5f7269">{{ pSel.id }}</span>
+        </div>
+        <div style="font:italic 400 18px/1.55 Newsreader,serif;color:#e6efe9">“{{ pSel.content }}”</div>
+        <div style="display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font:400 11px 'JetBrains Mono',monospace">
+          <span style="color:#5f7269">created</span><span style="color:#bccac2">{{ pSel.created }} · {{ pSel.source }}</span>
+          <span style="color:#5f7269">recalls</span><span style="color:#bccac2">{{ pSel.recalls }} · last {{ pSel.lastRecall }}</span>
+          <span style="color:#5f7269">strength</span><span style="color:#a3e635">{{ pSel.strength }}</span>
+        </div>
+        <div style="margin-top:auto;display:flex;gap:8px">
+          <span onClick="{{ openInRecall }}" style="flex:1;text-align:center;font:500 11px 'JetBrains Mono',monospace;color:#e6efe9;background:rgba(45,212,160,.16);border:1px solid rgba(45,212,160,.4);border-radius:7px;padding:8px 0;cursor:pointer">open ↵</span>
+          <span onClick="{{ copyId }}" style="flex:1;text-align:center;font:500 11px 'JetBrains Mono',monospace;color:{{ copyColor }};border:1px solid rgba(125,200,170,.15);border-radius:7px;padding:8px 0;cursor:pointer" style-hover="color:#e6efe9">{{ copyLabel }}</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</sc-if>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;defaultView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;recall&quot;,&quot;cortex&quot;,&quot;stream&quot;],&quot;default&quot;:&quot;recall&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Behavior&quot;}}">
+const TYPE_COLORS = { preference:'#f2c14e', decision:'#2dd4a0', requirement:'#fb7185', learning:'#a3e635', fact:'#38bdf8', note:'#8fa39a' };
+const MEMS = [
+  {id:'#mem_8f21c', type:'preference', tier:'semantic', content:'Prefers explicit error types over exceptions — Result<T, E> pattern in Rust-style code, and never silent catch blocks in TypeScript.', created:'2026-05-02 14:22', lastRecall:'2d ago', recalls:14, strength:'0.92', source:'session s_0412 (claude-code)', age:'2d ago', score:0.94, pinned:true,
+   linked:[{color:'#2dd4a0',text:'Centralize API error handling in middleware…',score:'0.82'},{color:'#a3e635',text:'Team lints against console.error…',score:'0.77'},{color:'#38bdf8',text:'Sentry is the error tracker of record…',score:'0.71'}]},
+  {id:'#mem_4a90d', type:'decision', tier:'semantic', content:'Decided to centralize API error handling in a single middleware layer rather than per-route try/catch (project: atlas-api).', created:'2026-05-11 10:03', lastRecall:'1w ago', recalls:6, strength:'0.85', source:'session s_0430 (claude-code)', age:'1w ago', score:0.87, pinned:false,
+   linked:[{color:'#f2c14e',text:'Prefers explicit error types over exceptions…',score:'0.82'}]},
+  {id:'#mem_c1e77', type:'learning', tier:'episodic', content:"Learned that user's team lints against console.error in production paths; structured logger (pino) is the sanctioned channel.", created:'2026-06-20 16:40', lastRecall:'3w ago', recalls:2, strength:'0.74', source:'session s_0461 (claude-code)', age:'3w ago', score:0.81, pinned:false,
+   linked:[{color:'#f2c14e',text:'Prefers explicit error types over exceptions…',score:'0.77'}]},
+  {id:'#mem_2b3f9', type:'requirement', tier:'episodic', content:'All user-facing errors must include a correlation ID and a plain-language message; stack traces never leak to clients.', created:'2026-06-02 09:15', lastRecall:'1mo ago', recalls:1, strength:'0.66', source:'session s_0447 (claude-code)', age:'1mo ago', score:0.74, pinned:false,
+   linked:[{color:'#2dd4a0',text:'Centralize API error handling in middleware…',score:'0.69'}]},
+];
+const PMEMS = [
+  {id:'#2026-05-06_DECISION_9C41', type:'decision', tier:'semantic', content:'Byte-edge plugin spec + implementation plan locked — the design doc is the source of truth. API surface frozen for v1; any scope change requires re-review.', created:'2026-05-06', source:'session s_0301', recalls:8, lastRecall:'2d ago', strength:'0.91', score:'0.80'},
+  {id:'#2026-05-02_DECISION_77A2', type:'decision', tier:'semantic', content:"Port.io is already functioning as the operational CMDB for Byte Edge — don't duplicate inventory in Rekall.", created:'2026-05-02', source:'session s_0299', recalls:3, lastRecall:'5d ago', strength:'0.84', score:'0.70'},
+  {id:'#2026-04-12_FACT_5B10', type:'fact', tier:'episodic', content:'Byte Edge cloud architecture position doc lives at docs-and-architecture/byte-edge/cloud-position.md.', created:'2026-04-12', source:'session s_0270', recalls:2, lastRecall:'2w ago', strength:'0.72', score:'0.65'},
+  {id:'#2026-02-04_REQ_1D08', type:'requirement', tier:'semantic', content:'Byte Edge requirements: scale to 10,000 edge nodes, offline-first sync, zero-touch provisioning.', created:'2026-02-04', source:'session s_0201', recalls:5, lastRecall:'3w ago', strength:'0.88', score:'0.64'},
+  {id:'#2026-05-04_DECISION_3E55', type:'decision', tier:'semantic', content:'byte-edge plugin will NOT include any cluster mutation actions in v1 — read-only observability only.', created:'2026-05-04', source:'session s_0300', recalls:4, lastRecall:'1w ago', strength:'0.86', score:'0.63'},
+  {id:'#2026-05-06_DECISION_8B12', type:'decision', tier:'semantic', content:'byte-edge plugin design locked — (1) API surface, (2) event schema, (3) retry semantics all frozen.', created:'2026-05-06', source:'session s_0301', recalls:2, lastRecall:'1w ago', strength:'0.79', score:'0.57'},
+];
+const FEED = [
+  {time:'14:02', q:'“what testing framework does this repo use”', hits:'3 hits', score:'0.93', top:true},
+  {time:'13:44', q:'“user\u2019s preferred git commit style”', hits:'5 hits', score:'0.90'},
+  {time:'13:12', q:'“deadline for the atlas migration”', hits:'1 hit', score:'0.71', warn:true},
+  {time:'12:58', q:'“does the user like emoji in docs”', hits:'2 hits', score:'0.89'},
+  {time:'12:31', q:'“preferred cloud region + infra”', hits:'0 hits', score:'miss', miss:true},
+];
+const SESSIONS = [
+  {session_id:'claude-code_2026-07-17_a41f09', project:'byte-edge', lastAt:'2h ago', totals:{recalls:6, injected:4, tokens:2140},
+   injected:[{color:'#fb7185',text:'Byte Edge requirements: scale to 10,000 edge nodes…',tok:'310 tok'},{color:'#2dd4a0',text:'byte-edge plugin spec + implementation plan locked…',tok:'280 tok'},{color:'#f2c14e',text:'Prefers explicit error types over exceptions…',tok:'190 tok'},{color:'#a3e635',text:'metallb root cause FINAL — byte-edge-setup group…',tok:'250 tok'}],
+   recalls:[
+    {query:'metallb pool not rendering root cause', tok:'420 tok', time:'14:02', memories:[{color:'#a3e635',text:'metallb root cause FINAL (2026-07-16, external-charts-config.yaml)…',score:'0.93'},{color:'#a3e635',text:'metallb fix CONFIRMED across 3 clusters…',score:'0.88'},{color:'#a3e635',text:'CORRECTION to metallb-pool-not-rendering root cause…',score:'0.84'}]},
+    {query:'byte edge helm pack publish command', tok:'260 tok', time:'12:31', memories:[{color:'#38bdf8',text:'Working byte-edge-cli pack publish command for byte-edge-core charts…',score:'0.90'},{color:'#8fa39a',text:'BE-497 lint fixes needed on byte-edge-cli main branch…',score:'0.72'}]}]},
+  {session_id:'claude-code_2026-07-17_77c2be', project:'rekall', lastAt:'5h ago', totals:{recalls:3, injected:2, tokens:980},
+   injected:[{color:'#2dd4a0',text:'Chose SQLite + sqlite-vec for local store…',tok:'220 tok'},{color:'#f2c14e',text:'Wants dashboards dark-mode-first…',tok:'140 tok'}],
+   recalls:[{query:'kb ui column layout decision', tok:'310 tok', time:'09:47', memories:[{color:'#2dd4a0',text:'KB UI groups memories in curated columns by type…',score:'0.91'},{color:'#f2c14e',text:'Prefers serif display + mono labels in cockpit…',score:'0.86'}]}]},
+  {session_id:'claude-code_2026-07-16_d803aa', project:'byte-edge', lastAt:'1d ago', totals:{recalls:8, injected:5, tokens:3420},
+   injected:[{color:'#fb7185',text:'Weekly Friday report format required for byte-edge…',tok:'180 tok'},{color:'#2dd4a0',text:'byte-edge plugin will NOT include cluster mutation actions…',tok:'240 tok'}],
+   recalls:[{query:'uat lab cluster profile config', tok:'510 tok', time:'16:20', memories:[{color:'#a3e635',text:'working byte-edge profiles carry TWO packs (UAT lab kfcuk)…',score:'0.89'}]}]},
+  {session_id:'Unattributed · general', project:'general', lastAt:'2d ago', totals:{recalls:4, injected:0, tokens:640},
+   injected:[],
+   recalls:[{query:'deployment preferences', tok:'160 tok', time:'17:32', memories:[{color:'#f2c14e',text:'Prefers zero-touch provisioning + GitOps flow…',score:'0.91'}]}]},
+];
+const FLAGGED = [
+  {type:'learning', tier:'episodic', text:'[auto-inferred] packValuesFrom (not packValuesOverlayFrom) is the only correct key…', age:'3MO', date:'2026-04-06'},
+  {type:'learning', tier:'episodic', text:'byte-secrets-operator 0.10.6 in Port had pack.namespace reverted to "byte-secrets-operator"…', age:'3MO', date:'2026-04-24'},
+  {type:'note', tier:'episodic', text:'Week of 2026-04-06 to 2026-04-10 — 16 MRs merged. Mapped to milestones…', age:'3MO', date:'2026-04-10'},
+  {type:'learning', tier:'episodic', text:'Pre-existing DynamoDB tables skip hydrateFromHCL (hash_key/stack already populated)…', age:'1MO', date:'2026-06-11'},
+  {type:'fact', tier:'semantic', text:'Adversarial review of context-recall branch found 2 HIGH bugs (close_loop guard compares…', age:'8D', date:'2026-07-09'},
+  {type:'preference', tier:'semantic', text:'Attribution preference updated 2026-04-06: always include Co-Authored-By…', age:'3MO', date:'2026-04-06'},
+];
+const SCOPES = ['all projects', 'global', 'atlas-api', 'byte-edge', 'rekall'];
+MEMS[0].scope = 'global'; MEMS[1].scope = 'atlas-api'; MEMS[2].scope = 'atlas-api'; MEMS[3].scope = 'atlas-api';
+[2, 7, 21, 30].forEach((d, i) => MEMS[i].days = d);
+PMEMS.forEach(m => m.scope = 'byte-edge');
+[2, 5, 14, 21, 7, 7].forEach((d, i) => PMEMS[i].days = d);
+const RECENCY = { 'today': 1, 'this week': 7, 'this month': 31, 'all time': Infinity };
+const ALL_MEMS = [...MEMS, ...PMEMS.map(m => ({ ...m, score: parseFloat(m.score), age: m.lastRecall, pinned: false, linked: m.linked ?? [] }))];
+const SCOPE_COUNTS = { 'all projects': 870, 'global': 118, 'atlas-api': 236, 'byte-edge': 342, 'rekall': 174 };
+class Component extends DCLogic {
+  state = { view: this.props.defaultView ?? 'recall', selIdx: 0, paletteOpen: false, pIdx: 0, pQuery: 'byte edge', scope: 'all projects', scopeOpen: false, sessIdx: 0, kbQuery: 'how does the user prefer error handling?', kbMems: null, kbMode: 'semantic', pMode: 'semantic', recency: 'all time', typeFilter: null, forgotten: [], pruneMsg: '', migrateMsg: '', copied: false };
+  openFromPalette = () => {
+    const filtered = this.filteredP();
+    if (!filtered.length) { this.setState({ paletteOpen: false }); return; }
+    const pi = Math.min(this.state.pIdx, filtered.length - 1);
+    const mems = filtered.map(m => ({ ...m, score: parseFloat(m.score), age: m.lastRecall, pinned: m.pinned ?? false, linked: m.linked ?? [] }));
+    this.setState({ paletteOpen: false, view: 'recall', kbMems: mems, kbQuery: this.state.pQuery, selIdx: pi });
+  };
+  graphRef = (el) => { this.graphEl = el; if (el && !this.raf) this.startGraph(); };
+  startGraph = () => {
+      const TIER = ['#a78bfa', '#2dd4a0', '#38bdf8'];
+      const N = 46;
+      this.nodes = Array.from({ length: N }, (_, i) => ({
+        x: Math.random(), y: Math.random(),
+        vx: (Math.random() - .5) * .00045, vy: (Math.random() - .5) * .00045,
+        heat: Math.pow(Math.random(), 2.2), // recall frequency 0..1 — few hot, many cold
+        c: TIER[i % 3 === 0 ? 0 : (Math.random() < .55 ? 1 : 2)],
+        ph: Math.random() * Math.PI * 2, flare: 0,
+      }));
+      this.events = [
+        'recall · “metallb pool not rendering root cause” → 3 hits',
+        'recall · “byte edge helm pack publish command” → 2 hits',
+        'store · preference · “dashboards dark-mode-first”',
+        'recall · “user’s preferred git commit style” → 5 hits',
+        'recall · “kb ui column layout decision” → 2 hits',
+        'store · learning · “pino is the sanctioned logger”',
+      ];
+      this.evIdx = 0; this.lastEv = 0; this.evLabel = ''; this.evAt = 0; this.evNode = null;
+      const loop = (t) => {
+        const el = this.graphEl;
+        if (!el || !el.isConnected) { this.raf = null; return; }
+        const w = el.clientWidth, h = el.clientHeight;
+        if (el.width !== w * 2) { el.width = w * 2; el.height = h * 2; }
+        const ctx = el.getContext('2d');
+        ctx.setTransform(2, 0, 0, 2, 0, 0);
+        ctx.clearRect(0, 0, w, h);
+        const g = ctx.createRadialGradient(w * .6, h * .4, 0, w * .6, h * .4, Math.max(w, h) * .7);
+        g.addColorStop(0, 'rgba(45,212,160,.10)'); g.addColorStop(1, 'rgba(45,212,160,0)');
+        ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+        const ns = this.nodes;
+        if (t - this.lastEv > 2600) { // fire a simulated recall/store event
+          this.lastEv = t; this.evAt = t;
+          this.evLabel = this.events[this.evIdx++ % this.events.length];
+          const hot = ns.filter(n => n.heat > .35);
+          this.evNode = hot[Math.floor(Math.random() * hot.length)] ?? ns[0];
+          this.evNode.flare = 1;
+          this.evNode.heat = Math.min(1, this.evNode.heat + .08); // recall reinforces
+        }
+        for (const n of ns) {
+          n.x += n.vx; n.y += n.vy;
+          if (n.x < .02 || n.x > .98) n.vx *= -1;
+          if (n.y < .06 || n.y > .94) n.vy *= -1;
+          if (n.flare > 0) n.flare = Math.max(0, n.flare - .012);
+        }
+        for (let i = 0; i < ns.length; i++) for (let j = i + 1; j < ns.length; j++) {
+          const a = ns[i], b = ns[j];
+          const dx = (a.x - b.x) * w, dy = (a.y - b.y) * h;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < 4900) {
+            const boost = Math.max(a.flare, b.flare);
+            const o = (1 - d2 / 4900) * (.10 + .30 * Math.max(a.heat, b.heat)) * (0.7 + 0.3 * Math.sin(t / 900 + a.ph)) + boost * .35;
+            ctx.strokeStyle = `rgba(45,212,160,${Math.min(o, .8).toFixed(3)})`;
+            ctx.lineWidth = .6 + boost * .8;
+            ctx.beginPath(); ctx.moveTo(a.x * w, a.y * h); ctx.lineTo(b.x * w, b.y * h); ctx.stroke();
+          }
+        }
+        for (const n of ns) {
+          const pulse = .65 + .35 * Math.sin(t / 700 + n.ph);
+          const r = 1 + n.heat * 2.8 + n.flare * 2.5;
+          const alpha = .18 + .72 * n.heat * pulse + n.flare * .6;
+          ctx.shadowColor = n.c; ctx.shadowBlur = (3 + 9 * n.heat) * pulse + n.flare * 18;
+          ctx.fillStyle = n.c; ctx.globalAlpha = Math.min(alpha, 1);
+          ctx.beginPath(); ctx.arc(n.x * w, n.y * h, r, 0, Math.PI * 2); ctx.fill();
+          ctx.globalAlpha = 1; ctx.shadowBlur = 0;
+          if (n.flare > 0) { // ripple ring
+            const p = 1 - n.flare;
+            ctx.strokeStyle = `rgba(127,232,195,${(n.flare * .55).toFixed(3)})`;
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(n.x * w, n.y * h, r + 4 + p * 26, 0, Math.PI * 2); ctx.stroke();
+          }
+        }
+        if (this.evLabel && t - this.evAt < 2400) { // event ticker
+          const fade = Math.min(1, (t - this.evAt) / 250) * Math.min(1, (2400 - (t - this.evAt)) / 500);
+          ctx.font = '500 9px "JetBrains Mono", monospace';
+          ctx.fillStyle = `rgba(127,232,195,${(fade * .9).toFixed(3)})`;
+          ctx.fillText(this.evLabel.slice(0, Math.floor(w / 5.6)), 18, h - 30);
+        }
+        this.raf = requestAnimationFrame(loop);
+      };
+    this.raf = requestAnimationFrame(loop);
+  };
+  componentDidMount() {
+    if (this.graphEl && !this.raf) this.startGraph();
+    this.onKey = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); this.setState(s => ({ paletteOpen: !s.paletteOpen, pIdx: 0 })); return; }
+      if (!this.state.paletteOpen) return;
+      const n = this.filteredP().length;
+      if (e.key === 'Escape') this.setState({ paletteOpen: false });
+      else if (e.key === 'ArrowDown') { e.preventDefault(); this.setState(s => ({ pIdx: Math.min(s.pIdx + 1, Math.max(n - 1, 0)) })); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); this.setState(s => ({ pIdx: Math.max(s.pIdx - 1, 0) })); }
+      else if (e.key === 'Enter') { this.openFromPalette(); }
+    };
+    window.addEventListener('keydown', this.onKey);
+    this.onClickAway = () => { if (this.state.scopeOpen) this.setState({ scopeOpen: false }); };
+    window.addEventListener('click', this.onClickAway);
+  }
+  componentWillUnmount() { window.removeEventListener('keydown', this.onKey); window.removeEventListener('click', this.onClickAway); if (this.raf) cancelAnimationFrame(this.raf); }
+  inScope(m) { const s = this.state.scope; return s === 'all projects' || m.scope === s; }
+  filteredP() {
+    const q = this.state.pQuery.trim().toLowerCase();
+    const pool = PMEMS.filter(m => this.inScope(m));
+    if (!q) return pool;
+    if (this.state.pMode === 'exact') return pool.filter(m => m.content.toLowerCase().includes(q));
+    return pool.filter(m => q.split(/\s+/).every(w => m.content.toLowerCase().includes(w)));
+  }
+  renderVals() {
+    const { view, selIdx, paletteOpen, pIdx, pQuery, scope, scopeOpen } = this.state;
+    const { kbMode, pMode, recency, typeFilter, forgotten, pruneMsg, migrateMsg, copied } = this.state;
+    const scoped = (this.state.kbMems ?? ALL_MEMS).filter(m => this.inScope(m) && !forgotten.includes(m.id) && (!typeFilter || m.type === typeFilter) && (m.days ?? 0) <= RECENCY[recency]);
+    const si = Math.min(selIdx, Math.max(scoped.length - 1, 0));
+    const tab = (v) => ({ color: view === v ? '#e6efe9' : '#5f7269', bg: view === v ? 'rgba(45,212,160,.14)' : 'transparent' });
+    const sel = scoped[si] ?? ALL_MEMS[0];
+    const filtered = this.filteredP();
+    const pi = Math.min(pIdx, Math.max(filtered.length - 1, 0));
+    const pSel = filtered[pi] ?? PMEMS[0];
+    return {
+      viewTag: ({cortex:'COCKPIT', recall:'KNOWLEDGE BASE', stream:'STREAM', sessions:'SESSIONS', hygiene:'HYGIENE'})[view],
+      isCortex: view === 'cortex', isRecall: view === 'recall', isStream: view === 'stream', isSessions: view === 'sessions', isHygiene: view === 'hygiene',
+      goCortex: () => this.setState({ view: 'cortex' }), goRecall: () => this.setState({ view: 'recall' }), goStream: () => this.setState({ view: 'stream' }),
+      goSessions: () => this.setState({ view: 'sessions' }), goHygiene: () => this.setState({ view: 'hygiene' }),
+      sessionsTabColor: tab('sessions').color, sessionsTabBg: tab('sessions').bg,
+      hygieneTabColor: tab('hygiene').color, hygieneTabBg: tab('hygiene').bg,
+      cortexTabColor: tab('cortex').color, cortexTabBg: tab('cortex').bg,
+      recallTabColor: tab('recall').color, recallTabBg: tab('recall').bg,
+      streamTabColor: tab('stream').color, streamTabBg: tab('stream').bg,
+      typeFacets: [
+        { name:'preference', count:142 }, { name:'decision', count:203 }, { name:'requirement', count:88 },
+        { name:'learning', count:176 }, { name:'fact', count:198 }, { name:'note', count:63 },
+      ].map(t => ({ ...t, color: TYPE_COLORS[t.name],
+        textColor: typeFilter === t.name ? '#e6efe9' : '#84988d',
+        ring: typeFilter === t.name ? `0 0 0 2px rgba(45,212,160,.3)` : 'none',
+        pick: () => this.setState(s => ({ typeFilter: s.typeFilter === t.name ? null : t.name, selIdx: 0 })) })),
+      kbModes: ['semantic', 'exact', 'hybrid'].map(m => ({ name: m, pick: () => this.setState({ kbMode: m }),
+        bg: kbMode === m ? 'rgba(45,212,160,.18)' : 'transparent', color: kbMode === m ? '#7fe8c3' : '#5f7269', border: kbMode === m ? 'rgba(45,212,160,.4)' : 'rgba(125,200,170,.15)' })),
+      recencyOptions: Object.keys(RECENCY).map(r => ({ name: r, color: recency === r ? '#e6efe9' : '#84988d', pick: () => this.setState({ recency: r, selIdx: 0 }) })),
+      forgetSel: () => this.setState(s => ({ forgotten: [...s.forgotten, sel.id], selIdx: 0 })),
+      pruneMsg, hasPruneMsg: !!pruneMsg,
+      buildPlan: () => this.setState({ pruneMsg: 'plan built · 30 candidates staged (0 identity) — review in Stream before apply' }),
+      migrateMsg, hasMigrateMsg: !!migrateMsg,
+      migrateDry: () => this.setState({ migrateMsg: 'dry run · 844 memories would gain tier/durability/retention_days · 0 errors' }),
+      migrateApply: () => this.setState({ migrateMsg: 'applied · 844 rows updated · safe to re-run' }),
+      pModes: ['semantic', 'exact'].map(m => ({ name: m, pick: () => this.setState({ pMode: m, pIdx: 0 }),
+        bg: pMode === m ? 'rgba(45,212,160,.16)' : 'transparent', color: pMode === m ? '#7fe8c3' : '#5f7269', border: pMode === m ? 'rgba(45,212,160,.35)' : 'rgba(125,200,170,.15)' })),
+      copyLabel: copied ? 'copied ✓' : 'copy id', copyColor: copied ? '#a3e635' : '#84988d',
+      copyId: () => { navigator.clipboard?.writeText(pSel.id); this.setState({ copied: true }); setTimeout(() => this.setState({ copied: false }), 1200); },
+      topCount: scope === 'all projects' ? '870 · 1,204 edges' : `${SCOPE_COUNTS[scope]} in scope · 870 total`,
+      scope, scopeOpen,
+      toggleScope: (e) => { e.stopPropagation(); this.setState(s => ({ scopeOpen: !s.scopeOpen })); },
+      scopeOptions: SCOPES.map(s => ({ name: s, count: SCOPE_COUNTS[s], active: s === scope, color: s === scope ? '#e6efe9' : '#84988d', dotColor: s === scope ? '#2dd4a0' : 'transparent', pick: (e) => { e.stopPropagation(); this.setState({ scope: s, scopeOpen: false, selIdx: 0, pIdx: 0, kbMems: null }); } })),
+      resultCount: `${scoped.length} matches · 38ms`,
+      hasResults: scoped.length > 0, noResults: scoped.length === 0,
+      results: scoped.map((m, i) => ({
+        ...m, select: () => this.setState({ selIdx: i }),
+        score: m.score.toFixed(2), barPct: Math.round(m.score * 100) + '%',
+        cardBg: i === si ? '#141e1a' : '#0f1714',
+        cardBorder: i === si ? 'rgba(45,212,160,.45)' : 'rgba(125,200,170,.12)',
+        railColor: i === si ? '#2dd4a0' : 'transparent',
+        scoreColor: i === si ? '#7fe8c3' : '#84988d',
+        barColor: i === si ? '#2dd4a0' : '#5f7269',
+        typeColor: TYPE_COLORS[m.type],
+        textColor: i === si ? '#e6efe9' : '#bccac2',
+        meta: `${m.tier} · ${m.scope} · recalled ${m.recalls}×`,
+        opacity: m.score < 0.75 ? '.75' : '1',
+      })),
+      sel: { ...sel, typeColor: TYPE_COLORS[sel.type] }, selLinked: sel.linked,
+      feed: FEED.map(f => ({ ...f, bg: f.top ? 'rgba(45,212,160,.07)' : 'transparent', color: f.top ? '#e6efe9' : '#bccac2', scoreColor: f.miss ? '#f87171' : (f.warn ? '#f2c14e' : '#a3e635') })),
+      paletteOpen,
+      openPalette: () => this.setState({ paletteOpen: true, pIdx: 0 }),
+      closePalette: () => this.setState({ paletteOpen: false }),
+      stop: (e) => e.stopPropagation(),
+      pQuery, setQuery: (e) => this.setState({ pQuery: e.target.value, pIdx: 0 }),
+      pEmpty: filtered.length === 0,
+      pRows: filtered.map((m, i) => ({
+        ...m, select: () => { if (i === pi) this.openFromPalette(); else this.setState({ pIdx: i }); },
+        bg: i === pi ? 'rgba(45,212,160,.1)' : 'transparent',
+        border: i === pi ? 'rgba(45,212,160,.3)' : 'transparent',
+        typeColor: TYPE_COLORS[m.type],
+        textColor: i === pi ? '#e6efe9' : '#bccac2',
+        scoreColor: i === pi ? '#7fe8c3' : '#5f7269',
+      })),
+      pSel: { ...pSel, typeColor: TYPE_COLORS[pSel.type] },
+      openInRecall: this.openFromPalette,
+      kbQuery: this.state.kbQuery,
+      sessCount: SESSIONS.length,
+      sessions: SESSIONS.map((s, i) => ({
+        ...s, select: () => this.setState({ sessIdx: i }),
+        bg: i === this.state.sessIdx ? 'rgba(45,212,160,.07)' : 'transparent',
+        rail: i === this.state.sessIdx ? 'inset 2px 0 0 #2dd4a0' : 'none',
+        idColor: i === this.state.sessIdx ? '#e6efe9' : '#84988d',
+        totalsLine: `${s.totals.recalls} recalls · ${s.totals.injected} injected · ${s.totals.tokens.toLocaleString()} tok`,
+      })),
+      sSel: (() => { const s = SESSIONS[this.state.sessIdx]; return { ...s, injectedCount: s.injected.length, recallCount: s.recalls.length, totalsLine: `${s.totals.tokens.toLocaleString()} tok total` }; })(),
+      sSelInjected: SESSIONS[this.state.sessIdx].injected,
+      sSelRecalls: SESSIONS[this.state.sessIdx].recalls,
+      flagged: FLAGGED.map(f => ({ ...f, typeColor: TYPE_COLORS[f.type] ?? '#8fa39a' })),
+      graphRef: this.graphRef,
+    };
+  }
+}
+</script>
+</body>
+</html>
