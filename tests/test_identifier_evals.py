@@ -180,3 +180,34 @@ def test_hybrid_recall_at_5_hits_each_identifier_class_where_dense_misses(tmp_pa
         assert target_id not in _dense_top5_ids(manager, identifier), (
             f"dense-only found {identifier}: the hybrid hit proves nothing"
         )
+
+
+def _drift(manager: MemoryManager) -> dict:
+    return json.loads(manager._bm25_path.with_name("_bm25_drift.json").read_text())
+
+
+def test_vocab_lifecycle_oov_identifier_miss_to_hit_via_resparse(tmp_path):
+    """The PR's core claim, end-to-end: OOV identifier -> drift flagged ->
+    recall miss -> resparse -> recall hit. Regression pin (T3/T4 shipped it)."""
+    from memory.resparse import resparse
+
+    manager = _build_manager(tmp_path, vocab_corpus=DISTRACTORS)  # fit WITHOUT the identifier
+    for content in DISTRACTORS:
+        manager.save(content, type="note", scope=SCOPE)
+    assert _drift(manager)["oov_identifier_seen"] is False  # clean before the identifier lands
+
+    target_id = manager.save(TARGETS[INSTANCE_ID], type="note", scope=SCOPE)
+
+    drift = _drift(manager)
+    assert drift["oov_identifier_seen"] is True
+    assert INSTANCE_ID in drift["oov_identifier_tokens"]
+    assert drift["window"][-1] > 0  # the identifier save recorded OOV mass
+
+    # Stale vocab: the token is OOV on both query and point side — sparse leg blind.
+    assert target_id not in _top5_ids(manager, INSTANCE_ID)
+
+    result = resparse(manager)
+
+    assert result["oov_identifier_reset"] is True
+    assert target_id in _top5_ids(manager, INSTANCE_ID)
+    assert _drift(manager)["oov_identifier_seen"] is False  # drift resets only after verified refit
