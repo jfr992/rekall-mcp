@@ -311,12 +311,13 @@ class VectorStore:
             vector: Query vector (dense)
             limit: Maximum results
             filters: Filter by payload fields {"field": "value"}
-            score_threshold: Minimum similarity (0-1). In hybrid mode this gates the dense
-                candidates; BM25 candidates are exempt (RRF scores are rank-based).
+            score_threshold: Minimum cosine similarity. Applied identically in both
+                paths: server-side on the dense path, post-scoring on the hybrid path.
             query_text: Original query text for BM25 sparse search
 
         Returns:
-            List of results with score and payload
+            List of results with score and payload. Score is always cosine —
+            hybrid uses RRF only to select candidates, never as the score.
 
         Example:
             results = store.search(
@@ -341,9 +342,6 @@ class VectorStore:
                                 using="",
                                 limit=prefetch_limit,
                                 filter=query_filter,
-                                # RRF-fused scores are rank-based; cosine thresholds only
-                                # make sense on the dense candidate set.
-                                score_threshold=score_threshold or None,
                             ),
                             Prefetch(
                                 query=SparseVector(
