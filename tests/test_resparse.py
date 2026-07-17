@@ -223,3 +223,17 @@ def test_dense_vectors_are_byte_identical_after_resparse(tmp_path):
     resparse(manager)
 
     assert _dense_vectors(manager) == before
+
+
+def test_count_mismatch_aborts_with_sentinel_held(tmp_path, monkeypatch):
+    from memory.resparse import ResparseAbortedError, resparse
+
+    manager = _build_manager(tmp_path)
+    _seed(manager)
+    monkeypatch.setattr(manager.store, "count", lambda: 9999)
+
+    with pytest.raises(ResparseAbortedError, match="verification failed"):
+        resparse(manager)
+
+    assert manager.resparse_sentinel.exists()
+    assert manager.sparse_encoder is None
