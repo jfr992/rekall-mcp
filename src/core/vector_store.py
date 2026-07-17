@@ -363,10 +363,13 @@ class VectorStore:
                         with_vectors=[""],
                     ).points
 
-                    return [
+                    scored = [
                         {"score": self._cosine_to(vector, hit.vector), **hit.payload}
                         for hit in results
                     ]
+                    # Same cosine threshold semantics as the dense path (Qdrant
+                    # drops hits scoring below score_threshold, ties kept).
+                    return [hit for hit in scored if hit["score"] >= score_threshold]
 
             # Dense-only search
             results = self.client.query_points(
