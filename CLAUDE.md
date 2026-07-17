@@ -123,13 +123,14 @@ Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/h
 - **Proactive context injection.** The restore hook is zero-injection by design — anything in the data is reachable via `recall_memories()` on demand. Per-session firehose injection burns tokens for noise.
 - **Per-turn LLM judge without a gate.** Cost cliff. See hook discipline above.
 - **Synthesizing rules into CLAUDE.md from imagined sources.** Real incident — a rule about commit footers got fabricated and almost shipped. Verbatim source or explicit author intent only.
-- **BM25 hybrid on main.** Lives on `feat/hybrid-search-bm25` until the migrate_hybrid.py glob→rglob fix and the compact.py asyncio.run→await fix land. Don't merge without those.
+- **Partial vocab refits.** BM25 token IDs are assigned at fit time — a refit without rewriting every point's sparse vector in the same transaction (`resparse`) produces silently wrong matches. Never cap or sample the resparse corpus.
 - **More reads over smarter reads.** A new context surface ships only with evidence it reduces duplicate memory_ids across capsule buckets (test-asserted) or feeds the recall-utility loop (event emitted + consumed by the utility report). No evidence, no merge.
 - **Eval corpus and scenario queries in `tests/test_software_evals.py` may not be edited in the same PR as ranking/routing changes, except to add scenarios.**
 
 ## Deferred work (with reason)
 
-- **BM25 hybrid merge** — adds Qdrant-native sparse vectors for identifier-style queries. Marginal value at <5k memories; merge when scale demands. Pre-merge fix required: `migrate_hybrid.py` glob→rglob.
+- **Auto-resparse trigger** — manual `POST /api/memory/resparse` + loud doctor drift signals cover the current save cadence. Add a trigger (thread via `run_in_executor`, never a bare asyncio task in the sync save path) only if drift recurs unattended for two weeks.
+- **Stable BM25 token IDs (hash-based, bm42-style)** — would make refits incremental and kill the resparse transaction. Revisit at >50k memories or if resparse duration exceeds barrier-hold tolerance.
 - **Auto-compaction** — shipped on main (`src/memory/compact.py`, route `POST /api/memory/compact`). Known issue: asyncio.run inside sync path (see pitfall table).
 - **Session-end summary** — Claude Code has no native end-of-session hook. Workaround would be a slash command the user types at session end. Not worth building until per-turn judge proves insufficient.
 
@@ -148,6 +149,8 @@ Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/h
 | Restore hook fetches 12KB of "proactive context" but echoes only the status line | pre-v1.5.0 `rekall-restore.sh` | Either drop the fetch entirely (current — nuclear mode) or actually inject (was the bug we caught) |
 | Compose defaults to named volumes → existing installs mount empty stores and "all memories are gone" | `docker-compose.yaml` (v1.11) | Layer `docker-compose.bind-mounts.example.yaml` (or copy it to `docker-compose.override.yaml`) to keep the `~/.claude/` bind mounts |
 | Stale `.env` `EMBEDDING_PROVIDER=sentence-transformers` on the slim image (no torch) silently degrades endpoints to zero | v1.11 deploy | Remove the var or set `fastembed` (vectors are identical); #57 tracks making the failure loud |
+| BM25 vocab frozen at fit time → identifiers born later miss recall entirely (silent dense-only degradation) | prod, Jul 5–17 vocab | `POST /api/memory/resparse`; doctor `bm25` block surfaces drift (OOV window, vocab age, identifier flag) |
+| One symmetric `encode()` for docs AND queries → sparse scores ~IDF² (IDF applied both sides) | `sparse_encoder.py` (pre-v1.13) | `encode_document` / `encode_query` split — IDF once, document side only |
 
 ## Where to read next
 
