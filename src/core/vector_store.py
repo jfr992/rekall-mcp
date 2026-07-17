@@ -26,6 +26,7 @@ All operations are traced via Telemetry.
 from __future__ import annotations
 
 import logging
+import math
 from typing import Any
 
 from qdrant_client import QdrantClient
@@ -357,9 +358,15 @@ class VectorStore:
                         query=FusionQuery(fusion=Fusion.RRF),
                         query_filter=query_filter,
                         limit=limit,
+                        # RRF selects candidates; scores are re-computed as cosine
+                        # locally so every search path returns one score space.
+                        with_vectors=[""],
                     ).points
 
-                    return [{"score": hit.score, **hit.payload} for hit in results]
+                    return [
+                        {"score": self._cosine_to(vector, hit.vector), **hit.payload}
+                        for hit in results
+                    ]
 
             # Dense-only search
             results = self.client.query_points(
@@ -377,6 +384,25 @@ class VectorStore:
                 }
                 for hit in results
             ]
+
+    @staticmethod
+    def _cosine_to(query_vector: list[float], hit_vector: Any) -> float:
+        """Cosine between the query and a hit's dense vector.
+
+        Scale-invariant, so it matches Qdrant's cosine score whether or not the
+        stored vector was normalized. Named-vector hits carry {"": dense, ...}.
+        """
+        vec = hit_vector
+        if isinstance(vec, dict):
+            vec = vec.get("") or next((v for v in vec.values() if isinstance(v, list)), None)
+        if not vec:
+            return 0.0
+        dot = sum(q * h for q, h in zip(query_vector, vec))
+        norm_q = math.sqrt(sum(q * q for q in query_vector))
+        norm_h = math.sqrt(sum(h * h for h in vec))
+        if norm_q == 0.0 or norm_h == 0.0:
+            return 0.0
+        return dot / (norm_q * norm_h)
 
     def scroll(
         self,
