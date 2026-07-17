@@ -151,3 +151,32 @@ def test_bootstrap_threshold_save_path_exercises_sparse_leg_for_identifier_query
     assert calls == [ERROR_CLASS]  # sparse leg executed on the real recall path
     assert original(ERROR_CLASS)  # non-empty encoding: hybrid branch, not dense fallthrough
     assert target_id in _top5_ids(manager, ERROR_CLASS)
+
+
+def _dense_top5_ids(manager: MemoryManager, query: str) -> list[str]:
+    # Empty query_text forces the dense-only branch on the same store/corpus.
+    results = manager.store.search(vector=manager.embedder.encode(query), query_text="", limit=5)
+    return [r["memory_id"] for r in results]
+
+
+def test_hybrid_recall_at_5_hits_each_identifier_class_where_dense_misses(tmp_path):
+    """Regression pin: hybrid adds coverage dense can't provide.
+
+    Three identifier classes (error class, instance ID, hyphenated pack name)
+    against a distractor-heavy corpus. The routed embedder makes every target
+    orthogonal to its query, so the dense-only path misses all three — any
+    top-5 hit is the sparse leg's doing.
+    """
+    manager = _build_manager(tmp_path, vocab_corpus=DISTRACTORS + list(TARGETS.values()))
+    for content in DISTRACTORS:
+        manager.save(content, type="note", scope=SCOPE)
+    target_ids = {
+        identifier: manager.save(content, type="note", scope=SCOPE)
+        for identifier, content in TARGETS.items()
+    }
+
+    for identifier, target_id in target_ids.items():
+        assert target_id in _top5_ids(manager, identifier), f"hybrid missed {identifier}"
+        assert target_id not in _dense_top5_ids(manager, identifier), (
+            f"dense-only found {identifier}: the hybrid hit proves nothing"
+        )
