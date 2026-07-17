@@ -140,3 +140,38 @@ def test_resparse_happy_path_repairs_identifier_recall(tmp_path):
     assert drift["saves_since_fit"] == 0
     assert drift["oov_identifier_seen"] is False
     assert not manager.resparse_sentinel.exists()
+
+
+def test_interrupted_resparse_holds_sentinel_and_rerun_recovers(tmp_path):
+    from memory.resparse import ResparseAbortedError, resparse
+
+    manager = _build_manager(tmp_path)
+    target_id = _seed(manager)
+
+    real_update = manager.store.client.update_vectors
+    calls = {"n": 0}
+
+    def flaky(*args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] >= 2:  # second batch fails, and so does its one retry
+            raise RuntimeError("simulated qdrant outage")
+        return real_update(*args, **kwargs)
+
+    manager.store.client.update_vectors = flaky
+    try:
+        with pytest.raises(ResparseAbortedError, match="rerun"):
+            resparse(manager, batch_size=2)
+    finally:
+        manager.store.client.update_vectors = real_update
+
+    assert manager.resparse_sentinel.exists()
+    assert manager.sparse_encoder is None  # dense-only while incomplete
+    assert manager.doctor()["bm25"]["verdict"] == "resparse_incomplete"
+
+    result = resparse(manager, batch_size=2)
+
+    assert result["points_updated"] == 5
+    assert not manager.resparse_sentinel.exists()
+    assert manager.sparse_encoder is not None
+    assert manager.doctor()["bm25"]["verdict"] != "resparse_incomplete"
+    assert target_id in _identifier_hits(manager)

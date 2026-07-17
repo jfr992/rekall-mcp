@@ -231,7 +231,12 @@ class MemoryManager:
         A vocab carrying a ``_binding`` for a different store is refused
         (dense-only, logged once) — decoding with the wrong vocab would return
         silently wrong sparse matches. Headerless vocabs load as always.
+
+        An in-progress resparse marker means the collection holds mixed-generation
+        sparse vectors — dense-only until a rerun completes and clears it.
         """
+        if self.resparse_sentinel.exists():
+            return None
         if (
             self._sparse_encoder is None
             and not self._sparse_vocab_rejected
