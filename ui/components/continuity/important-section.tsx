@@ -53,7 +53,7 @@ export function ImportantSection({
     <div className="space-y-4">
       {orderedTypes.map((type) => (
         <section key={type}>
-          <MonoLabel>
+          <MonoLabel className="tracking-[0.16em]">
             {type} · {byType.get(type)!.length}
           </MonoLabel>
           <ul className="mt-2 space-y-1.5">
