@@ -112,7 +112,7 @@ export function Drawer({
           <motion.div
             role="presentation"
             onClick={onClose}
-            className="fixed inset-0 bg-black/60"
+            className="fixed inset-0 bg-[var(--scrim)]"
             style={{ zIndex: "var(--z-drawer)" }}
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
