@@ -14,6 +14,7 @@ Usage:
     MCP_CONFIG=tools.yaml python -m server
 """
 
+import asyncio
 import logging
 import os
 import re
@@ -439,6 +440,27 @@ def _server_error(message: str):
     from starlette.responses import JSONResponse
 
     return JSONResponse({"error": message}, status_code=500)
+
+
+# Exclusive maintenance barrier: resparse holds this for its whole transaction,
+# so mutation routes (save/observe/delete) queue behind it and land on the new
+# vocab generation. Single-process daemon makes an in-process lock sufficient.
+_maintenance_barrier = asyncio.Lock()
+
+
+@mcp.custom_route("/api/memory/resparse", methods=["POST"])
+async def api_memory_resparse(request):
+    """REST API: transactional BM25 vocab refit. Maintenance op — REST only, no MCP tool."""
+    from memory.resparse import resparse
+
+    try:
+        manager = _get_memory_manager()
+        async with _maintenance_barrier:
+            result = await asyncio.to_thread(resparse, manager)
+        return _ok(result)
+    except Exception as e:
+        logger.error(f"Error running resparse: {e}")
+        return _server_error(str(e))
 
 
 @mcp.custom_route("/api/memory/save", methods=["POST"])
