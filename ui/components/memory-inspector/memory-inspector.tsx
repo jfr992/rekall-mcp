@@ -1,8 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Copy, Check, X } from "lucide-react";
+import { AlertTriangle, Copy, Check, PencilLine, Trash2, X } from "lucide-react";
 import { Drawer } from "@/components/ui/drawer";
+import { Button } from "@/components/ui/button";
+import { DeleteMemoryDialog } from "./delete-memory-dialog";
 import { Badge } from "@/components/ui/badge";
 import { MonoLabel } from "@/components/ui/mono-label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -32,6 +34,7 @@ export function MemoryInspector({
   const [copied, setCopied] = useState<"id" | "content" | null>(null);
   const [copyFailed, setCopyFailed] = useState<"id" | "content" | null>(null);
   const [backlinkEntity, setBacklinkEntity] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const memory = detail?.memory;
 
   // Compute status: contradicted > superseded > legacy > current
@@ -211,6 +214,40 @@ export function MemoryInspector({
               onSelectMemory={onSelectMemory}
             />
           ) : null}
+
+          {/* Actions — delete is guarded; edit lands with supersede semantics in U3 */}
+          <div className="flex items-center gap-3 border-t border-[var(--border)] pt-4">
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setConfirmDelete(true)}
+              aria-label="Delete memory"
+            >
+              <Trash2 size={14} />
+              Delete
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled
+              title="Editing lands in U3 with supersede semantics"
+            >
+              <PencilLine size={14} />
+              Edit (coming in U3)
+            </Button>
+          </div>
+
+          {confirmDelete && (
+            <DeleteMemoryDialog
+              memoryId={memory.memory_id}
+              content={memory.content ?? ""}
+              onCancel={() => setConfirmDelete(false)}
+              onDone={() => {
+                setConfirmDelete(false);
+                onClose();
+              }}
+            />
+          )}
         </div>
       ) : (
         <p className="text-sm text-[var(--fg-muted)]">Memory not found.</p>
