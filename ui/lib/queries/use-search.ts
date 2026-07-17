@@ -1,10 +1,16 @@
 import { useQuery } from "@tanstack/react-query";
 import { postRecall } from "@/lib/api/search";
 
-export function useSearch(query: string, project: string) {
+export type SearchMode = "semantic" | "exact";
+
+// Exact mode fetches a deeper pool (50): the verbatim match may rank low
+// semantically, so the caller client-filters the wider set to substring hits.
+const LIMIT: Record<SearchMode, number> = { semantic: 10, exact: 50 };
+
+export function useSearch(query: string, project: string, mode: SearchMode = "semantic") {
   return useQuery({
-    queryKey: ["search", project, query],
-    queryFn: () => postRecall(query, project, 10),
+    queryKey: ["search", project, query, mode],
+    queryFn: () => postRecall(query, project, LIMIT[mode]),
     enabled: query.trim().length > 0,
     staleTime: 30_000,
   });
