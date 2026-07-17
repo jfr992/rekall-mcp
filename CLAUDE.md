@@ -65,7 +65,7 @@ Surfaces live under `ui/app/<name>/page.tsx`. Pattern:
 2. Wraps in a Suspense boundary with `loading.tsx`.
 3. Components live in `ui/components/<surface>/`.
 4. Tests in `ui/tests/<component>.test.tsx` use the fixtures in `ui/tests/fixtures/`.
-5. Add the route to `ui/components/shell/sidebar-nav.tsx`.
+5. Add the route to the top-nav tabs in `ui/components/shell/cockpit-shell.tsx`.
 
 ## Memory schema invariants (don't break)
 
