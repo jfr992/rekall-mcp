@@ -478,7 +478,10 @@ async def api_save_memory(request):
             return JSONResponse({"error": "content is required"}, status_code=400)
 
         manager = _get_memory_manager()
-        memory_id = manager.save(content, type=mem_type, project=project, capture_origin="rest")
+        async with _maintenance_barrier:
+            memory_id = manager.save(
+                content, type=mem_type, project=project, capture_origin="rest"
+            )
 
         return JSONResponse({"memory_id": memory_id, "status": "saved", "type": mem_type})
     except RequestValidationError as e:
@@ -1048,7 +1051,8 @@ async def api_delete_memory(request):
             return JSONResponse({"error": "memory_id is required"}, status_code=400)
 
         manager = _get_memory_manager()
-        deleted = manager.delete(memory_id)
+        async with _maintenance_barrier:
+            deleted = manager.delete(memory_id)
 
         if not deleted:
             return JSONResponse(
