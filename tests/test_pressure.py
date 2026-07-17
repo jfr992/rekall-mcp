@@ -34,3 +34,23 @@ def test_render_pressure_report_has_header():
         {"low_value_count": 1, "stale_working_count": 1, "candidates": []}
     )
     assert "Memory Pressure Report" in report
+
+
+def test_identify_pressure_returns_labeled_lists():
+    """T5: per-reason lists so the UI can group flags (was one merged blob)."""
+    from memory.pressure import identify_pressure
+
+    memories = [
+        {"memory_id": "lv1", "tier": "working", "salience": 0.1, "content": "low"},
+        {
+            "memory_id": "st1",
+            "tier": "working",
+            "salience": 0.9,
+            "retention_days": 1,
+            "date": "2020-01-01",
+            "content": "stale",
+        },
+    ]
+    p = identify_pressure(memories)
+    assert [m["memory_id"] for m in p["low_value"]] == ["lv1"]
+    assert [m["memory_id"] for m in p["stale_working"]] == ["st1"]
