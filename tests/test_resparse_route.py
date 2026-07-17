@@ -2,9 +2,15 @@
 
 from __future__ import annotations
 
+import asyncio
+import threading
 from unittest.mock import MagicMock
 
+import httpx
+import pytest
 from starlette.testclient import TestClient
+
+from tests.test_resparse import QUERY, _build_manager, _seed
 
 
 def _client(monkeypatch) -> TestClient:
@@ -46,3 +52,63 @@ def test_resparse_route_rejects_browser_marked_cross_origin(monkeypatch):
     )
 
     assert response.status_code == 403
+
+
+@pytest.mark.integration
+async def test_save_during_resparse_queues_and_lands_with_new_vocab(tmp_path, monkeypatch):
+    import server
+    from core.utils import stable_hash_id
+    from memory import resparse as resparse_mod
+
+    manager = _build_manager(tmp_path)
+    _seed(manager)
+    monkeypatch.setattr("memory.singleton._instance", manager)
+
+    started, release = threading.Event(), threading.Event()
+    real_resparse = resparse_mod.resparse
+
+    def slow_resparse(mgr, **kwargs):
+        started.set()
+        assert release.wait(timeout=10)
+        return real_resparse(mgr, **kwargs)
+
+    monkeypatch.setattr("memory.resparse.resparse", slow_resparse)
+
+    transport = httpx.ASGITransport(app=server.build_app())
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        resparse_task = asyncio.create_task(client.post("/api/memory/resparse"))
+        assert await asyncio.to_thread(started.wait, 5)
+
+        save_task = asyncio.create_task(
+            client.post(
+                "/api/memory/save",
+                json={
+                    "content": "follow-up on i-03470c789e7b72080 remediation completed",
+                    "project": "proj",
+                },
+            )
+        )
+        await asyncio.sleep(0.3)
+        assert not save_task.done()  # queued behind the barrier
+
+        release.set()
+        resparse_response = await resparse_task
+        save_response = await save_task
+
+    assert resparse_response.status_code == 200
+    # 5 seeded points only: the save never snuck into the transaction window.
+    assert resparse_response.json()["points_updated"] == 5
+    assert save_response.status_code == 200
+
+    memory_id = save_response.json()["memory_id"]
+    point = manager.store.client.retrieve(
+        collection_name=manager.store.collection,
+        ids=[stable_hash_id(memory_id)],
+        with_payload=True,
+        with_vectors=True,
+    )[0]
+    sparse = point.vector["bm25"]
+    got = dict(zip(sparse.indices, sparse.values, strict=True))
+    expected = manager.store.sparse_encoder.encode_document(point.payload["embedding_text"])
+    assert got == pytest.approx(expected)  # the queued save used the NEW vocab
+    assert manager.store.sparse_encoder.vocab[QUERY] in got
