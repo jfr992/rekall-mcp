@@ -368,10 +368,17 @@ class VectorStore:
                         with_vectors=[""],
                     ).points
 
-                    return [
-                        {"score": self._cosine_to(vector, hit.vector), **hit.payload}
-                        for hit in results
-                    ]
+                    hits = []
+                    for hit in results:
+                        cosine = self._cosine_to(vector, hit.vector)
+                        entry = {"score": cosine, **hit.payload}
+                        # Below the dense floor ⇒ only the sparse leg could have
+                        # admitted it. Callers use this to keep exact-term hits
+                        # from losing downstream re-ranking cuts.
+                        if cosine < score_threshold:
+                            entry["sparse_rescued"] = True
+                        hits.append(entry)
+                    return hits
 
             # Dense-only search
             results = self.client.query_points(
