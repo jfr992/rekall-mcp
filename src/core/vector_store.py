@@ -311,8 +311,10 @@ class VectorStore:
             vector: Query vector (dense)
             limit: Maximum results
             filters: Filter by payload fields {"field": "value"}
-            score_threshold: Minimum cosine similarity. Applied identically in both
-                paths: server-side on the dense path, post-scoring on the hybrid path.
+            score_threshold: Minimum cosine similarity for dense retrieval —
+                server-side on the dense path and on the hybrid dense leg.
+                Sparse-leg matches bypass it (exact-term coverage); their
+                returned score is still true cosine.
             query_text: Original query text for BM25 sparse search
 
         Returns:
@@ -342,6 +344,11 @@ class VectorStore:
                                 using="",
                                 limit=prefetch_limit,
                                 filter=query_filter,
+                                # Same server-side floor as the dense path. Sparse-leg
+                                # candidates bypass it: exact-term matches are the
+                                # coverage the sparse index exists for, and their
+                                # dense cosine is low by definition.
+                                score_threshold=score_threshold,
                             ),
                             Prefetch(
                                 query=SparseVector(
@@ -361,13 +368,10 @@ class VectorStore:
                         with_vectors=[""],
                     ).points
 
-                    scored = [
+                    return [
                         {"score": self._cosine_to(vector, hit.vector), **hit.payload}
                         for hit in results
                     ]
-                    # Same cosine threshold semantics as the dense path (Qdrant
-                    # drops hits scoring below score_threshold, ties kept).
-                    return [hit for hit in scored if hit["score"] >= score_threshold]
 
             # Dense-only search
             results = self.client.query_points(
