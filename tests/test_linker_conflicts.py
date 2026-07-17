@@ -41,15 +41,18 @@ def _mock_embedder() -> MagicMock:
     return embedder
 
 
-def test_entity_band_contradicts_with_shared_entity(tmp_path):
-    """Same-type, sim=0.79, shared entity → auto_link creates 'contradicts' edge."""
+def test_negation_contradicts_deterministic(tmp_path, monkeypatch):
+    """sim=0.65 + asymmetric negation near a shared concept → deterministic
+    contradicts, no key needed."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
     kg = KnowledgeGraph(tmp_path / "_graph.json")
     kg.add_node("old_decision", memory_type="decision")
 
     result = auto_link(
         graph=kg,
         memory_id="new_decision",
-        content="Switched from PostgreSQL to MongoDB for primary storage",
+        content="Do not use PostgreSQL for primary storage anymore",
         memory_type="decision",
         project="api",
         embedder=_mock_embedder(),
@@ -59,8 +62,8 @@ def test_entity_band_contradicts_with_shared_entity(tmp_path):
                     "memory_id": "old_decision",
                     "type": "decision",
                     "content": "Use PostgreSQL for primary storage",
-                    "score": 0.79,
-                    "entities": ["PostgreSQL", "MongoDB"],
+                    "score": 0.65,
+                    "entities": ["PostgreSQL"],
                 },
             ]
         ),
@@ -205,6 +208,147 @@ def test_deterministic_edge_not_llm_refined(tmp_path, monkeypatch):
     assert not edge_data.get("llm_refined")
 
 
+# U2.5 conflict-edge policy: deterministic (no-key) entity band defaults to
+# related_to — the repr-v2 rebuild ran keyless with a contradicts default and
+# flagged 47% of the corpus. Deterministic contradicts now requires a negation
+# hit at sim >= 0.60 (_is_contradiction); the LLM path is unchanged.
+
+
+def test_entity_band_no_key_mid_band_related_to(tmp_path, monkeypatch):
+    """sim=0.50, shared entity, no key → related_to, never contradicts."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    kg.add_node("old_decision", memory_type="decision")
+
+    result = auto_link(
+        graph=kg,
+        memory_id="new_decision",
+        content="Use MongoDB as primary datastore",
+        memory_type="decision",
+        project="api",
+        embedder=_mock_embedder(),
+        store=_mock_store(
+            [
+                {
+                    "memory_id": "old_decision",
+                    "type": "decision",
+                    "content": "Use PostgreSQL as primary datastore",
+                    "score": 0.50,
+                    "entities": ["MongoDB"],
+                },
+            ]
+        ),
+    )
+
+    assert result.relations.get("contradicts", 0) == 0
+    assert result.relations.get("related_to") == 1
+
+
+def test_negation_below_060_floor_not_contradicts(tmp_path, monkeypatch):
+    """sim=0.55 + negation is below the restored 0.60 negation floor — the
+    entity band catches it as related_to (keyless)."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    kg.add_node("old_decision", memory_type="decision")
+
+    result = auto_link(
+        graph=kg,
+        memory_id="new_decision",
+        content="Do not use PostgreSQL for primary storage anymore",
+        memory_type="decision",
+        project="api",
+        embedder=_mock_embedder(),
+        store=_mock_store(
+            [
+                {
+                    "memory_id": "old_decision",
+                    "type": "decision",
+                    "content": "Use PostgreSQL for primary storage",
+                    "score": 0.55,
+                    "entities": ["PostgreSQL"],
+                },
+            ]
+        ),
+    )
+
+    assert result.relations.get("contradicts", 0) == 0
+    assert result.relations.get("related_to") == 1
+
+
+def test_sim_065_no_negation_no_key_related_to(tmp_path, monkeypatch):
+    """sim=0.65, shared entity, no negation, no key → related_to (above the
+    negation floor, but a negation hit is required for deterministic contradicts)."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    kg.add_node("old_decision", memory_type="decision")
+
+    result = auto_link(
+        graph=kg,
+        memory_id="new_decision",
+        content="Use MongoDB as primary datastore",
+        memory_type="decision",
+        project="api",
+        embedder=_mock_embedder(),
+        store=_mock_store(
+            [
+                {
+                    "memory_id": "old_decision",
+                    "type": "decision",
+                    "content": "Use PostgreSQL as primary datastore",
+                    "score": 0.65,
+                    "entities": ["MongoDB"],
+                },
+            ]
+        ),
+    )
+
+    assert result.relations.get("contradicts", 0) == 0
+    assert result.relations.get("related_to") == 1
+
+
+def test_llm_path_upgrades_band_to_contradicts(tmp_path, monkeypatch):
+    """LLM path pin: key present + entity band + LLM says CONTRADICTS →
+    contradicts edge stamped llm_refined=True. The LLM (not the deterministic
+    default) is now the only keyed source of band contradicts."""
+    mock_response = SimpleNamespace(content=[SimpleNamespace(text="CONTRADICTS")])
+    mock_client = MagicMock()
+    mock_client.messages.create.return_value = mock_response
+    mock_anthropic = MagicMock()
+    mock_anthropic.Anthropic.return_value = mock_client
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.setitem(sys.modules, "anthropic", mock_anthropic)
+
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    kg.add_node("old_decision", memory_type="decision")
+
+    result = auto_link(
+        graph=kg,
+        memory_id="new_decision",
+        content="Use MongoDB as primary datastore",
+        memory_type="decision",
+        project="api",
+        embedder=_mock_embedder(),
+        store=_mock_store(
+            [
+                {
+                    "memory_id": "old_decision",
+                    "type": "decision",
+                    "content": "Use PostgreSQL as primary datastore",
+                    "score": 0.65,
+                    "entities": ["MongoDB"],
+                },
+            ]
+        ),
+    )
+
+    assert result.relations.get("contradicts") == 1
+    assert kg._graph.edges["new_decision", "old_decision"]["llm_refined"] is True
+
+
 # Repr v2 calibration (2026-07-09, all-MiniLM, stored-vs-stored on these fixtures):
 # raw-content cosines run lower than embedding_text ones. Boundaries re-derived by
 # bracket midpoint — see constants in memory/linker.py.
@@ -249,7 +393,8 @@ def test_sim_087_same_type_supersedes_under_repr_v2_band(tmp_path, monkeypatch):
 
 
 def test_sim_046_exact_entity_band_fires(tmp_path, monkeypatch):
-    """sim=0.46 is at the lower entity-band boundary [0.46, 0.85) — fires contradicts."""
+    """sim=0.46 is at the lower entity-band boundary [0.46, 0.85) — the band
+    fires, but keyless its deterministic verdict is now related_to."""
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
 
     kg = KnowledgeGraph(tmp_path / "_graph.json")
@@ -275,7 +420,8 @@ def test_sim_046_exact_entity_band_fires(tmp_path, monkeypatch):
         ),
     )
 
-    assert result.relations.get("contradicts") == 1
+    assert result.relations.get("related_to") == 1
+    assert result.relations.get("contradicts", 0) == 0
 
 
 def test_sim_045_entity_band_does_not_fire(tmp_path, monkeypatch):
@@ -310,7 +456,7 @@ def test_sim_045_entity_band_does_not_fire(tmp_path, monkeypatch):
 
 
 def test_llm_garbage_response_deterministic_fallback(tmp_path, monkeypatch):
-    """LLM returning unknown word falls back to deterministic contradicts."""
+    """LLM returning unknown word falls back to the deterministic related_to."""
     mock_response = SimpleNamespace(content=[SimpleNamespace(text="BLAHBLAH")])
     mock_client = MagicMock()
     mock_client.messages.create.return_value = mock_response
@@ -343,7 +489,8 @@ def test_llm_garbage_response_deterministic_fallback(tmp_path, monkeypatch):
         ),
     )
 
-    assert result.relations.get("contradicts") == 1
+    assert result.relations.get("related_to") == 1
+    assert result.relations.get("contradicts", 0) == 0
 
 
 def test_llm_returns_related_creates_related_to_edge(tmp_path, monkeypatch):
@@ -385,7 +532,8 @@ def test_llm_returns_related_creates_related_to_edge(tmp_path, monkeypatch):
 
 
 def test_llm_refine_exception_fallback(tmp_path, monkeypatch):
-    """When LLM client raises, entity-band contradicts is preserved."""
+    """When LLM client raises, the deterministic related_to is preserved —
+    an API outage must not flag conflicts."""
     mock_anthropic = MagicMock()
     mock_anthropic.Anthropic.side_effect = RuntimeError("API unavailable")
 
@@ -415,7 +563,8 @@ def test_llm_refine_exception_fallback(tmp_path, monkeypatch):
         ),
     )
 
-    assert result.relations.get("contradicts") == 1
+    assert result.relations.get("related_to") == 1
+    assert result.relations.get("contradicts", 0) == 0
 
 
 def test_llm_refine_key_absent_no_anthropic_call(tmp_path, monkeypatch):
@@ -449,7 +598,8 @@ def test_llm_refine_key_absent_no_anthropic_call(tmp_path, monkeypatch):
     )
 
     mock_anthropic.Anthropic.assert_not_called()
-    assert result.relations.get("contradicts") == 1
+    assert result.relations.get("related_to") == 1
+    assert result.relations.get("contradicts", 0) == 0
 
 
 def test_llm_refine_supersedes_override(tmp_path, monkeypatch):
@@ -528,10 +678,10 @@ def test_llm_refinement_capped_per_save(tmp_path, monkeypatch):
     )
 
     assert mock_client.messages.create.call_count == 3
-    # All five candidates still classified: 3 LLM-refined to related_to,
-    # 2 deterministic contradicts past the cap.
-    assert result.relations.get("related_to", 0) == 3
-    assert result.relations.get("contradicts", 0) == 2
+    # All five candidates still classified: 3 LLM-confirmed related_to,
+    # 2 deterministic related_to past the cap.
+    assert result.relations.get("related_to", 0) == 5
+    assert result.relations.get("contradicts", 0) == 0
 
 
 def test_widened_range_supersedes_carries_provisional_band(tmp_path, monkeypatch):
