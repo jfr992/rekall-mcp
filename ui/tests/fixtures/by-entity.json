@@ -1,0 +1,16 @@
+{
+  "entity": "MetalLB",
+  "project": "net-lab",
+  "count": 1,
+  "memories": [
+    {
+      "memory_id": "2026-07-02_learning_d4e5f6",
+      "content": "MetalLB speaker pods need the memberlist secret",
+      "type": "learning",
+      "tier": "working",
+      "date": "2026-07-02",
+      "project": "net-lab",
+      "entities": ["MetalLB", "memberlist"]
+    }
+  ]
+}

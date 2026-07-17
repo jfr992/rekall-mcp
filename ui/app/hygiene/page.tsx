@@ -7,6 +7,8 @@ import { Empty } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PressureGauges } from "@/components/hygiene/pressure-gauges";
 import { PressureExplainer } from "@/components/hygiene/pressure-explainer";
+import { FlaggedPanel } from "@/components/hygiene/flagged-panel";
+import { MemoryInspector } from "@/components/memory-inspector/memory-inspector";
 import { PruneBuilder } from "@/components/hygiene/prune-builder";
 import { PrunePlanReview } from "@/components/hygiene/prune-plan-review";
 import { PruneApplyGate } from "@/components/hygiene/prune-apply-gate";
@@ -15,6 +17,7 @@ import { BackfillRunner } from "@/components/hygiene/backfill-runner";
 import { usePressure } from "@/lib/queries/use-pressure";
 import { usePrunePlanMutation, usePruneApplyMutation } from "@/lib/queries/use-prune";
 import { useProjectStore } from "@/lib/project-store";
+import { useMemoryDetail } from "@/lib/queries/use-memory-detail";
 import type { PrunePlan } from "@/lib/schemas";
 
 export default function HygienePage() {
@@ -24,6 +27,8 @@ export default function HygienePage() {
   const applyMutation = usePruneApplyMutation();
 
   const [plan, setPlan] = useState<PrunePlan | null>(null);
+  const [inspecting, setInspecting] = useState<string | null>(null);
+  const detail = useMemoryDetail(inspecting);
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const handleBuild = () => {
@@ -69,6 +74,7 @@ export default function HygienePage() {
           <>
             <PressureGauges data={pressure.data} />
             <PressureExplainer data={pressure.data} />
+            <FlaggedPanel flagged={pressure.data.flagged} onSelect={setInspecting} />
           </>
         ) : (
           <Empty title="Could not load pressure" />
@@ -101,6 +107,15 @@ export default function HygienePage() {
         loading={applyMutation.isPending}
         onClose={() => setDialogOpen(false)}
         onConfirm={handleApply}
+      />
+
+      <MemoryInspector
+        open={inspecting !== null}
+        detail={detail.data}
+        isLoading={detail.isLoading}
+        currentProject={project}
+        onClose={() => setInspecting(null)}
+        onSelectMemory={setInspecting}
       />
     </div>
   );

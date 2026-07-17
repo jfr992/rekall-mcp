@@ -308,3 +308,5 @@ Four ways to resolve, in order of frequency:
 4. **Superseded pairs** (clear replacement rather than disagreement) are retired automatically by the gated prune — no action needed.
 
 Review all pairs at once: `curl http://localhost:8000/api/memory/consolidate` or the Hygiene page.
+
+Bulk repair of machine-made conflict flags: `QDRANT_URL=http://localhost:6333 uv run python scripts/repair_contradicts.py` re-judges every unrefined `contradicts` edge (LLM per pair when `ANTHROPIC_API_KEY` is set, negation heuristic otherwise) and downgrades the unsupported ones to `related_to` — dry-run by default, `--apply` to write.

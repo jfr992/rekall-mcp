@@ -33,6 +33,10 @@ _MAX_CANDIDATES = 10
 _SIMILARITY_THRESHOLD = 0.40
 _CONTRADICTION_SIMILARITY_THRESHOLD = 0.46
 _SUPERSEDES_SIMILARITY_THRESHOLD = 0.85
+# U2.5: 0.46 proved far too permissive as a deterministic-contradicts floor
+# (the keyless repr-v2 rebuild flagged 47% of the corpus) — it remains the
+# entity-band floor only. Negation-based contradicts requires >= 0.60 again.
+_NEGATION_CONTRADICTION_FLOOR = 0.60
 # Widened entity band can put every candidate in the LLM-refine path; bound
 # the per-save Haiku spend (hook-discipline cost cliff).
 _MAX_LLM_REFINEMENTS_PER_SAVE = 3
@@ -286,7 +290,11 @@ def _classify_relation(
     if similarity > _SUPERSEDES_SIMILARITY_THRESHOLD and new_type == cand_type:
         return "supersedes", False
 
-    # Entity-band contradicts: same type, mid-range similarity, shared entities signal conflict.
+    # Entity band: same type, mid-range similarity, shared entities — a
+    # potential conflict, but too weak as deterministic evidence (the keyless
+    # repr-v2 rebuild with a contradicts default flagged 47% of the corpus).
+    # Deterministic default is related_to; contradicts needs a negation hit
+    # (handled above, >= 0.60) or an LLM verdict.
     if (
         new_type == cand_type
         and _CONTRADICTION_SIMILARITY_THRESHOLD <= similarity < _SUPERSEDES_SIMILARITY_THRESHOLD
@@ -295,7 +303,7 @@ def _classify_relation(
         relation, llm_refined = _llm_refine(
             new_content=new_content,
             cand_content=cand_content,
-            deterministic="contradicts",
+            deterministic="related_to",
             budget=llm_budget,
         )
         if llm_refined:
@@ -329,7 +337,7 @@ def _is_contradiction(
     4. The negation targets a concept shared with the other text
        (negation word must appear within 3 words of a shared token)
     """
-    if similarity < _CONTRADICTION_SIMILARITY_THRESHOLD:
+    if similarity < _NEGATION_CONTRADICTION_FLOOR:
         return False
 
     new_has_negation = _contains_negation(new_content)

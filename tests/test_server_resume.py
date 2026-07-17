@@ -36,4 +36,4 @@ async def test_api_resume_packet(monkeypatch):
     assert isinstance(response, JSONResponse)
     payload = json.loads(response.body)
     assert payload["scope"]["project"] == "brain"
-    manager.get_resume_packet.assert_called_once_with(project="brain", limit=9)
+    manager.get_resume_packet.assert_called_once_with(project="brain", limit=9, all_scopes=False)

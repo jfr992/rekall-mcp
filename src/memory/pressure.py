@@ -36,6 +36,8 @@ def identify_pressure(
     return {
         "low_value_count": len(low_value),
         "stale_working_count": len(stale_working),
+        "low_value": low_value,
+        "stale_working": stale_working,
         "candidates": _dedupe(low_value + stale_working),
     }
 

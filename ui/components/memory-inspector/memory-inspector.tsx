@@ -1,12 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Copy, Check, X } from "lucide-react";
+import { AlertTriangle, Copy, Check, PencilLine, Trash2, X } from "lucide-react";
 import { Drawer } from "@/components/ui/drawer";
+import { Button } from "@/components/ui/button";
+import { DeleteMemoryDialog } from "./delete-memory-dialog";
 import { Badge } from "@/components/ui/badge";
 import { MonoLabel } from "@/components/ui/mono-label";
 import { Skeleton } from "@/components/ui/skeleton";
 import { MemoryContent } from "./memory-content";
+import { EntityBacklinks } from "./entity-backlinks";
 import { EvidenceRail } from "./evidence-rail";
 import { RelationshipList } from "./relationship-list";
 import type { DetailResponseV2 } from "@/lib/schemas";
@@ -30,6 +33,8 @@ export function MemoryInspector({
 }: Props) {
   const [copied, setCopied] = useState<"id" | "content" | null>(null);
   const [copyFailed, setCopyFailed] = useState<"id" | "content" | null>(null);
+  const [backlinkEntity, setBacklinkEntity] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const memory = detail?.memory;
 
   // Compute status: contradicted > superseded > legacy > current
@@ -162,6 +167,34 @@ export function MemoryInspector({
           {/* Memory text — rendered once */}
           <MemoryContent content={memory.content ?? ""} />
 
+          {/* Entity chips — each opens the backlinks slide-over */}
+          {memory.entities?.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {memory.entities.map((entity) => (
+                <button
+                  key={entity}
+                  type="button"
+                  aria-label={`Backlinks for ${entity}`}
+                  onClick={() => setBacklinkEntity(entity)}
+                  className="rounded-full border border-[var(--border)] bg-[var(--surface-0)] px-2.5 py-0.5 font-mono text-[11px] text-[var(--fg-muted)] hover:border-[var(--border-strong)] hover:text-[var(--fg)]"
+                >
+                  {entity}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          {backlinkEntity && (
+            <EntityBacklinks
+              entity={backlinkEntity}
+              project={currentProject}
+              onClose={() => setBacklinkEntity(null)}
+              onSelectMemory={(memoryId) => {
+                setBacklinkEntity(null);
+                onSelectMemory(memoryId);
+              }}
+            />
+          )}
+
           {/* Evidence rail */}
           <EvidenceRail
             provenance={detail?.provenance}
@@ -181,6 +214,40 @@ export function MemoryInspector({
               onSelectMemory={onSelectMemory}
             />
           ) : null}
+
+          {/* Actions — delete is guarded; edit lands with supersede semantics in U3 */}
+          <div className="flex items-center gap-3 border-t border-[var(--border)] pt-4">
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setConfirmDelete(true)}
+              aria-label="Delete memory"
+            >
+              <Trash2 size={14} />
+              Delete
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled
+              title="Editing lands in U3 with supersede semantics"
+            >
+              <PencilLine size={14} />
+              Edit (coming in U3)
+            </Button>
+          </div>
+
+          {confirmDelete && (
+            <DeleteMemoryDialog
+              memoryId={memory.memory_id}
+              content={memory.content ?? ""}
+              onCancel={() => setConfirmDelete(false)}
+              onDone={() => {
+                setConfirmDelete(false);
+                onClose();
+              }}
+            />
+          )}
         </div>
       ) : (
         <p className="text-sm text-[var(--fg-muted)]">Memory not found.</p>
