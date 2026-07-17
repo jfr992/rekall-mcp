@@ -43,6 +43,18 @@ export const MemorySchema = z.object({
   salience: z.number().optional(),
 }).passthrough();
 
+// ----- Recall (global search) ----------------------------------------------
+
+export const RecallMemorySchema = MemorySchema.extend({
+  score: z.number().optional(),
+});
+
+export const RecallResponseSchema = z.object({
+  query: z.string(),
+  count: z.number(),
+  memories: z.array(RecallMemorySchema),
+});
+
 // ----- Graph ---------------------------------------------------------------
 
 export const GraphNodeSchema = z.object({
@@ -312,6 +324,8 @@ export type Health = z.infer<typeof HealthSchema>;
 export type ProjectInfo = z.infer<typeof ProjectInfoSchema>;
 export type ProjectsResponse = z.infer<typeof ProjectsResponseSchema>;
 export type Memory = z.infer<typeof MemorySchema>;
+export type RecallMemory = z.infer<typeof RecallMemorySchema>;
+export type RecallResponse = z.infer<typeof RecallResponseSchema>;
 export type GraphNode = z.infer<typeof GraphNodeSchema>;
 export type GraphLink = z.infer<typeof GraphLinkSchema>;
 export type GraphResponse = z.infer<typeof GraphResponseSchema>;

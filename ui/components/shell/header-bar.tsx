@@ -6,6 +6,7 @@ import { RefreshCw } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { MonoLabel } from "@/components/ui/mono-label";
+import { GlobalSearch } from "./global-search";
 
 const titles: Record<string, string> = {
   "/brain": "Neural Graph",
@@ -31,6 +32,7 @@ export function HeaderBar() {
     <header className="sticky top-0 flex h-14 items-center justify-between border-b border-[var(--border)] bg-[var(--bg-base)]/80 px-6 backdrop-blur-[12px]">
       <h1 className="font-serif text-xl">{title}</h1>
       <div className="flex items-center gap-3">
+        <GlobalSearch />
         <MonoLabel>now {now}</MonoLabel>
         <Button
           variant="ghost"
