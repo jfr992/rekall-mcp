@@ -121,6 +121,64 @@ def test_existing_edge_can_be_upgraded_to_supersedes(tmp_path):
     assert edges[0].weight == 0.9
 
 
+def test_remove_edge_deletes_only_that_edge(tmp_path):
+    kg = _tmp_graph(tmp_path)
+    for n in "abc":
+        kg.add_node(n)
+    kg.add_edge("a", "b", "contradicts", 0.7)
+    kg.add_edge("a", "c", "related_to", 0.6)
+
+    kg.remove_edge("a", "b")
+
+    assert kg.stats()["edges"] == 1
+    assert kg.get_edges("a", direction="out")[0].target == "c"
+
+
+def test_remove_edge_missing_is_noop(tmp_path):
+    kg = _tmp_graph(tmp_path)
+    kg.add_node("a")
+    kg.add_node("b")
+
+    kg.remove_edge("a", "b")  # no edge exists
+
+    assert kg.stats()["edges"] == 0
+
+
+def test_set_edge_relation_downgrades_past_priority_guard(tmp_path):
+    """add_edge refuses contradicts→related_to (priority 2→0); the repair
+    script needs an explicit bypass."""
+    kg = _tmp_graph(tmp_path)
+    kg.add_node("a")
+    kg.add_node("b")
+    kg.add_edge("a", "b", "contradicts", 0.7)
+
+    changed = kg.set_edge_relation("a", "b", "related_to")
+
+    assert changed is True
+    edges = kg.get_edges("a", direction="out")
+    assert edges[0].relation == "related_to"
+    assert edges[0].weight == 0.7  # untouched attrs preserved
+
+
+def test_set_edge_relation_applies_marker_attrs(tmp_path):
+    kg = _tmp_graph(tmp_path)
+    kg.add_node("a")
+    kg.add_node("b")
+    kg.add_edge("a", "b", "contradicts", 0.7)
+
+    kg.set_edge_relation("a", "b", "contradicts", negation_matched=True)
+
+    assert kg._graph.edges["a", "b"]["negation_matched"] is True
+
+
+def test_set_edge_relation_missing_edge_returns_false(tmp_path):
+    kg = _tmp_graph(tmp_path)
+    kg.add_node("a")
+    kg.add_node("b")
+
+    assert kg.set_edge_relation("a", "b", "related_to") is False
+
+
 def test_invalid_relation_raises(tmp_path):
     kg = _tmp_graph(tmp_path)
     kg.add_node("a")
