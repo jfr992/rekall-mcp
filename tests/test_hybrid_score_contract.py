@@ -12,7 +12,7 @@ import pytest
 
 
 def _cosine(a: list[float], b: list[float]) -> float:
-    dot = sum(x * y for x, y in zip(a, b))
+    dot = sum(x * y for x, y in zip(a, b, strict=True))
     na = math.sqrt(sum(x * x for x in a))
     nb = math.sqrt(sum(x * x for x in b))
     if na == 0.0 or nb == 0.0:
@@ -108,9 +108,7 @@ class TestHybridScoreContract:
         # score Qdrant computed for the dense path, normalized storage or not.
         stored = {
             item["memory_id"]: item["_vector"]
-            for item in hybrid_store.get_many(
-                [h["memory_id"] for h in hybrid], with_vectors=True
-            )
+            for item in hybrid_store.get_many([h["memory_id"] for h in hybrid], with_vectors=True)
         }
         for hit in hybrid:
             manual = _cosine(query_vector, stored[hit["memory_id"]])
@@ -135,7 +133,7 @@ class TestHybridScoreContract:
 
         assert len(dense) > 0
         assert [h["memory_id"] for h in hybrid] == [h["memory_id"] for h in dense]
-        for h_hit, d_hit in zip(hybrid, dense):
+        for h_hit, d_hit in zip(hybrid, dense, strict=True):
             assert h_hit["score"] == pytest.approx(d_hit["score"], abs=1e-6)
             assert {k: v for k, v in h_hit.items() if k != "score"} == {
                 k: v for k, v in d_hit.items() if k != "score"
@@ -181,7 +179,7 @@ class TestHybridScoreContract:
 
         assert [h["memory_id"] for h in dense] == ["p0", "p1", "p2"]
         assert [h["memory_id"] for h in hybrid] == [h["memory_id"] for h in dense]
-        for h_hit, d_hit in zip(hybrid, dense):
+        for h_hit, d_hit in zip(hybrid, dense, strict=True):
             assert h_hit["score"] == pytest.approx(d_hit["score"], abs=1e-6)
 
     def test_sparse_leg_recovers_dense_invisible_point_with_cosine_score(self, make_store):
