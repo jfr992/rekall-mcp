@@ -10,8 +10,9 @@ describe("continuity T4 fixes", () => {
   });
 
   it("ageBadge labels memories older than 90 days", () => {
-    const old = new Date();
-    old.setMonth(old.getMonth() - 5);
+    // Fixed 150-day offset: calendar months are 149-153 days and flake at UTC
+    // day rollovers (real failure on 2026-07-17: 5 months back = 149.98 days).
+    const old = new Date(Date.now() - 150 * 86_400_000);
     expect(ageBadge(old.toISOString().slice(0, 10))).toBe("5mo");
     const recent = new Date().toISOString().slice(0, 10);
     expect(ageBadge(recent)).toBeNull();
