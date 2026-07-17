@@ -20,19 +20,27 @@ export default function KbPage() {
     <div className="mx-auto flex h-[calc(100vh-3.5rem)] max-w-7xl flex-col gap-6 p-6">
       <SerifHeading eyebrow="CURATED BY TYPE · LIVE" title={`Knowledge Base · ${project}`} />
 
-      <div className="flex gap-2 text-sm">
-        <button
-          className={`rounded px-3 py-1 ${tab === "curated" ? "bg-foreground text-background" : "border"}`}
-          onClick={() => setTab("curated")}
-        >
-          Curated
-        </button>
-        <button
-          className={`rounded px-3 py-1 ${tab === "okf" ? "bg-foreground text-background" : "border"}`}
-          onClick={() => setTab("okf")}
-        >
-          Export OKF
-        </button>
+      <div className="flex gap-1.5">
+        {(
+          [
+            ["curated", "Curated"],
+            ["okf", "Export OKF"],
+          ] as const
+        ).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            aria-pressed={tab === key}
+            onClick={() => setTab(key)}
+            className={`cursor-pointer rounded-[7px] px-3 py-1.5 text-xs font-medium transition-colors duration-[150ms] ${
+              tab === key
+                ? "bg-[rgba(45,212,160,0.14)] text-[var(--fg)]"
+                : "border border-[var(--border)] text-[var(--fg-dim)] hover:text-[var(--fg)]"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {tab === "okf" ? (

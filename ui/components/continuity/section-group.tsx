@@ -16,7 +16,7 @@ export function SectionGroup({ title, eyebrow, count, defaultOpen = false, child
       open={defaultOpen}
       className="group rounded-lg border border-[var(--border)] bg-[var(--bg-elevated)]"
     >
-      <summary className="flex cursor-pointer list-none items-center gap-3 p-4 [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-3 rounded-lg p-4 transition-colors hover:bg-[var(--surface-0)] [&::-webkit-details-marker]:hidden">
         <ChevronRight
           size={16}
           className="shrink-0 text-[var(--fg-muted)] transition-transform group-open:rotate-90"

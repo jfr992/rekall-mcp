@@ -16,7 +16,14 @@ export function KbSlice({ title, accentVar, entries }: Props) {
       style={{ borderLeft: `3px solid ${accentVar}` }}
     >
       <header className="flex shrink-0 items-baseline justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
-        <h2 className="font-serif text-xl">{title}</h2>
+        <span className="flex items-baseline gap-2.5">
+          <span
+            aria-hidden
+            className="h-1.5 w-1.5 shrink-0 self-center rounded-full"
+            style={{ background: accentVar, boxShadow: `0 0 8px ${accentVar}` }}
+          />
+          <h2 className="font-serif text-xl">{title}</h2>
+        </span>
         <MonoLabel>{entries.length}</MonoLabel>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-4">

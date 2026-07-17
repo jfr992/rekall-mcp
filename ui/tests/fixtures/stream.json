@@ -1,0 +1,57 @@
+{
+  "rows": [
+    {
+      "kind": "saved",
+      "at": "2026-07-17T09:15:00.000001",
+      "payload": {
+        "memory_id": "2026-07-17_note_ab12cd34",
+        "type": "note",
+        "tier": "working",
+        "project": "rekall-mcp",
+        "preview": "compose build needs network egress for next/font",
+        "durability": 0.31,
+        "fades_in_hours": 311
+      }
+    },
+    {
+      "kind": "recalled",
+      "at": "2026-07-17T09:05:00.000001",
+      "payload": {
+        "query": "how did we fix the rrf filter",
+        "memory_ids": ["2026-07-01_learning_ff00aa11"],
+        "top_score": 0.87,
+        "project": "rekall-mcp"
+      }
+    },
+    {
+      "kind": "recalled",
+      "at": "2026-07-17T08:59:00.000001",
+      "payload": {
+        "query": "nothing matches this",
+        "memory_ids": [],
+        "top_score": null,
+        "project": "rekall-mcp"
+      }
+    },
+    {
+      "kind": "promoted",
+      "at": "2026-07-16T22:00:00.000001",
+      "payload": {
+        "memory_id": "2026-07-09_note_abc123",
+        "from_tier": "working",
+        "to_tier": "semantic",
+        "project": "rekall-mcp"
+      }
+    },
+    {
+      "kind": "consolidated",
+      "at": "2026-07-15T12:00:00.000001",
+      "payload": {
+        "memory_id": "2026-07-15_summary_dd44ee55",
+        "preview": "Summary of 6 stale working notes about the compose migration",
+        "project": "rekall-mcp"
+      }
+    }
+  ],
+  "event_window": { "events": 4211, "oldest_at": "2026-06-30T08:12:44.123456" }
+}
