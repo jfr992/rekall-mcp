@@ -45,8 +45,17 @@ def _bm25_block(manager) -> dict[str, Any]:
         "oov_rate_window": None,
         "oov_identifier_seen": False,
         "saves_since_fit": 0,
+        "resparse_inflight": False,
         "verdict": "missing",
     }
+
+    if vocab_path.with_name(".resparse-in-progress").exists():
+        # Mixed-generation sparse vectors: sparse leg is disabled until a
+        # resparse rerun completes — this verdict outranks every other.
+        block["vocab_present"] = vocab_path.exists()
+        block["resparse_inflight"] = True
+        block["verdict"] = "resparse_incomplete"
+        return block
 
     try:
         drift = json.loads(drift_path.read_text())
