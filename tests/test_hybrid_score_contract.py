@@ -183,3 +183,41 @@ class TestHybridScoreContract:
         assert [h["memory_id"] for h in hybrid] == [h["memory_id"] for h in dense]
         for h_hit, d_hit in zip(hybrid, dense):
             assert h_hit["score"] == pytest.approx(d_hit["score"], abs=1e-6)
+
+    def test_sparse_leg_recovers_dense_invisible_point_with_cosine_score(self, make_store):
+        """Coverage: an identifier-only memory whose degenerate dense vector keeps
+        it out of the dense top-k IS returned by hybrid via the sparse leg — and
+        its score is still cosine-valued, not an RRF rank score."""
+        from core import BM25Encoder
+
+        identifier_doc = "EDGE-9999 device conflict on host"
+        encoder = BM25Encoder()
+        encoder.fit(self.CORPUS + [identifier_doc])
+        store = make_store(encoder)
+
+        dim = 384
+        query_vector = [1.0] + [0.0] * (dim - 1)
+
+        def _vec(c0: float, other_axis: int) -> list[float]:
+            v = [0.0] * dim
+            v[0] = c0
+            v[other_axis] = math.sqrt(1.0 - c0 * c0)
+            return v
+
+        id_cosine = 0.05  # nearly orthogonal to the query: dense-invisible
+        points = [
+            ("close0", _vec(0.9, 1), self.CORPUS[0]),
+            ("close1", _vec(0.8, 2), self.CORPUS[1]),
+            ("close2", _vec(0.7, 3), self.CORPUS[2]),
+            ("edge", _vec(id_cosine, 4), identifier_doc),
+        ]
+        for pid, vec, content in points:
+            store.save(id=pid, vector=vec, payload={"memory_id": pid}, content=content)
+
+        hybrid = store.search(vector=query_vector, query_text="EDGE-9999", limit=3)
+        dense = store.search(vector=query_vector, query_text="", limit=3)
+
+        assert "edge" not in [h["memory_id"] for h in dense]
+        hybrid_by_id = {h["memory_id"]: h for h in hybrid}
+        assert "edge" in hybrid_by_id
+        assert hybrid_by_id["edge"]["score"] == pytest.approx(id_cosine, abs=1e-6)
