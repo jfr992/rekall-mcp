@@ -36,3 +36,13 @@ def test_resparse_route_maps_failures_to_500_with_remediation(monkeypatch):
 
     assert response.status_code == 500
     assert "reindex" in response.json()["error"]
+
+
+def test_resparse_route_rejects_browser_marked_cross_origin(monkeypatch):
+    response = _client(monkeypatch).post(
+        "/api/memory/resparse",
+        content="x=1",
+        headers={"Origin": "http://localhost:9999", "Content-Type": "text/plain"},
+    )
+
+    assert response.status_code == 403
