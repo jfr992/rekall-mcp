@@ -56,6 +56,13 @@ export const RecallResponseSchema = z.object({
   memories: z.array(RecallMemorySchema),
 });
 
+// ----- Delete ---------------------------------------------------------------
+
+export const DeleteResponseSchema = z.object({
+  deleted: z.boolean(),
+  memory_id: z.string(),
+});
+
 // ----- Entity backlinks ----------------------------------------------------
 
 export const ByEntityResponseSchema = z.object({
@@ -337,6 +344,7 @@ export type Memory = z.infer<typeof MemorySchema>;
 export type RecallMemory = z.infer<typeof RecallMemorySchema>;
 export type RecallResponse = z.infer<typeof RecallResponseSchema>;
 export type ByEntityResponse = z.infer<typeof ByEntityResponseSchema>;
+export type DeleteResponse = z.infer<typeof DeleteResponseSchema>;
 export type GraphNode = z.infer<typeof GraphNodeSchema>;
 export type GraphLink = z.infer<typeof GraphLinkSchema>;
 export type GraphResponse = z.infer<typeof GraphResponseSchema>;
