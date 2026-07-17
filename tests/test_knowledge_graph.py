@@ -37,6 +37,36 @@ def test_save_and_reload_roundtrip(tmp_path):
     assert edges[0].weight == 0.8
 
 
+def test_reload_roundtrips_band_attr(tmp_path):
+    """v1.12 live bug: _load dropped band (and any custom attr), erasing the
+    provisional supersedes markers on every restart — silently disarming the
+    prune refusal."""
+    kg = _tmp_graph(tmp_path)
+    kg.add_node("new")
+    kg.add_node("old")
+    kg.add_edge("new", "old", "supersedes", 0.87, band="provisional")
+    kg.save()
+
+    kg2 = _tmp_graph(tmp_path)
+    assert kg2._graph.edges["new", "old"].get("band") == "provisional"
+
+
+def test_reload_roundtrips_custom_marker_attrs(tmp_path):
+    """Repair markers (negation_matched, ...) must survive save+reload, and
+    get_edges must tolerate attrs that are not Edge dataclass fields."""
+    kg = _tmp_graph(tmp_path)
+    kg.add_node("a")
+    kg.add_node("b")
+    kg.add_edge("a", "b", "contradicts", 0.7)
+    kg.set_edge_relation("a", "b", "contradicts", negation_matched=True)
+    kg.save()
+
+    kg2 = _tmp_graph(tmp_path)
+    assert kg2._graph.edges["a", "b"]["negation_matched"] is True
+    edges = kg2.get_edges("a", direction="out")
+    assert edges[0].relation == "contradicts"
+
+
 def test_atomic_write_no_partial(tmp_path):
     kg = _tmp_graph(tmp_path)
     kg.add_node("mem_a", memory_type="fact")
