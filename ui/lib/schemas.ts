@@ -252,6 +252,14 @@ export const FeedbackResponseSchema = z.object({ recorded: z.boolean() });
 
 // ----- Pressure ------------------------------------------------------------
 
+export const FlaggedMemorySchema = z.object({
+  memory_id: z.string(),
+  content: z.string(),
+  type: z.string().optional().nullable(),
+  tier: z.string().optional().nullable(),
+  date: z.string().optional().nullable(),
+});
+
 export const PressureResponseSchema = z.object({
   project: z.string(),
   load_score: z.number(),
@@ -260,6 +268,9 @@ export const PressureResponseSchema = z.object({
     stale_working_count: z.number(),
     low_value_count: z.number(),
     contradiction_count: z.number(),
+    stale_working: z.array(FlaggedMemorySchema).default([]),
+    low_value: z.array(FlaggedMemorySchema).default([]),
+    conflict: z.array(FlaggedMemorySchema).default([]),
   }),
   candidates: z.array(z.record(z.string(), z.any())),
   truncated: z.boolean().optional(),
