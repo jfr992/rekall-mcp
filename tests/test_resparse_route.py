@@ -9,7 +9,6 @@ from unittest.mock import MagicMock
 import httpx
 import pytest
 from starlette.testclient import TestClient
-
 from tests.test_resparse import QUERY, _build_manager, _seed
 
 
