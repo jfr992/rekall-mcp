@@ -13,16 +13,14 @@ type Props = {
 
 export function PruneBuilder({ onBuild, loading, disabled }: Props) {
   return (
-    <Card variant="flat" className="flex items-center justify-between gap-6">
-      <div>
-        <SerifHeading title="Build a prune plan" size="section" eyebrow="DRY RUN" />
-        <p className="mt-1 text-sm text-[var(--fg-muted)]">
-          Selects up to 200 candidates. Identity tier and memories with no salience are never selected.
-        </p>
-      </div>
-      <div className="flex items-center gap-3">
+    <Card variant="flat" className="flex h-full flex-col">
+      <SerifHeading title="Build a prune plan" size="section" eyebrow="DRY RUN" />
+      <p className="mt-1.5 text-sm text-[var(--fg-muted)]">
+        Selects up to 200 candidates. Identity tier and memories with no salience are never selected.
+      </p>
+      <div className="mt-auto flex items-center pt-4">
         <MonoLabel>max 200</MonoLabel>
-        <Button onClick={onBuild} loading={loading} disabled={disabled}>
+        <Button className="ml-auto" onClick={onBuild} loading={loading} disabled={disabled}>
           Build plan
         </Button>
       </div>

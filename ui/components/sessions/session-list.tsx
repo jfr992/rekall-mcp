@@ -39,7 +39,11 @@ export function SessionList({ sessions, selectedId, onSelect }: Props) {
                         : "hover:bg-[var(--surface-0)]"
                     }`}
                   >
-                    <span className="break-all font-mono text-xs text-[var(--fg)]">
+                    <span
+                      className={`break-all font-mono text-xs ${
+                        active ? "text-[var(--accent-bright)]" : "text-[var(--fg)]"
+                      }`}
+                    >
                       {unattributed ? `Unattributed · ${s.project}` : s.session_id}
                     </span>
                     <span className="flex items-baseline justify-between gap-2">
@@ -47,7 +51,12 @@ export function SessionList({ sessions, selectedId, onSelect }: Props) {
                         {s.totals.recalls} recalls · {s.totals.injected} injected ·{" "}
                         {s.totals.tokens} tok
                       </span>
-                      <MonoLabel>{relativeTime(s.last_at)}</MonoLabel>
+                      <MonoLabel className="normal-case tracking-normal text-[var(--fg-dim)]">
+                        {relativeTime(s.last_at)}
+                      </MonoLabel>
+                    </span>
+                    <span className="font-mono text-[10px] text-[var(--fg-dim)]">
+                      {s.project}
                     </span>
                   </button>
                 </li>

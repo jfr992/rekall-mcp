@@ -27,9 +27,9 @@ export function ProjectSwitcher() {
   };
 
   return (
-    <label className="flex flex-col gap-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-0)] px-3 py-2">
-      <span className="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.08em] text-[var(--fg-muted)]">
-        <User size={12} />
+    <label className="flex shrink-0 items-center gap-2 rounded-lg border border-[rgba(45,212,160,0.3)] bg-[rgba(45,212,160,0.08)] px-3 py-1.5 transition-colors hover:border-[rgba(45,212,160,0.55)]">
+      <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-[var(--fg-dim)]">
+        <User size={11} />
         scope
       </span>
       <div className="relative">
@@ -37,7 +37,7 @@ export function ProjectSwitcher() {
           value={project}
           onChange={handleChange}
           aria-label="Memory scope"
-          className="w-full cursor-pointer appearance-none bg-transparent pr-6 text-sm text-[var(--fg)] focus:outline-none disabled:cursor-wait disabled:opacity-50"
+          className="max-w-[8rem] cursor-pointer appearance-none bg-transparent pr-5 font-mono text-[11px] font-medium text-[var(--accent-bright)] focus:outline-none disabled:cursor-wait disabled:opacity-50 md:max-w-[12rem]"
           disabled={isLoading}
         >
           {isLoading ? (
@@ -46,11 +46,11 @@ export function ProjectSwitcher() {
             <option value="">error</option>
           ) : (
             <>
-              <option value="" className="bg-[var(--bg-base)] text-[var(--fg)]">
+              <option value="" className="bg-[var(--bg-raised)] text-[var(--fg)]">
                 all memories · {total}
               </option>
               {projects.map((p) => (
-                <option key={p.name} value={p.name} className="bg-[var(--bg-base)] text-[var(--fg)]">
+                <option key={p.name} value={p.name} className="bg-[var(--bg-raised)] text-[var(--fg)]">
                   {p.name} · {p.count}
                 </option>
               ))}

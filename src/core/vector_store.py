@@ -467,6 +467,34 @@ class VectorStore:
 
             return merged
 
+    def scroll_all(
+        self,
+        filters: dict[str, Any] | None = None,
+        batch_size: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Exhaustive filtered scroll — pages through Qdrant's next_offset.
+
+        Unlike scroll(), this returns EVERY matching payload, so aggregate
+        counts (tier composition, per-week buckets) are never silently capped.
+        """
+        with self._telemetry.track("vector_store.scroll_all"):
+            query_filter = self._build_filter(filters) if filters else None
+
+            payloads: list[dict[str, Any]] = []
+            offset = None
+            while True:
+                results, offset = self.client.scroll(
+                    collection_name=self.collection,
+                    scroll_filter=query_filter,
+                    limit=batch_size,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+                payloads.extend(point.payload for point in results)
+                if offset is None:
+                    return payloads
+
     def get_by_id(self, memory_id: str) -> dict[str, Any] | None:
         """Fetch a single payload by memory_id.
 

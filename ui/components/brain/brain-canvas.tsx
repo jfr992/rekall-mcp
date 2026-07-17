@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useMemo, useCallback, useEffect, useState } from "react";
+import { useRef, useMemo, useCallback, useEffect, useLayoutEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { typeColor, tierColor } from "@/lib/theme";
 import { buildNodeTooltip } from "./tooltip";
@@ -15,6 +15,7 @@ type Props = {
   links: GraphLink[];
   selectedId?: string | null;
   onNodeClick: (memoryId: string) => void;
+  particles?: boolean; // panel mode passes false — no directional particles
 };
 
 type EnrichedNode = GraphNode & {
@@ -32,18 +33,24 @@ if (typeof window !== "undefined") {
   requestAnimationFrame(tick);
 }
 
-export function BrainCanvas({ nodes, links, selectedId, onNodeClick }: Props) {
+export function BrainCanvas({ nodes, links, selectedId, onNodeClick, particles = true }: Props) {
   const fgRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
-  const [dimensions, setDimensions] = useState({ width: 900, height: 650 });
+  // null until first measure — the graph only mounts with real container dims
+  const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     const measure = () => {
       const { width, height } = el.getBoundingClientRect();
-      if (width > 0 && height > 0) setDimensions({ width, height });
+      if (width > 0 && height > 0) {
+        setDimensions((d) => (d && d.width === width && d.height === height ? d : { width, height }));
+      } else {
+        // Unmeasurable container (jsdom) — fall back so the graph still mounts
+        setDimensions((d) => d ?? { width: 900, height: 650 });
+      }
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -54,8 +61,10 @@ export function BrainCanvas({ nodes, links, selectedId, onNodeClick }: Props) {
   // Map backend PCA positions (unit disc) to the viewport with padding.
   // Uniform scale (no per-axis stretch) keeps the disc a disc, not a box.
   const enriched = useMemo<EnrichedNode[]>(() => {
-    const padX = 100;
-    const padY = 100;
+    if (!dimensions) return [];
+    // Proportional padding — a fixed 100px pad ate most of a small panel
+    const padX = Math.max(24, dimensions.width * 0.1);
+    const padY = Math.max(24, dimensions.height * 0.1);
     const w = dimensions.width - padX * 2;
     const h = dimensions.height - padY * 2;
     const scale = Math.min(w, h) / 2;
@@ -122,7 +131,8 @@ export function BrainCanvas({ nodes, links, selectedId, onNodeClick }: Props) {
       }, 300);
       return () => clearTimeout(t);
     }
-  }, [enriched.length]);
+    // dimensions: refit when the panel is resized, not just on data load
+  }, [enriched.length, dimensions]);
 
   // ---------- NODE RENDERING ----------
   const nodeCanvasObject = useCallback(
@@ -264,6 +274,7 @@ export function BrainCanvas({ nodes, links, selectedId, onNodeClick }: Props) {
 
   return (
     <div ref={containerRef} className="h-full w-full">
+      {dimensions === null ? null : (
       <ForceGraph2D
         ref={fgRef}
         graphData={{ nodes: enriched as object[], links: links as object[] }}
@@ -286,7 +297,7 @@ export function BrainCanvas({ nodes, links, selectedId, onNodeClick }: Props) {
         }}
         // Link
         linkCanvasObject={linkCanvasObject}
-        linkDirectionalParticles={1}
+        linkDirectionalParticles={particles ? 1 : 0}
         linkDirectionalParticleWidth={1.2}
         linkDirectionalParticleColor={() => "rgba(160, 175, 210, 0.35)"}
         linkDirectionalParticleSpeed={0.002}
@@ -300,6 +311,7 @@ export function BrainCanvas({ nodes, links, selectedId, onNodeClick }: Props) {
         minZoom={0.3}
         maxZoom={8}
       />
+      )}
     </div>
   );
 }
