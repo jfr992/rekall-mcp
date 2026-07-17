@@ -530,7 +530,7 @@ class MemoryManager:
         if encoder is None:
             return
         tokens = encoder._tokenize(embedding_text)
-        if not tokens:
+        if len(tokens) == 0:  # explicit: test doubles can be truthy yet length-zero
             return
         oov_tokens = [t for t in tokens if t not in encoder.vocab]
         oov_rate = len(oov_tokens) / len(tokens)
