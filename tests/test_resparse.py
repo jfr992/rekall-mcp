@@ -237,3 +237,24 @@ def test_count_mismatch_aborts_with_sentinel_held(tmp_path, monkeypatch):
 
     assert manager.resparse_sentinel.exists()
     assert manager.sparse_encoder is None
+
+
+def test_resparse_happy_path_on_embedded_store(tmp_path):
+    """The full transaction against the embedded (local-path) store, any lane."""
+    from memory.resparse import resparse
+
+    manager = MemoryManager(
+        memory_dir=tmp_path / "memory", qdrant_path=str(tmp_path / "embedded-q")
+    )
+    manager._embedder = RoutedEmbedder()
+    _install_vocab(manager)
+    manager.store.recreate_collection()
+    target_id = _seed(manager)
+
+    assert target_id not in _identifier_hits(manager)
+
+    result = resparse(manager)
+
+    assert result["points_updated"] == 5 == manager.store.count()
+    assert target_id in _identifier_hits(manager)
+    assert not manager.resparse_sentinel.exists()
