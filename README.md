@@ -253,7 +253,7 @@ End-to-end effectiveness numbers — accuracy, token cost, and the workloads Rek
 
 These are **R@5 retrieval-recall** numbers — "was the correct memory in the top 5 retrieved" — with no LLM at any stage. They are **not** end-to-end QA-accuracy and are **not** comparable to the QA-accuracy figures other systems (mem0, Zep) publish on LongMemEval. MemPalace's raw retrieval baseline (96.6% R@5) uses the same metric and is the closest comparison point.
 
-Measured 2026-07-02 on v1.7.0 (`main`, 5-weight recall ranking). All three benchmark modes run from `main`; the product's default recall path is dense — BM25 in the product search path still lives on `feat/hybrid-search-bm25`.
+Measured 2026-07-02 on v1.7.0 (`main`, 5-weight recall ranking). Hybrid (BM25 + dense) has been the product's default recall path since 2026-07-17 — the "Hybrid" rows below now describe what recall actually runs. The BM25 vocab is maintained via `POST /api/memory/resparse` (see [docs/TUNING.md](docs/TUNING.md)); drift is surfaced in the doctor's `bm25` block.
 
 | Mode | R@5 | R@10 |
 |------|-----|------|

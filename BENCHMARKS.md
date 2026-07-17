@@ -109,6 +109,30 @@ archive; today that is out of rekall's design scope.
 where rekall scores 96.6–97.6% — is documented separately in
 [`benchmarks/README.md`](benchmarks/README.md). Don't conflate the two.)
 
+## Hybrid identifier recall (2026-07-17)
+
+Hybrid BM25+dense became the default product recall path with the vocab-lifecycle
+work (PRs #69–#71): asymmetric encoder (the shipped symmetric one scored ~IDF²),
+cosine score contract, transactional `resparse`, drift surfaced in the doctor.
+
+Live prod evidence, before/after the vocab refit + fixes — exact-token queries
+whose memories existed but were invisible to dense-only recall:
+
+| Query (exact token) | Before | After |
+|---|---|---|
+| `EdgeHostDeviceAlreadyInUse` (error class) | MISS | HIT rank 5 |
+| `i-03470c789e7b72080` (instance ID) | MISS (0 results) | HIT rank 2 |
+| Dense spot-checks (metallb, task_hint, packValuesFrom) | HIT | HIT (unchanged) |
+
+Honesty note: it took **three** live-gate rounds after a fully green suite
+(1118 tests, two adversarial plan reviews) to reach HIT — a prod-leaked orphan
+point caught by resparse's parity preflight, a cosine floor that killed
+sparse-rescued hits (the eval had searched with non-production parameters),
+and the frozen blend weights cutting the low-cosine exact match (fixed with a
+reserved final-cut slot, weights untouched). Frozen probes and the
+`test_software_evals.py` corpus were byte-identical throughout. The
+identifier-class regression suite is `tests/test_identifier_evals.py`.
+
 ## Methodology & honesty rules
 
 - **Frozen corpus.** The 16 probes are frozen and may not be edited in the same
