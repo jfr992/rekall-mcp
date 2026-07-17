@@ -88,3 +88,21 @@ def test_resparse_refuses_when_collection_has_no_sparse_schema(tmp_path):
 
     assert not manager.resparse_sentinel.exists()
     assert manager.store.count() == 1  # nothing mutated
+
+
+def test_resparse_refuses_on_orphan_qdrant_points_before_mutation(tmp_path):
+    from memory.resparse import ResparsePreflightError, resparse
+
+    manager = _build_manager(tmp_path)
+    _seed(manager)
+    manager.store.save(
+        id="2020-01-01_note_dead0000",
+        vector=manager.embedder.encode("orphan point with no yaml source"),
+        payload={"memory_id": "2020-01-01_note_dead0000", "content": "orphan"},
+        content="orphan point with no yaml source",
+    )
+
+    with pytest.raises(ResparsePreflightError, match="1 "):
+        resparse(manager)
+
+    assert not manager.resparse_sentinel.exists()
