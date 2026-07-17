@@ -23,7 +23,7 @@ export function ResumeHeader({ scope }: Props) {
           if (!value) return null;
           return (
             <div key={key}>
-              <MonoLabel>{label}</MonoLabel>
+              <MonoLabel className="tracking-[0.16em]">{label}</MonoLabel>
               <div className="mt-1 font-mono text-sm text-[var(--fg)]">{String(value)}</div>
             </div>
           );
