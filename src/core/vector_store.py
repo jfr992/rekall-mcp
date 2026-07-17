@@ -212,7 +212,7 @@ class VectorStore:
 
             # Build sparse vector if encoder and content available
             if self.sparse_encoder is not None and content:
-                sparse = self.sparse_encoder.encode(content)
+                sparse = self.sparse_encoder.encode_document(content)
                 if sparse:
                     # PointStruct (not a raw dict): the embedded local client
                     # rejects dict points; the HTTP client merely tolerates them.
@@ -329,7 +329,7 @@ class VectorStore:
 
             # Hybrid search if encoder + query text available
             if self.sparse_encoder is not None and query_text:
-                sparse = self.sparse_encoder.encode(query_text)
+                sparse = self.sparse_encoder.encode_query(query_text)
                 if sparse:
                     prefetch_limit = limit * 2
                     results = self.client.query_points(

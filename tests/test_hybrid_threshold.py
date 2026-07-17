@@ -8,7 +8,8 @@ from core.vector_store import VectorStore
 
 
 class FakeSparseEncoder:
-    def encode(self, text: str) -> dict[int, float]:
+    # Query side changed to asymmetric BM25: search() now calls encode_query().
+    def encode_query(self, text: str) -> dict[int, float]:
         return {1: 0.5, 7: 0.25}
 
 
