@@ -310,3 +310,9 @@ Four ways to resolve, in order of frequency:
 Review all pairs at once: `curl http://localhost:8000/api/memory/consolidate` or the Hygiene page.
 
 Bulk repair of machine-made conflict flags: `QDRANT_URL=http://localhost:6333 uv run python scripts/repair_contradicts.py` re-judges every unrefined `contradicts` edge (LLM per pair when `ANTHROPIC_API_KEY` is set, negation heuristic otherwise) and downgrades the unsupported ones to `related_to` — dry-run by default, `--apply` to write.
+
+## BM25 vocab lifecycle (hybrid search)
+
+Hybrid search fuses dense vectors with a BM25 sparse index whose IDF vocabulary is built at fit time. Token IDs are assigned by insertion order, which means **a refit reassigns every ID — the vocab and all stored sparse vectors must change together, in one transaction**. That transaction is `POST /api/memory/resparse`: it refits a fresh encoder on the full corpus, rewrites every point's sparse vector (dense untouched), verifies the count, then atomically publishes the vocab and swaps the live encoder. A sentinel guards the whole run — if it's interrupted, search degrades to dense-only (never wrong matches) and the doctor reports `resparse_incomplete`; the fix is always to rerun resparse, never to delete the marker.
+
+Drift is surfaced, not hidden: the doctor's `bm25` block reports vocab age, size, a rolling OOV-rate window over recent saves, and an `oov_identifier_seen` flag that trips the moment a hyphen/underscore-shaped identifier (an instance ID, an error class, a pack name) is saved that the vocab can't encode. Verdict `stale` means exact-token recall is silently degraded for anything saved since the last fit — run resparse. There is deliberately no auto-trigger yet; the manual endpoint plus a loud doctor covers the current save cadence.
