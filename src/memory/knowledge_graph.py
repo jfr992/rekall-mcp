@@ -218,6 +218,30 @@ class KnowledgeGraph:
         self._graph.add_edge(source, target, **attrs)
         self._dirty = True
 
+    def set_edge_relation(self, source: str, target: str, relation: str, **attrs: Any) -> bool:
+        """Explicitly set an existing edge's relation, bypassing add_edge's
+        priority guard (which refuses downgrades like contradicts→related_to).
+
+        Returns True when the edge existed and was updated. A stale band
+        marker is dropped on relation change unless a new one is supplied.
+        """
+        if relation not in RELATION_TYPES:
+            raise ValueError(f"Unknown relation: {relation}")
+        if not self._graph.has_edge(source, target):
+            return False
+        data = self._graph.edges[source, target]
+        if data.get("relation") != relation and "band" not in attrs:
+            data.pop("band", None)
+        data["relation"] = relation
+        data.update(attrs)
+        self._dirty = True
+        return True
+
+    def remove_edge(self, source: str, target: str) -> None:
+        if self._graph.has_edge(source, target):
+            self._graph.remove_edge(source, target)
+            self._dirty = True
+
     def get_edges(self, memory_id: str, direction: str = "both") -> list[Edge]:
         edges: list[Edge] = []
 
