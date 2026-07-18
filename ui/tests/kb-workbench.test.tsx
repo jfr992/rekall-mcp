@@ -379,4 +379,14 @@ describe("KB recall workbench", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show 8 more" }));
     expect(list.getByText("Result number 17")).toBeInTheDocument();
   });
+
+  test("results panel is the scroll container, not the page — bounded max-height with internal overflow", async () => {
+    vi.mocked(searchApi.postRecall).mockResolvedValue(RESULTS);
+    renderPage();
+    await typeQuery();
+
+    const panel = screen.getByRole("list", { name: /recall results/i });
+    expect(panel.className).toContain("max-h-[60vh]");
+    expect(panel.className).toContain("overflow-y-auto");
+  });
 });

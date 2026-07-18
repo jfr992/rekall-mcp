@@ -321,4 +321,20 @@ describe("Sessions surface", () => {
       await screen.findByText(/use postgresql for primary store/i)
     ).toBeInTheDocument();
   });
+
+  test("list pane and detail pane scroll independently — the page itself doesn't grow", async () => {
+    renderSessions();
+    await screen.findByText(/sess-abc123/);
+
+    const listScroll = screen.getByText(/sess-abc123/).closest("section")!.querySelector(
+      ":scope > div"
+    )!;
+    expect(listScroll.className).toContain("overflow-y-auto");
+
+    const user = userEvent.setup();
+    await user.click(screen.getByText(/sess-abc123/));
+    await screen.findByText(/vector corruption tripwire/i);
+    const detailPane = screen.getByText(/vector corruption tripwire/i).closest("section")!;
+    expect(detailPane.className).toContain("overflow-y-auto");
+  });
 });

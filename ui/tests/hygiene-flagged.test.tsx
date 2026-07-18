@@ -51,4 +51,11 @@ describe("hygiene flagged panel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Show all 12" }));
     expect(screen.getByText(/conflicted fact 11/)).toBeInTheDocument();
   });
+
+  it("each group panel is the scroll container, not the page — bounded max-height with internal overflow", () => {
+    render(<FlaggedPanel flagged={FLAGGED} onSelect={vi.fn()} />);
+    const panel = screen.getByText(/conflicted fact/).closest("section")!;
+    expect(panel.className).toContain("max-h-[50vh]");
+    expect(panel.className).toContain("overflow-y-auto");
+  });
 });
