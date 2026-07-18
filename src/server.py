@@ -606,12 +606,14 @@ async def api_memory_reflex(request):
         text = raw_text.strip()
         project = _safe_project(body.get("project"))
         limit = _body_int(body, "limit", 4, lo=1, hi=12)
+        # Caller's cwd, not the backend's — attribution only (v1.5.0 scope pitfall)
+        caller_cwd = body.get("cwd") or body.get("workspace_root") or None
 
         if not text:
             return _bad_request("text is required")
 
         manager = _get_memory_manager()
-        result = manager.reflex(text=text, project=project, limit=limit)
+        result = manager.reflex(text=text, project=project, limit=limit, cwd=caller_cwd)
 
         # memory_recalled emission lives in manager.recall (event contract v2)
         return _ok(result)
