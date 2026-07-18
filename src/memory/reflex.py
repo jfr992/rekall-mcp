@@ -89,6 +89,7 @@ def build_reflex_packet(
         limit=limit,
         score_threshold=0.5,
         cwd=cwd,
+        source="reflex",
     ):
         if len(memories) >= limit:
             break
