@@ -320,6 +320,10 @@ Review all pairs at once: `curl http://localhost:8000/api/memory/consolidate` or
 
 Bulk repair of machine-made conflict flags: `QDRANT_URL=http://localhost:6333 uv run python scripts/repair_contradicts.py` re-judges every unrefined `contradicts` edge (LLM per pair when `ANTHROPIC_API_KEY` is set, negation heuristic otherwise) and downgrades the unsupported ones to `related_to` — dry-run by default, `--apply` to write.
 
+## Inspector warnings
+
+`missing provenance` on a memory means it was saved before provenance tracking existed (2026-07-18) — its origin (agent, source tool, working directory) was never recorded and is not fabricated retroactively. Memories saved after that date carry provenance automatically; the warning marks legacy data, not a fault.
+
 ## BM25 vocab lifecycle (hybrid search)
 
 Hybrid search fuses dense vectors with a BM25 sparse index whose IDF vocabulary is built at fit time. Token IDs are assigned by insertion order, which means **a refit reassigns every ID — the vocab and all stored sparse vectors must change together, in one transaction**. That transaction is `POST /api/memory/resparse`: it refits a fresh encoder on the full corpus, rewrites every point's sparse vector (dense untouched), verifies the count, then atomically publishes the vocab and swaps the live encoder. A sentinel guards the whole run — if it's interrupted, search degrades to dense-only (never wrong matches) and the doctor reports `resparse_incomplete`; the fix is always to rerun resparse, never to delete the marker.
