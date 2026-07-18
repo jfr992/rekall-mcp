@@ -323,3 +323,17 @@ async def test_reflex_recall_tool_reports_no_matches(tool_registry):
     rendered = await registered_tools["reflex_recall"](text="say hello")
 
     assert rendered == "No reflex cues matched."
+
+
+def test_reflex_recall_events_carry_reflex_source(monkeypatch):
+    """Regression: the merged-recall redesign hardcoded source="recall", so the
+    feed's reflex origin label never fires for hook-driven recalls."""
+    from unittest.mock import MagicMock
+
+    from memory.reflex import build_reflex_packet
+
+    manager = MagicMock()
+    manager.recall.return_value = []
+    build_reflex_packet(manager, text="terraform destroy", limit=4)
+    kwargs = manager.recall.call_args.kwargs
+    assert kwargs.get("source") == "reflex"
