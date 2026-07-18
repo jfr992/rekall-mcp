@@ -536,13 +536,15 @@ async def api_recall_memories(request):
             if not isinstance(task_hint, str):
                 return JSONResponse({"error": "task_hint must be a string"}, status_code=400)
             task_hint = task_hint[:256]
+        # Caller's cwd, not the backend's — attribution only (v1.5.0 scope pitfall)
+        caller_cwd = body.get("cwd") or body.get("workspace_root") or None
 
         if not query:
             return JSONResponse({"error": "query is required"}, status_code=400)
 
         manager = _get_memory_manager()
         results = manager.recall(
-            query, limit=limit, project=project, type=mem_type, task_hint=task_hint
+            query, limit=limit, project=project, type=mem_type, task_hint=task_hint, cwd=caller_cwd
         )
 
         # memory_recalled emission lives in manager.recall (event contract v2)

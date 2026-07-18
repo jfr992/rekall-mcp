@@ -1204,6 +1204,7 @@ class MemoryManager:
         days_back: int | None = None,
         score_threshold: float = 0.35,
         task_hint: str | None = None,
+        cwd: str | None = None,
     ) -> list[dict[str, Any]]:
         """Recall relevant memories using semantic search.
 
@@ -1216,6 +1217,9 @@ class MemoryManager:
             score_threshold: Minimum similarity (0-1)
             task_hint: Short phrase (2+ words) for the caller's current task;
                 matching results surface first, survivor floor ceil(limit/2)
+            cwd: Caller's working directory — attributes the recall event to
+                the detected project when no explicit project is given; never
+                filters results
 
         Returns:
             List of memories with scores
@@ -1417,9 +1421,16 @@ class MemoryManager:
                 logger.debug("freshness annotation skipped", exc_info=True)
 
             try:
+                # Attribution only — the caller's cwd resolves through the same
+                # ScopeDetector path observe uses (v1.5.0 scope pitfall).
+                attributed = project
+                if not attributed and cwd:
+                    from memory.scope import ScopeDetector
+
+                    attributed = ScopeDetector.detect(cwd=cwd).project
                 self.record_event(
                     event_type="memory_recalled",
-                    project=project or "general",
+                    project=attributed or "general",
                     memory_ids=[m["memory_id"] for m in results if m.get("memory_id")],
                     source="recall",
                     payload={
@@ -1518,6 +1529,7 @@ class MemoryManager:
         type: str | None = None,
         days_back: int | None = None,
         task_hint: str | None = None,
+        cwd: str | None = None,
     ) -> str:
         """Recall memories with smart formatting that guides AI behavior.
 
@@ -1546,6 +1558,7 @@ class MemoryManager:
             type=type,
             days_back=days_back,
             task_hint=task_hint,
+            cwd=cwd,
         )
 
         if not memories:
