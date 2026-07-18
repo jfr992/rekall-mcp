@@ -26,6 +26,63 @@ describe("RecallFeed", () => {
     expect(hitRow).toBeNull();
   });
 
+  test("rows without a query render a human origin label instead of a dash", () => {
+    const originRows: StreamRow[] = [
+      {
+        kind: "recalled",
+        at: "2026-07-17T10:00:00.000001",
+        payload: {
+          query: null,
+          memory_ids: ["2026-07-01_learning_ff00aa11"],
+          top_score: 0.7,
+          project: "rekall-mcp",
+          capture_origin: "capsule",
+        },
+      },
+      {
+        kind: "recalled",
+        at: "2026-07-17T10:01:00.000001",
+        payload: {
+          query: null,
+          memory_ids: [],
+          top_score: null,
+          project: "rekall-mcp",
+          capture_origin: "session_start",
+        },
+      },
+      {
+        kind: "recalled",
+        at: "2026-07-17T10:02:00.000001",
+        payload: {
+          query: null,
+          memory_ids: [],
+          top_score: null,
+          project: "rekall-mcp",
+          capture_origin: "some_future_origin",
+        },
+      },
+    ];
+    render(<RecallFeed rows={originRows} misses7d={0} onSelect={vi.fn()} />);
+    expect(screen.getByText("capsule")).toBeInTheDocument();
+    expect(screen.getByText("session start")).toBeInTheDocument();
+    expect(screen.getByText("background recall")).toBeInTheDocument();
+    expect(screen.queryByText("—")).not.toBeInTheDocument();
+  });
+
+  test("scoped feed with zero recalls explains how attribution works", () => {
+    render(<RecallFeed rows={[]} misses7d={0} onSelect={vi.fn()} scoped />);
+    expect(
+      screen.getByText(
+        "No recalls in this scope yet — recalls attribute to a project when the agent passes its working directory"
+      )
+    ).toBeInTheDocument();
+  });
+
+  test("unscoped feed with zero recalls keeps the generic empty state", () => {
+    render(<RecallFeed rows={[]} misses7d={0} onSelect={vi.fn()} />);
+    expect(screen.queryByText(/No recalls in this scope yet/)).not.toBeInTheDocument();
+  });
+
   test("footer shows the 7d miss count from insights", () => {
     render(<RecallFeed rows={rows} misses7d={3} onSelect={vi.fn()} />);
     expect(screen.getByText("3 misses · 7d")).toBeInTheDocument();
