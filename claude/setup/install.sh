@@ -135,7 +135,7 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     step "Installing hooks → ~/.claude/hooks/"
     mkdir -p "$HOME/.claude/hooks"
 
-    HOOKS=(rekall-restore.sh rekall-observe.sh memory-prune.sh)
+    HOOKS=(rekall-restore.sh rekall-observe.sh memory-prune.sh rekall-reflex.sh)
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         HOOKS+=(session-start-memory.sh)
     fi
@@ -177,47 +177,66 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     REST_CMD="$HOME/.claude/hooks/rekall-restore.sh"
     OBS_CMD="$HOME/.claude/hooks/rekall-observe.sh"
     PRUNE_CMD="$HOME/.claude/hooks/memory-prune.sh"
+    REFLEX_CMD="$HOME/.claude/hooks/rekall-reflex.sh"
     START_CMD=""
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         START_CMD="$HOME/.claude/hooks/session-start-memory.sh"
     fi
 
-    /usr/bin/python3 - "$SETTINGS" "$REST_CMD" "$OBS_CMD" "$PRUNE_CMD" "$START_CMD" <<'PY'
+    /usr/bin/python3 - "$SETTINGS" "$REST_CMD" "$OBS_CMD" "$PRUNE_CMD" "$REFLEX_CMD" "$START_CMD" <<'PY'
 import json, sys
-path, rest_cmd, obs_cmd, prune_cmd, start_cmd = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5]
+path, rest_cmd, obs_cmd, prune_cmd, reflex_cmd, start_cmd = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]
 with open(path) as f: d = json.load(f)
 d.setdefault("hooks", {})
 
 def ensure_event_hook(event, command, matcher=""):
+    """Wire `command` under `event`, keyed on matcher correctness.
+
+    Returns "added" (new entry appended), "repaired" (existing entry's
+    matcher was wrong/missing and got corrected in place), or None
+    (already wired with the correct matcher — true no-op).
+    """
     arr = d["hooks"].setdefault(event, [])
     # Already wired?
     for entry in arr:
         for h in entry.get("hooks", []):
             if h.get("command") == command:
-                return False
-    # Append (don't clobber existing matchers)
+                existing_matcher = entry.get("matcher", "")
+                if matcher and existing_matcher != matcher:
+                    entry["matcher"] = matcher
+                    return "repaired"
+                return None
+    # Append (don't clobber existing matchers on OTHER entries)
     new_entry = {"hooks": [{"type": "command", "command": command}]}
     if matcher:
         new_entry["matcher"] = matcher
     arr.append(new_entry)
-    return True
+    return "added"
 
 added = []
-if ensure_event_hook("UserPromptSubmit", rest_cmd):
-    added.append("UserPromptSubmit → rekall-restore.sh")
-if ensure_event_hook("Stop", obs_cmd):
-    added.append("Stop → rekall-observe.sh")
-if ensure_event_hook("SessionStart", prune_cmd):
-    added.append("SessionStart → memory-prune.sh")
-if start_cmd and ensure_event_hook("SessionStart", start_cmd):
-    added.append("SessionStart → session-start-memory.sh")
+repaired = []
+
+def record(result, label):
+    if result == "added":
+        added.append(label)
+    elif result == "repaired":
+        repaired.append(label)
+
+record(ensure_event_hook("UserPromptSubmit", rest_cmd), "UserPromptSubmit → rekall-restore.sh")
+record(ensure_event_hook("Stop", obs_cmd), "Stop → rekall-observe.sh")
+record(ensure_event_hook("SessionStart", prune_cmd), "SessionStart → memory-prune.sh")
+record(ensure_event_hook("PreToolUse", reflex_cmd, matcher="Bash"), "PreToolUse → rekall-reflex.sh")
+if start_cmd:
+    record(ensure_event_hook("SessionStart", start_cmd), "SessionStart → session-start-memory.sh")
 
 with open(path, "w") as f:
     json.dump(d, f, indent=2)
 
 if added:
     print("  ✓ added:", ", ".join(added))
-else:
+if repaired:
+    print("  ✓ repaired matcher:", ", ".join(repaired))
+if not added and not repaired:
     print("  ✓ already wired (no changes)")
 PY
 fi
@@ -262,6 +281,7 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     [[ -f "$HOME/.claude/hooks/rekall-restore.sh" ]] && ok "rekall-restore.sh in place" || warn "rekall-restore.sh missing"
     [[ -f "$HOME/.claude/hooks/rekall-observe.sh" ]] && ok "rekall-observe.sh in place" || warn "rekall-observe.sh missing"
     [[ -f "$HOME/.claude/hooks/memory-prune.sh" ]]   && ok "memory-prune.sh in place"   || warn "memory-prune.sh missing"
+    [[ -f "$HOME/.claude/hooks/rekall-reflex.sh" ]]  && ok "rekall-reflex.sh in place"  || warn "rekall-reflex.sh missing"
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         [[ -f "$HOME/.claude/hooks/session-start-memory.sh" ]] && ok "session-start-memory.sh in place" || warn "session-start-memory.sh missing"
     fi
@@ -278,3 +298,4 @@ echo "  • Type /memory-stats in a new session to verify slash commands work."
 echo
 echo "Kill switches (env vars):"
 echo "  REKALL_AUTOSAVE=0   disables restore status, SessionStart capsule, and Stop-hook auto-save"
+echo "  REKALL_REFLEX=0     disables the PreToolUse reflex recall hook (also gated by REKALL_AUTOSAVE=0)"
