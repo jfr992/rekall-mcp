@@ -274,3 +274,11 @@ describe("StreamPage — consolidation ladder", () => {
     expect(ladder.getByText("volatile · decays in days")).toBeInTheDocument();
   });
 });
+
+
+test("timeline scrolls inside a bounded panel, not the page", async () => {
+  render(<StreamPage />);
+  const scroller = await screen.findByTestId("stream-timeline-scroll");
+  expect(scroller.className).toMatch(/overflow-y-auto/);
+  expect(scroller.className).toMatch(/min-h-0|max-h|flex-1/);
+});
