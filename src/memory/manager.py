@@ -2045,10 +2045,11 @@ class MemoryManager:
         text: str,
         project: str | None = None,
         limit: int = 4,
+        cwd: str | None = None,
     ) -> dict[str, Any]:
         from memory.reflex import build_reflex_packet
 
-        return build_reflex_packet(self, text=text, project=project, limit=limit)
+        return build_reflex_packet(self, text=text, project=project, limit=limit, cwd=cwd)
 
     def get_memory_detail(
         self,

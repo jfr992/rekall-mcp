@@ -410,7 +410,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/save` | POST | Save a memory |
 | `/api/memory/recall` | POST | Graph-enhanced search (optional `task_hint`: context-matched results first; optional `cwd`: attributes the recall event to the caller's project) |
 | `/api/memory/recall/cross-project` | POST | Cross-project transfer recall |
-| `/api/memory/reflex` | POST | Cue-triggered recall packet for risky commands or edits |
+| `/api/memory/reflex` | POST | Cue-triggered recall packet for risky commands or edits (optional `cwd`: attributes the recall event to the caller's project) |
 | `/api/memory/observe` | POST | Auto-classify and save (accepts `cwd` for scope) |
 | `/api/memory/stats` | GET | Statistics + graph metrics |
 | `/api/memory/doctor` | GET | Trust report for YAML/Qdrant/vector/graph/provenance health |
