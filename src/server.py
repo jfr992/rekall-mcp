@@ -502,7 +502,13 @@ async def api_save_memory(request):
 
         manager = _get_memory_manager()
         async with _maintenance_barrier():
-            memory_id = manager.save(content, type=mem_type, project=project, capture_origin="rest")
+            memory_id = manager.save(
+                content,
+                type=mem_type,
+                project=project,
+                capture_origin="rest",
+                source_tool="rest",
+            )
 
         return JSONResponse({"memory_id": memory_id, "status": "saved", "type": mem_type})
     except RequestValidationError as e:
@@ -2018,6 +2024,8 @@ async def api_observe(request):
                 capture_origin="hook",
                 session_id=body.get("session_id") or None,
                 evidence_class=evidence_class,
+                source_tool="observe",
+                cwd=caller_cwd,
             )
 
         return JSONResponse(
