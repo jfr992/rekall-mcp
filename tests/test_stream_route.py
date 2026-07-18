@@ -125,13 +125,39 @@ def test_stream_recalled_rows_include_misses(monkeypatch, tmp_path):
         "memory_ids": [],
         "top_score": None,
         "project": "proj-a",
+        "capture_origin": "test",
     }
     assert hit["payload"] == {
         "query": "how to x",
         "memory_ids": ["m1", "m2"],
         "top_score": 0.91,
         "project": "proj-a",
+        "capture_origin": "test",
     }
+
+
+def test_stream_recalled_rows_carry_capture_origin(monkeypatch, tmp_path):
+    """payload.capture_origin when present; v1 events (no key) fall back to event.source."""
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    log = manager.event_log
+    log.append(
+        _ev(
+            "memory_recalled",
+            "proj-a",
+            {"query": None, "memory_ids": [], "memories": [], "capture_origin": "capsule"},
+            _at(1),
+        )
+    )
+    # v1 shape: no query, no capture_origin — only the event-level source exists
+    log.append(_ev("memory_recalled", "proj-a", {"memory_ids": ["m1"]}, _at(0.5)))
+
+    r = tc.get("/api/memory/stream")
+
+    assert r.status_code == 200
+    v1, v2 = r.json()["rows"]  # newest first
+    assert v1["payload"]["query"] is None
+    assert v1["payload"]["capture_origin"] == "test"  # _ev's source
+    assert v2["payload"]["capture_origin"] == "capsule"
 
 
 def test_stream_promoted_rows(monkeypatch, tmp_path):
