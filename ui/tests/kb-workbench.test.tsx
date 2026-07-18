@@ -186,17 +186,62 @@ describe("KB recall workbench", () => {
     expect(list.getByText(/prefers explicit error types/i)).toBeInTheDocument();
   });
 
+  test("the pressed recency chip carries the accent pill treatment", async () => {
+    vi.mocked(searchApi.postRecall).mockResolvedValue(RESULTS);
+    renderPage();
+    await typeQuery();
+
+    const rail = within(screen.getByRole("group", { name: /recency/i }));
+    const chip = rail.getByRole("button", { name: /^7d$/i });
+
+    fireEvent.click(chip);
+
+    expect(chip).toHaveAttribute("aria-pressed", "true");
+    expect(chip.className).toContain("bg-[rgba(45,212,160,0.14)]");
+    expect(chip.className).toContain("text-[var(--accent-primary)]");
+    // the unpressed neighbour stays muted
+    const all = rail.getByRole("button", { name: /^all$/i });
+    expect(all.className).not.toContain("text-[var(--accent-primary)]");
+  });
+
   test("count line reflects facet filters honestly", async () => {
     vi.mocked(searchApi.postRecall).mockResolvedValue(RESULTS);
     renderPage();
     await typeQuery();
 
-    expect(screen.getByText("4 results · 4 shown")).toBeInTheDocument();
+    const countLine = () => screen.getByText(/results ·/).closest("p")!;
+    expect(countLine()).toHaveTextContent("4 results · 4 shown");
 
     const rail = within(screen.getByRole("group", { name: /type facets/i }));
     fireEvent.click(rail.getByRole("button", { name: /decision 2/i }));
 
-    expect(screen.getByText("4 results · 2 shown")).toBeInTheDocument();
+    expect(countLine()).toHaveTextContent("4 results · 2 shown");
+  });
+
+  test("count line's shown segment turns accent whenever a filter is active", async () => {
+    vi.mocked(searchApi.postRecall).mockResolvedValue(RESULTS);
+    renderPage();
+    await typeQuery();
+
+    // no filter — neutral
+    expect(screen.getByText("4 shown").className).not.toContain(
+      "text-[var(--accent-primary)]"
+    );
+
+    // recency 30d keeps 2 of 4 — accent tracks the active filter
+    const recency = within(screen.getByRole("group", { name: /recency/i }));
+    fireEvent.click(recency.getByRole("button", { name: /^30d$/i }));
+    expect(screen.getByText("2 shown").className).toContain(
+      "text-[var(--accent-primary)]"
+    );
+
+    // back to all, then a type filter that excludes nothing: still accent
+    fireEvent.click(recency.getByRole("button", { name: /^all$/i }));
+    const facets = within(screen.getByRole("group", { name: /type facets/i }));
+    fireEvent.click(facets.getByRole("button", { name: /decision 2/i }));
+    expect(screen.getByText("2 shown").className).toContain(
+      "text-[var(--accent-primary)]"
+    );
   });
 
   test("clicking a card opens the memory in the inspector", async () => {

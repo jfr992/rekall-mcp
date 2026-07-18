@@ -144,9 +144,15 @@ def build_stream(
     *,
     project: str | None,
     limit: int = 50,
+    after: str | None = None,
+    before: str | None = None,
     now: datetime | None = None,
 ) -> dict[str, Any]:
-    """Newest-first merged activity rows + the honest event-window marker."""
+    """Newest-first merged activity rows + the honest event-window marker.
+
+    after/before are inclusive YYYY-MM-DD day bounds applied post-merge on the
+    row's date part — never a Qdrant Range on the string date (known pitfall).
+    """
     now = now or datetime.now()
     # A compaction summary IS a memory record — surface it once, as its own kind.
     rows = [
@@ -157,6 +163,10 @@ def build_stream(
             rows.append(_recalled_row(event))
         elif event.event_type == "memory_promoted":
             rows.append(_promoted_row(event))
+    if after is not None:
+        rows = [row for row in rows if row["at"][:10] >= after]
+    if before is not None:
+        rows = [row for row in rows if row["at"][:10] <= before]
     rows.sort(key=lambda row: row["at"], reverse=True)
     return {
         "rows": rows[:limit],
