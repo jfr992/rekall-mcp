@@ -37,7 +37,7 @@ export function SessionList({
                     type="button"
                     aria-pressed={active}
                     onClick={() => onSelect(s.session_id)}
-                    className={`flex w-full flex-col gap-1 px-5 py-3 text-left transition-colors ${
+                    className={`flex w-full flex-col gap-0.5 px-4 py-2 text-left transition-colors ${
                       active
                         ? "bg-[var(--surface-1)] shadow-[inset_2px_0_0_var(--accent-primary)]"
                         : "hover:bg-[var(--surface-0)]"
@@ -50,17 +50,14 @@ export function SessionList({
                     >
                       {unattributed ? `Unattributed · ${s.project}` : s.session_id}
                     </span>
-                    <span className="flex items-baseline justify-between gap-2">
-                      <span className="text-xs text-[var(--fg-muted)]">
-                        {s.totals.recalls} recalls · {s.totals.injected} injected ·{" "}
+                    <span data-meta-line className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-xs text-[var(--fg-muted)]">
+                        {s.project} · {s.totals.recalls} recalls · {s.totals.injected} injected ·{" "}
                         {s.totals.tokens} tok
                       </span>
-                      <MonoLabel className="normal-case tracking-normal text-[var(--fg-dim)]">
+                      <MonoLabel className="shrink-0 normal-case tracking-normal text-[var(--fg-dim)]">
                         {relativeTime(s.last_at)}
                       </MonoLabel>
-                    </span>
-                    <span className="font-mono text-[10px] text-[var(--fg-dim)]">
-                      {s.project}
                     </span>
                   </button>
                 </li>

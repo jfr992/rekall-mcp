@@ -5,13 +5,18 @@ import { Badge } from "@/components/ui/badge";
 import { Chip } from "@/components/ui/chip";
 import { Empty } from "@/components/ui/empty";
 import { MonoLabel } from "@/components/ui/mono-label";
+import { ShowMoreList } from "@/components/ui/show-more-list";
 import { MemoryInspector } from "@/components/memory-inspector/memory-inspector";
 import { useSearch } from "@/lib/queries/use-search";
 import { useMemoryDetail } from "@/lib/queries/use-memory-detail";
 import { tokens, typeColor } from "@/lib/theme";
+import type { RecallResponse } from "@/lib/schemas";
 
 const DEBOUNCE_MS = 200;
 const RECALL_LIMIT = 30;
+const VISIBLE_RESULTS = 10;
+
+type Memory = RecallResponse["memories"][number];
 
 type Props = {
   project: string;
@@ -194,65 +199,71 @@ export function RecallWorkbench({ project }: Props) {
         {shown.length > 0 ? (
         <ul
           aria-label="Recall results"
-          className="flex min-h-0 flex-col gap-2.5 overflow-y-auto pb-4"
+          className="flex max-h-[60vh] min-h-0 flex-col gap-2.5 overflow-y-auto pb-4"
         >
-          {shown.map((m) => (
-            <li key={m.memory_id}>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedId(m.memory_id);
-                  setInspectorOpen(true);
-                }}
-                className={`w-full cursor-pointer rounded-[9px] border px-4 py-3.5 text-left transition-colors hover:border-[rgba(45,212,160,0.5)] ${
-                  selectedId === m.memory_id
-                    ? "border-[rgba(45,212,160,0.45)] bg-[var(--surface-1)]"
-                    : "border-[var(--border)] bg-[var(--bg-elevated)]"
-                }`}
-              >
-                <div className="mb-2 flex items-center gap-2.5">
-                  {typeof m.score === "number" ? (
-                    <span className="font-mono text-xs font-semibold text-[var(--fg-muted)]">
-                      {m.score.toFixed(2)}
-                    </span>
-                  ) : null}
-                  {m.type ? <Badge kind="type" value={m.type} /> : null}
-                  <MonoLabel className="ml-auto">{m.date ?? "—"}</MonoLabel>
-                </div>
-                <p className="line-clamp-3 text-sm leading-relaxed text-[var(--fg-soft)]">
-                  {m.content}
-                </p>
-                {selectedId === m.memory_id &&
-                (detail.data?.relationships?.length ?? 0) > 0 ? (
-                  <div className="mt-3 flex flex-col gap-1.5">
-                    <MonoLabel className="tracking-[0.16em]">
-                      LINKED MEMORIES
-                    </MonoLabel>
-                    {detail.data!.relationships!.map((rel) => (
-                      <span
-                        key={`${rel.neighbor_id}-${rel.relation}-${rel.direction}`}
-                        className="flex items-center gap-2 rounded-[7px] border border-[var(--border)] bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-[var(--fg-soft)]"
-                      >
-                        <span
-                          aria-hidden
-                          className="h-1.5 w-1.5 shrink-0 rounded-full"
-                          style={{ background: typeColor(rel.memory?.type) }}
-                        />
-                        <span className="min-w-0 flex-1 truncate">
-                          {rel.memory?.content ?? rel.neighbor_id}
-                        </span>
-                        {typeof rel.weight === "number" ? (
-                          <span className="shrink-0 font-mono text-[9px] text-[var(--fg-dim)]">
-                            {rel.weight.toFixed(2)}
-                          </span>
-                        ) : null}
+          <ShowMoreList
+            items={shown}
+            initialCount={VISIBLE_RESULTS}
+            keyFor={(m) => m.memory_id}
+            footerWrapper={(node) => <li>{node}</li>}
+            renderItem={(m: Memory) => (
+              <li>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedId(m.memory_id);
+                    setInspectorOpen(true);
+                  }}
+                  className={`w-full cursor-pointer rounded-[9px] border px-4 py-3.5 text-left transition-colors hover:border-[rgba(45,212,160,0.5)] ${
+                    selectedId === m.memory_id
+                      ? "border-[rgba(45,212,160,0.45)] bg-[var(--surface-1)]"
+                      : "border-[var(--border)] bg-[var(--bg-elevated)]"
+                  }`}
+                >
+                  <div className="mb-2 flex items-center gap-2.5">
+                    {typeof m.score === "number" ? (
+                      <span className="font-mono text-xs font-semibold text-[var(--fg-muted)]">
+                        {m.score.toFixed(2)}
                       </span>
-                    ))}
+                    ) : null}
+                    {m.type ? <Badge kind="type" value={m.type} /> : null}
+                    <MonoLabel className="ml-auto">{m.date ?? "—"}</MonoLabel>
                   </div>
-                ) : null}
-              </button>
-            </li>
-          ))}
+                  <p className="line-clamp-3 text-sm leading-relaxed text-[var(--fg-soft)]">
+                    {m.content}
+                  </p>
+                  {selectedId === m.memory_id &&
+                  (detail.data?.relationships?.length ?? 0) > 0 ? (
+                    <div className="mt-3 flex flex-col gap-1.5">
+                      <MonoLabel className="tracking-[0.16em]">
+                        LINKED MEMORIES
+                      </MonoLabel>
+                      {detail.data!.relationships!.map((rel) => (
+                        <span
+                          key={`${rel.neighbor_id}-${rel.relation}-${rel.direction}`}
+                          className="flex items-center gap-2 rounded-[7px] border border-[var(--border)] bg-[var(--surface-1)] px-2.5 py-1.5 text-xs text-[var(--fg-soft)]"
+                        >
+                          <span
+                            aria-hidden
+                            className="h-1.5 w-1.5 shrink-0 rounded-full"
+                            style={{ background: typeColor(rel.memory?.type) }}
+                          />
+                          <span className="min-w-0 flex-1 truncate">
+                            {rel.memory?.content ?? rel.neighbor_id}
+                          </span>
+                          {typeof rel.weight === "number" ? (
+                            <span className="shrink-0 font-mono text-[9px] text-[var(--fg-dim)]">
+                              {rel.weight.toFixed(2)}
+                            </span>
+                          ) : null}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
+                </button>
+              </li>
+            )}
+          />
         </ul>
         ) : (
           <Empty
