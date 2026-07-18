@@ -1,6 +1,7 @@
 import { Fragment } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Empty } from "@/components/ui/empty";
+import { recallOriginLabel } from "@/lib/recall-origin";
 import type { StreamRow } from "@/lib/schemas";
 
 type Props = {
@@ -76,7 +77,10 @@ function RecalledRow({ row }: { row: Extract<StreamRow, { kind: "recalled" }> })
         RECALLED
       </span>
       <span className="text-[13px] text-[var(--fg-muted)]">
-        “{payload.query ?? "—"}” → {surfaced}
+        {payload.query !== null
+          ? `“${payload.query}”`
+          : recallOriginLabel(payload.capture_origin)}{" "}
+        → {surfaced}
         {payload.top_score != null ? `, top match ${payload.top_score.toFixed(2)}` : ""}
       </span>
     </div>

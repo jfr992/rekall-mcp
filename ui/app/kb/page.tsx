@@ -9,6 +9,7 @@ import { Empty } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useKb } from "@/lib/queries/use-kb";
 import { useProjectStore } from "@/lib/project-store";
+import { scopedTitle } from "@/lib/scoped-title";
 
 type Tab = "recall" | "curated" | "okf";
 
@@ -21,7 +22,7 @@ export default function KbPage() {
     <div className="mx-auto flex h-[calc(100vh-3.5rem)] max-w-7xl flex-col gap-6 p-6">
       <SerifHeading
         eyebrow={tab === "recall" ? "RECALL · SEMANTIC SEARCH" : "CURATED BY TYPE · LIVE"}
-        title={`Knowledge Base · ${project}`}
+        title={scopedTitle("Knowledge Base", project)}
       />
 
       <div className="flex gap-1.5">

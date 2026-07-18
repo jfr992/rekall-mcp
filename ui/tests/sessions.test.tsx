@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, act, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
@@ -17,6 +17,10 @@ import type { SessionDetail, SessionsResponse } from "@/lib/schemas";
 vi.mock("@/lib/api/sessions");
 vi.mock("@/lib/api/feedback");
 vi.mock("@/lib/api/detail");
+
+function utcDay(offsetDays: number): string {
+  return new Date(Date.now() - offsetDays * 86_400_000).toISOString().slice(0, 10);
+}
 
 function renderSessions() {
   const client = new QueryClient({
@@ -67,6 +71,7 @@ describe("Sessions surface", () => {
       return Promise.resolve({
         sessions: project ? all.filter((s) => s.project === project) : all,
         window: 5000,
+        event_window: (sessionsFixture as SessionsResponse).event_window,
       });
     });
     renderSessions();
@@ -76,7 +81,7 @@ describe("Sessions surface", () => {
     });
     expect(screen.queryByText(/sess-abc123/)).not.toBeInTheDocument();
     expect(screen.queryByText(/unattributed · rekall-mcp/i)).not.toBeInTheDocument();
-    expect(sessionsApi.getSessions).toHaveBeenCalledWith("byte-edge", 50);
+    expect(sessionsApi.getSessions).toHaveBeenCalledWith("byte-edge", 50, {});
   });
 
   test("clicking a session shows recall cards with scores", async () => {
@@ -181,6 +186,115 @@ describe("Sessions surface", () => {
     // Normal recalls keep their query + token header.
     expect(screen.getByText(/freshness-aware recall gate/i)).toBeInTheDocument();
     expect(screen.getByText(/640 tok/i)).toBeInTheDocument();
+  });
+
+  test("range row defaults to All: unbounded query, All chip pressed", async () => {
+    renderSessions();
+    await screen.findByText(/sess-abc123/);
+
+    const chips = within(screen.getByRole("group", { name: /sessions range/i }));
+    expect(chips.getByRole("button", { name: /^All$/ })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(chips.getByRole("button", { name: /^7d$/ })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+    expect(sessionsApi.getSessions).toHaveBeenLastCalledWith("", 50, {});
+  });
+
+  test("clicking a range chip re-bounds the sessions query", async () => {
+    renderSessions();
+    await screen.findByText(/sess-abc123/);
+    const chips = within(screen.getByRole("group", { name: /sessions range/i }));
+
+    fireEvent.click(chips.getByRole("button", { name: /^Today$/ }));
+    await waitFor(() => {
+      expect(sessionsApi.getSessions).toHaveBeenLastCalledWith("", 50, {
+        after: utcDay(0),
+        before: utcDay(0),
+      });
+    });
+
+    fireEvent.click(chips.getByRole("button", { name: /^7d$/ }));
+    await waitFor(() => {
+      expect(sessionsApi.getSessions).toHaveBeenLastCalledWith("", 50, {
+        after: utcDay(7),
+      });
+    });
+    expect(chips.getByRole("button", { name: /^7d$/ })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(chips.getByRole("button", { name: /^All$/ })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+  });
+
+  test("jump-to-day sets after=before=that day and clears the chip selection", async () => {
+    renderSessions();
+    await screen.findByText(/sess-abc123/);
+
+    fireEvent.change(screen.getByLabelText(/jump to day/i), {
+      target: { value: "2026-07-10" },
+    });
+
+    await waitFor(() => {
+      expect(sessionsApi.getSessions).toHaveBeenLastCalledWith("", 50, {
+        after: "2026-07-10",
+        before: "2026-07-10",
+      });
+    });
+    const chips = within(screen.getByRole("group", { name: /sessions range/i }));
+    for (const name of ["Today", "Yesterday", "7d", "30d", "All"]) {
+      expect(chips.getByRole("button", { name })).toHaveAttribute(
+        "aria-pressed",
+        "false"
+      );
+    }
+  });
+
+  test("honest notice shows when the range reaches past event_window.oldest_at", async () => {
+    renderSessions();
+    await screen.findByText(/sess-abc123/);
+
+    // default All reaches past the fixture's oldest event (2026-06-30)
+    expect(
+      screen.getByText("sessions before 2026-06-30 not shown (event log window)")
+    ).toBeInTheDocument();
+
+    // a day inside the window doesn't reach past the tail — notice hides
+    fireEvent.change(screen.getByLabelText(/jump to day/i), {
+      target: { value: "2026-07-10" },
+    });
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/sessions before .* not shown/)
+      ).not.toBeInTheDocument();
+    });
+  });
+
+  test("empty list for a bounded range shows the range-specific empty state", async () => {
+    vi.mocked(sessionsApi.getSessions).mockImplementation((_project, _limit, range) =>
+      Promise.resolve(
+        range && (range.after || range.before)
+          ? ({
+              sessions: [],
+              window: 5000,
+              event_window: (sessionsFixture as SessionsResponse).event_window,
+            } as SessionsResponse)
+          : (sessionsFixture as SessionsResponse)
+      )
+    );
+    renderSessions();
+    await screen.findByText(/sess-abc123/);
+
+    const chips = within(screen.getByRole("group", { name: /sessions range/i }));
+    fireEvent.click(chips.getByRole("button", { name: /^Today$/ }));
+
+    expect(await screen.findByText(/No sessions in this range/)).toBeInTheDocument();
   });
 
   test("clicking a memory id expands it in the inspector", async () => {
