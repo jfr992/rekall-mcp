@@ -39,6 +39,34 @@ describe("sessions api", () => {
     );
   });
 
+  test("getSessions passes inclusive day bounds as after/before query params", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(sessionsFixture)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getSessions("", 50, { after: "2026-07-10", before: "2026-07-12" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/memory/sessions?limit=50&after=2026-07-10&before=2026-07-12",
+      expect.anything()
+    );
+  });
+
+  test("getSessions parses the event_window truncation marker", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(sessionsFixture)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await getSessions("", 50);
+
+    expect(res.event_window).toEqual({
+      events: 42,
+      oldest_at: "2026-06-30T08:00:00+00:00",
+    });
+  });
+
   test("getSessionDetail hits the id route and parses recalls", async () => {
     const fetchMock = vi
       .fn()

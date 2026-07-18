@@ -202,6 +202,12 @@ export const KbResponseSchema = z.object({
   truncated: z.boolean().optional(),
 });
 
+// Bounded event-tail truncation marker shared by sessions/insights/stream.
+export const EventWindowSchema = z.object({
+  events: z.number(),
+  oldest_at: z.string().nullable(),
+});
+
 // ----- Sessions ------------------------------------------------------------
 
 export const SessionTotalsSchema = z.object({
@@ -221,6 +227,7 @@ export const SessionRowSchema = z.object({
 export const SessionsResponseSchema = z.object({
   sessions: z.array(SessionRowSchema),
   window: z.number(),
+  event_window: EventWindowSchema,
 });
 
 export const SessionInjectedSchema = z.object({
@@ -359,11 +366,6 @@ export const TierCountsSchema = z.object({
   episodic: z.number(),
   semantic: z.number(),
   identity: z.number(),
-});
-
-export const EventWindowSchema = z.object({
-  events: z.number(),
-  oldest_at: z.string().nullable(),
 });
 
 export const InsightsResponseSchema = z.object({
