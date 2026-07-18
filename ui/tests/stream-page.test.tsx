@@ -1,5 +1,5 @@
 import { describe, test, expect, vi, afterEach } from "vitest";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, within, fireEvent } from "@testing-library/react";
 
 // Module-level mocks must precede import of the component under test
 vi.mock("@/lib/project-store", () => ({
@@ -38,6 +38,90 @@ function mockAll({ stream = streamFixture }: { stream?: unknown } = {}) {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+function utcDay(offsetDays: number): string {
+  return new Date(Date.now() - offsetDays * 86_400_000).toISOString().slice(0, 10);
+}
+
+describe("StreamPage — range selection", () => {
+  test("defaults to the 7d range: bounded query, 7d chip pressed", () => {
+    mockAll();
+    render(<StreamPage />);
+
+    expect(useStream).toHaveBeenLastCalledWith("rekall-mcp", 50, { after: utcDay(7) });
+    const chips = within(screen.getByRole("group", { name: /stream range/i }));
+    expect(chips.getByRole("button", { name: /^7d$/ })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+    expect(chips.getByRole("button", { name: /^All$/ })).toHaveAttribute(
+      "aria-pressed",
+      "false"
+    );
+  });
+
+  test("clicking a chip re-bounds the stream query", () => {
+    mockAll();
+    render(<StreamPage />);
+    const chips = within(screen.getByRole("group", { name: /stream range/i }));
+
+    fireEvent.click(chips.getByRole("button", { name: /^Today$/ }));
+    expect(useStream).toHaveBeenLastCalledWith("rekall-mcp", 50, {
+      after: utcDay(0),
+      before: utcDay(0),
+    });
+
+    fireEvent.click(chips.getByRole("button", { name: /^30d$/ }));
+    expect(useStream).toHaveBeenLastCalledWith("rekall-mcp", 50, { after: utcDay(30) });
+
+    fireEvent.click(chips.getByRole("button", { name: /^All$/ }));
+    expect(useStream).toHaveBeenLastCalledWith("rekall-mcp", 50, {});
+    expect(chips.getByRole("button", { name: /^All$/ })).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    );
+  });
+
+  test("jump-to-day sets after=before=that day and clears the chip selection", () => {
+    mockAll();
+    render(<StreamPage />);
+
+    fireEvent.change(screen.getByLabelText(/jump to day/i), {
+      target: { value: "2026-07-10" },
+    });
+
+    expect(useStream).toHaveBeenLastCalledWith("rekall-mcp", 50, {
+      after: "2026-07-10",
+      before: "2026-07-10",
+    });
+    const chips = within(screen.getByRole("group", { name: /stream range/i }));
+    for (const name of ["Today", "Yesterday", "7d", "30d", "All"]) {
+      expect(chips.getByRole("button", { name })).toHaveAttribute(
+        "aria-pressed",
+        "false"
+      );
+    }
+  });
+
+  test("honest notice appears only when the range reaches past event_window.oldest_at", () => {
+    mockAll(); // fixture event_window.oldest_at = 2026-06-30
+    render(<StreamPage />);
+
+    // default 7d starts after the fixture's oldest event — nothing truncated
+    expect(
+      screen.queryByText(/recalls\/promotions before .* not shown/)
+    ).not.toBeInTheDocument();
+
+    const chips = within(screen.getByRole("group", { name: /stream range/i }));
+    fireEvent.click(chips.getByRole("button", { name: /^All$/ }));
+
+    expect(
+      screen.getByText(
+        "recalls/promotions before 2026-06-30 not shown (event log window)"
+      )
+    ).toBeInTheDocument();
+  });
 });
 
 describe("StreamPage — ladder markers", () => {

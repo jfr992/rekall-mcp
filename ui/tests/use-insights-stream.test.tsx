@@ -50,10 +50,23 @@ describe("useStream", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(getStream).toHaveBeenCalledWith("byte-edge", 50);
+    expect(getStream).toHaveBeenCalledWith("byte-edge", 50, {});
     expect(result.current.data?.rows).toHaveLength(streamFixture.rows.length);
     // one poll per page, panels derive from this cache (PLAN: no SSE)
-    const query = client.getQueryCache().find({ queryKey: ["stream", "byte-edge", 50] });
+    const query = client
+      .getQueryCache()
+      .find({ queryKey: ["stream", "byte-edge", 50, null, null] });
     expect(query?.observers[0]?.options.refetchInterval).toBe(10_000);
+  });
+
+  test("plumbs after/before range into the fetch and the query key", async () => {
+    const { useStream } = await import("@/lib/queries/use-stream");
+    const { getStream } = await import("@/lib/api/stream");
+
+    const range = { after: "2026-07-10", before: "2026-07-17" };
+    const { result } = renderHook(() => useStream("byte-edge", 50, range), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(getStream).toHaveBeenCalledWith("byte-edge", 50, range);
   });
 });

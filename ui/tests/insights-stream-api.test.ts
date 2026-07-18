@@ -40,4 +40,18 @@ describe("insights + stream api", () => {
     expect(res.rows).toHaveLength(5);
     expect(res.rows[0].kind).toBe("saved");
   });
+
+  test("getStream appends after/before day bounds when a range is given", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify(streamFixture)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await getStream("byte-edge", 50, { after: "2026-07-10", before: "2026-07-17" });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/memory/stream?limit=50&project=byte-edge&after=2026-07-10&before=2026-07-17",
+      expect.anything()
+    );
+  });
 });
