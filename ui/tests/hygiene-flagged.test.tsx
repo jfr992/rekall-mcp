@@ -17,6 +17,16 @@ const FLAGGED = {
   ],
 };
 
+function manyConflicts(n: number) {
+  return Array.from({ length: n }, (_, i) => ({
+    memory_id: `cf${i}`,
+    content: `conflicted fact ${i}`,
+    type: "fact",
+    tier: "semantic",
+    date: "2026-07-01",
+  }));
+}
+
 describe("hygiene flagged panel", () => {
   it("groups flags by reason and opens the inspector on row click", () => {
     const onSelect = vi.fn();
@@ -26,5 +36,19 @@ describe("hygiene flagged panel", () => {
     expect(screen.getByText(/low value/)).toBeInTheDocument();
     fireEvent.click(screen.getByText(/conflicted fact/));
     expect(onSelect).toHaveBeenCalledWith("cf1");
+  });
+
+  it("collapses a group with more than 5 members to the top 5 plus a Show all N expander", () => {
+    const onSelect = vi.fn();
+    render(
+      <FlaggedPanel
+        flagged={{ ...FLAGGED, conflict: manyConflicts(12) }}
+        onSelect={onSelect}
+      />
+    );
+    expect(screen.getByText(/conflicted fact 4/)).toBeInTheDocument();
+    expect(screen.queryByText(/conflicted fact 5/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Show all 12" }));
+    expect(screen.getByText(/conflicted fact 11/)).toBeInTheDocument();
   });
 });
