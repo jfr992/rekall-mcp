@@ -97,4 +97,27 @@ describe("RecallFeed", () => {
     fireEvent.click(screen.getByText("nothing matches this"));
     expect(onSelect).not.toHaveBeenCalled();
   });
+
+  test("caps at 8 rows and links to /stream instead of expanding", () => {
+    const many: StreamRow[] = Array.from({ length: 12 }, (_, i) => ({
+      kind: "recalled",
+      at: `2026-07-17T10:${String(i).padStart(2, "0")}:00.000001`,
+      payload: {
+        query: `query number ${i}`,
+        memory_ids: ["m1"],
+        top_score: 0.8,
+        project: "rekall-mcp",
+        capture_origin: "recall",
+      },
+    }));
+    render(<RecallFeed rows={many} misses7d={0} onSelect={vi.fn()} />);
+
+    expect(screen.getByText("query number 7")).toBeInTheDocument();
+    expect(screen.queryByText("query number 8")).not.toBeInTheDocument();
+    const link = screen.getByRole("link", { name: "View all in Stream →" });
+    expect(link).toHaveAttribute("href", "/stream");
+    expect(
+      screen.queryByRole("button", { name: /show \d+ more/i })
+    ).not.toBeInTheDocument();
+  });
 });
