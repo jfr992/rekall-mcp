@@ -408,6 +408,7 @@ export const StreamRecalledRowSchema = z.object({
     memory_ids: z.array(z.string()),
     top_score: z.number().nullable(),
     project: z.string().nullable(),
+    capture_origin: z.string().nullable().optional(),
   }),
 });
 

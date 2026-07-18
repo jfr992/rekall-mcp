@@ -207,6 +207,8 @@ def _recalled_row(event: MemoryEvent) -> dict[str, Any]:
             "memory_ids": list(event.payload.get("memory_ids") or []),
             "top_score": _top_score(event),
             "project": event.project,
+            # v1 events predate the payload key — the event source is the origin
+            "capture_origin": event.payload.get("capture_origin") or event.source or None,
         },
     }
 
