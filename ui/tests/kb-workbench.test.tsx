@@ -281,6 +281,42 @@ describe("KB recall workbench", () => {
     expect(detailApi.getMemoryDetail).toHaveBeenCalledTimes(1);
   });
 
+  test("facet rail stays hidden until a query has loaded results", async () => {
+    vi.mocked(searchApi.postRecall).mockResolvedValue(RESULTS);
+    renderPage();
+
+    // Empty query — no rail, and the prompt sits in the full content width.
+    expect(
+      screen.queryByRole("group", { name: /type facets/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: /recency/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/type to recall/i).closest('[class*="grid-cols"]')
+    ).toBeNull();
+
+    await typeQuery();
+
+    expect(screen.getByRole("group", { name: /type facets/i })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /recency/i })).toBeInTheDocument();
+  });
+
+  test("facet rail never renders a zero-count row", async () => {
+    vi.mocked(searchApi.postRecall).mockResolvedValue(RESULTS);
+    renderPage();
+    await typeQuery();
+
+    const rail = within(screen.getByRole("group", { name: /type facets/i }));
+    const rows = rail.getAllByRole("button");
+    // all + only the types present in the results — nothing else
+    expect(rows).toHaveLength(4);
+    expect(rail.queryByRole("button", { name: /fact/i })).not.toBeInTheDocument();
+    for (const row of rows) {
+      expect(row.textContent).not.toMatch(/\b0\b/);
+    }
+  });
+
   test("empty query shows a prompt and fires no recall", async () => {
     renderPage();
 
@@ -297,6 +333,14 @@ describe("KB recall workbench", () => {
     });
 
     expect(await screen.findByText(/no matches/i)).toBeInTheDocument();
+  });
+
+  test("heading drops the scope separator when all memories are in scope", () => {
+    useProjectStore.setState({ project: "" });
+    renderPage();
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent).toBe("Knowledge Base");
   });
 
   test("the heading eyebrow tracks the active tab", async () => {

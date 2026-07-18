@@ -502,7 +502,13 @@ async def api_save_memory(request):
 
         manager = _get_memory_manager()
         async with _maintenance_barrier():
-            memory_id = manager.save(content, type=mem_type, project=project, capture_origin="rest")
+            memory_id = manager.save(
+                content,
+                type=mem_type,
+                project=project,
+                capture_origin="rest",
+                source_tool="rest",
+            )
 
         return JSONResponse({"memory_id": memory_id, "status": "saved", "type": mem_type})
     except RequestValidationError as e:
@@ -530,13 +536,15 @@ async def api_recall_memories(request):
             if not isinstance(task_hint, str):
                 return JSONResponse({"error": "task_hint must be a string"}, status_code=400)
             task_hint = task_hint[:256]
+        # Caller's cwd, not the backend's — attribution only (v1.5.0 scope pitfall)
+        caller_cwd = body.get("cwd") or body.get("workspace_root") or None
 
         if not query:
             return JSONResponse({"error": "query is required"}, status_code=400)
 
         manager = _get_memory_manager()
         results = manager.recall(
-            query, limit=limit, project=project, type=mem_type, task_hint=task_hint
+            query, limit=limit, project=project, type=mem_type, task_hint=task_hint, cwd=caller_cwd
         )
 
         # memory_recalled emission lives in manager.recall (event contract v2)
@@ -798,12 +806,13 @@ _SESSIONS_EVENT_WINDOW = EVENT_WINDOW
 
 
 def _folded_sessions(limit: int = 50):
+    """Fold the shared event snapshot into sessions; returns (sessions, snapshot)."""
     from memory.insights import event_snapshot
     from memory.sessions import fold_sessions
 
     manager = _get_memory_manager()
     snapshot = event_snapshot(manager.event_log)
-    return fold_sessions(list(snapshot.events), limit=limit)
+    return fold_sessions(list(snapshot.events), limit=limit), snapshot
 
 
 @mcp.custom_route("/api/memory/sessions", methods=["GET"])
@@ -812,11 +821,19 @@ async def api_list_sessions(request):
     try:
         limit = _read_int(request.query_params, "limit", 50, lo=1, hi=500)
         project = request.query_params.get("project")
+        after = _read_day(request.query_params, "after")
+        before = _read_day(request.query_params, "before")
         # Fold the full window, filter, then limit — the recall join needs all
         # events, and a pre-filter limit would starve the scoped list.
-        sessions = _folded_sessions(limit=_SESSIONS_EVENT_WINDOW)
+        sessions, snapshot = _folded_sessions(limit=_SESSIONS_EVENT_WINDOW)
         if project and project != "all":
             sessions = [s for s in sessions if s["project"] == project]
+        # Inclusive day bounds on each session's last activity — string compare
+        # on the date part, never a Range on the string date (known pitfall).
+        if after is not None:
+            sessions = [s for s in sessions if (s["last_at"] or "")[:10] >= after]
+        if before is not None:
+            sessions = [s for s in sessions if (s["last_at"] or "")[:10] <= before]
         sessions = sessions[:limit]
         # U2 phase metric: server-side hit counter for the transparency view.
         _get_memory_manager().record_event(
@@ -829,7 +846,15 @@ async def api_list_sessions(request):
             {key: s[key] for key in ("session_id", "project", "started_at", "last_at", "totals")}
             for s in sessions
         ]
-        return _ok({"sessions": rows, "window": _SESSIONS_EVENT_WINDOW})
+        # Same honest marker the stream carries, from the snapshot the fold
+        # used — taken before the view_opened append above.
+        return _ok(
+            {
+                "sessions": rows,
+                "window": _SESSIONS_EVENT_WINDOW,
+                "event_window": {"events": len(snapshot.events), "oldest_at": snapshot.oldest_at},
+            }
+        )
     except RequestValidationError as e:
         return _bad_request(str(e))
     except Exception as e:
@@ -848,7 +873,7 @@ async def api_session_detail(request):
         match = next(
             (
                 s
-                for s in _folded_sessions(limit=_SESSIONS_EVENT_WINDOW)
+                for s in _folded_sessions(limit=_SESSIONS_EVENT_WINDOW)[0]
                 if s["session_id"] == session_id
             ),
             None,
@@ -2001,6 +2026,8 @@ async def api_observe(request):
                 capture_origin="hook",
                 session_id=body.get("session_id") or None,
                 evidence_class=evidence_class,
+                source_tool="observe",
+                cwd=caller_cwd,
             )
 
         return JSONResponse(

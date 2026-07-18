@@ -319,6 +319,72 @@ async def test_mcp_tools_stamp_capture_origin(tool_registry):
     assert manager.save.call_args.kwargs["capture_origin"] == "save_memory_tool"
 
 
+def test_recall_with_cwd_attributes_event_to_detected_project(tmp_path):
+    """No explicit project + caller cwd → the event carries the detected project."""
+    caller = tmp_path / "caller-proj"
+    caller.mkdir()
+    mgr = _mgr(HITS)
+
+    MemoryManager.recall(mgr, "auth rotation", limit=5, cwd=str(caller))
+
+    assert mgr.record_event.call_args.kwargs["project"] == "caller-proj"
+
+
+def test_recall_explicit_project_beats_cwd(tmp_path):
+    caller = tmp_path / "caller-proj"
+    caller.mkdir()
+    mgr = _mgr(HITS)
+
+    MemoryManager.recall(mgr, "auth rotation", limit=5, project="explicit-proj", cwd=str(caller))
+
+    assert mgr.record_event.call_args.kwargs["project"] == "explicit-proj"
+
+
+def test_recall_without_project_or_cwd_stays_general():
+    mgr = _mgr(HITS)
+
+    MemoryManager.recall(mgr, "auth rotation", limit=5)
+
+    assert mgr.record_event.call_args.kwargs["project"] == "general"
+
+
+@pytest.mark.asyncio
+async def test_mcp_recall_tool_forwards_cwd_for_attribution(tool_registry, tmp_path):
+    """cwd through the tool → manager emission attributed to the detected project."""
+    from tools.builtin.memory import OptimizedMemoryTools
+
+    capture_tool, registered_tools = tool_registry
+
+    class FakeMCP:
+        def tool(self, **kwargs):
+            return capture_tool()
+
+    caller = tmp_path / "tool-proj"
+    caller.mkdir()
+    provider = OptimizedMemoryTools()
+    provider._manager = _mgr(HITS)
+    provider.register(FakeMCP())
+
+    await registered_tools["recall_memories"](query="auth rotation", cwd=str(caller))
+
+    assert provider._manager.record_event.call_args.kwargs["project"] == "tool-proj"
+
+
+def test_rest_recall_passes_cwd_to_manager(rest_client, fake_rest_manager):
+    fake_rest_manager.recall.return_value = []
+    r = rest_client.post("/api/memory/recall", json={"query": "q", "cwd": "/Users/x/repo"})
+    assert r.status_code == 200
+    assert fake_rest_manager.recall.call_args.kwargs["cwd"] == "/Users/x/repo"
+
+
+def test_rest_recall_without_cwd_passes_none(rest_client, fake_rest_manager):
+    """Old clients send no cwd → None, never fabricated from the backend's own cwd."""
+    fake_rest_manager.recall.return_value = []
+    r = rest_client.post("/api/memory/recall", json={"query": "q"})
+    assert r.status_code == 200
+    assert fake_rest_manager.recall.call_args.kwargs["cwd"] is None
+
+
 def test_cli_save_stamps_capture_origin_cli():
     from unittest.mock import patch
 
