@@ -8,9 +8,15 @@ type Props = {
   sessions: SessionRow[];
   selectedId: string | null;
   onSelect: (sessionId: string) => void;
+  emptyMessage?: string;
 };
 
-export function SessionList({ sessions, selectedId, onSelect }: Props) {
+export function SessionList({
+  sessions,
+  selectedId,
+  onSelect,
+  emptyMessage = "No sessions in the event window.",
+}: Props) {
   return (
     <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-elevated)]">
       <header className="flex shrink-0 items-baseline justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
@@ -19,9 +25,7 @@ export function SessionList({ sessions, selectedId, onSelect }: Props) {
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {sessions.length === 0 ? (
-          <p className="px-5 py-4 text-sm text-[var(--fg-muted)]">
-            No sessions in the event window.
-          </p>
+          <p className="px-5 py-4 text-sm text-[var(--fg-muted)]">{emptyMessage}</p>
         ) : (
           <ul>
             {sessions.map((s) => {

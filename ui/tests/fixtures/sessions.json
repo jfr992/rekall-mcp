@@ -22,5 +22,6 @@
       "totals": { "recalls": 1, "injected": 0, "tokens": 120 }
     }
   ],
-  "window": 5000
+  "window": 5000,
+  "event_window": { "events": 42, "oldest_at": "2026-06-30T08:00:00+00:00" }
 }
