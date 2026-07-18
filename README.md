@@ -444,7 +444,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/publish/status` | GET | Poll a synthesis job's progress |
 | `/api/memory/events` | GET, POST | GET: cursor-paginated event feed (`cursor=&limit=`, truncation-safe); POST: append a client-side session-summary event |
 | `/api/memory/review` | POST | Record a review verdict (`keep\|fix\|kill`; kill deletes then records, fix is 501 until U3) |
-| `/api/memory/sessions` | GET | Session transparency list folded from events (`?limit=`; `?project=` scopes to one project incl. its unattributed bucket, absent or `all` = every project; `window` = event-tail cap; emits a `view_opened` counter) |
+| `/api/memory/sessions` | GET | Session transparency list folded from events (`?limit=`; `?project=` scopes to one project incl. its unattributed bucket, absent or `all` = every project; `after`/`before` are inclusive `YYYY-MM-DD` day bounds on each session's last activity; `window` = event-tail cap; `event_window.oldest_at` marks where the fold truncates; emits a `view_opened` counter) |
 | `/api/memory/sessions/{id}` | GET | Full session detail: injected memories + recall cards with scores; unattributed recalls under `unattributed:<project>` |
 | `/api/memory/feedback` | POST | One-click recall feedback (`useful\|wrong\|stale`) → `memory_feedback` event; labeled evidence only, never read into ranking |
 | `/api/memory/insights` | GET | Cockpit aggregates (`?project=`): totals, per-week counts, 7d recall/miss/promotion stats with honest denominators, tier counts; `event_window` = bounded event-tail truncation info |
