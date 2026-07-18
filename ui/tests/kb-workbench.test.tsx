@@ -281,6 +281,27 @@ describe("KB recall workbench", () => {
     expect(detailApi.getMemoryDetail).toHaveBeenCalledTimes(1);
   });
 
+  test("facet rail stays hidden until a query has loaded results", async () => {
+    vi.mocked(searchApi.postRecall).mockResolvedValue(RESULTS);
+    renderPage();
+
+    // Empty query — no rail, and the prompt sits in the full content width.
+    expect(
+      screen.queryByRole("group", { name: /type facets/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: /recency/i })
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/type to recall/i).closest('[class*="grid-cols"]')
+    ).toBeNull();
+
+    await typeQuery();
+
+    expect(screen.getByRole("group", { name: /type facets/i })).toBeInTheDocument();
+    expect(screen.getByRole("group", { name: /recency/i })).toBeInTheDocument();
+  });
+
   test("empty query shows a prompt and fires no recall", async () => {
     renderPage();
 

@@ -73,6 +73,9 @@ export function RecallWorkbench({ project }: Props) {
     ? memories.filter((m) => (m.type ?? "note") === typeFilter)
     : memories;
 
+  // Facets are slices of loaded results — without results the rail is dead UI.
+  const showRail = query.trim().length > 0 && fetched.length > 0;
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="mx-auto w-full max-w-3xl">
@@ -106,6 +109,21 @@ export function RecallWorkbench({ project }: Props) {
         ) : null}
       </div>
 
+      {!showRail ? (
+        !query.trim() ? (
+          <Empty
+            title="Type to recall"
+            hint={`Semantic search over ${project || "all"} memories — top ${RECALL_LIMIT} by score`}
+          />
+        ) : results.isFetched ? (
+          <Empty
+            title="No matches"
+            hint={`Nothing matches “${query}” in ${project || "all projects"}`}
+          />
+        ) : (
+          <div className="min-h-0 flex-1" />
+        )
+      ) : (
       <div className="grid min-h-0 flex-1 grid-cols-[180px_1fr] gap-6">
         <aside className="flex flex-col gap-6 border-r border-[var(--border)] pr-4">
           <div role="group" aria-label="Type facets">
@@ -173,12 +191,7 @@ export function RecallWorkbench({ project }: Props) {
           </div>
         </aside>
 
-        {!query.trim() ? (
-          <Empty
-            title="Type to recall"
-            hint={`Semantic search over ${project || "all"} memories — top ${RECALL_LIMIT} by score`}
-          />
-        ) : shown.length > 0 ? (
+        {shown.length > 0 ? (
         <ul
           aria-label="Recall results"
           className="flex min-h-0 flex-col gap-2.5 overflow-y-auto pb-4"
@@ -241,19 +254,14 @@ export function RecallWorkbench({ project }: Props) {
             </li>
           ))}
         </ul>
-        ) : results.isFetched ? (
-          <Empty
-            title={fetched.length > 0 ? "Nothing in this slice" : "No matches"}
-            hint={
-              fetched.length > 0
-                ? "Results exist but the active type/recency filters hide them all"
-                : `Nothing matches “${query}” in ${project || "all projects"}`
-            }
-          />
         ) : (
-          <div />
+          <Empty
+            title="Nothing in this slice"
+            hint="Results exist but the active type/recency filters hide them all"
+          />
         )}
       </div>
+      )}
 
       <MemoryInspector
         open={inspectorOpen}
