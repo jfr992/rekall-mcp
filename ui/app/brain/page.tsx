@@ -99,6 +99,7 @@ export default function BrainPage() {
           rows={streamQ.data?.rows ?? []}
           misses7d={insights.misses_7d}
           onSelect={setSelectedId}
+          scoped={project !== ""}
         />
 
         <div className="flex flex-col gap-3.5">
