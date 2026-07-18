@@ -895,7 +895,7 @@ class OptimizedMemoryTools(BaseToolProvider):
 
             lines = [f"Reflex cues: {', '.join(packet['cues'])}", ""]
             for memory in packet["memories"]:
-                lines.append(f"- [{memory['reason']}] {memory.get('content', '')}")
+                lines.append(f"- {memory.get('content', '')}")
             return "\n".join(lines).strip()
 
         registered.append("reflex_recall")

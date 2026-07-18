@@ -5,6 +5,21 @@ from __future__ import annotations
 from typing import Any
 
 _CUES = {
+    "destructive": {
+        "terms": (
+            "rm -rf",
+            "drop table",
+            "force-delete",
+            "forcedelete",
+            "rotate",
+            "prune",
+            "kubectl delete",
+            "terraform destroy",
+            "tofu destroy",
+            "helm uninstall",
+        ),
+        "query": "backups data loss incidents safety rules destructive operations",
+    },
     "iac": {
         "terms": ("terraform", "terragrunt", "tofu"),
         "query": "infrastructure terraform terragrunt tofu safety rules prior failures",
@@ -34,55 +49,60 @@ def detect_reflex_cues(text: str) -> list[str]:
     return cues
 
 
+MAX_CUES = 3
+
+
 def build_reflex_packet(
     manager,
     *,
     text: str,
     project: str | None = None,
     limit: int = 4,
+    cwd: str | None = None,
 ) -> dict[str, Any]:
-    """Build a small recall packet for cues matched by command or prompt text."""
-    cues = detect_reflex_cues(text)
-    memories = []
-    seen: set[str] = set()
-    if limit <= 0:
+    """Build a small recall packet for cues matched by command or prompt text.
+
+    Selects up to MAX_CUES matched cues (destructive first, then _CUES
+    declaration order) and merges their queries into a single recall call —
+    one network round trip regardless of how many cue groups matched.
+    """
+    all_cues = detect_reflex_cues(text)
+    cues = all_cues[:MAX_CUES]
+    dropped_cues = all_cues[MAX_CUES:]
+
+    if limit <= 0 or not cues:
         return {
             "text": text,
             "project": project,
             "cues": cues,
+            "dropped_cues": dropped_cues,
             "memories": [],
         }
 
-    base_slots, extra_slots = divmod(limit, len(cues)) if cues else (0, 0)
-    slots_by_cue = {
-        cue: base_slots + (1 if index < extra_slots else 0) for index, cue in enumerate(cues)
-    }
+    merged_query = " ".join(_CUES[cue]["query"] for cue in cues)
 
-    for cue in cues:
-        cue_slots = slots_by_cue[cue]
-        if cue_slots <= 0:
+    memories = []
+    seen: set[str] = set()
+    for memory in manager.recall(
+        query=merged_query,
+        project=project,
+        limit=limit,
+        score_threshold=0.5,
+        cwd=cwd,
+    ):
+        if len(memories) >= limit:
+            break
+        memory_id = memory.get("memory_id")
+        if memory_id and memory_id in seen:
             continue
-        query = _CUES[cue]["query"]
-        added_for_cue = 0
-        for memory in manager.recall(
-            query=query,
-            project=project,
-            limit=limit,
-            score_threshold=0.5,
-        ):
-            if added_for_cue >= cue_slots or len(memories) >= limit:
-                break
-            memory_id = memory.get("memory_id")
-            if memory_id and memory_id in seen:
-                continue
-            if memory_id:
-                seen.add(memory_id)
-            memories.append({**memory, "reason": cue})
-            added_for_cue += 1
+        if memory_id:
+            seen.add(memory_id)
+        memories.append(memory)
 
     return {
         "text": text,
         "project": project,
         "cues": cues,
+        "dropped_cues": dropped_cues,
         "memories": memories,
     }
