@@ -40,7 +40,7 @@ export const MemorySchema = z.object({
   lifecycle_reason: z.string().optional(),
   date: z.string().optional(),
   project: z.string().optional(),
-  salience: z.number().optional(),
+  salience: z.number().nullable().optional(),
   entities: z.array(z.string()).optional(),
 }).passthrough();
 

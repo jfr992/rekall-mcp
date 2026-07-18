@@ -81,6 +81,100 @@ _NOT_FOUND_RESULT = {
     "warnings": [],
 }
 
+# Legacy memory: all provenance null, no lifecycle_reason, healthy storage.
+# Nothing here should render as "unknown" — absence is omitted, not displayed.
+_LEGACY_RESULT = {
+    "memory": {
+        "memory_id": "2025-01-01_note_legacy1",
+        "content": "A memory saved before provenance tracking existed",
+        "type": "note",
+        "project": "rekall-mcp",
+    },
+    "neighbors": [],
+    "scope": {"project": "rekall-mcp", "agent": None, "repo_name": None},
+    "relationships": [],
+    "provenance": {
+        "agent": None,
+        "source_tool": None,
+        "source_event": None,
+        "timestamp": None,
+        "session_id": None,
+        "repo_name": None,
+        "branch": None,
+        "trust_boundary": None,
+    },
+    "lifecycle": {
+        "tier": "semantic",
+        "durability": 0.4,
+        "retention_days": None,
+        "lifecycle_reason": None,
+    },
+    "storage": {"qdrant": True, "yaml": True},
+    "warnings": ["missing_provenance"],
+}
+
+# Degraded storage: not indexed in Qdrant. Storage line must render, labeled.
+_DEGRADED_STORAGE_RESULT = {
+    "memory": {
+        "memory_id": "2026-07-01_note_degraded1",
+        "content": "YAML-only memory",
+        "type": "note",
+        "project": "rekall-mcp",
+    },
+    "neighbors": [],
+    "scope": {"project": "rekall-mcp", "agent": "claude-code", "repo_name": None},
+    "relationships": [],
+    "provenance": {
+        "agent": "claude-code",
+        "source_tool": "save_memory",
+        "source_event": None,
+        "timestamp": None,
+        "session_id": None,
+        "repo_name": None,
+        "branch": None,
+        "trust_boundary": None,
+    },
+    "lifecycle": {
+        "tier": "working",
+        "durability": 0.5,
+        "retention_days": None,
+        "lifecycle_reason": "default for note",
+    },
+    "storage": {"qdrant": False, "yaml": True},
+    "warnings": ["missing_index"],
+}
+
+# Fresh memory: full provenance including agent/source_tool, healthy storage.
+_FRESH_RESULT = {
+    "memory": {
+        "memory_id": "2026-07-15_decision_fresh1",
+        "content": "Use Qdrant for the vector store",
+        "type": "decision",
+        "project": "rekall-mcp",
+    },
+    "neighbors": [],
+    "scope": {"project": "rekall-mcp", "agent": "claude-code", "repo_name": "rekall-mcp"},
+    "relationships": [],
+    "provenance": {
+        "agent": "claude-code",
+        "source_tool": "save_memory",
+        "source_event": "PostToolUse",
+        "timestamp": "2026-07-15T10:00:00",
+        "session_id": "sess-fresh",
+        "repo_name": "rekall-mcp",
+        "branch": "main",
+        "trust_boundary": "public",
+    },
+    "lifecycle": {
+        "tier": "working",
+        "durability": 0.7,
+        "retention_days": 90,
+        "lifecycle_reason": "default for decision",
+    },
+    "storage": {"qdrant": True, "yaml": True},
+    "warnings": [],
+}
+
 
 # ---------------------------------------------------------------------------
 # Tests for _render_memory_detail helper
@@ -112,13 +206,16 @@ def test_render_memory_detail_contains_missing_neighbor_ids():
     assert "2026-07-01_decision_aaa1" in text, "missing neighbor id must appear in output"
 
 
-def test_render_memory_detail_null_fields_shown_as_unknown():
-    """Null provenance/lifecycle fields render as 'unknown', not 'None'."""
+def test_render_memory_detail_null_fields_omitted_not_unknown():
+    """Null provenance/lifecycle fields are omitted entirely — never 'None', never 'unknown'.
+
+    Slim pin (rev-2): absence is hidden from display, not shown as filler.
+    """
     from tools.builtin.memory import _render_memory_detail
 
     text = _render_memory_detail(_FULL_RESULT)
-    assert "None" not in text, "Python None must not appear; use 'unknown' instead"
-    assert "unknown" in text, "null fields must render as 'unknown'"
+    assert "None" not in text, "Python None must not appear"
+    assert "unknown" not in text, "absent fields must be omitted, not rendered as 'unknown'"
 
 
 def test_render_memory_detail_content_appears():
@@ -127,6 +224,59 @@ def test_render_memory_detail_content_appears():
 
     text = _render_memory_detail(_FULL_RESULT)
     assert "Use PostgreSQL for primary store" in text
+
+
+def test_render_memory_detail_legacy_memory_has_no_unknown_strings():
+    """Legacy memory (all-null provenance) renders no 'unknown' strings anywhere."""
+    from tools.builtin.memory import _render_memory_detail
+
+    text = _render_memory_detail(_LEGACY_RESULT)
+    assert "unknown" not in text
+    assert "None" not in text
+
+
+def test_render_memory_detail_legacy_memory_omits_trust_boundary():
+    """trust_boundary is never rendered, even as a labeled-absent line."""
+    from tools.builtin.memory import _render_memory_detail
+
+    text = _render_memory_detail(_LEGACY_RESULT)
+    assert "trust" not in text.lower()
+
+
+def test_render_memory_detail_legacy_memory_omits_lifecycle_reason():
+    """lifecycle_reason is dropped from the rendered surface (still lives in the response dict)."""
+    from tools.builtin.memory import _render_memory_detail
+
+    text = _render_memory_detail(_LEGACY_RESULT)
+    assert "reason" not in text.lower()
+
+
+def test_render_memory_detail_legacy_memory_omits_storage_when_healthy():
+    """Healthy storage (qdrant=True, yaml=True) renders no storage lines at all."""
+    from tools.builtin.memory import _render_memory_detail
+
+    text = _render_memory_detail(_LEGACY_RESULT)
+    assert "storage" not in text.lower()
+    assert "indexed" not in text.lower()
+    assert "persisted" not in text.lower()
+
+
+def test_render_memory_detail_degraded_storage_renders_qdrant_missing_line():
+    """Degraded storage (qdrant=False) keeps a labeled storage line."""
+    from tools.builtin.memory import _render_memory_detail
+
+    text = _render_memory_detail(_DEGRADED_STORAGE_RESULT)
+    assert "storage" in text.lower()
+    assert "qdrant" in text.lower()
+
+
+def test_render_memory_detail_fresh_memory_renders_agent_and_source_tool():
+    """Fresh memory with real provenance renders agent/source_tool values."""
+    from tools.builtin.memory import _render_memory_detail
+
+    text = _render_memory_detail(_FRESH_RESULT)
+    assert "claude-code" in text
+    assert "save_memory" in text
 
 
 # ---------------------------------------------------------------------------
