@@ -532,6 +532,7 @@ class OptimizedMemoryTools(BaseToolProvider):
             project: str | None = None,
             days: int | None = None,
             task_hint: str | None = None,
+            cwd: str | None = None,
         ) -> str:
             """Use this whenever the question references prior decisions, current values or
             settings, past learnings, or what was chosen/changed — before answering from
@@ -556,6 +557,8 @@ class OptimizedMemoryTools(BaseToolProvider):
                     e.g. "auth middleware refactor" or "vector_store named vectors"
                     — 2+ words. Matching memories surface first; single words are
                     ignored server-side.
+                cwd: Pass your current working directory so the recall is
+                    attributed to your project.
             """
             return self.manager.recall_formatted(
                 query=query,
@@ -564,6 +567,7 @@ class OptimizedMemoryTools(BaseToolProvider):
                 project=project,
                 days_back=days,
                 task_hint=task_hint,
+                cwd=cwd,
             )
 
         registered.append("recall_memories")
