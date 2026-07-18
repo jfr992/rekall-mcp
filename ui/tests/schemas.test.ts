@@ -139,4 +139,12 @@ describe("schemas parse real fixtures", () => {
     expect(miss.payload.top_score).toBeNull();
     expect(parsed.event_window.events).toBe(4211);
   });
+
+  test("StreamRecalledRowSchema keeps capture_origin on recalled rows", () => {
+    const parsed = StreamResponseSchema.parse(load("stream.json"));
+    const recalled = parsed.rows[1];
+    if (recalled.kind !== "recalled") throw new Error("expected recalled row");
+    // schema must not strip the field — the feed renders it when query is null
+    expect(recalled.payload.capture_origin).toBe("recall");
+  });
 });

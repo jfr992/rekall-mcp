@@ -20,7 +20,8 @@
         "query": "how did we fix the rrf filter",
         "memory_ids": ["2026-07-01_learning_ff00aa11"],
         "top_score": 0.87,
-        "project": "rekall-mcp"
+        "project": "rekall-mcp",
+        "capture_origin": "recall"
       }
     },
     {
@@ -30,7 +31,8 @@
         "query": "nothing matches this",
         "memory_ids": [],
         "top_score": null,
-        "project": "rekall-mcp"
+        "project": "rekall-mcp",
+        "capture_origin": "recall"
       }
     },
     {
