@@ -726,6 +726,35 @@ def test_manager_lifecycle_both_none_warns():
     assert "missing_lifecycle" in result["warnings"]
 
 
+def test_manager_lifecycle_reason_only_no_missing_lifecycle_warning():
+    """lifecycle_reason present but durability absent: missing_lifecycle must NOT fire.
+
+    Contract (ARCHITECTURE.md:513-520): only fires when BOTH are null.
+    """
+    from memory.manager import MemoryManager
+
+    memory_id = "2026-07-01_note_reasononly"
+    memory = {
+        "memory_id": memory_id,
+        "content": "test",
+        "type": "note",
+        "project": "rekall-mcp",
+        "agent": "claude-code",
+        "lifecycle_reason": "default for note",
+        # durability absent
+    }
+
+    mgr = MagicMock(spec=MemoryManager)
+    mgr.store = _make_mock_store({memory_id: memory})
+    mgr.knowledge_graph = _make_mock_graph([])
+    mgr.memory_dir = MagicMock()
+    mgr.memory_dir.rglob.return_value = []
+
+    result = MemoryManager.get_memory_detail(mgr, memory_id)
+
+    assert "missing_lifecycle" not in result["warnings"]
+
+
 # ---------------------------------------------------------------------------
 # Fix 1: _find_in_yaml key matching — production shape uses "id", not "memory_id"
 # ---------------------------------------------------------------------------
@@ -934,3 +963,37 @@ def test_warning_absent_for_real_agent():
     result = MemoryManager.get_memory_detail(mgr, memory_id)
 
     assert "missing_provenance" not in result["warnings"]
+
+
+def test_manager_provenance_unknown_agent_normalized_to_null():
+    """agent='unknown' in the stored payload must render as None in provenance.
+
+    The stored payload itself is untouched (only the response is normalized).
+    The missing_provenance warning pin (agent='unknown' counts as absent) stays green.
+    """
+    from memory.manager import MemoryManager
+
+    memory_id = "2026-07-01_note_unkagent"
+    memory = {
+        "memory_id": memory_id,
+        "content": "saved with scope-detector default agent",
+        "type": "note",
+        "project": "rekall-mcp",
+        "agent": "unknown",
+        "durability": 0.5,
+        "lifecycle_reason": "default",
+    }
+
+    mgr = MagicMock(spec=MemoryManager)
+    mgr.store = _make_mock_store({memory_id: memory})
+    mgr.knowledge_graph = _make_mock_graph([])
+    mgr.memory_dir = MagicMock()
+    mgr.memory_dir.rglob.return_value = []
+
+    result = MemoryManager.get_memory_detail(mgr, memory_id)
+
+    assert result["provenance"]["agent"] is None
+    # stored payload untouched
+    assert result["memory"]["agent"] == "unknown"
+    # existing warning pin still true: agent="unknown" counts as absent
+    assert "missing_provenance" in result["warnings"]
