@@ -79,4 +79,12 @@ describe("Cockpit dashboard page", () => {
     fireEvent.click(row);
     expect(await screen.findByRole("dialog")).toBeInTheDocument();
   });
+
+  test("live recall feed tile never expands — it caps rows and links out to Stream", async () => {
+    renderPage();
+    await screen.findByText("how did we fix the rrf filter");
+    expect(
+      screen.queryByRole("button", { name: /show \d+ more/i })
+    ).not.toBeInTheDocument();
+  });
 });
