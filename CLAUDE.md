@@ -104,6 +104,7 @@ Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/h
 
 - **`rekall-restore.sh`** (UserPromptSubmit) — fetch-don't-inject. Status line only (~92 bytes/session). **Don't add context dumps here.** If you want context, the agent calls `recall_memories()` on demand.
 - **`rekall-observe.sh`** (Stop) — Haiku judge with cheap signal gate. **Never add a hook that fires Haiku per turn without a gate.** Current gate fires on (a) new commits since last fire, (b) durability keyword in last user message, or (c) 5+ turns AND zero saves today. Without the gate you'd burn ~$30/month per active developer.
+- **`rekall-reflex.sh`** (PreToolUse, Bash) — the sanctioned exception to "no proactive injection" below. Pattern: local per-group cue gate (word-boundary match, no network on a miss) → once-per-session debounce per matched cue → bounded fetch (0.1s connect / 1s total) to `/api/memory/reflex` → ≤800-codepoint untrusted-framed packet injected via `additionalContext`. Never exits 2, never sets `permissionDecision` — it informs, it never gates. Kill switches: `REKALL_AUTOSAVE=0` (master) or `REKALL_REFLEX=0` (dedicated). Any new PreToolUse/PostToolUse hook that injects context must follow this same shape or justify the deviation.
 
 **Re-entrancy:** if a hook invokes `claude -p`, that inner Claude Code instance fires its own hooks. Guard with `REKALL_JUDGE_INFLIGHT=1` set before exec, checked at the top of the hook. Without this, infinite hook recursion.
 
@@ -120,7 +121,7 @@ Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/h
 ## What we deliberately don't do
 
 - **`/dashboard` route.** Removed in v1.5.0 (409 lines of embedded HTML). The cockpit at `:3333` is the supported UI. Don't bring it back.
-- **Proactive context injection.** The restore hook is zero-injection by design — anything in the data is reachable via `recall_memories()` on demand. Per-session firehose injection burns tokens for noise.
+- **Firehose proactive injection.** The restore hook stays zero-injection by design — anything in the data is reachable via `recall_memories()` on demand. `rekall-reflex.sh` is the one sanctioned, bounded exception (see hook discipline above); it doesn't reopen the door to per-turn context dumps.
 - **Per-turn LLM judge without a gate.** Cost cliff. See hook discipline above.
 - **Synthesizing rules into CLAUDE.md from imagined sources.** Real incident — a rule about commit footers got fabricated and almost shipped. Verbatim source or explicit author intent only.
 - **Partial vocab refits.** BM25 token IDs are assigned at fit time — a refit without rewriting every point's sparse vector in the same transaction (`resparse`) produces silently wrong matches. Never cap or sample the resparse corpus.
@@ -149,6 +150,7 @@ Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/h
 | Restore hook fetches 12KB of "proactive context" but echoes only the status line | pre-v1.5.0 `rekall-restore.sh` | Either drop the fetch entirely (current — nuclear mode) or actually inject (was the bug we caught) |
 | Compose defaults to named volumes → existing installs mount empty stores and "all memories are gone" | `docker-compose.yaml` (v1.11) | Layer `docker-compose.bind-mounts.example.yaml` (or copy it to `docker-compose.override.yaml`) to keep the `~/.claude/` bind mounts |
 | Stale `.env` `EMBEDDING_PROVIDER=sentence-transformers` on the slim image (no torch) silently degrades endpoints to zero | v1.11 deploy | Remove the var or set `fastembed` (vectors are identical); #57 tracks making the failure loud |
+| PreToolUse hook exit 2 blocks the tool call — every reflex failure path must exit 0 | `rekall-reflex.sh` | `\|\| exit 0` guards on every fallible step; no bare `set -e` exit |
 | BM25 vocab frozen at fit time → identifiers born later miss recall entirely (silent dense-only degradation) | prod, Jul 5–17 vocab | `POST /api/memory/resparse`; doctor `bm25` block surfaces drift (OOV window, vocab age, identifier flag) |
 | One symmetric `encode()` for docs AND queries → sparse scores ~IDF² (IDF applied both sides) | `sparse_encoder.py` (pre-v1.13) | `encode_document` / `encode_query` split — IDF once, document side only |
 
