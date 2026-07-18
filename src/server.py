@@ -383,6 +383,18 @@ def _read_int(query_params, key: str, default: int, lo: int = 1, hi: int = 10000
     return max(lo, min(value, hi))
 
 
+_DAY_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def _read_day(query_params, key: str) -> str | None:
+    raw = query_params.get(key)
+    if raw is None:
+        return None
+    if not _DAY_RE.match(raw):
+        raise RequestValidationError(f"{key} must be a YYYY-MM-DD date")
+    return raw
+
+
 def _read_float(query_params, key: str, default: float, lo: float = 0.0, hi: float = 1.0) -> float:
     raw = query_params.get(key)
     if raw is None:
@@ -885,11 +897,17 @@ async def api_memory_stream(request):
         project = _safe_project(request.query_params.get("project"))
         scoped = project not in (None, "all")
         limit = _read_int(request.query_params, "limit", 50, lo=1, hi=500)
+        after = _read_day(request.query_params, "after")
+        before = _read_day(request.query_params, "before")
         manager = _get_memory_manager()
 
         records = manager.store.scroll_all(filters={"project": project} if scoped else None)
         snapshot = event_snapshot(manager.event_log)
-        return _ok(build_stream(records, snapshot, project=project, limit=limit))
+        return _ok(
+            build_stream(
+                records, snapshot, project=project, limit=limit, after=after, before=before
+            )
+        )
     except RequestValidationError as e:
         return _bad_request(str(e))
     except Exception as e:

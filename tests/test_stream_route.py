@@ -216,6 +216,96 @@ def test_stream_project_scope_filters_records_and_events(monkeypatch, tmp_path):
     ]
 
 
+def test_stream_after_filters_older_days_inclusive(monkeypatch, tmp_path):
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    manager.store.scroll_all.return_value = [
+        _record("r-new", "proj-a", days_ago=0),
+        _record("r-edge", "proj-a", days_ago=2),
+        _record("r-old", "proj-a", days_ago=5),
+    ]
+
+    r = tc.get("/api/memory/stream", params={"after": _date(2)})
+
+    assert r.status_code == 200
+    ids = [row["payload"]["memory_id"] for row in r.json()["rows"]]
+    assert ids == ["r-new", "r-edge"]  # inclusive day bound; r-old dropped
+
+
+def test_stream_before_filters_newer_days_inclusive(monkeypatch, tmp_path):
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    manager.store.scroll_all.return_value = [
+        _record("r-new", "proj-a", days_ago=0),
+        _record("r-edge", "proj-a", days_ago=2),
+        _record("r-old", "proj-a", days_ago=5),
+    ]
+
+    r = tc.get("/api/memory/stream", params={"before": _date(2)})
+
+    assert r.status_code == 200
+    ids = [row["payload"]["memory_id"] for row in r.json()["rows"]]
+    assert ids == ["r-edge", "r-old"]  # inclusive day bound; r-new dropped
+
+
+def test_stream_after_and_before_bound_one_day_across_kinds(monkeypatch, tmp_path):
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    log = manager.event_log
+    log.append(
+        _ev(
+            "memory_recalled",
+            "proj-a",
+            {"query": "in-window", "memory_ids": ["m1"], "memories": [], "session_id": None},
+            _at(2),
+        )
+    )
+    log.append(
+        _ev(
+            "memory_recalled",
+            "proj-a",
+            {"query": "too-new", "memory_ids": [], "memories": [], "session_id": None},
+            _at(0),
+        )
+    )
+    manager.store.scroll_all.return_value = [
+        _record("r-in", "proj-a", days_ago=2),
+        _record("r-too-old", "proj-a", days_ago=4),
+    ]
+
+    r = tc.get("/api/memory/stream", params={"after": _date(2), "before": _date(2)})
+
+    assert r.status_code == 200
+    rows = r.json()["rows"]
+    # Both kinds survive the day window; too-new event and too-old record don't.
+    assert sorted(row["kind"] for row in rows) == ["recalled", "saved"]
+    assert all(row["at"][:10] == _date(2) for row in rows)
+
+
+def test_stream_rejects_malformed_day_bounds(monkeypatch, tmp_path):
+    tc, _ = _rest_client(monkeypatch, tmp_path)
+    assert tc.get("/api/memory/stream", params={"after": "yesterday"}).status_code == 400
+    assert tc.get("/api/memory/stream", params={"before": "2026/07/01"}).status_code == 400
+
+
+def test_stream_event_window_reports_oldest_event_even_when_range_hides_rows(monkeypatch, tmp_path):
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    manager.event_log.append(
+        _ev(
+            "memory_recalled",
+            "proj-a",
+            {"query": "old", "memory_ids": [], "memories": [], "session_id": None},
+            _at(10),
+        )
+    )
+
+    r = tc.get("/api/memory/stream", params={"after": _date(2)})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["rows"] == []  # the recall is older than the range
+    # The window marker still surfaces the snapshot bounds so the UI can say
+    # which recalls/promotions it cannot see.
+    assert body["event_window"] == {"events": 1, "oldest_at": _at(10)}
+
+
 def test_stream_merges_newest_first_and_honors_limit(monkeypatch, tmp_path):
     tc, manager = _rest_client(monkeypatch, tmp_path)
     log = manager.event_log

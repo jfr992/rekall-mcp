@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Chip } from "@/components/ui/chip";
 import { Empty } from "@/components/ui/empty";
 import { MonoLabel } from "@/components/ui/mono-label";
 import { MemoryInspector } from "@/components/memory-inspector/memory-inspector";
@@ -91,7 +92,16 @@ export function RecallWorkbench({ project }: Props) {
         </div>
         {results.data ? (
           <p className="mt-2 text-right font-mono text-[10px] text-[var(--fg-dim)]">
-            {`${fetched.length} results · ${shown.length} shown`}
+            {fetched.length} results ·{" "}
+            <span
+              className={
+                typeFilter !== null || recency !== "all"
+                  ? "text-[var(--accent-primary)]"
+                  : undefined
+              }
+            >
+              {shown.length} shown
+            </span>
           </p>
         ) : null}
       </div>
@@ -155,17 +165,9 @@ export function RecallWorkbench({ project }: Props) {
             <MonoLabel className="mb-2.5 block tracking-[0.16em]">RECENCY</MonoLabel>
             <div className="flex flex-col gap-1.5">
               {RECENCY_OPTIONS.map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  aria-pressed={recency === r}
-                  onClick={() => setRecency(r)}
-                  className={`cursor-pointer rounded px-1 py-0.5 text-left text-xs transition-colors hover:text-[var(--fg)] ${
-                    recency === r ? "text-[var(--fg)]" : "text-[var(--fg-muted)]"
-                  }`}
-                >
+                <Chip key={r} active={recency === r} onClick={() => setRecency(r)}>
                   {r}
-                </button>
+                </Chip>
               ))}
             </div>
           </div>
