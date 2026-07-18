@@ -102,6 +102,23 @@ for idx, e in enumerate(entries):
         if first_recall_idx is None:
             first_recall_idx = idx
 
+# PreToolUse reflex packets land as "attachment" entries, not tool_result
+# blocks — invisible to the scan above. Without this, edits_after_recall /
+# test_passes_after_recall never see reflex-driven recalls.
+for idx, e in enumerate(entries):
+    if e.get("type") != "attachment" or e.get("hookEvent") != "PreToolUse":
+        continue
+    try:
+        envelope = json.loads(e.get("stdout", ""))
+    except Exception:
+        continue
+    context = envelope.get("hookSpecificOutput", {}).get("additionalContext") or ""
+    if "REKALL REFLEX" not in context:
+        continue
+    recalled.update(MID.findall(context))
+    if first_recall_idx is None or idx < first_recall_idx:
+        first_recall_idx = idx
+
 if not recalled:
     sys.exit(0)
 
