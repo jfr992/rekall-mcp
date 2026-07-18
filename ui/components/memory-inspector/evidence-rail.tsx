@@ -10,7 +10,7 @@ type Props = {
   storage: Storage | undefined;
   warnings: string[] | undefined;
   durability: number | null | undefined;
-  salience: number | undefined;
+  salience: number | null | undefined;
   reinforcement_count: number | null | undefined;
   missingNeighborIds?: string[] | null;
 };
@@ -42,89 +42,96 @@ export function EvidenceRail({
   missingNeighborIds,
 }: Props) {
   // Backend is the single source of truth for warnings — map codes to human labels
-  const allWarnings = (warnings ?? []).map((w) => WARNING_LABELS[w] ?? w);
+  const backendWarnings = (warnings ?? []).map((w) => WARNING_LABELS[w] ?? w);
 
-  // Null/undefined → "unknown"; explicit 0 → "0.00"
-  const durabilityDisplay = durability == null ? "unknown" : durability.toFixed(2);
+  // Storage warnings are derived here — the backend emits no such warning
+  const storageWarnings = [
+    storage && storage.qdrant === false ? "not indexed in Qdrant" : null,
+    storage && storage.yaml === false ? "missing from YAML" : null,
+  ].filter((w): w is string => w !== null);
 
-  // Absent → "legacy/unknown"; present → formatted
-  const salienceDisplay =
-    salience !== undefined ? salience.toFixed(2) : "legacy/unknown";
+  const allWarnings = [...backendWarnings, ...storageWarnings];
 
-  // Null/undefined → "unknown"; number (including 0) → "N×"
-  const reinforcementDisplay =
-    reinforcement_count == null ? "unknown" : `${reinforcement_count}×`;
+  const hasSource = !!(
+    provenance &&
+    (provenance.agent ||
+      provenance.source_tool ||
+      provenance.repo_name ||
+      provenance.repo_remote ||
+      provenance.branch ||
+      provenance.source_event)
+  );
+
+  const hasDurability = durability !== null && durability !== undefined;
+
+  const hasSalience = salience !== null && salience !== undefined;
+
+  const lifecycleLine = [
+    lifecycle?.tier,
+    lifecycle?.retention_days != null ? `retention ${lifecycle.retention_days}d` : null,
+    reinforcement_count ? `reinforced ${reinforcement_count}×` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="space-y-4 border-t border-[var(--border)] pt-4 font-mono text-xs">
       {/* Source */}
-      {provenance && (() => {
-        const hasAnyField = !!(
-          provenance.agent ||
-          provenance.source_tool ||
-          provenance.source_event ||
-          provenance.repo_name ||
-          provenance.branch ||
-          provenance.trust_boundary
-        );
-        return (
-          <section>
-            <MonoLabel className="mb-2 block">Source</MonoLabel>
-            {hasAnyField ? (
-              <div className="space-y-1">
-                {provenance.agent && (
-                  <Field label="agent" value={provenance.agent} />
-                )}
-                {provenance.source_tool && (
-                  <Field label="tool" value={provenance.source_tool} />
-                )}
-                {provenance.source_event && (
-                  <Field label="event" value={provenance.source_event} />
-                )}
-                {provenance.repo_name && (
-                  <Field label="repo" value={provenance.repo_name} />
-                )}
-                {provenance.branch && (
-                  <Field label="branch" value={provenance.branch} />
-                )}
-                {provenance.trust_boundary && (
-                  <Field label="trust" value={provenance.trust_boundary} />
-                )}
-              </div>
-            ) : (
-              <p className="text-xs text-[var(--fg-muted)]">no provenance recorded (legacy memory)</p>
+      {hasSource && (
+        <section>
+          <MonoLabel className="mb-2 block">Source</MonoLabel>
+          <div className="space-y-1">
+            {provenance!.agent && <Field label="agent" value={provenance!.agent} />}
+            {provenance!.source_tool && (
+              <Field label="tool" value={provenance!.source_tool} />
             )}
-          </section>
-        );
-      })()}
+            {provenance!.source_event && (
+              <Field label="event" value={provenance!.source_event} />
+            )}
+            {provenance!.repo_name && (
+              <Field label="repo" value={provenance!.repo_name} />
+            )}
+            {provenance!.repo_remote && (
+              <Field label="remote" value={provenance!.repo_remote} />
+            )}
+            {provenance!.branch && <Field label="branch" value={provenance!.branch} />}
+          </div>
+        </section>
+      )}
 
       {/* Lifecycle */}
       <section>
         <MonoLabel className="mb-2 block">Lifecycle</MonoLabel>
         <div className="space-y-1">
-          {lifecycle?.tier && <Field label="tier" value={lifecycle.tier} />}
-          <Field label="durability" value={durabilityDisplay} />
-          <Field label="salience" value={salienceDisplay} />
-          <Field label="reinforcement" value={reinforcementDisplay} />
-          {lifecycle?.lifecycle_reason && (
-            <Field label="reason" value={lifecycle.lifecycle_reason} />
+          {lifecycleLine && (
+            <p className="text-xs text-[var(--fg)]">{lifecycleLine}</p>
           )}
-          {lifecycle?.retention_days != null && (
-            <Field label="retention" value={`${lifecycle.retention_days}d`} />
+          {hasDurability && (
+            <div className="grid grid-cols-2 gap-2">
+              <MonoLabel>durability</MonoLabel>
+              <div
+                role="meter"
+                aria-label="durability"
+                aria-valuenow={durability as number}
+                aria-valuemin={0}
+                aria-valuemax={1}
+                title={(durability as number).toFixed(2)}
+                className="h-1.5 w-full self-center overflow-hidden rounded-full bg-[rgba(45,212,160,0.12)]"
+              >
+                <div
+                  className="h-full rounded-full bg-[var(--accent-primary)]"
+                  style={{
+                    width: `${Math.max(0, Math.min((durability as number) * 100, 100))}%`,
+                  }}
+                />
+              </div>
+            </div>
+          )}
+          {hasSalience && (
+            <Field label="salience" value={(salience as number).toFixed(2)} />
           )}
         </div>
       </section>
-
-      {/* Storage */}
-      {storage && (
-        <section>
-          <MonoLabel className="mb-2 block">Storage</MonoLabel>
-          <div className="space-y-1">
-            <Field label="qdrant" value={storage.qdrant ? "indexed" : "not indexed"} />
-            <Field label="yaml" value={storage.yaml ? "persisted" : "not persisted"} />
-          </div>
-        </section>
-      )}
 
       {/* Warnings */}
       {(allWarnings.length > 0 || (missingNeighborIds?.length ?? 0) > 0) && (
