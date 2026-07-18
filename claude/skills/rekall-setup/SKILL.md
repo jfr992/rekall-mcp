@@ -13,8 +13,8 @@ Runs the bundled installer at `claude/setup/install.sh`. Safe to re-run; it back
 
 1. Preflight: checks `docker`, `jq`, `curl`, `python3`
 2. Starts Qdrant + backend (skip with `--skip-backend`)
-3. Copies `rekall-restore.sh` + `rekall-observe.sh` to `~/.claude/hooks/`
-4. Backs up + patches `~/.claude/settings.json` with `UserPromptSubmit` and `Stop` hook entries (deduped — won't add if already wired)
+3. Copies `rekall-restore.sh` + `rekall-observe.sh` + `rekall-reflex.sh` to `~/.claude/hooks/`
+4. Backs up + patches `~/.claude/settings.json` with `UserPromptSubmit`, `Stop`, and `PreToolUse` (Bash matcher, `rekall-reflex.sh`) hook entries (deduped — won't add if already wired; repairs a missing/wrong matcher on an existing reflex entry in place)
 5. Copies all 9 slash commands to `~/.claude/skills/`
 6. Verifies backend health + reports memory count
 
