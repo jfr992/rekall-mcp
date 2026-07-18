@@ -302,6 +302,21 @@ describe("KB recall workbench", () => {
     expect(screen.getByRole("group", { name: /recency/i })).toBeInTheDocument();
   });
 
+  test("facet rail never renders a zero-count row", async () => {
+    vi.mocked(searchApi.postRecall).mockResolvedValue(RESULTS);
+    renderPage();
+    await typeQuery();
+
+    const rail = within(screen.getByRole("group", { name: /type facets/i }));
+    const rows = rail.getAllByRole("button");
+    // all + only the types present in the results — nothing else
+    expect(rows).toHaveLength(4);
+    expect(rail.queryByRole("button", { name: /fact/i })).not.toBeInTheDocument();
+    for (const row of rows) {
+      expect(row.textContent).not.toMatch(/\b0\b/);
+    }
+  });
+
   test("empty query shows a prompt and fires no recall", async () => {
     renderPage();
 
