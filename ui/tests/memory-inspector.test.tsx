@@ -84,8 +84,40 @@ const detail: DetailResponseV2 = {
     retention_days: 90,
     lifecycle_reason: "default for decision",
   },
-  storage: { qdrant: true, yaml: false },
+  storage: { qdrant: true, yaml: true },
   warnings: [],
+};
+
+// All-null provenance / no lifecycle_reason / zero reinforcement / no salience — a legacy pre-lifecycle memory.
+const legacyDetail: DetailResponseV2 = {
+  ...detail,
+  memory: {
+    memory_id: "2020-01-01_fact_legacy",
+    content: "Legacy pre-lifecycle memory",
+    type: "fact",
+    tier: "episodic",
+    date: "2020-01-01",
+    project: "rekall-mcp",
+  },
+  provenance: {
+    agent: null,
+    source_tool: null,
+    source_event: null,
+    timestamp: null,
+    session_id: null,
+    repo_name: null,
+    repo_remote: null,
+    branch: null,
+    trust_boundary: null,
+  },
+  lifecycle: {
+    tier: "episodic",
+    durability: null,
+    retention_days: 30,
+    lifecycle_reason: null,
+  },
+  storage: { qdrant: true, yaml: true },
+  warnings: ["missing_provenance"],
 };
 
 const defaultProps = {
@@ -106,31 +138,55 @@ describe("MemoryInspector", () => {
     expect(matches).toHaveLength(1);
   });
 
-  test("null durability renders 'unknown', not '0.00'", () => {
+  test("null durability renders no durability meter or text", () => {
     const mod: DetailResponseV2 = {
       ...detail,
       lifecycle: { ...detail.lifecycle!, durability: null },
     };
     render(<MemoryInspector {...defaultProps} detail={mod} />);
     expect(screen.queryByText("0.00")).not.toBeInTheDocument();
-    // "unknown" should appear at least for durability
-    expect(screen.getAllByText("unknown").length).toBeGreaterThan(0);
+    expect(screen.queryByText("unknown")).not.toBeInTheDocument();
+    expect(screen.queryByRole("meter", { name: "durability" })).not.toBeInTheDocument();
   });
 
-  test("actual durability 0 renders '0.00'", () => {
+  test("actual durability 0 renders a meter with title '0.00'", () => {
     const mod: DetailResponseV2 = {
       ...detail,
       lifecycle: { ...detail.lifecycle!, durability: 0 },
     };
     render(<MemoryInspector {...defaultProps} detail={mod} />);
-    expect(screen.getByText("0.00")).toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: "durability" })).toHaveAttribute(
+      "title",
+      "0.00",
+    );
   });
 
-  test("missing salience renders 'legacy/unknown', not a low numeric value", () => {
+  test("durability 0.65 renders a meter with title '0.65'", () => {
+    render(<MemoryInspector {...defaultProps} />);
+    expect(screen.getByRole("meter", { name: "durability" })).toHaveAttribute(
+      "title",
+      "0.65",
+    );
+  });
+
+  test("missing salience renders no salience row and does not crash", () => {
     const { salience: _removed, ...memWithoutSalience } = detail.memory!;
     const mod: DetailResponseV2 = { ...detail, memory: memWithoutSalience };
     render(<MemoryInspector {...defaultProps} detail={mod} />);
-    expect(screen.getByText("legacy/unknown")).toBeInTheDocument();
+    expect(screen.queryByText("legacy/unknown")).not.toBeInTheDocument();
+    expect(screen.queryByText(/salience/i)).not.toBeInTheDocument();
+  });
+
+  test("numeric salience 0.7 renders formatted '0.70' salience row", () => {
+    render(<MemoryInspector {...defaultProps} />);
+    expect(screen.getByText("salience")).toBeInTheDocument();
+    expect(screen.getByText("0.70")).toBeInTheDocument();
+  });
+
+  test("lifecycle_reason is never rendered even when present", () => {
+    render(<MemoryInspector {...defaultProps} />);
+    expect(screen.queryByText("default for decision")).not.toBeInTheDocument();
+    expect(screen.queryByText("reason")).not.toBeInTheDocument();
   });
 
   test("provenance fields render in evidence rail", () => {
@@ -138,7 +194,20 @@ describe("MemoryInspector", () => {
     expect(screen.getByText("claude-code")).toBeInTheDocument();
     expect(screen.getByText("save_memory")).toBeInTheDocument();
     expect(screen.getByText("main")).toBeInTheDocument();
-    expect(screen.getByText("public")).toBeInTheDocument();
+  });
+
+  test("fresh provenance (agent/source_tool/repo_name) renders Source section with those rows", () => {
+    render(<MemoryInspector {...defaultProps} />);
+    expect(screen.getByText("Source")).toBeInTheDocument();
+    expect(screen.getByText("claude-code")).toBeInTheDocument();
+    expect(screen.getByText("save_memory")).toBeInTheDocument();
+  });
+
+  test("trust_boundary is never rendered even when present", () => {
+    render(<MemoryInspector {...defaultProps} />);
+    // Fixture provenance.trust_boundary = "public" — must not surface anywhere
+    expect(screen.queryByText("public")).not.toBeInTheDocument();
+    expect(screen.queryByText("trust")).not.toBeInTheDocument();
   });
 
   test("in-edge supersedes relation renders 'superseded by'", () => {
@@ -244,21 +313,27 @@ describe("MemoryInspector", () => {
 
   // --- IMPORTANT: reinforcement_count in evidence rail ---
 
-  test("reinforcement_count 3 renders '3×' in evidence rail", () => {
+  test("reinforcement_count 3 renders 'reinforced 3×' in evidence rail", () => {
     const mod: DetailResponseV2 = {
       ...detail,
       memory: { ...detail.memory!, reinforcement_count: 3 },
     };
     render(<MemoryInspector {...defaultProps} detail={mod} />);
-    expect(screen.getByText("3×")).toBeInTheDocument();
+    expect(screen.getByText(/reinforced 3×/)).toBeInTheDocument();
   });
 
-  test("undefined reinforcement_count renders 'unknown' in evidence rail", () => {
+  test("reinforcement_count 0 renders no reinforced clause", () => {
+    render(<MemoryInspector {...defaultProps} />);
+    // Default fixture has reinforcement_count: 0
+    expect(screen.queryByText(/reinforced/i)).not.toBeInTheDocument();
+  });
+
+  test("undefined reinforcement_count renders no reinforced clause and no 'unknown'", () => {
     const { reinforcement_count: _removed, ...memWithout } = detail.memory!;
     const mod: DetailResponseV2 = { ...detail, memory: memWithout };
     render(<MemoryInspector {...defaultProps} detail={mod} />);
-    // Durability is 0.65 (not null), so the only "unknown" comes from reinforcement
-    expect(screen.getByText("unknown")).toBeInTheDocument();
+    expect(screen.queryByText(/reinforced/i)).not.toBeInTheDocument();
+    expect(screen.queryByText("unknown")).not.toBeInTheDocument();
   });
 
   // --- IMPORTANT: neighbor rows show date + project ---
@@ -317,8 +392,8 @@ describe("MemoryInspector", () => {
 
   // --- Fix T9: legacy source fallback ---
 
-  test("all-null provenance renders 'no provenance recorded (legacy memory)'", () => {
-    const legacyDetail: DetailResponseV2 = {
+  test("all-null provenance renders no Source heading at all", () => {
+    const legacySourceDetail: DetailResponseV2 = {
       ...detail,
       provenance: {
         agent: null,
@@ -332,13 +407,40 @@ describe("MemoryInspector", () => {
         trust_boundary: null,
       },
     };
-    render(<MemoryInspector {...defaultProps} detail={legacyDetail} />);
+    render(<MemoryInspector {...defaultProps} detail={legacySourceDetail} />);
+    expect(screen.queryByText("Source")).not.toBeInTheDocument();
     expect(
-      screen.getByText("no provenance recorded (legacy memory)"),
-    ).toBeInTheDocument();
+      screen.queryByText("no provenance recorded (legacy memory)"),
+    ).not.toBeInTheDocument();
   });
 
   // --- IMPORTANT: status badge ---
+
+  test("qdrant false renders 'not indexed in Qdrant' warning row", () => {
+    const mod: DetailResponseV2 = {
+      ...detail,
+      storage: { qdrant: false, yaml: true },
+    };
+    render(<MemoryInspector {...defaultProps} detail={mod} />);
+    expect(screen.getByText("not indexed in Qdrant")).toBeInTheDocument();
+  });
+
+  test("yaml false renders 'missing from YAML' warning row", () => {
+    const mod: DetailResponseV2 = {
+      ...detail,
+      storage: { qdrant: true, yaml: false },
+    };
+    render(<MemoryInspector {...defaultProps} detail={mod} />);
+    expect(screen.getByText("missing from YAML")).toBeInTheDocument();
+  });
+
+  test("healthy storage (qdrant true, yaml true) renders no storage warning text", () => {
+    render(<MemoryInspector {...defaultProps} />);
+    expect(screen.queryByText("not indexed in Qdrant")).not.toBeInTheDocument();
+    expect(screen.queryByText("missing from YAML")).not.toBeInTheDocument();
+    expect(screen.queryByText("indexed")).not.toBeInTheDocument();
+    expect(screen.queryByText("persisted")).not.toBeInTheDocument();
+  });
 
   test("status badge shows 'superseded' when in-edge supersedes relationship present", () => {
     // Default fixture has relationships[0]: direction="in", relation="supersedes"
@@ -389,6 +491,22 @@ describe("MemoryInspector", () => {
     };
     render(<MemoryInspector {...defaultProps} detail={detailWithNullMem} />);
     expect(screen.getByText("memory unavailable")).toBeInTheDocument();
+  });
+
+  test("legacy fixture renders none of the fabricated/plumbing terms", () => {
+    render(<MemoryInspector {...defaultProps} detail={legacyDetail} />);
+    expect(screen.queryByText("unknown")).not.toBeInTheDocument();
+    expect(screen.queryByText("legacy/unknown")).not.toBeInTheDocument();
+    expect(screen.queryByText("trust")).not.toBeInTheDocument();
+    expect(screen.queryByText("reason")).not.toBeInTheDocument();
+    expect(screen.queryByText("indexed")).not.toBeInTheDocument();
+    expect(screen.queryByText("persisted")).not.toBeInTheDocument();
+  });
+
+  test("legacy fixture lifecycle line shows tier and retention, no reinforced clause", () => {
+    render(<MemoryInspector {...defaultProps} detail={legacyDetail} />);
+    expect(screen.getByText("episodic · retention 30d")).toBeInTheDocument();
+    expect(screen.queryByText(/reinforced/i)).not.toBeInTheDocument();
   });
 
   test("status badge shows 'current' when no contradicts, no incoming supersedes, no legacy warnings", () => {
