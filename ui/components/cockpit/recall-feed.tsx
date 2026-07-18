@@ -1,6 +1,7 @@
 "use client";
 
 import { MonoLabel } from "@/components/ui/mono-label";
+import { recallOriginLabel } from "@/lib/recall-origin";
 import type { StreamRow } from "@/lib/schemas";
 
 type RecalledRow = Extract<StreamRow, { kind: "recalled" }>;
@@ -9,6 +10,7 @@ type Props = {
   rows: StreamRow[];
   misses7d: number;
   onSelect: (memoryId: string) => void;
+  scoped?: boolean;
 };
 
 function hhmm(at: string): string {
@@ -17,7 +19,7 @@ function hhmm(at: string): string {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
-export function RecallFeed({ rows, misses7d, onSelect }: Props) {
+export function RecallFeed({ rows, misses7d, onSelect, scoped = false }: Props) {
   const recalled = rows.filter((r): r is RecalledRow => r.kind === "recalled");
 
   return (
@@ -25,6 +27,12 @@ export function RecallFeed({ rows, misses7d, onSelect }: Props) {
       <MonoLabel className="mb-3.5 block text-[9px] tracking-[0.16em]">Live recall feed</MonoLabel>
 
       <div className="flex flex-1 flex-col gap-0.5 text-xs">
+        {recalled.length === 0 && scoped ? (
+          <p className="py-6 text-center text-[11px] text-[var(--fg-muted)]">
+            No recalls in this scope yet — recalls attribute to a project when the agent passes
+            its working directory
+          </p>
+        ) : null}
         {recalled.map((row, i) => {
           const hits = row.payload.memory_ids.length;
           const miss = hits === 0;
@@ -44,14 +52,22 @@ export function RecallFeed({ rows, misses7d, onSelect }: Props) {
               }`}
             >
               <span className="font-mono text-[10px] text-[var(--fg-dim)]">{hhmm(row.at)}</span>
-              <span className={`truncate ${miss ? "text-[var(--accent-danger)]" : "text-[var(--fg-soft)]"}`}>
-                {row.payload.query ?? "—"}
+              <span
+                className={`truncate ${
+                  row.payload.query === null
+                    ? "italic text-[var(--fg-muted)]"
+                    : miss
+                      ? "text-[var(--accent-danger)]"
+                      : "text-[var(--fg-soft)]"
+                }`}
+              >
+                {row.payload.query ?? recallOriginLabel(row.payload.capture_origin)}
               </span>
               <span className="font-mono text-[10px] text-[var(--fg-dim)]">
                 {hits} {hits === 1 ? "hit" : "hits"}
               </span>
               <span className="font-mono text-[10px] font-medium text-[var(--accent-bright)]">
-                {row.payload.top_score === null ? "—" : row.payload.top_score.toFixed(2)}
+                {row.payload.top_score === null ? null : row.payload.top_score.toFixed(2)}
               </span>
             </Row>
           );

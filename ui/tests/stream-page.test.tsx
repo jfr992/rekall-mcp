@@ -158,6 +158,30 @@ describe("StreamPage — timeline rows", () => {
     expect(screen.getByText(/0 memories surfaced/)).toBeInTheDocument();
   });
 
+  test("recalled rows without a query show the origin label, not a dash", () => {
+    mockAll({
+      stream: {
+        rows: [
+          {
+            kind: "recalled",
+            at: "2026-07-17T09:05:00.000001",
+            payload: {
+              query: null,
+              memory_ids: ["2026-07-01_learning_ff00aa11"],
+              top_score: null,
+              project: "rekall-mcp",
+              capture_origin: "capsule",
+            },
+          },
+        ],
+        event_window: { events: 10, oldest_at: "2026-06-30T08:12:44.123456" },
+      },
+    });
+    render(<StreamPage />);
+    expect(screen.getByText(/capsule → 1 memory surfaced/)).toBeInTheDocument();
+    expect(screen.queryByText(/—/)).not.toBeInTheDocument();
+  });
+
   test("renders a promoted row with PROMOTED label and from → to tier", () => {
     mockAll();
     render(<StreamPage />);
