@@ -18,6 +18,7 @@ import { usePressure } from "@/lib/queries/use-pressure";
 import { usePrunePlanMutation, usePruneApplyMutation } from "@/lib/queries/use-prune";
 import { useProjectStore } from "@/lib/project-store";
 import { useMemoryDetail } from "@/lib/queries/use-memory-detail";
+import { scopedTitle } from "@/lib/scoped-title";
 import type { PrunePlan } from "@/lib/schemas";
 
 export default function HygienePage() {
@@ -65,7 +66,7 @@ export default function HygienePage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
-      <SerifHeading eyebrow="PRESSURE · PRUNE · BACKFILL" title={`Memory Hygiene · ${project}`} />
+      <SerifHeading eyebrow="PRESSURE · PRUNE · BACKFILL" title={scopedTitle("Memory Hygiene", project)} />
 
       <section className="space-y-3">
         {pressure.isLoading ? (

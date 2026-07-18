@@ -335,6 +335,14 @@ describe("KB recall workbench", () => {
     expect(await screen.findByText(/no matches/i)).toBeInTheDocument();
   });
 
+  test("heading drops the scope separator when all memories are in scope", () => {
+    useProjectStore.setState({ project: "" });
+    renderPage();
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    expect(heading.textContent).toBe("Knowledge Base");
+  });
+
   test("the heading eyebrow tracks the active tab", async () => {
     renderPage();
     expect(screen.getByText("RECALL · SEMANTIC SEARCH")).toBeInTheDocument();
