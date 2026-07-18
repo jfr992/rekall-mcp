@@ -61,7 +61,8 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 - `EMBEDDING_PROVIDER` sets embedding backend (`fastembed` default; `sentence-transformers` requires the `[torch]` extra; `ollama`, `gemini`).
 - `LOG_LEVEL` for diagnostics.
 - `OLLAMA_URL`, `GEMINI_API_KEY` as provider-specific settings.
-- `REKALL_MARKER_DIR` — directory where the restore and observe hooks write/read the per-session restore marker file (default `/tmp`).
+- `REKALL_MARKER_DIR` — directory where the restore, observe, and reflex hooks write/read per-session marker files (default `/tmp`).
+- `REKALL_REFLEX` — dedicated kill switch for `rekall-reflex.sh` (PreToolUse). Set to `0` to disable reflex recalls without touching autosave. Also gated by `REKALL_AUTOSAVE` (see below) — either variable at `0` disables it.
 
 Current compose defaults:
 - service: `rekall-mcp` on port `8000`
@@ -178,7 +179,7 @@ Rekall detects conflicting memories of the same type at read time, not write tim
 - Prints a one-line summary only when memories are actually removed.
 - Exits 0 and is silent on any error (curl timeout, server unreachable, empty result).
 
-**Kill switch:** set `REKALL_AUTOSAVE=0` — the hook exits immediately without calling the server. The same variable gates `rekall-observe.sh` autosave.
+**Kill switch:** set `REKALL_AUTOSAVE=0` — the hook exits immediately without calling the server. `REKALL_AUTOSAVE` is the master switch for all shipped rekall hooks, including read-only ones (`rekall-reflex.sh` gates on it too, alongside its own `REKALL_REFLEX` switch) — despite the name, it is not save-specific.
 
 **Server-side caps (hard limits in `src/memory/prune_superseded.py`):**
 - `MAX_PER_FIRE = 10` — maximum deletions in one endpoint call.
