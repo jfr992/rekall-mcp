@@ -247,6 +247,16 @@ describe("StreamPage — day grouping", () => {
   });
 });
 
+describe("StreamPage — per-day bounding", () => {
+  test("normal fixture volume renders with no day-collapse expander present", () => {
+    mockAll();
+    render(<StreamPage />);
+    expect(
+      screen.queryByRole("button", { name: /show \d+ more from this day/i })
+    ).not.toBeInTheDocument();
+  });
+});
+
 describe("StreamPage — consolidation ladder", () => {
   test("renders one card per tier with counts from insights and the design taglines", () => {
     mockAll();
