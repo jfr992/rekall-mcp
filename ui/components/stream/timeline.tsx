@@ -1,12 +1,15 @@
 import { Fragment } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Empty } from "@/components/ui/empty";
+import { ShowMoreList } from "@/components/ui/show-more-list";
 import { recallOriginLabel } from "@/lib/recall-origin";
 import type { StreamRow } from "@/lib/schemas";
 
 type Props = {
   rows: StreamRow[];
 };
+
+const VISIBLE_PER_DAY = 20;
 
 function sameDay(a: Date, b: Date): boolean {
   return (
@@ -126,9 +129,35 @@ function Row({ row }: { row: StreamRow }) {
   }
 }
 
+function RowLine({ row }: { row: StreamRow }) {
+  return (
+    <div className="grid grid-cols-[48px_1fr] items-start gap-3">
+      <span className="pt-3 text-right font-mono text-[10px] text-[var(--fg-dim)]">
+        {timeLabel(row.at)}
+      </span>
+      <Row row={row} />
+    </div>
+  );
+}
+
+type Group = { label: string; rows: StreamRow[] };
+
+function groupByDay(rows: StreamRow[], now: number): Group[] {
+  const groups: Group[] = [];
+  for (const row of rows) {
+    const label = dayLabel(row.at, now);
+    const current = groups[groups.length - 1];
+    if (current && current.label === label) {
+      current.rows.push(row);
+    } else {
+      groups.push({ label, rows: [row] });
+    }
+  }
+  return groups;
+}
+
 export function Timeline({ rows }: Props) {
   const now = Date.now();
-  let lastLabel: string | null = null;
   if (rows.length === 0) {
     return (
       <Empty
@@ -137,34 +166,31 @@ export function Timeline({ rows }: Props) {
       />
     );
   }
+  const groups = groupByDay(rows, now);
   return (
     <div className="flex flex-col gap-3.5">
-      {rows.map((row, i) => {
-        const label = dayLabel(row.at, now);
-        const header = label !== lastLabel ? label : null;
-        lastLabel = label;
-        return (
-          <Fragment key={`${row.at}-${i}`}>
-            {header ? (
-              <div
-                className={`font-mono text-[10px] font-medium tracking-[0.14em] ${
-                  header.startsWith("TODAY")
-                    ? "text-[var(--accent-bright)]"
-                    : "text-[var(--fg-dim)]"
-                } ${i > 0 ? "mt-2" : ""}`}
-              >
-                {header}
-              </div>
-            ) : null}
-            <div className="grid grid-cols-[48px_1fr] items-start gap-3">
-              <span className="pt-3 text-right font-mono text-[10px] text-[var(--fg-dim)]">
-                {timeLabel(row.at)}
-              </span>
-              <Row row={row} />
-            </div>
-          </Fragment>
-        );
-      })}
+      {groups.map((group, gi) => (
+        <Fragment key={`${group.label}-${gi}`}>
+          <div
+            className={`font-mono text-[10px] font-medium tracking-[0.14em] ${
+              group.label.startsWith("TODAY")
+                ? "text-[var(--accent-bright)]"
+                : "text-[var(--fg-dim)]"
+            } ${gi > 0 ? "mt-2" : ""}`}
+          >
+            {group.label}
+          </div>
+          <div className="flex flex-col gap-3.5">
+            <ShowMoreList
+              items={group.rows}
+              initialCount={VISIBLE_PER_DAY}
+              keyFor={(row, i) => `${row.at}-${i}`}
+              moreLabel={(n) => `Show ${n} more from this day`}
+              renderItem={(row) => <RowLine row={row} />}
+            />
+          </div>
+        </Fragment>
+      ))}
     </div>
   );
 }
