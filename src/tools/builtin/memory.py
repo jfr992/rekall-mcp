@@ -514,6 +514,7 @@ class OptimizedMemoryTools(BaseToolProvider):
                 scope=scope,
                 context=context,
                 capture_origin="observe_judge",
+                source_tool="mcp",
             )
 
             if isinstance(result, str):
@@ -662,6 +663,7 @@ class OptimizedMemoryTools(BaseToolProvider):
                 project=scope.project,
                 scope=scope,
                 capture_origin="save_memory_tool",
+                source_tool="mcp",
             )
             return f"Saved memory: {memory_id}"
 
