@@ -350,4 +350,33 @@ describe("KB recall workbench", () => {
     fireEvent.click(screen.getByRole("button", { name: /^curated$/i }));
     expect(screen.getByText("CURATED BY TYPE · LIVE")).toBeInTheDocument();
   });
+
+  test("results panel shows only the top 10 with a Show more expander when more are loaded", async () => {
+    const many: RecallResponse = {
+      query: "many",
+      count: 18,
+      memories: Array.from({ length: 18 }, (_, i) => ({
+        memory_id: `m-${i}`,
+        content: `Result number ${i}`,
+        type: "note",
+        tier: "working",
+        date: daysAgo(i),
+        project: "byte-edge",
+        score: 0.9 - i * 0.01,
+      })),
+    };
+    vi.mocked(searchApi.postRecall).mockResolvedValue(many);
+    renderPage();
+    fireEvent.change(screen.getByRole("textbox", { name: /recall query/i }), {
+      target: { value: "many" },
+    });
+    await screen.findByText("Result number 0");
+
+    const list = within(screen.getByRole("list", { name: /recall results/i }));
+    expect(list.getByText("Result number 9")).toBeInTheDocument();
+    expect(list.queryByText("Result number 10")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Show 8 more" }));
+    expect(list.getByText("Result number 17")).toBeInTheDocument();
+  });
 });

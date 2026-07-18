@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
 import Link from "next/link";
 
 type Props<T> = {
@@ -10,6 +10,9 @@ type Props<T> = {
   keyFor: (item: T) => string;
   viewAllHref?: string;
   moreLabel?: (remaining: number) => string;
+  // Wraps the "show more"/"view all" control — pass `(node) => <li>{node}</li>`
+  // when items render as <li> so the control stays valid inside a <ul>.
+  footerWrapper?: (node: ReactNode) => ReactNode;
 };
 
 export function ShowMoreList<T>({
@@ -19,6 +22,7 @@ export function ShowMoreList<T>({
   keyFor,
   viewAllHref,
   moreLabel = (n) => `Show ${n} more`,
+  footerWrapper = (node) => node,
 }: Props<T>) {
   const [expanded, setExpanded] = useState(false);
   const hasMore = items.length > initialCount;
@@ -28,15 +32,19 @@ export function ShowMoreList<T>({
   return (
     <>
       {shown.map((item) => (
-        <div key={keyFor(item)}>{renderItem(item)}</div>
+        <Fragment key={keyFor(item)}>{renderItem(item)}</Fragment>
       ))}
-      {hasMore && viewAllHref ? (
-        <Link href={viewAllHref}>View all {items.length} →</Link>
-      ) : hasMore && !expanded ? (
-        <button type="button" onClick={() => setExpanded(true)}>
-          {moreLabel(remaining)}
-        </button>
-      ) : null}
+      {hasMore
+        ? footerWrapper(
+            viewAllHref ? (
+              <Link href={viewAllHref}>View all {items.length} →</Link>
+            ) : !expanded ? (
+              <button type="button" onClick={() => setExpanded(true)}>
+                {moreLabel(remaining)}
+              </button>
+            ) : null
+          )
+        : null}
     </>
   );
 }
