@@ -310,6 +310,80 @@ def test_get_session_detail_unknown_id_404(monkeypatch, tmp_path):
     assert r.json()["session_id"] == "nope"
 
 
+def test_get_sessions_after_filters_older_days_inclusive(monkeypatch, tmp_path):
+    """?after= keeps sessions whose last activity day is >= the bound."""
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    log = manager.event_log
+    log.append(_summary("s-old", "proj-a", ["m1"], "2026-07-10T09:00:00"))
+    log.append(_summary("s-edge", "proj-a", ["m2"], "2026-07-12T09:00:00"))
+    log.append(_summary("s-new", "proj-a", ["m3"], "2026-07-14T09:00:00"))
+
+    r = tc.get("/api/memory/sessions", params={"after": "2026-07-12"})
+
+    assert r.status_code == 200
+    assert [s["session_id"] for s in r.json()["sessions"]] == ["s-new", "s-edge"]
+
+
+def test_get_sessions_before_filters_newer_days_inclusive(monkeypatch, tmp_path):
+    """?before= keeps sessions whose last activity day is <= the bound."""
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    log = manager.event_log
+    log.append(_summary("s-old", "proj-a", ["m1"], "2026-07-10T09:00:00"))
+    log.append(_summary("s-edge", "proj-a", ["m2"], "2026-07-12T09:00:00"))
+    log.append(_summary("s-new", "proj-a", ["m3"], "2026-07-14T09:00:00"))
+
+    r = tc.get("/api/memory/sessions", params={"before": "2026-07-12"})
+
+    assert r.status_code == 200
+    assert [s["session_id"] for s in r.json()["sessions"]] == ["s-edge", "s-old"]
+
+
+def test_get_sessions_after_and_before_bound_one_day(monkeypatch, tmp_path):
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    log = manager.event_log
+    log.append(_summary("s-old", "proj-a", ["m1"], "2026-07-10T09:00:00"))
+    log.append(_summary("s-edge", "proj-a", ["m2"], "2026-07-12T09:00:00"))
+    log.append(_summary("s-new", "proj-a", ["m3"], "2026-07-14T09:00:00"))
+
+    r = tc.get("/api/memory/sessions", params={"after": "2026-07-12", "before": "2026-07-12"})
+
+    assert r.status_code == 200
+    assert [s["session_id"] for s in r.json()["sessions"]] == ["s-edge"]
+
+
+def test_get_sessions_rejects_malformed_day_bounds(monkeypatch, tmp_path):
+    tc, _ = _rest_client(monkeypatch, tmp_path)
+    assert tc.get("/api/memory/sessions", params={"after": "yesterday"}).status_code == 400
+    assert tc.get("/api/memory/sessions", params={"before": "2026/07/01"}).status_code == 400
+
+
+def test_get_sessions_default_window_unchanged_without_day_params(monkeypatch, tmp_path):
+    """No after/before → every folded session in the event window, as before."""
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    log = manager.event_log
+    log.append(_summary("s-old", "proj-a", ["m1"], "2026-07-01T09:00:00"))
+    log.append(_summary("s-new", "proj-a", ["m2"], "2026-07-14T09:00:00"))
+
+    r = tc.get("/api/memory/sessions")
+
+    assert r.status_code == 200
+    assert [s["session_id"] for s in r.json()["sessions"]] == ["s-new", "s-old"]
+
+
+def test_get_sessions_event_window_marker_survives_range_filter(monkeypatch, tmp_path):
+    """The response carries the stream-style event_window marker so the UI can
+    say which sessions it cannot see, even when the range hides every row."""
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    manager.event_log.append(_summary("s-old", "proj-a", ["m1"], "2026-07-01T09:00:00"))
+
+    r = tc.get("/api/memory/sessions", params={"after": "2026-07-10"})
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["sessions"] == []
+    assert body["event_window"] == {"events": 1, "oldest_at": "2026-07-01T09:00:00"}
+
+
 def test_sessions_list_get_emits_view_opened_counter(monkeypatch, tmp_path):
     """The U2 phase metric: % of sessions where the view was opened."""
     tc, manager = _rest_client(monkeypatch, tmp_path)
