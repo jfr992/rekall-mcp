@@ -181,6 +181,7 @@ Idempotent, backs up your existing `~/.claude/settings.json` first. It:
 
 - **`rekall-restore.sh`** (UserPromptSubmit) — once-per-session status line (`Rekall ready — N memories…`). No context injection.
 - **`rekall-observe.sh`** (Stop) — a Haiku judge that auto-saves durable observations, gated by cheap signal detection (durability keywords, new git commits, or session length) so it doesn't fire on every turn. Kill switch: `REKALL_AUTOSAVE=0`.
+- **`rekall-reflex.sh`** (PreToolUse, Bash) — surfaces relevant memories before risky commands (destructive ops, IaC, memory-data, hooks, helm). A local word-boundary cue match gates the fetch (no network on a miss), debounced once per session per cue. On a match it does a bounded `curl` (0.1s connect / 1s total) to `/api/memory/reflex` and injects a capped, untrusted-framed packet as `additionalContext`. It never blocks the tool call — every failure path exits 0. Kill switches: `REKALL_AUTOSAVE=0` (master) or `REKALL_REFLEX=0` (dedicated).
 
 ### Slash commands (manual, not auto-triggering)
 
@@ -410,7 +411,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/save` | POST | Save a memory |
 | `/api/memory/recall` | POST | Graph-enhanced search (optional `task_hint`: context-matched results first; optional `cwd`: attributes the recall event to the caller's project) |
 | `/api/memory/recall/cross-project` | POST | Cross-project transfer recall |
-| `/api/memory/reflex` | POST | Cue-triggered recall packet for risky commands or edits |
+| `/api/memory/reflex` | POST | Cue-triggered recall packet for risky commands or edits (optional `cwd`: attributes the recall event to the caller's project) |
 | `/api/memory/observe` | POST | Auto-classify and save (accepts `cwd` for scope) |
 | `/api/memory/stats` | GET | Statistics + graph metrics |
 | `/api/memory/doctor` | GET | Trust report for YAML/Qdrant/vector/graph/provenance health |
