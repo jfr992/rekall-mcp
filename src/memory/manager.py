@@ -1205,6 +1205,7 @@ class MemoryManager:
         score_threshold: float = 0.35,
         task_hint: str | None = None,
         cwd: str | None = None,
+        source: str = "recall",
     ) -> list[dict[str, Any]]:
         """Recall relevant memories using semantic search.
 
@@ -1432,7 +1433,7 @@ class MemoryManager:
                     event_type="memory_recalled",
                     project=attributed or "general",
                     memory_ids=[m["memory_id"] for m in results if m.get("memory_id")],
-                    source="recall",
+                    source=source,
                     payload={
                         "query": query,
                         "task_hint": task_hint,
@@ -1443,7 +1444,7 @@ class MemoryManager:
                         # chars/4 — honest heuristic, not a tokenizer
                         "token_estimate": sum(len(m.get("content") or "") // 4 for m in results),
                         "session_id": None,
-                        "capture_origin": None,
+                        "capture_origin": source if source != "recall" else None,
                     },
                 )
             except Exception:
