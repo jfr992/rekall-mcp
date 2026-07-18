@@ -1,8 +1,11 @@
 "use client";
 
 import { MonoLabel } from "@/components/ui/mono-label";
+import { ShowMoreList } from "@/components/ui/show-more-list";
 import { recallOriginLabel } from "@/lib/recall-origin";
 import type { StreamRow } from "@/lib/schemas";
+
+const FEED_CAP = 8;
 
 type RecalledRow = Extract<StreamRow, { kind: "recalled" }>;
 
@@ -33,45 +36,51 @@ export function RecallFeed({ rows, misses7d, onSelect, scoped = false }: Props) 
             its working directory
           </p>
         ) : null}
-        {recalled.map((row, i) => {
-          const hits = row.payload.memory_ids.length;
-          const miss = hits === 0;
-          const topId = row.payload.memory_ids[0];
-          // Hit rows open the inspector on their top memory; misses have none
-          const Row = miss ? "div" : "button";
-          return (
-            <Row
-              key={`${row.at}-${i}`}
-              {...(miss
-                ? { "data-miss": "" }
-                : { type: "button" as const, onClick: () => onSelect(topId) })}
-              className={`grid grid-cols-[52px_1fr_60px_44px] items-baseline gap-2.5 rounded-md border-0 bg-transparent px-1.5 py-2 text-left ${
-                miss
-                  ? "bg-[rgba(248,113,113,0.08)]"
-                  : "cursor-pointer hover:bg-[var(--surface-0)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-primary)]"
-              }`}
-            >
-              <span className="font-mono text-[10px] text-[var(--fg-dim)]">{hhmm(row.at)}</span>
-              <span
-                className={`truncate ${
-                  row.payload.query === null
-                    ? "italic text-[var(--fg-muted)]"
-                    : miss
-                      ? "text-[var(--accent-danger)]"
-                      : "text-[var(--fg-soft)]"
+        <ShowMoreList
+          items={recalled}
+          initialCount={FEED_CAP}
+          viewAllHref="/stream"
+          moreLabel={() => "View all in Stream →"}
+          keyFor={(row, i) => `${row.at}-${i}`}
+          renderItem={(row) => {
+            const hits = row.payload.memory_ids.length;
+            const miss = hits === 0;
+            const topId = row.payload.memory_ids[0];
+            // Hit rows open the inspector on their top memory; misses have none
+            const Row = miss ? "div" : "button";
+            return (
+              <Row
+                {...(miss
+                  ? { "data-miss": "" }
+                  : { type: "button" as const, onClick: () => onSelect(topId) })}
+                className={`grid grid-cols-[52px_1fr_60px_44px] items-baseline gap-2.5 rounded-md border-0 bg-transparent px-1.5 py-2 text-left ${
+                  miss
+                    ? "bg-[rgba(248,113,113,0.08)]"
+                    : "cursor-pointer hover:bg-[var(--surface-0)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-primary)]"
                 }`}
               >
-                {row.payload.query ?? recallOriginLabel(row.payload.capture_origin)}
-              </span>
-              <span className="font-mono text-[10px] text-[var(--fg-dim)]">
-                {hits} {hits === 1 ? "hit" : "hits"}
-              </span>
-              <span className="font-mono text-[10px] font-medium text-[var(--accent-bright)]">
-                {row.payload.top_score === null ? null : row.payload.top_score.toFixed(2)}
-              </span>
-            </Row>
-          );
-        })}
+                <span className="font-mono text-[10px] text-[var(--fg-dim)]">{hhmm(row.at)}</span>
+                <span
+                  className={`truncate ${
+                    row.payload.query === null
+                      ? "italic text-[var(--fg-muted)]"
+                      : miss
+                        ? "text-[var(--accent-danger)]"
+                        : "text-[var(--fg-soft)]"
+                  }`}
+                >
+                  {row.payload.query ?? recallOriginLabel(row.payload.capture_origin)}
+                </span>
+                <span className="font-mono text-[10px] text-[var(--fg-dim)]">
+                  {hits} {hits === 1 ? "hit" : "hits"}
+                </span>
+                <span className="font-mono text-[10px] font-medium text-[var(--accent-bright)]">
+                  {row.payload.top_score === null ? null : row.payload.top_score.toFixed(2)}
+                </span>
+              </Row>
+            );
+          }}
+        />
       </div>
 
       <p className="mt-2 border-t border-[var(--border)] pt-2.5 text-[11px] text-[var(--fg-muted)]">
