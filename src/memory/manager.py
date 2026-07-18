@@ -2134,8 +2134,9 @@ class MemoryManager:
         ]
 
         # 6. Provenance (null for any missing field)
+        _raw_agent = memory.get("agent")
         provenance: dict[str, Any] = {
-            "agent": memory.get("agent"),
+            "agent": _raw_agent if _raw_agent not in (None, "unknown") else None,
             "source_tool": memory.get("source_tool"),
             "source_event": memory.get("source_event"),
             "timestamp": memory.get("timestamp"),
