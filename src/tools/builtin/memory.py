@@ -45,8 +45,11 @@ _IN_LABELS: dict[str, str] = {
 def _render_memory_detail(result: dict[str, Any]) -> str:
     """Render a get_memory_detail v2 result as compact structured text.
 
-    Null fields render as 'unknown'. Direction labels follow the UI convention:
-    '-> <relation>' for outgoing, '<- <inverted label>' for incoming.
+    Absent fields are omitted, never shown as 'unknown' filler. trust_boundary
+    and lifecycle_reason never render (display-only drop; both still live in
+    the response dict for API consumers). Storage lines render only when
+    degraded. Direction labels follow the UI convention: '-> <relation>' for
+    outgoing, '<- <inverted label>' for incoming.
     """
     memory = result.get("memory")
     if not memory:
@@ -58,37 +61,47 @@ def _render_memory_detail(result: dict[str, Any]) -> str:
     lines.append(f"content: {memory.get('content', '')}")
     lines.append("")
 
-    # Provenance
+    # Provenance — omit null fields and trust_boundary entirely
     prov = result.get("provenance") or {}
-    lines.append("provenance:")
-    for k in (
-        "agent",
-        "source_tool",
-        "source_event",
-        "timestamp",
-        "session_id",
-        "repo_name",
-        "branch",
-        "trust_boundary",
-    ):
-        v = prov.get(k)
-        lines.append(f"  {k}: {v if v is not None else 'unknown'}")
-    lines.append("")
+    prov_lines = [
+        f"  {k}: {prov.get(k)}"
+        for k in (
+            "agent",
+            "source_tool",
+            "source_event",
+            "timestamp",
+            "session_id",
+            "repo_name",
+            "branch",
+        )
+        if prov.get(k) is not None
+    ]
+    if prov_lines:
+        lines.append("provenance:")
+        lines.extend(prov_lines)
+        lines.append("")
 
-    # Lifecycle
+    # Lifecycle — omit null fields; lifecycle_reason never rendered
     lc = result.get("lifecycle") or {}
-    lines.append("lifecycle:")
-    for k in ("tier", "durability", "retention_days", "lifecycle_reason"):
-        v = lc.get(k)
-        lines.append(f"  {k}: {v if v is not None else 'unknown'}")
-    lines.append("")
+    lc_lines = [
+        f"  {k}: {lc.get(k)}"
+        for k in ("tier", "durability", "retention_days")
+        if lc.get(k) is not None
+    ]
+    if lc_lines:
+        lines.append("lifecycle:")
+        lines.extend(lc_lines)
+        lines.append("")
 
-    # Storage
+    # Storage — omit entirely when healthy (both stores present)
     storage = result.get("storage") or {}
-    lines.append("storage:")
-    lines.append(f"  qdrant: {'indexed' if storage.get('qdrant') else 'not indexed'}")
-    lines.append(f"  yaml: {'persisted' if storage.get('yaml') else 'not persisted'}")
-    lines.append("")
+    if not (storage.get("qdrant") and storage.get("yaml")):
+        lines.append("storage:")
+        if not storage.get("qdrant"):
+            lines.append("  qdrant: not indexed")
+        if not storage.get("yaml"):
+            lines.append("  yaml: not persisted")
+        lines.append("")
 
     # Warnings
     warnings = result.get("warnings") or []
