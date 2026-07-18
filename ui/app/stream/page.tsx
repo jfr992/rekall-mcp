@@ -52,7 +52,7 @@ export default function StreamPage() {
     oldestDay !== null && (range.after === undefined || range.after < oldestDay);
 
   return (
-    <div className="mx-auto grid max-w-7xl grid-cols-1 gap-6 p-6 lg:grid-cols-[240px_1fr]">
+    <div className="mx-auto grid h-[calc(100vh-3.5rem)] max-w-7xl grid-cols-1 gap-6 p-6 lg:grid-cols-[240px_1fr]">
       {insights.isLoading ? (
         <Skeleton className="h-[420px] w-full" />
       ) : insights.data ? (
@@ -64,7 +64,7 @@ export default function StreamPage() {
       ) : (
         <Empty title="Could not load insights" hint="Check backend connection" />
       )}
-      <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex min-h-0 min-w-0 flex-col gap-4">
         <div
           role="group"
           aria-label="Stream range"
@@ -105,7 +105,12 @@ export default function StreamPage() {
         ) : stream.isError || !stream.data ? (
           <Empty title="Could not load stream" hint="Check backend connection" />
         ) : (
-          <Timeline rows={stream.data.rows} />
+          <div
+            data-testid="stream-timeline-scroll"
+            className="min-h-0 flex-1 overflow-y-auto pr-1"
+          >
+            <Timeline rows={stream.data.rows} />
+          </div>
         )}
       </div>
     </div>
