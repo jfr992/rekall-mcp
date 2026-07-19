@@ -54,7 +54,7 @@ operated within ~0.05 of the cutoff, so runs wobbled and preference probes
 hard-missed (precision@5 = 0.0 against a corpus of one memory). At 0.40 the
 preference family still collapses (2/9). Full decision record, including the
 adversarial review that forced the control experiment:
-[`docs/specs/2026-07-09-dense-representation-fix.md`](docs/specs/2026-07-09-dense-representation-fix.md).
+the dense-representation fix (repr v2, 2026-07-09).
 
 ## Representation v2
 

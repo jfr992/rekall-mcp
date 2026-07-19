@@ -98,7 +98,7 @@ def print_results(results: list[dict], mode: str) -> None:
         pct = f"{avg * 100:.1f}%"
         print(f"  {m:<20} {pct:>10}")
 
-    print(f"\n  Per-type Recall@5 (any):")
+    print("\n  Per-type Recall@5 (any):")
     print(f"  {'-' * 40}")
     by_type = aggregate_by_type(results, "recall_any_at_5")
     for qtype, score in by_type.items():
