@@ -54,3 +54,59 @@ def test_identify_pressure_returns_labeled_lists():
     p = identify_pressure(memories)
     assert [m["memory_id"] for m in p["low_value"]] == ["lv1"]
     assert [m["memory_id"] for m in p["stale_working"]] == ["st1"]
+
+
+def test_identify_pressure_surfaces_disputed_memories():
+    """T5: disputed=true (set by reinforce.py on a `wrong` verdict) is its own
+    flagged reason, distinct from low_value/stale_working."""
+    from memory.pressure import identify_pressure
+
+    memories = [
+        {"memory_id": "d1", "tier": "semantic", "salience": 0.9, "content": "disputed", "disputed": True},
+        {"memory_id": "ok1", "tier": "semantic", "salience": 0.9, "content": "fine", "disputed": False},
+        {"memory_id": "ok2", "tier": "semantic", "salience": 0.9, "content": "no flag at all"},
+    ]
+    p = identify_pressure(memories)
+    assert [m["memory_id"] for m in p["disputed"]] == ["d1"]
+    assert p["disputed_count"] == 1
+
+
+def test_stale_candidate_memory_ids_dedupes_repeated_events_in_first_seen_order():
+    """T5: memory_supersedes_candidate events (T2's payload shape:
+    {memory_id, reason}) collapse repeats for the same memory_id — a stale
+    verdict re-fired for the same memory shouldn't double up in the list."""
+    from memory.events import MemoryEvent
+    from memory.pressure import stale_candidate_memory_ids
+
+    events = [
+        MemoryEvent(
+            event_type="memory_supersedes_candidate",
+            project="general",
+            agent="unknown",
+            source="reinforcement",
+            payload={"memory_id": "s1", "reason": "stale_feedback"},
+        ),
+        MemoryEvent(
+            event_type="memory_recalled",
+            project="general",
+            agent="unknown",
+            source="client",
+            payload={"memory_id": "irrelevant"},
+        ),
+        MemoryEvent(
+            event_type="memory_supersedes_candidate",
+            project="general",
+            agent="unknown",
+            source="reinforcement",
+            payload={"memory_id": "s2", "reason": "stale_feedback"},
+        ),
+        MemoryEvent(
+            event_type="memory_supersedes_candidate",
+            project="general",
+            agent="unknown",
+            source="reinforcement",
+            payload={"memory_id": "s1", "reason": "stale_feedback"},
+        ),
+    ]
+
+    assert stale_candidate_memory_ids(events) == ["s1", "s2"]
