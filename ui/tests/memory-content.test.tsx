@@ -3,7 +3,7 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryContent } from "@/components/memory-inspector/memory-content";
 
 const COMMAND_CONTENT =
-  "Ran: glab mr view 3598 --repo yumbrands/cloud 2>&1 | head -60 — ERROR Failed to get merge request";
+  "Ran: glab mr view 3598 --repo example-org/cloud 2>&1 | head -60 — ERROR Failed to get merge request";
 
 describe("MemoryContent command rendering", () => {
   test("command-shaped content renders as a mono block", () => {
@@ -25,7 +25,7 @@ describe("MemoryContent command rendering", () => {
 
   test("mono block wraps long tokens cleanly in preview and expanded views", () => {
     const longCommand =
-      "Ran: glab mr view 3598 --repo yumbrands/cloud-platform-engineering 2>&1 — GET https://gitlab.com/api/v4/projects/yumbrands%2Fcloud%2Fplatform%2Fengineering/merge_requests/3598 " +
+      "Ran: glab mr view 3598 --repo example-org/cloud-platform-engineering 2>&1 — GET https://gitlab.com/api/v4/projects/example-org%2Fcloud%2Fplatform%2Fengineering/merge_requests/3598 " +
       "x".repeat(500);
     render(<MemoryContent content={longCommand} />);
 
