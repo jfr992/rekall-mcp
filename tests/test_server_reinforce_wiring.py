@@ -70,3 +70,13 @@ def test_reinforce_processor_failure_does_not_fail_ingestion(client, monkeypatch
 
     assert r.status_code == 200
     assert r.json()["status"] == "recorded"
+
+
+def test_suite_env_disables_processor_by_default(monkeypatch):
+    """The live processor must not fire during unrelated tests: conftest pins
+    REKALL_REINFORCE=0 for the whole suite (wiring tests opt back in explicitly).
+    Regression: with it live, session_summary posts from any test mutated shared
+    store state and produced cross-test 404s."""
+    import os
+
+    assert os.environ.get("REKALL_REINFORCE") == "0"
