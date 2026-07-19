@@ -194,6 +194,7 @@ class HistoryEntry:
     event_id: str
     kind: str
     ts: str
+    session_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -213,6 +214,7 @@ def apply_reinforcement(
     event_id: str,
     kind: str,
     now: datetime,
+    session_id: str | None = None,
 ) -> ReinforcementResult:
     """Damp `weight` by its position in the rolling 30d window, append to history.
 
@@ -233,7 +235,30 @@ def apply_reinforcement(
     else:
         delta = weight
 
-    new_history = [*history, HistoryEntry(event_id=event_id, kind=kind, ts=now.isoformat())]
+    new_history = [
+        *history,
+        HistoryEntry(event_id=event_id, kind=kind, ts=now.isoformat(), session_id=session_id),
+    ]
     new_history = new_history[-HISTORY_CAP:]
 
     return ReinforcementResult(history=new_history, delta=delta)
+
+
+_OUTCOME_KINDS = frozenset({"outcome", "useful"})
+_MIN_SESSIONS = 2
+_MIN_DAYS = 2
+
+
+def promotion_eligible(history: list[HistoryEntry]) -> bool:
+    """Additional gate enforced in the reinforce pass, not classify().
+
+    classify() promotes at reinforcement_count>=5 on raw count alone; this
+    gate additionally requires evidence from >=2 distinct sessions on >=2
+    distinct days, with >=1 outcome-grade (use-evidence or useful) event —
+    bare recalls/session-count alone can never promote.
+    """
+    sessions = {h.session_id for h in history if h.session_id}
+    days = {h.ts[:10] for h in history}
+    has_outcome = any(h.kind in _OUTCOME_KINDS for h in history)
+
+    return len(sessions) >= _MIN_SESSIONS and len(days) >= _MIN_DAYS and has_outcome
