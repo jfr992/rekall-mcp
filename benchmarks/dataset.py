@@ -46,8 +46,7 @@ def load_dataset(
         missing = REQUIRED_FIELDS - set(entry.keys())
         if missing:
             raise ValueError(
-                f"Entry {i} ({entry.get('question_id', '?')}) "
-                f"missing required fields: {missing}"
+                f"Entry {i} ({entry.get('question_id', '?')}) missing required fields: {missing}"
             )
 
     if skip > 0:
@@ -76,18 +75,20 @@ def build_session_corpus(
     session_ids = entry["haystack_session_ids"]
     dates = entry["haystack_dates"]
 
-    for session, sess_id, date in zip(sessions, session_ids, dates):
+    for session, sess_id, date in zip(sessions, session_ids, dates, strict=False):
         if include_assistant:
             turns = [t["content"] for t in session]
         else:
             turns = [t["content"] for t in session if t["role"] == "user"]
 
         if turns:
-            corpus.append({
-                "session_id": sess_id,
-                "text": "\n".join(turns),
-                "date": date,
-            })
+            corpus.append(
+                {
+                    "session_id": sess_id,
+                    "text": "\n".join(turns),
+                    "date": date,
+                }
+            )
 
     return corpus
 
@@ -115,12 +116,15 @@ def dataset_stats(data: list[dict]) -> dict:
         avg_sessions_per_question, min_sessions, max_sessions
     """
     from collections import Counter
+
     types = Counter(e["question_type"] for e in data)
     sessions_per_q = [len(e["haystack_sessions"]) for e in data]
     return {
         "total_questions": len(data),
         "question_types": dict(types),
-        "avg_sessions_per_question": sum(sessions_per_q) / len(sessions_per_q) if sessions_per_q else 0,
+        "avg_sessions_per_question": sum(sessions_per_q) / len(sessions_per_q)
+        if sessions_per_q
+        else 0,
         "min_sessions": min(sessions_per_q) if sessions_per_q else 0,
         "max_sessions": max(sessions_per_q) if sessions_per_q else 0,
     }

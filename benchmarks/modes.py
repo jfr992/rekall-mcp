@@ -13,8 +13,12 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from benchmarks.dataset import build_session_corpus
+
+if TYPE_CHECKING:
+    from core.vector_store import VectorStore
 
 _embedder = None
 _EMBEDDING_DIM = 384
@@ -38,23 +42,21 @@ def _collection_name(question_id: str, mode: str) -> str:
 
 def _ingest_dense(
     entry: dict, qdrant_url: str, collection: str, include_assistant: bool = False
-) -> tuple[list[str], "VectorStore"]:
+) -> tuple[list[str], VectorStore]:
     """Ingest haystack sessions into Qdrant with dense embeddings only."""
     from core.vector_store import VectorStore
 
     corpus = build_session_corpus(entry, include_assistant=include_assistant)
     embedder = _get_embedder()
 
-    store = VectorStore(
-        collection=collection, url=qdrant_url, embedding_dim=_EMBEDDING_DIM
-    )
+    store = VectorStore(collection=collection, url=qdrant_url, embedding_dim=_EMBEDDING_DIM)
     store.recreate_collection()
 
     texts = [doc["text"] for doc in corpus]
     vectors = embedder.encode_batch(texts)
     session_ids = []
 
-    for doc, vector in zip(corpus, vectors):
+    for doc, vector in zip(corpus, vectors, strict=False):
         store.save(
             id=doc["session_id"],
             vector=vector,
@@ -71,7 +73,7 @@ def _ingest_dense(
 
 def _ingest_hybrid(
     entry: dict, qdrant_url: str, collection: str, include_assistant: bool = False
-) -> tuple[list[str], "VectorStore"]:
+) -> tuple[list[str], VectorStore]:
     """Ingest haystack sessions with both dense and sparse (BM25) embeddings."""
     from core.sparse_encoder import BM25Encoder
     from core.vector_store import VectorStore
@@ -96,7 +98,7 @@ def _ingest_hybrid(
     vectors = embedder.encode_batch(texts)
     session_ids = []
 
-    for doc, vector in zip(corpus, vectors):
+    for doc, vector in zip(corpus, vectors, strict=False):
         store.save(
             id=doc["session_id"],
             vector=vector,
@@ -246,7 +248,7 @@ def retrieve_hybrid_graph(
         for i in range(len(vectors)):
             for j in range(i + 1, len(vectors)):
                 # Compute cosine similarity
-                dot = sum(a * b for a, b in zip(vectors[i], vectors[j]))
+                dot = sum(a * b for a, b in zip(vectors[i], vectors[j], strict=False))
                 norm_i = sum(a * a for a in vectors[i]) ** 0.5
                 norm_j = sum(a * a for a in vectors[j]) ** 0.5
 
