@@ -1206,6 +1206,7 @@ class MemoryManager:
         task_hint: str | None = None,
         cwd: str | None = None,
         source: str = "recall",
+        session_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Recall relevant memories using semantic search.
 
@@ -1221,6 +1222,8 @@ class MemoryManager:
             cwd: Caller's working directory — attributes the recall event to
                 the detected project when no explicit project is given; never
                 filters results
+            session_id: Caller's session id, if known — carried into the
+                memory_recalled event payload; absent stays null
 
         Returns:
             List of memories with scores
@@ -1434,6 +1437,7 @@ class MemoryManager:
                     project=attributed or "general",
                     memory_ids=[m["memory_id"] for m in results if m.get("memory_id")],
                     source=source,
+                    session_id=session_id,
                     payload={
                         "query": query,
                         "task_hint": task_hint,
@@ -1443,7 +1447,7 @@ class MemoryManager:
                         ],
                         # chars/4 — honest heuristic, not a tokenizer
                         "token_estimate": sum(len(m.get("content") or "") // 4 for m in results),
-                        "session_id": None,
+                        "session_id": session_id,
                         "capture_origin": source if source != "recall" else None,
                     },
                 )
@@ -1531,6 +1535,7 @@ class MemoryManager:
         days_back: int | None = None,
         task_hint: str | None = None,
         cwd: str | None = None,
+        session_id: str | None = None,
     ) -> str:
         """Recall memories with smart formatting that guides AI behavior.
 
@@ -1560,6 +1565,7 @@ class MemoryManager:
             days_back=days_back,
             task_hint=task_hint,
             cwd=cwd,
+            session_id=session_id,
         )
 
         if not memories:
@@ -2047,10 +2053,13 @@ class MemoryManager:
         project: str | None = None,
         limit: int = 4,
         cwd: str | None = None,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
         from memory.reflex import build_reflex_packet
 
-        return build_reflex_packet(self, text=text, project=project, limit=limit, cwd=cwd)
+        return build_reflex_packet(
+            self, text=text, project=project, limit=limit, cwd=cwd, session_id=session_id
+        )
 
     def get_memory_detail(
         self,

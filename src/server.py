@@ -538,13 +538,20 @@ async def api_recall_memories(request):
             task_hint = task_hint[:256]
         # Caller's cwd, not the backend's — attribution only (v1.5.0 scope pitfall)
         caller_cwd = body.get("cwd") or body.get("workspace_root") or None
+        session_id = body.get("session_id")
 
         if not query:
             return JSONResponse({"error": "query is required"}, status_code=400)
 
         manager = _get_memory_manager()
         results = manager.recall(
-            query, limit=limit, project=project, type=mem_type, task_hint=task_hint, cwd=caller_cwd
+            query,
+            limit=limit,
+            project=project,
+            type=mem_type,
+            task_hint=task_hint,
+            cwd=caller_cwd,
+            session_id=session_id,
         )
 
         # memory_recalled emission lives in manager.recall (event contract v2)
@@ -608,12 +615,15 @@ async def api_memory_reflex(request):
         limit = _body_int(body, "limit", 4, lo=1, hi=12)
         # Caller's cwd, not the backend's — attribution only (v1.5.0 scope pitfall)
         caller_cwd = body.get("cwd") or body.get("workspace_root") or None
+        session_id = body.get("session_id")
 
         if not text:
             return _bad_request("text is required")
 
         manager = _get_memory_manager()
-        result = manager.reflex(text=text, project=project, limit=limit, cwd=caller_cwd)
+        result = manager.reflex(
+            text=text, project=project, limit=limit, cwd=caller_cwd, session_id=session_id
+        )
 
         # memory_recalled emission lives in manager.recall (event contract v2)
         return _ok(result)
