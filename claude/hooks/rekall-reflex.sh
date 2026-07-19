@@ -52,7 +52,7 @@ for g in "${matched_groups[@]}"; do
 done
 [[ "$all_marked" == "true" ]] && exit 0
 
-body="$(jq -cn --arg text "$command" --arg cwd "$cwd" '{text:$text, cwd:$cwd, limit:4}' 2>/dev/null || true)"
+body="$(jq -cn --arg text "$command" --arg cwd "$cwd" --arg session_id "$session_id" '{text:$text, cwd:$cwd, limit:4, session_id:$session_id}' 2>/dev/null || true)"
 [[ -z "$body" ]] && exit 0
 
 response="$(curl -sf --connect-timeout 0.1 --max-time 1 -X POST "$API/api/memory/reflex" \
