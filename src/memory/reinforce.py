@@ -13,13 +13,16 @@ from __future__ import annotations
 import fcntl
 import json
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
+from itertools import groupby
 from pathlib import Path
+from typing import Any
 
-from memory.events import MemoryEvent
+from memory.events import EventLog, MemoryEvent
+from memory.lifecycle import LifecycleSignals, classify, compute_retention_days
 
 logger = logging.getLogger(__name__)
 
@@ -403,3 +406,172 @@ def reinforce_lock(lock_path: Path) -> Iterator[None]:
             yield
         finally:
             fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+
+
+def _history_from_payload(memory: dict[str, Any]) -> list[HistoryEntry]:
+    return [
+        HistoryEntry(
+            event_id=h.get("event_id", ""),
+            kind=h.get("kind", ""),
+            ts=h.get("ts", ""),
+            session_id=h.get("session_id"),
+        )
+        for h in memory.get("history") or []
+    ]
+
+
+def _history_to_payload(history: list[HistoryEntry]) -> list[dict[str, Any]]:
+    return [
+        {"event_id": h.event_id, "kind": h.kind, "ts": h.ts, "session_id": h.session_id}
+        for h in history
+    ]
+
+
+def _age_days(memory: dict[str, Any], now: datetime) -> int:
+    date_str = memory.get("date") or now.strftime("%Y-%m-%d")
+    try:
+        mem_date = datetime.strptime(date_str, "%Y-%m-%d")
+        return max(0, (now - mem_date).days)
+    except ValueError:
+        return 0
+
+
+def _apply_credit_to_memory(
+    memory_id: str,
+    kind_credits: list[Credit],
+    *,
+    store: Any,
+    graph: Any,
+    now: datetime,
+    lock_path: Path,
+    record_event: Callable[..., None],
+) -> None:
+    """Read-reclassify-write one memory's payload under the named lock."""
+    with reinforce_lock(lock_path):
+        memory = store.get_by_id(memory_id)
+        if not memory:
+            return
+
+        history = _history_from_payload(memory)
+        total_delta = 0.0
+        for credit in kind_credits:
+            kind = "wrong" if credit.disputed else ("outcome" if credit.outcome_grade else "bare")
+            result = apply_reinforcement(
+                history=history,
+                weight=credit.weight,
+                event_id=credit.event_id,
+                kind=kind,
+                now=now,
+                session_id=credit.session_id,
+            )
+            history = result.history
+            total_delta += result.delta
+
+        new_count = max(0.0, float(memory.get("reinforcement_count") or 0) + total_delta)
+
+        current_tier = memory.get("tier")
+        explicit_tier = current_tier if current_tier == "identity" else None
+        signals = LifecycleSignals(
+            memory_type=memory.get("type", "note"),
+            salience=float(memory.get("salience") or 0.0),
+            age_days=_age_days(memory, now),
+            reinforcement_count=new_count,
+            contradicts_count=graph.count_contradicts(memory_id) if memory_id else 0,
+            explicit_tier=explicit_tier,
+        )
+        result_cls = classify(signals)
+
+        # classify() promotes to semantic on raw count>=5 alone; the reinforce
+        # pass additionally requires session/day spread + outcome-grade
+        # evidence (PLAN.md Design > Promotion eligibility). A tier bump that
+        # doesn't clear the extra gate is held at the prior tier.
+        final_tier = result_cls.tier
+        if _TIER_RANK.get(final_tier, 0) > _TIER_RANK.get(
+            current_tier, 0
+        ) and not promotion_eligible(history):
+            final_tier = current_tier or "working"
+
+        disputed = memory.get("disputed", False) or any(c.disputed for c in kind_credits)
+
+        updated_payload: dict[str, Any] = {
+            "reinforcement_count": new_count,
+            "history": _history_to_payload(history),
+            "tier": final_tier,
+            "durability": result_cls.durability,
+            "lifecycle_reason": result_cls.reason,
+            "retention_days": compute_retention_days(memory.get("type", "note"), final_tier),
+            "disputed": disputed,
+        }
+        store.update_payload(memory_id, updated_payload)
+
+        if _TIER_RANK.get(final_tier, 0) > _TIER_RANK.get(current_tier, 0):
+            record_event(
+                event_type="memory_promoted",
+                project=str(memory.get("project") or "general"),
+                source="reinforcement",
+                memory_ids=[memory_id],
+                payload={"memory_id": memory_id, "from_tier": current_tier, "to_tier": final_tier},
+            )
+
+
+_TIER_RANK = {"working": 0, "episodic": 1, "semantic": 2, "identity": 3}
+
+
+def process_events(
+    *,
+    event_log: EventLog,
+    store: Any,
+    graph: Any,
+    state_path: Path,
+    lock_path: Path,
+    now: datetime,
+    record_event: Callable[..., None],
+    batch_limit: int = 500,
+) -> None:
+    """Read new events since the last checkpoint, apply credits, persist.
+
+    truncated=True (log rewritten/rotated underneath the cursor) halts
+    processing immediately without advancing the checkpoint — never
+    blind-replay (F5, F13).
+    """
+    state = load_state(state_path)
+    events, next_cursor, truncated = event_log.read_from(state.cursor, limit=batch_limit)
+
+    if truncated:
+        logger.warning(
+            "reinforce: event log truncated/rewritten past checkpoint cursor — "
+            "halting for manual reconciliation, not advancing checkpoint"
+        )
+        return
+
+    if not events:
+        return
+
+    result = collect_credits(events, processed_sessions=state.processed_sessions)
+
+    by_memory = sorted(result.credits, key=lambda c: c.memory_id)
+    for memory_id, group in groupby(by_memory, key=lambda c: c.memory_id):
+        _apply_credit_to_memory(
+            memory_id,
+            list(group),
+            store=store,
+            graph=graph,
+            now=now,
+            lock_path=lock_path,
+            record_event=record_event,
+        )
+
+    for candidate in result.supersedes_candidates:
+        record_event(
+            event_type="memory_supersedes_candidate",
+            project="general",
+            source="reinforcement",
+            memory_ids=[candidate.memory_id],
+            payload={"memory_id": candidate.memory_id, "reason": "stale_feedback"},
+        )
+
+    new_state = ReinforceState(
+        cursor=next_cursor,
+        processed_sessions=state.processed_sessions | result.newly_processed_sessions,
+    )
+    save_state(state_path, new_state)
