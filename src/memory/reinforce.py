@@ -305,3 +305,82 @@ def save_state(path: Path, state: ReinforceState) -> None:
         "processed_sessions": sorted(state.processed_sessions),
     }
     path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
+
+
+@dataclass(frozen=True, slots=True)
+class Credit:
+    """Normalized credit, regardless of source (recall, session, feedback)."""
+
+    memory_id: str
+    event_id: str
+    session_id: str | None
+    weight: float
+    outcome_grade: bool
+    disputed: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class CollectResult:
+    credits: list[Credit]
+    newly_processed_sessions: set[str]
+    supersedes_candidates: list[SupersedesCandidate]
+
+
+def collect_credits(events: list[MemoryEvent], processed_sessions: frozenset[str]) -> CollectResult:
+    """Fold a batch of events into credits, newly-processed sessions, and
+    stale-supersedes candidates. Pure — no I/O, no store/graph access.
+
+    A session's recalls are credited only once: the first session_summary
+    seen for a given session_id in this batch (Stop hook fires per turn,
+    so a session accrues many summary events — re-crediting on each would
+    massively over-count).
+    """
+    recalls_by_session: dict[str | None, list[MemoryEvent]] = {}
+    for e in events:
+        if e.event_type == "memory_recalled":
+            recalls_by_session.setdefault(e.payload.get("session_id"), []).append(e)
+
+    credits: list[Credit] = []
+    newly_processed: set[str] = set()
+    supersedes: list[SupersedesCandidate] = []
+
+    for e in events:
+        if e.event_type == "session_summary":
+            session_id = e.payload.get("session_id")
+            if not session_id or session_id in processed_sessions or session_id in newly_processed:
+                continue
+            recalls = recalls_by_session.get(session_id, [])
+            for outcome in credit_from_session(e, recalls):
+                credits.append(
+                    Credit(
+                        memory_id=outcome.memory_id,
+                        event_id=outcome.event_id,
+                        session_id=outcome.session_id,
+                        weight=outcome.weight,
+                        outcome_grade=outcome.outcome_grade,
+                    )
+                )
+            newly_processed.add(session_id)
+
+        elif e.event_type == "memory_feedback":
+            feedback = credit_from_feedback(e)
+            if feedback is not None:
+                credits.append(
+                    Credit(
+                        memory_id=feedback.memory_id,
+                        event_id=feedback.event_id,
+                        session_id=feedback.session_id,
+                        weight=feedback.weight,
+                        outcome_grade=feedback.outcome_grade,
+                        disputed=feedback.disputed,
+                    )
+                )
+            candidate = supersedes_candidate_from_feedback(e)
+            if candidate is not None:
+                supersedes.append(candidate)
+
+    return CollectResult(
+        credits=credits,
+        newly_processed_sessions=newly_processed,
+        supersedes_candidates=supersedes,
+    )
