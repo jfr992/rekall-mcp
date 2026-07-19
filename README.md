@@ -55,7 +55,30 @@ Data lives on named volumes (`rekall-memory`, `rekall-qdrant`). Existing install
 
 Trial-tier honesty: no hooks means nothing is captured automatically — you save and recall explicitly. Filtering is linear at embedded scale, and only one process can hold the embedded store (run `rekall serve` so sessions share one daemon). Shared-env `pip install` is unsupported; use isolated installs (`uvx` / `uv tool install`).
 
-**Done.** Claude now remembers things between sessions.
+### Wire Claude Code (hooks + config)
+
+The MCP server alone gives Claude memory *tools*; the hooks make memory *automatic*. From a repo checkout:
+
+```bash
+bash claude/setup/install.sh
+```
+
+Idempotent, backs up `~/.claude/settings.json` first. It wires four hooks and nine slash commands:
+
+| Hook | Event | What it does | Kill switch |
+|---|---|---|---|
+| `rekall-restore.sh` | UserPromptSubmit | once-per-session status line, no injection | `REKALL_AUTOSAVE=0` |
+| `rekall-observe.sh` | Stop | gated Haiku judge auto-saves durable observations + posts session summaries (feeds reinforcement) | `REKALL_AUTOSAVE=0` |
+| `rekall-reflex.sh` | PreToolUse (Bash) | surfaces relevant memories before risky commands | `REKALL_REFLEX=0` |
+| `memory-prune.sh` | SessionStart | daily gated prune housekeeping | `REKALL_AUTOSAVE=0` |
+
+Optional fifth (manual, injects a thin project capsule at session start): `cp claude/hooks/session-start-memory.sh ~/.claude/hooks/` + a SessionStart entry — see [`claude/INSTALL.md`](claude/INSTALL.md).
+
+Using profiles (`CLAUDE_CONFIG_DIR`)? The installer targets `~/.claude`; repeat the settings entries in each profile's `settings.json` (hook files can be shared by absolute path).
+
+Recommended agent policy for CLAUDE.md (when to recall, what to save): copy the block from [`docs/CLAUDE_MEMORY_SETTINGS.md`](docs/CLAUDE_MEMORY_SETTINGS.md).
+
+**Done.** Claude now remembers things between sessions — and recalls them before risky commands.
 
 ---
 
@@ -170,8 +193,8 @@ bash claude/setup/install.sh
 
 Idempotent, backs up your existing `~/.claude/settings.json` first. It:
 
-- copies the two hooks to `~/.claude/hooks/`
-- merges `UserPromptSubmit` + `Stop` entries into `~/.claude/settings.json` (deduped)
+- copies four hooks to `~/.claude/hooks/` (`rekall-restore`, `rekall-observe`, `rekall-reflex`, `memory-prune`)
+- merges `UserPromptSubmit`, `Stop`, `SessionStart`, and `PreToolUse` (Bash matcher) entries into `~/.claude/settings.json` (deduped; repairs a wrong/missing reflex matcher)
 - copies all nine slash commands to `~/.claude/skills/`
 - verifies backend health
 
