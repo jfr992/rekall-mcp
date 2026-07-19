@@ -123,7 +123,22 @@ def log_retention_stats(events: list[MemoryEvent]) -> dict[str, Any]:
     return {"count": len(events), "oldest": timestamps[0], "newest": timestamps[-1]}
 
 
-def print_report(rows: list[ReplayRow], retention: dict[str, Any]) -> None:
+def credit_coverage_stats(events: list[MemoryEvent]) -> dict[str, int]:
+    """Why credits may be missing: recalls without session_id can never be
+    credited (unsafe attribution — plumbed only from v1.14 on)."""
+    recalls = [e for e in events if e.event_type == "memory_recalled"]
+    sessionless = sum(1 for e in recalls if not e.payload.get("session_id"))
+    summaries = sum(1 for e in events if e.event_type == "session_summary")
+    return {
+        "recalls": len(recalls),
+        "recalls_without_session_id": sessionless,
+        "summaries": summaries,
+    }
+
+
+def print_report(
+    rows: list[ReplayRow], retention: dict[str, Any], coverage: dict[str, int] | None = None
+) -> None:
     print(
         f"Log retention: {retention['count']} events, "
         f"oldest={retention['oldest']}, newest={retention['newest']}"
@@ -132,6 +147,13 @@ def print_report(rows: list[ReplayRow], retention: dict[str, Any]) -> None:
 
     if not rows:
         print("(no credited memories)")
+        if coverage:
+            print(
+                f"  coverage: {coverage['recalls']} recalls seen, "
+                f"{coverage['recalls_without_session_id']} without session_id "
+                f"(uncreditable — attribution plumbed from v1.14), "
+                f"{coverage['summaries']} session summaries"
+            )
         return
 
     kinds = sorted({k for row in rows for k in row.credits_by_kind})
@@ -183,7 +205,7 @@ def main(argv: list[str] | None = None) -> None:
         sys.exit(0)
 
     rows = build_replay_rows(events_file, memories={}, now=datetime.now())
-    print_report(rows, log_retention_stats(events))
+    print_report(rows, log_retention_stats(events), credit_coverage_stats(events))
 
     if args.apply:
         _apply_live(events_file)
