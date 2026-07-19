@@ -322,7 +322,7 @@ Bulk repair of machine-made conflict flags: `QDRANT_URL=http://localhost:6333 uv
 
 ## Reinforcement & the tier ladder
 
-Memories earn **semantic** tier through evidence of use; **identity** is granted only by a human pin (inspector → "Promote to identity"). The credit model (all parameters adversarial/research-derived — see docs/specs):
+Memories earn **semantic** tier through evidence of use; **identity** is granted only by a human pin (inspector → "Promote to identity"). The credit model (all parameters adversarial/research-derived):
 
 | Evidence | Credit | Notes |
 |---|---|---|
