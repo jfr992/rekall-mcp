@@ -10,10 +10,15 @@ See PLAN.md (T2) for the full design. Credit sources:
 
 from __future__ import annotations
 
+import json
+import logging
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 
 from memory.events import MemoryEvent
+
+logger = logging.getLogger(__name__)
 
 RECALL_SCORE_FLOOR = 0.6
 RECALL_TOP_MARGIN = 0.05
@@ -262,3 +267,41 @@ def promotion_eligible(history: list[HistoryEntry]) -> bool:
     has_outcome = any(h.kind in _OUTCOME_KINDS for h in history)
 
     return len(sessions) >= _MIN_SESSIONS and len(days) >= _MIN_DAYS and has_outcome
+
+
+@dataclass(frozen=True, slots=True)
+class ReinforceState:
+    """Durable checkpoint: log cursor + sessions already outcome-credited.
+
+    Persisted outside the event log (_reinforce_state.json) so a rewritten/
+    truncated log is detected via EventLog.read_from's own truncated flag
+    instead of blind-replayed (F5, F13).
+    """
+
+    cursor: str | None
+    processed_sessions: frozenset[str]
+
+
+def load_state(path: Path) -> ReinforceState:
+    """Fresh state if the checkpoint file is absent or unreadable."""
+    if not path.exists():
+        return ReinforceState(cursor=None, processed_sessions=frozenset())
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        return ReinforceState(
+            cursor=data.get("cursor"),
+            processed_sessions=frozenset(data.get("processed_sessions") or []),
+        )
+    except (json.JSONDecodeError, OSError, TypeError):
+        logger.warning("reinforce state file unreadable, starting fresh: %s", path, exc_info=True)
+        return ReinforceState(cursor=None, processed_sessions=frozenset())
+
+
+def save_state(path: Path, state: ReinforceState) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "cursor": state.cursor,
+        "processed_sessions": sorted(state.processed_sessions),
+    }
+    path.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
