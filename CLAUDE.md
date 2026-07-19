@@ -152,7 +152,7 @@ Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/h
 | Stale `.env` `EMBEDDING_PROVIDER=sentence-transformers` on the slim image (no torch) silently degrades endpoints to zero | v1.11 deploy | Remove the var or set `fastembed` (vectors are identical); #57 tracks making the failure loud |
 | PreToolUse hook exit 2 blocks the tool call — every reflex failure path must exit 0 | `rekall-reflex.sh` | `\|\| exit 0` guards on every fallible step; no bare `set -e` exit |
 | BM25 vocab frozen at fit time → identifiers born later miss recall entirely (silent dense-only degradation) | prod, Jul 5–17 vocab | `POST /api/memory/resparse`; doctor `bm25` block surfaces drift (OOV window, vocab age, identifier flag) |
-| One symmetric `encode()` for docs AND queries → sparse scores ~IDF² (IDF applied both sides) | `sparse_encoder.py` (pre-v1.13) | `encode_document` / `encode_query` split — IDF once, document side only |
+| One symmetric `encode()` for docs AND queries → sparse scores ~IDF² (IDF applied both sides) | `sparse_encoder.py` (pre-v1.12) | `encode_document` / `encode_query` split — IDF once, document side only |
 
 ## Where to read next
 

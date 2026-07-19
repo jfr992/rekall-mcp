@@ -152,6 +152,7 @@ services:
     volumes:
       - ./src:/app/src:ro
       - ./tests:/app/tests:ro
+      - ./scripts:/app/scripts:ro
       - ./docs:/app/docs:ro
       - ./benchmarks:/app/benchmarks:ro
       - ./claude:/app/claude:ro
