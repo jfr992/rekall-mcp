@@ -67,7 +67,9 @@ ENTRYPOINT ["/entrypoint.sh"]
 CMD ["python", "-m", "server"]
 
 # Test image (compose --profile test): prod image + dev deps
+# jq: the shipped hooks (claude/hooks/*.sh) pipe through it; hook tests need it
 FROM base AS test
+RUN apt-get update && apt-get install -y --no-install-recommends jq && rm -rf /var/lib/apt/lists/*
 RUN uv pip install --system -r pyproject.toml --extra dev
 
 # Default build target = prod image

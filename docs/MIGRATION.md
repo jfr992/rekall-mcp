@@ -1,4 +1,43 @@
-# Migration Guide — portability release (unreleased)
+# Migration Guide — v1.11.0 → v1.12.0 (recall that earns its keep)
+
+**One post-upgrade step: resparse. Everything else upgrades in place.**
+
+- **Asymmetric BM25 encoder (fixes live IDF-squared scoring).** Sparse encoding
+  is now split into `encode_document` / `encode_query` — IDF is applied once,
+  on the document side only. Existing sparse vectors were written by the old
+  symmetric encoder, so run one transactional refit after upgrading:
+
+  ```bash
+  curl -X POST http://localhost:8000/api/memory/resparse
+  ```
+
+  `GET /api/memory/doctor` gains a `bm25` block (vocab age, out-of-vocabulary
+  window, identifier flag) that tells you when a resparse is due; identifiers
+  born after the last vocab fit are invisible to sparse recall until you refit.
+- **Recall-driven reinforcement is live** (kill switch: `REKALL_REINFORCE=0`).
+  Memories earn tier promotion through evidence credits — a top-1 recall in a
+  session that shows real work counts, bare recalls are damped
+  (`1/(1+0.5(n-1))` over a rolling 30 days), and promotion to semantic requires
+  credits from ≥2 sessions on ≥2 days plus ≥1 outcome-grade event. Nothing
+  auto-reaches identity.
+- **Identity tier is pin-only.** `POST /api/memory/{id}/pin` grants it,
+  `DELETE` the same route removes it, humans only. `POST /api/memory/{id}/dispute`
+  flags a memory (suppresses ranking, never deletes); un-dispute reverses it.
+  Prune refuses identity, pinned, semantic, and reinforcement ≥5.
+- **Reflex hook ships in the bundle** (`claude/hooks/rekall-reflex.sh`,
+  PreToolUse/Bash): cue-gated recall *before* risk-shaped commands, ≤800
+  codepoints, untrusted-framed, never blocks the tool. Install: copy to
+  `~/.claude/hooks/` + the settings entry from the README install section.
+  Kill switches: `REKALL_REFLEX=0` or `REKALL_AUTOSAVE=0`.
+- **Hygiene surfaces grew**: disputed and stale-candidate panels,
+  needs-attention counts in the cockpit, and `scripts/reinforce_replay.py`
+  for an offline dry-run of the credit pipeline against your event log.
+- **Suite note for contributors**: tests pin `REKALL_REINFORCE=0` globally;
+  reinforcement wiring tests opt back in explicitly.
+
+---
+
+# Migration Guide — v1.10.0 → v1.11.0 (portability)
 
 **No data migration. One compose behavior change for existing installs.**
 
