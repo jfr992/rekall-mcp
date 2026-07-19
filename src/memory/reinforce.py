@@ -11,12 +11,15 @@ See PLAN.md (T2) for the full design. Credit sources:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 
 from memory.events import MemoryEvent
 
 RECALL_SCORE_FLOOR = 0.6
 RECALL_TOP_MARGIN = 0.05
 BARE_RECALL_WEIGHT = 0.25
+DAMPING_WINDOW_DAYS = 30
+HISTORY_CAP = 20
 
 
 @dataclass(frozen=True, slots=True)
@@ -184,3 +187,53 @@ def credit_from_session(summary: MemoryEvent, recalls: list[MemoryEvent]) -> lis
         )
         for c in candidates
     ]
+
+
+@dataclass(frozen=True, slots=True)
+class HistoryEntry:
+    event_id: str
+    kind: str
+    ts: str
+
+
+@dataclass(frozen=True, slots=True)
+class ReinforcementResult:
+    history: list[HistoryEntry]
+    delta: float
+
+
+def _damping_factor(n: int) -> float:
+    """1/(1+0.5(n-1)) — nth increment in the rolling window, n>=1."""
+    return 1.0 / (1.0 + 0.5 * (n - 1))
+
+
+def apply_reinforcement(
+    history: list[HistoryEntry],
+    weight: float,
+    event_id: str,
+    kind: str,
+    now: datetime,
+) -> ReinforcementResult:
+    """Damp `weight` by its position in the rolling 30d window, append to history.
+
+    Only positive weights (reinforcement) are damped — a `wrong` penalty
+    (-1.0) is not diminishing-returns credit and applies at full weight.
+    History is capped at the last HISTORY_CAP entries (Mem0 precedent).
+    """
+    cutoff = now.timestamp() - DAMPING_WINDOW_DAYS * 86400
+    recent_count = sum(
+        1
+        for h in history
+        if h.kind != "wrong" and datetime.fromisoformat(h.ts).timestamp() >= cutoff
+    )
+
+    if weight > 0:
+        n = recent_count + 1
+        delta = weight * _damping_factor(n)
+    else:
+        delta = weight
+
+    new_history = [*history, HistoryEntry(event_id=event_id, kind=kind, ts=now.isoformat())]
+    new_history = new_history[-HISTORY_CAP:]
+
+    return ReinforcementResult(history=new_history, delta=delta)
