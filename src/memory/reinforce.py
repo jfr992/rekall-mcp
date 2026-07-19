@@ -16,6 +16,7 @@ from memory.events import MemoryEvent
 
 RECALL_SCORE_FLOOR = 0.6
 RECALL_TOP_MARGIN = 0.05
+BARE_RECALL_WEIGHT = 0.25
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,8 +72,18 @@ def credit_from_feedback(event: MemoryEvent) -> FeedbackCredit | None:
     """
     memory_id = event.payload.get("memory_id")
     verdict = event.payload.get("verdict")
-    if not memory_id or verdict != "useful":
+    if not memory_id or verdict not in ("useful", "wrong"):
         return None
+
+    if verdict == "wrong":
+        return FeedbackCredit(
+            memory_id=memory_id,
+            event_id=event.event_id,
+            session_id=event.payload.get("session_id"),
+            weight=-1.0,
+            outcome_grade=False,
+            disputed=True,
+        )
 
     return FeedbackCredit(
         memory_id=memory_id,
@@ -81,3 +92,95 @@ def credit_from_feedback(event: MemoryEvent) -> FeedbackCredit | None:
         weight=1.0,
         outcome_grade=True,
     )
+
+
+@dataclass(frozen=True, slots=True)
+class SupersedesCandidate:
+    memory_id: str
+    event_id: str
+    session_id: str | None
+
+
+def supersedes_candidate_from_feedback(event: MemoryEvent) -> SupersedesCandidate | None:
+    """A stale verdict is truth-maintenance signal, not counter credit.
+
+    Emits/refreshes a supersedes-candidate record for hygiene review
+    instead of touching reinforcement_count (Zep lesson: staleness invalidates,
+    it doesn't decay a score).
+    """
+    memory_id = event.payload.get("memory_id")
+    if not memory_id or event.payload.get("verdict") != "stale":
+        return None
+
+    return SupersedesCandidate(
+        memory_id=memory_id,
+        event_id=event.event_id,
+        session_id=event.payload.get("session_id"),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class OutcomeCredit:
+    memory_id: str
+    event_id: str
+    session_id: str | None
+    weight: float
+    outcome_grade: bool
+
+
+def credit_from_session(summary: MemoryEvent, recalls: list[MemoryEvent]) -> list[OutcomeCredit]:
+    """Outcome credit for a session_summary's recall-followed-by-use signal.
+
+    Only recalls matching the summary's session_id count. Each recall's own
+    top-1 (via credit_from_recall) is a candidate; it earns outcome credit
+    (+1.0) only if the session shows edits/test-passes AND its score is
+    within RECALL_TOP_MARGIN of the session's best candidate score — a
+    weak recall in a session where a different recall clearly drove the
+    outcome doesn't get borrowed credit (Codex F3).
+    """
+    session_id = summary.payload.get("session_id")
+    has_outcome = (
+        int(summary.payload.get("edits_after_recall") or 0) > 0
+        or int(summary.payload.get("test_passes_after_recall") or 0) > 0
+    )
+
+    candidates = [
+        candidate_result
+        for r in recalls
+        if r.payload.get("session_id") == session_id
+        and (candidate_result := credit_from_recall(r)) is not None
+    ]
+    if not candidates:
+        return []
+
+    if not has_outcome:
+        return [
+            OutcomeCredit(
+                memory_id=c.memory_id,
+                event_id=c.event_id,
+                session_id=c.session_id,
+                weight=BARE_RECALL_WEIGHT,
+                outcome_grade=False,
+            )
+            for c in candidates
+        ]
+
+    session_max = max(c.score for c in candidates)
+    return [
+        OutcomeCredit(
+            memory_id=c.memory_id,
+            event_id=c.event_id,
+            session_id=c.session_id,
+            weight=1.0,
+            outcome_grade=True,
+        )
+        if c.score >= session_max - RECALL_TOP_MARGIN
+        else OutcomeCredit(
+            memory_id=c.memory_id,
+            event_id=c.event_id,
+            session_id=c.session_id,
+            weight=BARE_RECALL_WEIGHT,
+            outcome_grade=False,
+        )
+        for c in candidates
+    ]
