@@ -17,15 +17,13 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import time
 from datetime import datetime
 from pathlib import Path
 
-from benchmarks.dataset import load_dataset, get_ground_truth, dataset_stats
-from benchmarks.metrics import score_question, print_results
+from benchmarks.dataset import dataset_stats, get_ground_truth, load_dataset
+from benchmarks.metrics import print_results, score_question
 from benchmarks.modes import retrieve_dense, retrieve_hybrid, retrieve_hybrid_graph
-
 
 MODE_FUNCTIONS = {
     "dense": retrieve_dense,
@@ -82,20 +80,22 @@ def run_single_mode(
 
         except Exception as e:
             errors += 1
-            results.append({
-                "question_id": entry["question_id"],
-                "question_type": entry["question_type"],
-                "question": entry["question"],
-                "mode": mode,
-                "error": str(e),
-                "recall_any_at_5": 0.0,
-                "recall_at_5": 0.0,
-                "ndcg_at_5": 0.0,
-                "recall_any_at_10": 0.0,
-                "recall_at_10": 0.0,
-                "ndcg_at_10": 0.0,
-                "duration_ms": round((time.time() - q_start) * 1000),
-            })
+            results.append(
+                {
+                    "question_id": entry["question_id"],
+                    "question_type": entry["question_type"],
+                    "question": entry["question"],
+                    "mode": mode,
+                    "error": str(e),
+                    "recall_any_at_5": 0.0,
+                    "recall_at_5": 0.0,
+                    "ndcg_at_5": 0.0,
+                    "recall_any_at_10": 0.0,
+                    "recall_at_10": 0.0,
+                    "ndcg_at_10": 0.0,
+                    "duration_ms": round((time.time() - q_start) * 1000),
+                }
+            )
 
         elapsed = time.time() - start_time
         rate = (i + 1) / elapsed if elapsed > 0 else 0
@@ -104,8 +104,8 @@ def run_single_mode(
         running_r5 = sum(r.get("recall_any_at_5", 0) for r in results) / len(results)
         status = "OK" if "error" not in results[-1] else "ERR"
         print(
-            f"  [{i+1:>3}/{total}] {status} R@5={r5:.0f} "
-            f"running={running_r5*100:.1f}% "
+            f"  [{i + 1:>3}/{total}] {status} R@5={r5:.0f} "
+            f"running={running_r5 * 100:.1f}% "
             f"({rate:.1f} q/s, ETA {eta:.0f}s)",
             end="\r",
         )
@@ -197,8 +197,8 @@ def main():
             r10 = sum(r["recall_at_10"] for r in valid) / len(valid)
             n5 = sum(r["ndcg_at_5"] for r in valid) / len(valid)
             print(
-                f"  {mode:<20} {r5_any*100:>9.1f}% {r5*100:>9.1f}% "
-                f"{r10*100:>9.1f}% {n5*100:>9.1f}%"
+                f"  {mode:<20} {r5_any * 100:>9.1f}% {r5 * 100:>9.1f}% "
+                f"{r10 * 100:>9.1f}% {n5 * 100:>9.1f}%"
             )
         print(f"  {'MemPalace (raw)':<20} {'96.6%':>10} {'—':>10} {'—':>10} {'—':>10}")
         print()
