@@ -6,6 +6,7 @@ import { Drawer } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { DeleteMemoryDialog } from "./delete-memory-dialog";
 import { PinMemoryDialog } from "./pin-memory-dialog";
+import { UndisputeButton } from "./undispute-button";
 import { Badge } from "@/components/ui/badge";
 import { MonoLabel } from "@/components/ui/mono-label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -39,6 +40,7 @@ export function MemoryInspector({
   const [confirmPin, setConfirmPin] = useState(false);
   const memory = detail?.memory;
   const isPinned = memory?.tier === "identity";
+  const isDisputed = memory?.disputed === true;
 
   // Compute status: contradicted > superseded > legacy > current
   const statusValue = (() => {
@@ -247,6 +249,7 @@ export function MemoryInspector({
               <Star size={14} />
               {isPinned ? "Remove identity pin" : "Promote to identity"}
             </Button>
+            {isDisputed && <UndisputeButton memoryId={memory.memory_id} />}
           </div>
 
           {confirmDelete && (
