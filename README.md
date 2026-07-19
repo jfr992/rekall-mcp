@@ -434,6 +434,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/lifecycle/backfill` | POST | Backfill tier metadata (dry-run + execute) |
 | `/api/memory/resparse` | POST | Transactional BM25 vocab refit — refuses on schema/parity divergence, fail-closed sentinel on interrupt (REST-only) |
 | `/api/memory/{id}` | DELETE | Delete a single memory |
+| `/api/memory/{id}/pin` | POST | Grant/revoke the identity pin (`{pinned: bool}`; human-only affordance, no MCP tool) |
 | `/api/memory/cleanup` | POST | Batch cleanup (prune superseded, age-based) |
 | `/api/memory/graph` | GET | Graph visualization data |
 | `/api/memory/graph/rebuild` | POST | Rebuild knowledge graph |

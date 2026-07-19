@@ -63,6 +63,13 @@ export const DeleteResponseSchema = z.object({
   memory_id: z.string(),
 });
 
+// ----- Pin (identity) -------------------------------------------------------
+
+export const PinResponseSchema = z.object({
+  memory_id: z.string(),
+  pinned: z.boolean(),
+});
+
 // ----- Entity backlinks ----------------------------------------------------
 
 export const ByEntityResponseSchema = z.object({
@@ -454,6 +461,7 @@ export type RecallMemory = z.infer<typeof RecallMemorySchema>;
 export type RecallResponse = z.infer<typeof RecallResponseSchema>;
 export type ByEntityResponse = z.infer<typeof ByEntityResponseSchema>;
 export type DeleteResponse = z.infer<typeof DeleteResponseSchema>;
+export type PinResponse = z.infer<typeof PinResponseSchema>;
 export type GraphNode = z.infer<typeof GraphNodeSchema>;
 export type GraphLink = z.infer<typeof GraphLinkSchema>;
 export type GraphResponse = z.infer<typeof GraphResponseSchema>;
