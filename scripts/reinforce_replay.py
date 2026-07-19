@@ -77,15 +77,24 @@ def build_replay_rows(
         history: list[HistoryEntry] = []
         credits_by_kind: dict[str, int] = {}
         effective = 0.0
-        for credit in credits:
+        # Chronological order + each credit's own observed_at (not the
+        # replay's single `now`) so the day-spread/damping windows reflect
+        # when the events actually happened, not when the report ran.
+        for credit in sorted(credits, key=lambda c: c.observed_at or ""):
             kind = "wrong" if credit.disputed else ("outcome" if credit.outcome_grade else "bare")
             credits_by_kind[kind] = credits_by_kind.get(kind, 0) + 1
+            try:
+                credit_time = (
+                    datetime.fromisoformat(credit.observed_at) if credit.observed_at else now
+                )
+            except ValueError:
+                credit_time = now
             outcome = apply_reinforcement(
                 history=history,
                 weight=credit.weight,
                 event_id=credit.event_id,
                 kind=kind,
-                now=now,
+                now=credit_time,
                 session_id=credit.session_id,
             )
             history = outcome.history

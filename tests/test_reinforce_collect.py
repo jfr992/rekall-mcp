@@ -84,3 +84,20 @@ def test_collect_credits_includes_feedback_and_supersedes_candidate():
     assert result.credits[0].weight == 1.0
     assert len(result.supersedes_candidates) == 1
     assert result.supersedes_candidates[0].memory_id == "m2"
+
+
+def test_collect_credits_carries_the_source_events_own_observed_at():
+    event = _feedback_event("useful", memory_id="m1")
+
+    result = collect_credits([event], processed_sessions=frozenset())
+
+    assert result.credits[0].observed_at == event.observed_at
+
+
+def test_collect_credits_from_session_summary_carries_summarys_observed_at():
+    summary = _summary_event(edits=2)
+    events = [_recall_event([{"memory_id": "m1", "score": 0.9}]), summary]
+
+    result = collect_credits(events, processed_sessions=frozenset())
+
+    assert result.credits[0].observed_at == summary.observed_at

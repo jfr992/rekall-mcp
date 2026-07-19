@@ -76,6 +76,7 @@ class FeedbackCredit:
     weight: float
     outcome_grade: bool
     disputed: bool = False
+    observed_at: str = ""
 
 
 def credit_from_feedback(event: MemoryEvent) -> FeedbackCredit | None:
@@ -97,6 +98,7 @@ def credit_from_feedback(event: MemoryEvent) -> FeedbackCredit | None:
             weight=-1.0,
             outcome_grade=False,
             disputed=True,
+            observed_at=event.observed_at,
         )
 
     return FeedbackCredit(
@@ -105,6 +107,7 @@ def credit_from_feedback(event: MemoryEvent) -> FeedbackCredit | None:
         session_id=event.payload.get("session_id"),
         weight=1.0,
         outcome_grade=True,
+        observed_at=event.observed_at,
     )
 
 
@@ -140,6 +143,7 @@ class OutcomeCredit:
     session_id: str | None
     weight: float
     outcome_grade: bool
+    observed_at: str = ""
 
 
 def credit_from_session(summary: MemoryEvent, recalls: list[MemoryEvent]) -> list[OutcomeCredit]:
@@ -175,6 +179,7 @@ def credit_from_session(summary: MemoryEvent, recalls: list[MemoryEvent]) -> lis
                 session_id=c.session_id,
                 weight=BARE_RECALL_WEIGHT,
                 outcome_grade=False,
+                observed_at=summary.observed_at,
             )
             for c in candidates
         ]
@@ -187,6 +192,7 @@ def credit_from_session(summary: MemoryEvent, recalls: list[MemoryEvent]) -> lis
             session_id=c.session_id,
             weight=1.0,
             outcome_grade=True,
+            observed_at=summary.observed_at,
         )
         if c.score >= session_max - RECALL_TOP_MARGIN
         else OutcomeCredit(
@@ -195,6 +201,7 @@ def credit_from_session(summary: MemoryEvent, recalls: list[MemoryEvent]) -> lis
             session_id=c.session_id,
             weight=BARE_RECALL_WEIGHT,
             outcome_grade=False,
+            observed_at=summary.observed_at,
         )
         for c in candidates
     ]
@@ -323,6 +330,7 @@ class Credit:
     weight: float
     outcome_grade: bool
     disputed: bool = False
+    observed_at: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -364,6 +372,7 @@ def collect_credits(events: list[MemoryEvent], processed_sessions: frozenset[str
                         session_id=outcome.session_id,
                         weight=outcome.weight,
                         outcome_grade=outcome.outcome_grade,
+                        observed_at=outcome.observed_at,
                     )
                 )
             newly_processed.add(session_id)
@@ -379,6 +388,7 @@ def collect_credits(events: list[MemoryEvent], processed_sessions: frozenset[str
                         weight=feedback.weight,
                         outcome_grade=feedback.outcome_grade,
                         disputed=feedback.disputed,
+                        observed_at=feedback.observed_at,
                     )
                 )
             candidate = supersedes_candidate_from_feedback(e)
@@ -454,14 +464,23 @@ def _apply_credit_to_memory(
 
         history = _history_from_payload(memory)
         total_delta = 0.0
-        for credit in kind_credits:
+        # Chronological order + each credit's own observed_at (not the
+        # single `now` passed to this pass) so day-spread/damping windows
+        # reflect when the events actually happened.
+        for credit in sorted(kind_credits, key=lambda c: c.observed_at or ""):
             kind = "wrong" if credit.disputed else ("outcome" if credit.outcome_grade else "bare")
+            try:
+                credit_time = (
+                    datetime.fromisoformat(credit.observed_at) if credit.observed_at else now
+                )
+            except ValueError:
+                credit_time = now
             result = apply_reinforcement(
                 history=history,
                 weight=credit.weight,
                 event_id=credit.event_id,
                 kind=kind,
-                now=now,
+                now=credit_time,
                 session_id=credit.session_id,
             )
             history = result.history

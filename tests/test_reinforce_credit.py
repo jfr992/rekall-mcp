@@ -165,3 +165,14 @@ def test_credit_from_session_out_of_margin_recall_gets_bare_not_outcome_credit()
     assert by_id["m1"].outcome_grade is True
     assert by_id["m2"].weight == 0.25
     assert by_id["m2"].outcome_grade is False
+
+
+def test_credit_from_session_carries_the_summary_events_own_observed_at():
+    from memory.reinforce import credit_from_session
+
+    summary = _summary_event(edits=2)
+    recalls = [_recall_event([{"memory_id": "m1", "score": 0.9}])]
+
+    credits = credit_from_session(summary, recalls)
+
+    assert credits[0].observed_at == summary.observed_at

@@ -218,3 +218,49 @@ def test_process_events_truncated_log_halts_without_advancing_checkpoint(tmp_pat
     from memory.reinforce import load_state
 
     assert load_state(state_path).cursor == stale_cursor
+
+
+def test_process_events_uses_each_credits_own_observed_at_for_day_spread(tmp_path):
+    """Two useful-feedback events for the same memory, genuinely on
+    different calendar days and different sessions, must register as 2
+    distinct days for promotion_eligible — not collapse to a single
+    "now" just because both are processed in the same batch/run.
+    """
+    log = _make_log(tmp_path)
+    log.append(
+        MemoryEvent(
+            event_type="memory_feedback",
+            project="proj-a",
+            agent="claude",
+            source="feedback_endpoint",
+            payload={"memory_id": "m1", "verdict": "useful", "session_id": "sess-1"},
+            observed_at="2026-06-01T10:00:00",
+        )
+    )
+    log.append(
+        MemoryEvent(
+            event_type="memory_feedback",
+            project="proj-a",
+            agent="claude",
+            source="feedback_endpoint",
+            payload={"memory_id": "m1", "verdict": "useful", "session_id": "sess-2"},
+            observed_at="2026-06-05T10:00:00",
+        )
+    )
+
+    store = _fake_store([_memory("m1")])
+    graph = _fake_graph()
+
+    process_events(
+        event_log=log,
+        store=store,
+        graph=graph,
+        state_path=tmp_path / "_reinforce_state.json",
+        lock_path=tmp_path / "_reinforce.lock",
+        now=datetime(2026, 7, 18, 12, 0, 0),
+        record_event=MagicMock(),
+    )
+
+    history = store._by_id["m1"]["history"]
+    days = {h["ts"][:10] for h in history}
+    assert days == {"2026-06-01", "2026-06-05"}

@@ -79,6 +79,41 @@ def test_build_replay_rows_single_event_does_not_meet_promotion_gate(tmp_path):
     assert rows[0].would_promote is False
 
 
+def test_build_replay_rows_uses_each_events_own_date_for_the_day_spread_gate(tmp_path):
+    """Two feedback events on genuinely different calendar days (per their own
+    observed_at) must count as 2 distinct days for promotion_eligible — not
+    collapse to "today" just because the replay's `now` is a single instant.
+    """
+    from scripts.reinforce_replay import build_replay_rows
+
+    events_file = tmp_path / "_events.jsonl"
+    _write_events(
+        events_file,
+        [
+            {
+                **_event(
+                    "memory_feedback",
+                    {"memory_id": "m1", "verdict": "useful", "session_id": "sess-1"},
+                    event_id="e1",
+                ),
+                "observed_at": "2026-06-01T10:00:00",
+            },
+            {
+                **_event(
+                    "memory_feedback",
+                    {"memory_id": "m1", "verdict": "useful", "session_id": "sess-2"},
+                    event_id="e2",
+                ),
+                "observed_at": "2026-06-05T10:00:00",
+            },
+        ],
+    )
+
+    rows = build_replay_rows(events_file, {}, now=datetime(2026, 7, 18, 12, 0, 0))
+
+    assert rows[0].would_promote is True
+
+
 def test_build_replay_rows_truncates_content_preview_to_80_chars(tmp_path):
     from scripts.reinforce_replay import build_replay_rows
 
