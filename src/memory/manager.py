@@ -764,11 +764,15 @@ class MemoryManager:
             logger.warning(f"Could not persist reinforcement for {memory_id}", exc_info=True)
             return
 
-        # Durable write site: the tier bump persisted, so the event is true.
+        # Durable write site: the tier change persisted, so the event is true.
         from_tier, to_tier = existing.get("tier"), updated.get("tier")
         if from_tier != to_tier:
+            tier_order = ("working", "episodic", "semantic", "identity")
+            from_rank = tier_order.index(from_tier) if from_tier in tier_order else 0
+            to_rank = tier_order.index(to_tier) if to_tier in tier_order else 0
+            event_type = "memory_promoted" if to_rank > from_rank else "memory_demoted"
             self.record_event(
-                event_type="memory_promoted",
+                event_type=event_type,
                 project=str(existing.get("project") or "general"),
                 source="reinforcement",
                 memory_ids=[memory_id],
