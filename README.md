@@ -4,7 +4,7 @@
 
 Rekall MCP is a persistent memory system with a **knowledge graph** layer. It stores memories as YAML + vector embeddings, connects them with typed relationships, and retrieves context using graph-enhanced semantic search.
 
-![Rekall in a Claude Code session — startup capsule, recall, and the reflex hook catching a destructive command (scripted replay, synthetic memories)](docs/demo/rekall-cc-demo.gif)
+![A real Claude Code session with Rekall: memory recall answers an incident question, then a destructive terraform command gets refused by quoting a danger-zone memory (recorded live, synthetic demo memories)](docs/demo/rekall-cc-real.gif)
 
 ![Rekall cockpit — aggregates dashboard with live recall feed and neural graph](docs/screenshots/cockpit.png)
 
