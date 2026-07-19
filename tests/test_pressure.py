@@ -62,8 +62,20 @@ def test_identify_pressure_surfaces_disputed_memories():
     from memory.pressure import identify_pressure
 
     memories = [
-        {"memory_id": "d1", "tier": "semantic", "salience": 0.9, "content": "disputed", "disputed": True},
-        {"memory_id": "ok1", "tier": "semantic", "salience": 0.9, "content": "fine", "disputed": False},
+        {
+            "memory_id": "d1",
+            "tier": "semantic",
+            "salience": 0.9,
+            "content": "disputed",
+            "disputed": True,
+        },
+        {
+            "memory_id": "ok1",
+            "tier": "semantic",
+            "salience": 0.9,
+            "content": "fine",
+            "disputed": False,
+        },
         {"memory_id": "ok2", "tier": "semantic", "salience": 0.9, "content": "no flag at all"},
     ]
     p = identify_pressure(memories)
