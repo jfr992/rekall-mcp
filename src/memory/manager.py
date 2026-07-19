@@ -1175,6 +1175,21 @@ class MemoryManager:
         self.store.update_payload(memory_id, updated_payload)
         return True
 
+    def set_disputed(self, memory_id: str, disputed: bool) -> bool:
+        """Clear (or set) the `disputed` flag reinforce.py sets on a `wrong`
+        verdict (PLAN.md T5 deliverable 4 — minimal resolution affordance).
+
+        Doesn't touch tier/reclassification: disputed suppresses recall
+        ranking, it isn't a classify() input. Returns False if the memory
+        doesn't exist.
+        """
+        existing = self.store.get_by_id(memory_id)
+        if not existing:
+            return False
+
+        self.store.update_payload(memory_id, {"disputed": disputed})
+        return True
+
     def cleanup(
         self,
         max_age_days_facts: int | None = None,
