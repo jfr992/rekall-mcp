@@ -48,6 +48,14 @@ describe("schemas parse real fixtures", () => {
     expect(parsed.flagged.stale_working_count).toBe(8);
   });
 
+  test("PressureResponseSchema parses disputed and stale_candidates flagged lists (T5)", () => {
+    const parsed = PressureResponseSchema.parse(load("pressure.json"));
+    expect(parsed.flagged.disputed_count).toBe(1);
+    expect(parsed.flagged.disputed[0].memory_id).toBe("d1");
+    expect(parsed.flagged.stale_candidates_count).toBe(1);
+    expect(parsed.flagged.stale_candidates[0].memory_id).toBe("s1");
+  });
+
   test("PrunePlanSchema", () => {
     const parsed = PrunePlanSchema.parse(load("prune-plan.json"));
     expect(parsed.candidates.length).toBe(2);

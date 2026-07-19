@@ -370,7 +370,7 @@ AI:  vector search finds the memory
 | Tool | Purpose |
 |------|---------|
 | `observe(summary)` | Auto-classify and save (accepts caller `cwd` for project scope) |
-| `recall_memories(query, task_hint?)` | Graph-enhanced semantic search; `task_hint` (2+ words) surfaces memories matching your current task first |
+| `recall_memories(query, task_hint?, session_id?)` | Graph-enhanced semantic search; `task_hint` (2+ words) surfaces memories matching your current task first |
 | `recall_across_projects(query, current_project)` | Cross-project transfer recall across current, related, and global memory |
 | `close_loop(memory_id, note?)` | Close an open loop: appends a RESOLVED stamp, drops it from the Open Loops capsule bucket |
 | `save_memory(content, type)` | Manual save with explicit type |
@@ -385,7 +385,7 @@ AI:  vector search finds the memory
 | `agent_startup(project)` | Unified startup payload |
 | `project_capsule(project)` | Thin project familiarity capsule |
 | `publish_team_memory(project)` | Team-safe bundle of distilled project capsule and playbooks |
-| `reflex_recall(text, project)` | Cue-triggered recall before risky commands or edits |
+| `reflex_recall(text, project, session_id?)` | Cue-triggered recall before risky commands or edits |
 | `memory_lifecycle()` | Behavioral classifier output |
 | `memory_doctor(project)` | Trust report for YAML/Qdrant/vector/graph/provenance health |
 | `get_cached_context(project)` | Flat context (prompt-cache optimized) |
@@ -409,9 +409,9 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 |----------|--------|---------|
 | `/health` | GET | Health check |
 | `/api/memory/save` | POST | Save a memory |
-| `/api/memory/recall` | POST | Graph-enhanced search (optional `task_hint`: context-matched results first; optional `cwd`: attributes the recall event to the caller's project) |
+| `/api/memory/recall` | POST | Graph-enhanced search (optional `task_hint`: context-matched results first; optional `cwd`: attributes the recall event to the caller's project; optional `session_id`: carried into the memory_recalled event) |
 | `/api/memory/recall/cross-project` | POST | Cross-project transfer recall |
-| `/api/memory/reflex` | POST | Cue-triggered recall packet for risky commands or edits (optional `cwd`: attributes the recall event to the caller's project) |
+| `/api/memory/reflex` | POST | Cue-triggered recall packet for risky commands or edits (optional `cwd`: attributes the recall event to the caller's project; optional `session_id`: carried into the memory_recalled event) |
 | `/api/memory/observe` | POST | Auto-classify and save (accepts `cwd` for scope) |
 | `/api/memory/stats` | GET | Statistics + graph metrics |
 | `/api/memory/doctor` | GET | Trust report for YAML/Qdrant/vector/graph/provenance health |
@@ -434,6 +434,8 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/lifecycle/backfill` | POST | Backfill tier metadata (dry-run + execute) |
 | `/api/memory/resparse` | POST | Transactional BM25 vocab refit — refuses on schema/parity divergence, fail-closed sentinel on interrupt (REST-only) |
 | `/api/memory/{id}` | DELETE | Delete a single memory |
+| `/api/memory/{id}/pin` | POST | Grant/revoke the identity pin (`{pinned: bool}`; human-only affordance, no MCP tool) |
+| `/api/memory/{id}/dispute` | POST | Clear (or set) the disputed flag (`{disputed: bool}`; minimal resolution affordance) |
 | `/api/memory/cleanup` | POST | Batch cleanup (prune superseded, age-based) |
 | `/api/memory/graph` | GET | Graph visualization data |
 | `/api/memory/graph/rebuild` | POST | Rebuild knowledge graph |

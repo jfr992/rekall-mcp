@@ -538,13 +538,20 @@ async def api_recall_memories(request):
             task_hint = task_hint[:256]
         # Caller's cwd, not the backend's — attribution only (v1.5.0 scope pitfall)
         caller_cwd = body.get("cwd") or body.get("workspace_root") or None
+        session_id = body.get("session_id")
 
         if not query:
             return JSONResponse({"error": "query is required"}, status_code=400)
 
         manager = _get_memory_manager()
         results = manager.recall(
-            query, limit=limit, project=project, type=mem_type, task_hint=task_hint, cwd=caller_cwd
+            query,
+            limit=limit,
+            project=project,
+            type=mem_type,
+            task_hint=task_hint,
+            cwd=caller_cwd,
+            session_id=session_id,
         )
 
         # memory_recalled emission lives in manager.recall (event contract v2)
@@ -608,12 +615,15 @@ async def api_memory_reflex(request):
         limit = _body_int(body, "limit", 4, lo=1, hi=12)
         # Caller's cwd, not the backend's — attribution only (v1.5.0 scope pitfall)
         caller_cwd = body.get("cwd") or body.get("workspace_root") or None
+        session_id = body.get("session_id")
 
         if not text:
             return _bad_request("text is required")
 
         manager = _get_memory_manager()
-        result = manager.reflex(text=text, project=project, limit=limit, cwd=caller_cwd)
+        result = manager.reflex(
+            text=text, project=project, limit=limit, cwd=caller_cwd, session_id=session_id
+        )
 
         # memory_recalled emission lives in manager.recall (event contract v2)
         return _ok(result)
@@ -622,6 +632,30 @@ async def api_memory_reflex(request):
     except Exception as e:
         logger.error(f"Error building reflex packet: {e}")
         return _server_error(str(e))
+
+
+def _run_reinforce_pass(manager) -> None:
+    """Fire the T2 reinforce processor after a session_summary lands.
+
+    Best-effort: a failure here must never fail the ingestion response
+    (PLAN.md Mechanism: consume session_summary server-side, non-blocking).
+    """
+    from datetime import datetime
+
+    from memory.reinforce import process_events
+
+    try:
+        process_events(
+            event_log=manager.event_log,
+            store=manager.store,
+            graph=manager.knowledge_graph,
+            state_path=manager.memory_dir / "_reinforce_state.json",
+            lock_path=manager.memory_dir / "_reinforce.lock",
+            now=datetime.now(),
+            record_event=manager.record_event,
+        )
+    except Exception:
+        logger.error("reinforce pass failed after session_summary ingestion", exc_info=True)
 
 
 @mcp.custom_route("/api/memory/events", methods=["POST"])
@@ -671,6 +705,10 @@ async def api_record_events(request):
                 "test_passes_after_recall": test_passes_after_recall,
             },
         )
+
+        if event_type == "session_summary" and os.getenv("REKALL_REINFORCE", "1") != "0":
+            _run_reinforce_pass(manager)
+
         return _ok({"status": "recorded"})
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -1168,6 +1206,57 @@ async def api_delete_memory(request):
     except Exception as e:
         logger.error(f"Error deleting memory: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/{memory_id}/pin", methods=["POST"])
+async def api_pin_memory(request):
+    """REST API: grant/revoke the identity pin. Human-only affordance — no MCP tool."""
+    from starlette.responses import JSONResponse
+
+    try:
+        memory_id = request.path_params["memory_id"]
+        body = await request.json()
+        pinned = body.get("pinned")
+        if not isinstance(pinned, bool):
+            return _bad_request("pinned must be a boolean")
+
+        manager = _get_memory_manager()
+        async with _maintenance_barrier():
+            ok = manager.set_identity_pin(memory_id, pinned=pinned)
+
+        if not ok:
+            return JSONResponse({"error": "not found", "memory_id": memory_id}, status_code=404)
+
+        return _ok({"memory_id": memory_id, "pinned": pinned})
+    except Exception as e:
+        logger.error(f"Error pinning memory: {e}")
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/memory/{memory_id}/dispute", methods=["POST"])
+async def api_dispute_memory(request):
+    """REST API: clear (or set) the disputed flag. Minimal v1 resolution
+    affordance (PLAN.md T5) — no supersede/edit machinery, just the flag."""
+    from starlette.responses import JSONResponse
+
+    try:
+        memory_id = request.path_params["memory_id"]
+        body = await request.json()
+        disputed = body.get("disputed")
+        if not isinstance(disputed, bool):
+            return _bad_request("disputed must be a boolean")
+
+        manager = _get_memory_manager()
+        async with _maintenance_barrier():
+            ok = manager.set_disputed(memory_id, disputed=disputed)
+
+        if not ok:
+            return JSONResponse({"error": "not found", "memory_id": memory_id}, status_code=404)
+
+        return _ok({"memory_id": memory_id, "disputed": disputed})
+    except Exception as e:
+        logger.error(f"Error updating disputed flag: {e}")
+        return _server_error(str(e))
 
 
 @mcp.custom_route("/api/memory/cleanup", methods=["POST"])
@@ -1809,7 +1898,7 @@ async def api_memory_projects(_request):
 @mcp.custom_route("/api/memory/pressure", methods=["GET"])
 async def api_memory_pressure(request):
     """REST API: Structured memory pressure snapshot."""
-    from memory.pressure import identify_pressure
+    from memory.pressure import identify_pressure, stale_candidate_memory_ids
 
     try:
         query = request.query_params
@@ -1835,6 +1924,14 @@ async def api_memory_pressure(request):
                 if mid and manager.knowledge_graph.count_contradicts(mid) > 0:
                     conflict.append(m)
 
+        # Stale-candidate ids come from the durable event log, not the scroll
+        # cap above — a bounded tail (not a full replay) is enough for display.
+        stale_ids = stale_candidate_memory_ids(manager.event_log.tail(limit=500))
+        by_id = (
+            {m.get("memory_id"): m for m in manager.store.get_many(stale_ids)} if stale_ids else {}
+        )
+        stale_candidates = [by_id[mid] for mid in stale_ids if mid in by_id]
+
         def _slim(items: list[dict]) -> list[dict]:
             return [
                 {
@@ -1856,9 +1953,13 @@ async def api_memory_pressure(request):
                     "stale_working_count": pressure.get("stale_working_count", 0),
                     "low_value_count": pressure.get("low_value_count", 0),
                     "contradiction_count": len(conflict),
+                    "disputed_count": pressure.get("disputed_count", 0),
+                    "stale_candidates_count": len(stale_candidates),
                     "stale_working": _slim(pressure.get("stale_working", [])),
                     "low_value": _slim(pressure.get("low_value", [])),
                     "conflict": _slim(conflict),
+                    "disputed": _slim(pressure.get("disputed", [])),
+                    "stale_candidates": _slim(stale_candidates),
                 },
                 "candidates": pressure.get("candidates", [])[:50],
                 "truncated": len(memories) >= cap,

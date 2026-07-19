@@ -126,6 +126,27 @@ def test_reflex_packet_passes_cwd_through_to_manager_recall():
     assert calls == ["/Users/dev/some-project"]
 
 
+def test_reflex_packet_passes_session_id_through_to_manager_recall():
+    from memory.reflex import build_reflex_packet
+
+    calls = []
+
+    class Manager:
+        def recall(self, query, limit=4, project=None, score_threshold=0.45, **kwargs):
+            calls.append(kwargs.get("session_id"))
+            return []
+
+    build_reflex_packet(
+        Manager(),
+        text="terraform apply",
+        project=None,
+        limit=4,
+        session_id="sess-42",
+    )
+
+    assert calls == ["sess-42"]
+
+
 def test_reflex_packet_shape_is_stable_for_hook():
     from memory.reflex import build_reflex_packet
 
@@ -148,6 +169,23 @@ def test_reflex_packet_shape_is_stable_for_hook():
     assert memory["type"] == "learning"
     assert memory["content"] == "Back up first"
     assert memory["score"] == 0.9
+
+
+def test_manager_reflex_passes_session_id_to_build_reflex_packet(monkeypatch):
+    from memory.manager import MemoryManager
+
+    captured = {}
+
+    def _fake_build_reflex_packet(manager, **kwargs):
+        captured.update(kwargs)
+        return {"cues": [], "dropped_cues": [], "memories": []}
+
+    monkeypatch.setattr("memory.reflex.build_reflex_packet", _fake_build_reflex_packet)
+
+    mgr = object.__new__(MemoryManager)
+    mgr.reflex(text="terraform apply", session_id="sess-42")
+
+    assert captured["session_id"] == "sess-42"
 
 
 class JsonRequest:
@@ -178,7 +216,7 @@ async def test_api_memory_reflex_returns_packet(monkeypatch):
     assert response.status_code == 200
     assert json.loads(response.body)["cues"] == ["iac"]
     manager.reflex.assert_called_once_with(
-        text="terraform apply", project="rekall-mcp", limit=2, cwd=None
+        text="terraform apply", project="rekall-mcp", limit=2, cwd=None, session_id=None
     )
 
 
@@ -193,8 +231,21 @@ async def test_api_memory_reflex_passes_cwd_to_manager(monkeypatch):
     await api_memory_reflex(JsonRequest({"text": "terraform apply", "cwd": "/Users/dev/proj"}))
 
     manager.reflex.assert_called_once_with(
-        text="terraform apply", project=None, limit=4, cwd="/Users/dev/proj"
+        text="terraform apply", project=None, limit=4, cwd="/Users/dev/proj", session_id=None
     )
+
+
+@pytest.mark.asyncio
+async def test_api_memory_reflex_passes_session_id_to_manager(monkeypatch):
+    from server import api_memory_reflex
+
+    manager = MagicMock()
+    manager.reflex.return_value = {"cues": [], "dropped_cues": [], "memories": []}
+    monkeypatch.setattr("server._get_memory_manager", lambda: manager)
+
+    await api_memory_reflex(JsonRequest({"text": "terraform apply", "session_id": "sess-42"}))
+
+    assert manager.reflex.call_args.kwargs["session_id"] == "sess-42"
 
 
 @pytest.mark.asyncio
@@ -210,7 +261,7 @@ async def test_api_memory_reflex_accepts_workspace_root_alias(monkeypatch):
     )
 
     manager.reflex.assert_called_once_with(
-        text="terraform apply", project=None, limit=4, cwd="/Users/dev/proj"
+        text="terraform apply", project=None, limit=4, cwd="/Users/dev/proj", session_id=None
     )
 
 
@@ -233,7 +284,11 @@ async def test_api_memory_reflex_explicit_project_wins_over_cwd(monkeypatch):
     )
 
     manager.reflex.assert_called_once_with(
-        text="terraform apply", project="rekall-mcp", limit=4, cwd="/Users/dev/other-project"
+        text="terraform apply",
+        project="rekall-mcp",
+        limit=4,
+        cwd="/Users/dev/other-project",
+        session_id=None,
     )
 
 
@@ -300,7 +355,31 @@ async def test_reflex_recall_tool_formats_memories(tool_registry):
 
     assert "Reflex cues: iac" in rendered
     assert "- Back up Terraform state before apply" in rendered
-    manager.reflex.assert_called_once_with(text="terraform apply", project="rekall-mcp")
+    manager.reflex.assert_called_once_with(
+        text="terraform apply", project="rekall-mcp", session_id=None
+    )
+
+
+@pytest.mark.asyncio
+async def test_reflex_recall_tool_passes_session_id_to_manager(tool_registry):
+    from tools.builtin.memory import OptimizedMemoryTools
+
+    capture_tool, registered_tools = tool_registry
+
+    class FakeMCP:
+        def tool(self, **kwargs):
+            return capture_tool()
+
+    manager = MagicMock()
+    manager.reflex.return_value = {"cues": [], "dropped_cues": [], "memories": []}
+
+    provider = OptimizedMemoryTools()
+    provider._manager = manager
+    provider.register(FakeMCP())
+
+    await registered_tools["reflex_recall"](text="terraform apply", session_id="sess-42")
+
+    assert manager.reflex.call_args.kwargs["session_id"] == "sess-42"
 
 
 @pytest.mark.asyncio

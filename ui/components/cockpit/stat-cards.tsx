@@ -97,7 +97,9 @@ export function StatCards({ insights, pressure }: Props) {
           {pressure
             ? pressure.flagged.stale_working_count +
               pressure.flagged.low_value_count +
-              pressure.flagged.contradiction_count
+              pressure.flagged.contradiction_count +
+              pressure.flagged.disputed_count +
+              pressure.flagged.stale_candidates_count
             : "—"}
         </div>
         <div className="mt-2 font-mono text-[10.5px] text-[var(--fg-muted)]">

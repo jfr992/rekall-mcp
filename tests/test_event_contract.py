@@ -79,6 +79,13 @@ def test_recall_emits_one_memory_recalled_with_query_scores_tokens():
     assert payload["capture_origin"] is None
 
 
+def test_recall_threads_session_id_into_memory_recalled_event():
+    mgr = _mgr(HITS)
+    MemoryManager.recall(mgr, "auth rotation", limit=5, session_id="sess-42")
+
+    assert mgr.record_event.call_args.kwargs["payload"]["session_id"] == "sess-42"
+
+
 def test_recall_survives_event_emission_failure():
     mgr = _mgr(HITS)
     mgr.record_event.side_effect = RuntimeError("event log broken")
@@ -107,6 +114,25 @@ async def test_mcp_recall_tool_rides_on_manager_emission(tool_registry):
 
     assert provider._manager.record_event.call_count == 1
     assert provider._manager.record_event.call_args.kwargs["event_type"] == "memory_recalled"
+
+
+@pytest.mark.asyncio
+async def test_mcp_recall_tool_threads_session_id_to_manager_recall(tool_registry):
+    from tools.builtin.memory import OptimizedMemoryTools
+
+    capture_tool, registered_tools = tool_registry
+
+    class FakeMCP:
+        def tool(self, **kwargs):
+            return capture_tool()
+
+    provider = OptimizedMemoryTools()
+    provider._manager = _mgr(HITS)
+    provider.register(FakeMCP())
+
+    await registered_tools["recall_memories"](query="auth rotation", session_id="sess-42")
+
+    assert provider._manager.record_event.call_args.kwargs["payload"]["session_id"] == "sess-42"
 
 
 @pytest.fixture

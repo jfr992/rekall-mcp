@@ -181,6 +181,7 @@ def test_match_posts_exact_command_cwd_and_limit(tmp_path):
     assert body["text"] == nasty_command
     assert body["cwd"] == "/workspaces/rekall-rfx"
     assert body["limit"] == 4
+    assert body["session_id"] == SESSION_ID
 
     calls = _calls(tmp_path)
     assert any("/api/memory/reflex" in c for c in calls), calls
