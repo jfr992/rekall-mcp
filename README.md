@@ -178,6 +178,7 @@ Browse the knowledge graph at `http://localhost:3333/brain` — the Next.js cock
 
 ![Recall workbench — semantic search with type facets](docs/screenshots/kb-recall.png)
 ![Stream — day-grouped activity timeline with the consolidation ladder](docs/screenshots/stream.png)
+![Hygiene — conflict queue, prune dry-run, and lifecycle backfill](docs/screenshots/hygiene.png)
 
 - `/brain` — force-directed graph view, nodes are memories, edges show typed relationships
 - `/kb` — typed columns (decisions, requirements, preferences, learnings), plus an **Export OKF** tab that distills memory into a portable [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf) bundle
