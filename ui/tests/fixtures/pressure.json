@@ -6,6 +6,8 @@
     "stale_working_count": 8,
     "low_value_count": 10,
     "contradiction_count": 1,
+    "disputed_count": 1,
+    "stale_candidates_count": 1,
     "stale_working": [],
     "low_value": [],
     "conflict": [
@@ -15,6 +17,24 @@
         "type": "decision",
         "tier": "semantic",
         "date": "2026-07-01"
+      }
+    ],
+    "disputed": [
+      {
+        "memory_id": "d1",
+        "content": "disputed fact about ingress class",
+        "type": "fact",
+        "tier": "semantic",
+        "date": "2026-07-10"
+      }
+    ],
+    "stale_candidates": [
+      {
+        "memory_id": "s1",
+        "content": "stale note about the old cluster name",
+        "type": "note",
+        "tier": "working",
+        "date": "2026-06-01"
       }
     ]
   },
