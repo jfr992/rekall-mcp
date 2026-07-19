@@ -489,21 +489,6 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 ---
 
 <details>
-<summary><b>Cost Savings</b></summary>
-
-### Token Savings
-- ~80% reduction in repetitive context
-
-### Prompt Cache Savings
-`get_cached_context()` returns identical content per turn -> 90% discount after turn 1
-
-At high usage: **~$54/month savings** per 10k cached tokens
-
-</details>
-
----
-
-<details>
 <summary><b>For Developers</b></summary>
 
 ### Local Development
