@@ -1225,9 +1225,7 @@ async def api_pin_memory(request):
             ok = manager.set_identity_pin(memory_id, pinned=pinned)
 
         if not ok:
-            return JSONResponse(
-                {"error": "not found", "memory_id": memory_id}, status_code=404
-            )
+            return JSONResponse({"error": "not found", "memory_id": memory_id}, status_code=404)
 
         return _ok({"memory_id": memory_id, "pinned": pinned})
     except Exception as e:
@@ -1253,9 +1251,7 @@ async def api_dispute_memory(request):
             ok = manager.set_disputed(memory_id, disputed=disputed)
 
         if not ok:
-            return JSONResponse(
-                {"error": "not found", "memory_id": memory_id}, status_code=404
-            )
+            return JSONResponse({"error": "not found", "memory_id": memory_id}, status_code=404)
 
         return _ok({"memory_id": memory_id, "disputed": disputed})
     except Exception as e:
@@ -1931,7 +1927,9 @@ async def api_memory_pressure(request):
         # Stale-candidate ids come from the durable event log, not the scroll
         # cap above — a bounded tail (not a full replay) is enough for display.
         stale_ids = stale_candidate_memory_ids(manager.event_log.tail(limit=500))
-        by_id = {m.get("memory_id"): m for m in manager.store.get_many(stale_ids)} if stale_ids else {}
+        by_id = (
+            {m.get("memory_id"): m for m in manager.store.get_many(stale_ids)} if stale_ids else {}
+        )
         stale_candidates = [by_id[mid] for mid in stale_ids if mid in by_id]
 
         def _slim(items: list[dict]) -> list[dict]:
