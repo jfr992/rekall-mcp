@@ -42,6 +42,7 @@ export const MemorySchema = z.object({
   project: z.string().optional(),
   salience: z.number().nullable().optional(),
   entities: z.array(z.string()).optional(),
+  disputed: z.boolean().optional(),
 }).passthrough();
 
 // ----- Recall (global search) ----------------------------------------------
@@ -61,6 +62,20 @@ export const RecallResponseSchema = z.object({
 export const DeleteResponseSchema = z.object({
   deleted: z.boolean(),
   memory_id: z.string(),
+});
+
+// ----- Pin (identity) -------------------------------------------------------
+
+export const PinResponseSchema = z.object({
+  memory_id: z.string(),
+  pinned: z.boolean(),
+});
+
+// ----- Dispute (resolution) --------------------------------------------------
+
+export const DisputeResponseSchema = z.object({
+  memory_id: z.string(),
+  disputed: z.boolean(),
 });
 
 // ----- Entity backlinks ----------------------------------------------------
@@ -275,9 +290,13 @@ export const PressureResponseSchema = z.object({
     stale_working_count: z.number(),
     low_value_count: z.number(),
     contradiction_count: z.number(),
+    disputed_count: z.number().default(0),
+    stale_candidates_count: z.number().default(0),
     stale_working: z.array(FlaggedMemorySchema).default([]),
     low_value: z.array(FlaggedMemorySchema).default([]),
     conflict: z.array(FlaggedMemorySchema).default([]),
+    disputed: z.array(FlaggedMemorySchema).default([]),
+    stale_candidates: z.array(FlaggedMemorySchema).default([]),
   }),
   candidates: z.array(z.record(z.string(), z.any())),
   truncated: z.boolean().optional(),
@@ -454,6 +473,8 @@ export type RecallMemory = z.infer<typeof RecallMemorySchema>;
 export type RecallResponse = z.infer<typeof RecallResponseSchema>;
 export type ByEntityResponse = z.infer<typeof ByEntityResponseSchema>;
 export type DeleteResponse = z.infer<typeof DeleteResponseSchema>;
+export type PinResponse = z.infer<typeof PinResponseSchema>;
+export type DisputeResponse = z.infer<typeof DisputeResponseSchema>;
 export type GraphNode = z.infer<typeof GraphNodeSchema>;
 export type GraphLink = z.infer<typeof GraphLinkSchema>;
 export type GraphResponse = z.infer<typeof GraphResponseSchema>;

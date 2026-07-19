@@ -124,7 +124,7 @@ def build_plan(manager, *, project: str, limit: int = MAX_DELETIONS_PER_APPLY) -
             continue
 
         reinforcement = int(m.get("reinforcement_count") or 0)
-        if reinforcement > 0:
+        if reinforcement >= 5 or tier in ("semantic", "identity") or m.get("pinned"):
             continue
 
         age = _age_days(m.get("date", ""), now=now)

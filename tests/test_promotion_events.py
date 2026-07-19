@@ -86,6 +86,34 @@ def test_reinforcement_without_tier_change_emits_nothing(mocked_manager):
     assert [e for e in _events(manager) if e["event_type"] == "memory_promoted"] == []
 
 
+def test_reinforcement_tier_drop_emits_demoted_not_promoted(mocked_manager):
+    """A contradicted semantic memory (classify() Rule 4) demotes one tier on
+    reclassify. That's a memory_demoted event, never memory_promoted."""
+    manager, store = mocked_manager
+    memory = {
+        "memory_id": "2026-07-09_fact_abc123",
+        "content": "the deploy needs the flag",
+        "type": "fact",
+        "project": "proj-a",
+        "tier": "semantic",
+        "salience": 0.1,
+        "reinforcement_count": 0,
+        "date": (datetime.now() - timedelta(days=8)).strftime("%Y-%m-%d"),
+    }
+    store.get_by_id.return_value = memory
+    manager.knowledge_graph.count_contradicts = MagicMock(return_value=2)
+
+    manager._reinforce_existing_memory("2026-07-09_fact_abc123")
+
+    store.update_payload.assert_called_once()
+    events = _events(manager)
+    assert [e["event_type"] for e in events] == ["memory_demoted"]
+    assert events[0]["project"] == "proj-a"
+    assert events[0]["payload"]["memory_id"] == "2026-07-09_fact_abc123"
+    assert events[0]["payload"]["from_tier"] == "semantic"
+    assert events[0]["payload"]["to_tier"] == "episodic"
+
+
 def test_failed_persistence_emits_no_promoted_event(mocked_manager):
     """The event lands only AFTER the write did — a failed update stays silent."""
     manager, store = mocked_manager

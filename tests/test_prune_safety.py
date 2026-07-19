@@ -94,6 +94,7 @@ def test_unknown_salience_never_in_plan():
 
 
 def test_reinforced_memories_not_in_plan():
+    """reinforcement_count>=5 protects; below that, prunable (Codex F10 decoupling)."""
     mgr = _fake_manager(
         [
             {
@@ -102,8 +103,8 @@ def test_reinforced_memories_not_in_plan():
                 "type": "note",
                 "salience": 0.1,
                 "date": _old_date(),
-                "reinforcement_count": 3,
-            },  # reinforced
+                "reinforcement_count": 5,
+            },  # reinforced to the promotion bar
             {
                 "memory_id": "w2",
                 "tier": "working",
@@ -118,6 +119,66 @@ def test_reinforced_memories_not_in_plan():
     ids = {c.memory_id for c in plan.candidates}
     assert "w1" not in ids
     assert "w2" in ids
+
+
+def test_below_promotion_threshold_reinforcement_is_prunable():
+    """Utility evidence below the promotion bar (reinforcement_count 1-4) no
+    longer immortalizes junk — only >=5 protects (Codex F10)."""
+    mgr = _fake_manager(
+        [
+            {
+                "memory_id": "w1",
+                "tier": "working",
+                "type": "note",
+                "salience": 0.1,
+                "date": _old_date(),
+                "reinforcement_count": 1,
+            },
+        ]
+    )
+    plan = build_plan(mgr, project="test")
+    ids = {c.memory_id for c in plan.candidates}
+    assert "w1" in ids
+
+
+def test_pinned_memory_not_in_plan():
+    """A pinned memory is never prunable regardless of reinforcement_count."""
+    mgr = _fake_manager(
+        [
+            {
+                "memory_id": "pinned1",
+                "tier": "working",
+                "type": "note",
+                "salience": 0.1,
+                "date": _old_date(),
+                "reinforcement_count": 0,
+                "pinned": True,
+            },
+        ]
+    )
+    plan = build_plan(mgr, project="test")
+    ids = {c.memory_id for c in plan.candidates}
+    assert "pinned1" not in ids
+
+
+def test_semantic_tier_not_in_plan_even_at_zero_reinforcement():
+    """tier=semantic protects independent of reinforcement_count (extends the
+    existing identity-only tier exemption)."""
+    mgr = _fake_manager(
+        [
+            {
+                "memory_id": "sem1",
+                "tier": "semantic",
+                "type": "fact",
+                "salience": 0.1,
+                "date": _old_date(),
+                "reinforcement_count": 0,
+            },
+        ]
+    )
+    plan = build_plan(mgr, project="test")
+    ids = {c.memory_id for c in plan.candidates}
+    assert "sem1" not in ids
 
 
 def test_young_memories_not_in_plan():

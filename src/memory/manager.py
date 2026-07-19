@@ -764,11 +764,15 @@ class MemoryManager:
             logger.warning(f"Could not persist reinforcement for {memory_id}", exc_info=True)
             return
 
-        # Durable write site: the tier bump persisted, so the event is true.
+        # Durable write site: the tier change persisted, so the event is true.
         from_tier, to_tier = existing.get("tier"), updated.get("tier")
         if from_tier != to_tier:
+            tier_order = ("working", "episodic", "semantic", "identity")
+            from_rank = tier_order.index(from_tier) if from_tier in tier_order else 0
+            to_rank = tier_order.index(to_tier) if to_tier in tier_order else 0
+            event_type = "memory_promoted" if to_rank > from_rank else "memory_demoted"
             self.record_event(
-                event_type="memory_promoted",
+                event_type=event_type,
                 project=str(existing.get("project") or "general"),
                 source="reinforcement",
                 memory_ids=[memory_id],
@@ -1121,6 +1125,71 @@ class MemoryManager:
         logger.info(f"Deleted memory: {memory_id}")
         return True
 
+    def set_identity_pin(self, memory_id: str, pinned: bool) -> bool:
+        """Grant or revoke the human-only identity pin (PLAN.md Identity pinning).
+
+        pinned=True sets explicit_tier="identity" + pinned=true; classify()
+        already treats explicit identity as permanent (lifecycle.py). Unpin
+        clears both flags and reclassifies at the memory's ordinary tier.
+        Read-reclassify-write, same shape as backfill_lifecycle. Returns
+        False if the memory doesn't exist.
+        """
+        from datetime import datetime as _dt
+
+        from memory.lifecycle import LifecycleSignals, classify, compute_retention_days
+
+        existing = self.store.get_by_id(memory_id)
+        if not existing:
+            return False
+
+        now = _dt.now()
+        date_str = existing.get("date") or now.strftime("%Y-%m-%d")
+        try:
+            age_days = max(0, (now - _dt.strptime(date_str, "%Y-%m-%d")).days)
+        except ValueError:
+            age_days = 0
+
+        explicit_tier = "identity" if pinned else None
+        signals = LifecycleSignals(
+            memory_type=existing.get("type", "note"),
+            salience=float(existing.get("salience") or 0.0),
+            age_days=age_days,
+            reinforcement_count=int(existing.get("reinforcement_count") or 0),
+            contradicts_count=self.knowledge_graph.count_contradicts(memory_id),
+            explicit_tier=explicit_tier,
+        )
+        result = classify(signals)
+
+        updated_payload = dict(existing)
+        updated_payload.update(
+            {
+                "tier": result.tier,
+                "durability": result.durability,
+                "lifecycle_reason": result.reason,
+                "retention_days": compute_retention_days(signals.memory_type, result.tier),
+                "pinned": pinned,
+            }
+        )
+        updated_payload["explicit_tier"] = "identity" if pinned else None
+
+        self.store.update_payload(memory_id, updated_payload)
+        return True
+
+    def set_disputed(self, memory_id: str, disputed: bool) -> bool:
+        """Clear (or set) the `disputed` flag reinforce.py sets on a `wrong`
+        verdict (PLAN.md T5 deliverable 4 — minimal resolution affordance).
+
+        Doesn't touch tier/reclassification: disputed suppresses recall
+        ranking, it isn't a classify() input. Returns False if the memory
+        doesn't exist.
+        """
+        existing = self.store.get_by_id(memory_id)
+        if not existing:
+            return False
+
+        self.store.update_payload(memory_id, {"disputed": disputed})
+        return True
+
     def cleanup(
         self,
         max_age_days_facts: int | None = None,
@@ -1206,6 +1275,7 @@ class MemoryManager:
         task_hint: str | None = None,
         cwd: str | None = None,
         source: str = "recall",
+        session_id: str | None = None,
     ) -> list[dict[str, Any]]:
         """Recall relevant memories using semantic search.
 
@@ -1221,6 +1291,8 @@ class MemoryManager:
             cwd: Caller's working directory — attributes the recall event to
                 the detected project when no explicit project is given; never
                 filters results
+            session_id: Caller's session id, if known — carried into the
+                memory_recalled event payload; absent stays null
 
         Returns:
             List of memories with scores
@@ -1434,6 +1506,7 @@ class MemoryManager:
                     project=attributed or "general",
                     memory_ids=[m["memory_id"] for m in results if m.get("memory_id")],
                     source=source,
+                    session_id=session_id,
                     payload={
                         "query": query,
                         "task_hint": task_hint,
@@ -1443,7 +1516,7 @@ class MemoryManager:
                         ],
                         # chars/4 — honest heuristic, not a tokenizer
                         "token_estimate": sum(len(m.get("content") or "") // 4 for m in results),
-                        "session_id": None,
+                        "session_id": session_id,
                         "capture_origin": source if source != "recall" else None,
                     },
                 )
@@ -1531,6 +1604,7 @@ class MemoryManager:
         days_back: int | None = None,
         task_hint: str | None = None,
         cwd: str | None = None,
+        session_id: str | None = None,
     ) -> str:
         """Recall memories with smart formatting that guides AI behavior.
 
@@ -1560,6 +1634,7 @@ class MemoryManager:
             days_back=days_back,
             task_hint=task_hint,
             cwd=cwd,
+            session_id=session_id,
         )
 
         if not memories:
@@ -2047,10 +2122,13 @@ class MemoryManager:
         project: str | None = None,
         limit: int = 4,
         cwd: str | None = None,
+        session_id: str | None = None,
     ) -> dict[str, Any]:
         from memory.reflex import build_reflex_packet
 
-        return build_reflex_packet(self, text=text, project=project, limit=limit, cwd=cwd)
+        return build_reflex_packet(
+            self, text=text, project=project, limit=limit, cwd=cwd, session_id=session_id
+        )
 
     def get_memory_detail(
         self,
