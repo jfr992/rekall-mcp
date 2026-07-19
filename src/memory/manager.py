@@ -1125,6 +1125,56 @@ class MemoryManager:
         logger.info(f"Deleted memory: {memory_id}")
         return True
 
+    def set_identity_pin(self, memory_id: str, pinned: bool) -> bool:
+        """Grant or revoke the human-only identity pin (PLAN.md Identity pinning).
+
+        pinned=True sets explicit_tier="identity" + pinned=true; classify()
+        already treats explicit identity as permanent (lifecycle.py). Unpin
+        clears both flags and reclassifies at the memory's ordinary tier.
+        Read-reclassify-write, same shape as backfill_lifecycle. Returns
+        False if the memory doesn't exist.
+        """
+        from datetime import datetime as _dt
+
+        from memory.lifecycle import LifecycleSignals, classify, compute_retention_days
+
+        existing = self.store.get_by_id(memory_id)
+        if not existing:
+            return False
+
+        now = _dt.now()
+        date_str = existing.get("date") or now.strftime("%Y-%m-%d")
+        try:
+            age_days = max(0, (now - _dt.strptime(date_str, "%Y-%m-%d")).days)
+        except ValueError:
+            age_days = 0
+
+        explicit_tier = "identity" if pinned else None
+        signals = LifecycleSignals(
+            memory_type=existing.get("type", "note"),
+            salience=float(existing.get("salience") or 0.0),
+            age_days=age_days,
+            reinforcement_count=int(existing.get("reinforcement_count") or 0),
+            contradicts_count=self.knowledge_graph.count_contradicts(memory_id),
+            explicit_tier=explicit_tier,
+        )
+        result = classify(signals)
+
+        updated_payload = dict(existing)
+        updated_payload.update(
+            {
+                "tier": result.tier,
+                "durability": result.durability,
+                "lifecycle_reason": result.reason,
+                "retention_days": compute_retention_days(signals.memory_type, result.tier),
+                "pinned": pinned,
+            }
+        )
+        updated_payload["explicit_tier"] = "identity" if pinned else None
+
+        self.store.update_payload(memory_id, updated_payload)
+        return True
+
     def cleanup(
         self,
         max_age_days_facts: int | None = None,

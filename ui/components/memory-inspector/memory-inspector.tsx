@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { AlertTriangle, Copy, Check, PencilLine, Trash2, X } from "lucide-react";
+import { AlertTriangle, Copy, Check, PencilLine, Trash2, X, Star } from "lucide-react";
 import { Drawer } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { DeleteMemoryDialog } from "./delete-memory-dialog";
+import { PinMemoryDialog } from "./pin-memory-dialog";
 import { Badge } from "@/components/ui/badge";
 import { MonoLabel } from "@/components/ui/mono-label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -35,7 +36,9 @@ export function MemoryInspector({
   const [copyFailed, setCopyFailed] = useState<"id" | "content" | null>(null);
   const [backlinkEntity, setBacklinkEntity] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmPin, setConfirmPin] = useState(false);
   const memory = detail?.memory;
+  const isPinned = memory?.tier === "identity";
 
   // Compute status: contradicted > superseded > legacy > current
   const statusValue = (() => {
@@ -235,6 +238,15 @@ export function MemoryInspector({
               <PencilLine size={14} />
               Edit (coming in U3)
             </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setConfirmPin(true)}
+              aria-label={isPinned ? "Remove identity pin" : "Promote to identity"}
+            >
+              <Star size={14} />
+              {isPinned ? "Remove identity pin" : "Promote to identity"}
+            </Button>
           </div>
 
           {confirmDelete && (
@@ -246,6 +258,16 @@ export function MemoryInspector({
                 setConfirmDelete(false);
                 onClose();
               }}
+            />
+          )}
+
+          {confirmPin && (
+            <PinMemoryDialog
+              memoryId={memory.memory_id}
+              content={memory.content ?? ""}
+              pinned={isPinned}
+              onCancel={() => setConfirmPin(false)}
+              onDone={() => setConfirmPin(false)}
             />
           )}
         </div>

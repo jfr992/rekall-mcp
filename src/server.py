@@ -634,6 +634,30 @@ async def api_memory_reflex(request):
         return _server_error(str(e))
 
 
+def _run_reinforce_pass(manager) -> None:
+    """Fire the T2 reinforce processor after a session_summary lands.
+
+    Best-effort: a failure here must never fail the ingestion response
+    (PLAN.md Mechanism: consume session_summary server-side, non-blocking).
+    """
+    from datetime import datetime
+
+    from memory.reinforce import process_events
+
+    try:
+        process_events(
+            event_log=manager.event_log,
+            store=manager.store,
+            graph=manager.knowledge_graph,
+            state_path=manager.memory_dir / "_reinforce_state.json",
+            lock_path=manager.memory_dir / "_reinforce.lock",
+            now=datetime.now(),
+            record_event=manager.record_event,
+        )
+    except Exception:
+        logger.error("reinforce pass failed after session_summary ingestion", exc_info=True)
+
+
 @mcp.custom_route("/api/memory/events", methods=["POST"])
 async def api_record_events(request):
     """REST API: Append a client-side event (e.g. session_summary) to the event log."""
@@ -681,6 +705,10 @@ async def api_record_events(request):
                 "test_passes_after_recall": test_passes_after_recall,
             },
         )
+
+        if event_type == "session_summary" and os.getenv("REKALL_REINFORCE", "1") != "0":
+            _run_reinforce_pass(manager)
+
         return _ok({"status": "recorded"})
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -1178,6 +1206,33 @@ async def api_delete_memory(request):
     except Exception as e:
         logger.error(f"Error deleting memory: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/{memory_id}/pin", methods=["POST"])
+async def api_pin_memory(request):
+    """REST API: grant/revoke the identity pin. Human-only affordance — no MCP tool."""
+    from starlette.responses import JSONResponse
+
+    try:
+        memory_id = request.path_params["memory_id"]
+        body = await request.json()
+        pinned = body.get("pinned")
+        if not isinstance(pinned, bool):
+            return _bad_request("pinned must be a boolean")
+
+        manager = _get_memory_manager()
+        async with _maintenance_barrier():
+            ok = manager.set_identity_pin(memory_id, pinned=pinned)
+
+        if not ok:
+            return JSONResponse(
+                {"error": "not found", "memory_id": memory_id}, status_code=404
+            )
+
+        return _ok({"memory_id": memory_id, "pinned": pinned})
+    except Exception as e:
+        logger.error(f"Error pinning memory: {e}")
+        return _server_error(str(e))
 
 
 @mcp.custom_route("/api/memory/cleanup", methods=["POST"])
