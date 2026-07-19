@@ -64,6 +64,10 @@ def _storage_isolation(tmp_path, monkeypatch):
     The shared singleton is reset so no test inherits another's storage path.
     """
     monkeypatch.setenv("MEMORY_STORAGE_PATH", str(tmp_path / "memory-store"))
+    # Live reinforce processor is default-ON in prod; during tests it must not
+    # fire on unrelated session_summary posts (cross-test store mutations).
+    # Wiring tests opt back in explicitly.
+    monkeypatch.setenv("REKALL_REINFORCE", "0")
     # A developer-exported QDRANT_PATH must never leak into tests (it would
     # collide with the conftest QDRANT_URL and point at a real local store).
     monkeypatch.delenv("QDRANT_PATH", raising=False)

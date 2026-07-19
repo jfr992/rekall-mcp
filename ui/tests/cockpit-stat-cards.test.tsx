@@ -35,10 +35,10 @@ describe("StatCards", () => {
     expect(container.textContent).not.toMatch(/hit rate/i);
   });
 
-  test("needs-attention card sums pressure flagged counts with a breakdown", () => {
+  test("needs-attention card sums pressure flagged counts with a breakdown, including disputed and stale_candidates (T5)", () => {
     render(<StatCards insights={insights} pressure={pressure} />);
-    // 8 stale + 10 low + 1 conflict = 19
-    expect(screen.getByText("19")).toBeInTheDocument();
+    // 8 stale + 10 low + 1 conflict + 1 disputed + 1 stale_candidate = 21
+    expect(screen.getByText("21")).toBeInTheDocument();
     expect(screen.getByText(/needs attention/i)).toBeInTheDocument();
     expect(screen.getByText(/stale 8/)).toBeInTheDocument();
     expect(screen.getByText(/low 10/)).toBeInTheDocument();

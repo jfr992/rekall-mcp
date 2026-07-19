@@ -86,7 +86,7 @@ A memory record has:
 
 **Don't bump the schema silently.** If you add a new field, update `memory/observe.py` (sanitization), `memory/lifecycle.py` (defaults), and `tests/conftest.py` (test fixtures). If existing memories need backfill, write a migration that runs through `manager.backfill_lifecycle()`.
 
-**Identity tier is sacred.** Reinforcement can promote `episodic → semantic → identity`, but nothing auto-demotes identity. Prune contract refuses to delete identity memories.
+**Identity tier is sacred — and pin-only.** No automatic path reaches identity: reinforcement tops out at semantic (≥5 effective credits, spaced across ≥2 sessions/2 days with ≥1 outcome-grade event); identity is granted/removed only via the human pin (`POST /api/memory/{id}/pin`). Nothing auto-demotes identity; `disputed` flags it but never suppresses it. Prune refuses identity, pinned, semantic, and reinforcement ≥5.
 
 ## Storage discipline
 

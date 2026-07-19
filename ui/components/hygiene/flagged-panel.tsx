@@ -19,12 +19,16 @@ type Props = {
     stale_working: FlaggedMemory[];
     low_value: FlaggedMemory[];
     conflict: FlaggedMemory[];
+    disputed: FlaggedMemory[];
+    stale_candidates: FlaggedMemory[];
   };
   onSelect: (memoryId: string) => void;
 };
 
 const GROUPS: Array<[keyof Props["flagged"], string, string]> = [
   ["conflict", "Conflicts", "carry a contradicts edge — see the resolution playbook in TUNING"],
+  ["disputed", "Disputed", "marked wrong by feedback — suppressed from recall until reviewed"],
+  ["stale_candidates", "Stale candidates", "marked stale — review for supersedes"],
   ["stale_working", "Stale", "working-tier past their retention window"],
   ["low_value", "Low value", "working-tier with low salience"],
 ];

@@ -59,6 +59,7 @@ def build_reflex_packet(
     project: str | None = None,
     limit: int = 4,
     cwd: str | None = None,
+    session_id: str | None = None,
 ) -> dict[str, Any]:
     """Build a small recall packet for cues matched by command or prompt text.
 
@@ -90,6 +91,7 @@ def build_reflex_packet(
         score_threshold=0.5,
         cwd=cwd,
         source="reflex",
+        session_id=session_id,
     ):
         if len(memories) >= limit:
             break

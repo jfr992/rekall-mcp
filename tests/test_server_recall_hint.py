@@ -42,6 +42,12 @@ def test_recall_truncates_oversized_task_hint(client, fake_manager):
     assert len(fake_manager.recall.call_args.kwargs["task_hint"]) == 256
 
 
+def test_recall_passes_session_id_to_manager(client, fake_manager):
+    r = client.post("/api/memory/recall", json={"query": "q", "session_id": "sess-42"})
+    assert r.status_code == 200
+    assert fake_manager.recall.call_args.kwargs["session_id"] == "sess-42"
+
+
 def test_rest_recall_emits_exactly_once(client, fake_manager):
     """Emission lives in manager.recall — the REST handler must not add a second."""
 

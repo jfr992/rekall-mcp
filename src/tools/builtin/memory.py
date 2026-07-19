@@ -546,6 +546,7 @@ class OptimizedMemoryTools(BaseToolProvider):
             days: int | None = None,
             task_hint: str | None = None,
             cwd: str | None = None,
+            session_id: str | None = None,
         ) -> str:
             """Use this whenever the question references prior decisions, current values or
             settings, past learnings, or what was chosen/changed — before answering from
@@ -572,6 +573,7 @@ class OptimizedMemoryTools(BaseToolProvider):
                     ignored server-side.
                 cwd: Pass your current working directory so the recall is
                     attributed to your project.
+                session_id: Pass the session id if known.
             """
             return self.manager.recall_formatted(
                 query=query,
@@ -581,6 +583,7 @@ class OptimizedMemoryTools(BaseToolProvider):
                 days_back=days,
                 task_hint=task_hint,
                 cwd=cwd,
+                session_id=session_id,
             )
 
         registered.append("recall_memories")
@@ -900,9 +903,15 @@ class OptimizedMemoryTools(BaseToolProvider):
         registered.append("publish_team_memory")
 
         @mcp.tool(structured_output=False)
-        async def reflex_recall(text: str, project: str | None = None) -> str:
-            """Use before risky commands or edits that may match prior failures."""
-            packet = self.manager.reflex(text=text, project=project)
+        async def reflex_recall(
+            text: str, project: str | None = None, session_id: str | None = None
+        ) -> str:
+            """Use before risky commands or edits that may match prior failures.
+
+            Args:
+                session_id: Pass the session id if known.
+            """
+            packet = self.manager.reflex(text=text, project=project, session_id=session_id)
             if not packet["cues"]:
                 return "No reflex cues matched."
 
