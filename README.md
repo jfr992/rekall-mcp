@@ -4,6 +4,8 @@
 
 Rekall MCP is a persistent memory system with a **knowledge graph** layer. It stores memories as YAML + vector embeddings, connects them with typed relationships, and retrieves context using graph-enhanced semantic search.
 
+![Rekall cockpit — aggregates dashboard with live recall feed and neural graph](docs/screenshots/cockpit.png)
+
 ---
 
 ## Local-First Agent Nervous System
@@ -173,6 +175,9 @@ When the same memory type appears in the result set, Rekall detects conflicting 
 ### Cockpit UI
 
 Browse the knowledge graph at `http://localhost:3333/brain` — the Next.js cockpit ships as a container, started by `docker compose up -d` alongside Qdrant and the backend. (For UI development, `cd ui && npm run dev -- -p 3333` still works.) Surfaces:
+
+![Recall workbench — semantic search with type facets](docs/screenshots/kb-recall.png)
+![Stream — day-grouped activity timeline with the consolidation ladder](docs/screenshots/stream.png)
 
 - `/brain` — force-directed graph view, nodes are memories, edges show typed relationships
 - `/kb` — typed columns (decisions, requirements, preferences, learnings), plus an **Export OKF** tab that distills memory into a portable [Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/tree/main/okf) bundle
