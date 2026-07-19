@@ -1235,6 +1235,34 @@ async def api_pin_memory(request):
         return _server_error(str(e))
 
 
+@mcp.custom_route("/api/memory/{memory_id}/dispute", methods=["POST"])
+async def api_dispute_memory(request):
+    """REST API: clear (or set) the disputed flag. Minimal v1 resolution
+    affordance (PLAN.md T5) — no supersede/edit machinery, just the flag."""
+    from starlette.responses import JSONResponse
+
+    try:
+        memory_id = request.path_params["memory_id"]
+        body = await request.json()
+        disputed = body.get("disputed")
+        if not isinstance(disputed, bool):
+            return _bad_request("disputed must be a boolean")
+
+        manager = _get_memory_manager()
+        async with _maintenance_barrier():
+            ok = manager.set_disputed(memory_id, disputed=disputed)
+
+        if not ok:
+            return JSONResponse(
+                {"error": "not found", "memory_id": memory_id}, status_code=404
+            )
+
+        return _ok({"memory_id": memory_id, "disputed": disputed})
+    except Exception as e:
+        logger.error(f"Error updating disputed flag: {e}")
+        return _server_error(str(e))
+
+
 @mcp.custom_route("/api/memory/cleanup", methods=["POST"])
 async def api_cleanup_memories(request):
     """REST API: Batch cleanup stale and redundant memories."""
@@ -1874,7 +1902,7 @@ async def api_memory_projects(_request):
 @mcp.custom_route("/api/memory/pressure", methods=["GET"])
 async def api_memory_pressure(request):
     """REST API: Structured memory pressure snapshot."""
-    from memory.pressure import identify_pressure
+    from memory.pressure import identify_pressure, stale_candidate_memory_ids
 
     try:
         query = request.query_params
@@ -1900,6 +1928,12 @@ async def api_memory_pressure(request):
                 if mid and manager.knowledge_graph.count_contradicts(mid) > 0:
                     conflict.append(m)
 
+        # Stale-candidate ids come from the durable event log, not the scroll
+        # cap above — a bounded tail (not a full replay) is enough for display.
+        stale_ids = stale_candidate_memory_ids(manager.event_log.tail(limit=500))
+        by_id = {m.get("memory_id"): m for m in manager.store.get_many(stale_ids)} if stale_ids else {}
+        stale_candidates = [by_id[mid] for mid in stale_ids if mid in by_id]
+
         def _slim(items: list[dict]) -> list[dict]:
             return [
                 {
@@ -1921,9 +1955,13 @@ async def api_memory_pressure(request):
                     "stale_working_count": pressure.get("stale_working_count", 0),
                     "low_value_count": pressure.get("low_value_count", 0),
                     "contradiction_count": len(conflict),
+                    "disputed_count": pressure.get("disputed_count", 0),
+                    "stale_candidates_count": len(stale_candidates),
                     "stale_working": _slim(pressure.get("stale_working", [])),
                     "low_value": _slim(pressure.get("low_value", [])),
                     "conflict": _slim(conflict),
+                    "disputed": _slim(pressure.get("disputed", [])),
+                    "stale_candidates": _slim(stale_candidates),
                 },
                 "candidates": pressure.get("candidates", [])[:50],
                 "truncated": len(memories) >= cap,
