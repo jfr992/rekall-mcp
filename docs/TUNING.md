@@ -320,6 +320,20 @@ Review all pairs at once: `curl http://localhost:8000/api/memory/consolidate` or
 
 Bulk repair of machine-made conflict flags: `QDRANT_URL=http://localhost:6333 uv run python scripts/repair_contradicts.py` re-judges every unrefined `contradicts` edge (LLM per pair when `ANTHROPIC_API_KEY` is set, negation heuristic otherwise) and downgrades the unsupported ones to `related_to` — dry-run by default, `--apply` to write.
 
+## Reinforcement & the tier ladder
+
+Memories earn **semantic** tier through evidence of use; **identity** is granted only by a human pin (inspector → "Promote to identity"). The credit model (all parameters adversarial/research-derived — see docs/specs):
+
+| Evidence | Credit | Notes |
+|---|---|---|
+| Recall followed by real work (session shows edits/tests after recall) | +1.0 | credited only to the recall's top-scored memory (score ≥0.6, within 0.05 of max) |
+| Explicit `useful` feedback | +1.0 | |
+| Bare recall | +0.25 | damped; can never sum to promotion alone |
+| Explicit `wrong` | −1.0 | also sets `disputed` — suppressed from recall until reviewed in Hygiene (identity exempt: flagged, never suppressed) |
+| Explicit `stale` | none | feeds a supersedes-candidate into Hygiene (staleness is truth-maintenance, not scoring) |
+
+Positive increments damp as 1/(1+0.5(n−1)) over a rolling 30 days; history caps at 20 events per memory. Promotion additionally requires credits from ≥2 distinct sessions on ≥2 distinct days plus ≥1 outcome-grade event — a burst is one exposure, not three. Replay/dry-run: `uv run python scripts/reinforce_replay.py` (dry-run default, `--apply` to write). Live processing runs after each session summary; kill switch `REKALL_REINFORCE=0`. Prune protects memories only at reinforcement ≥5, semantic/identity tier, or pinned.
+
 ## Inspector warnings
 
 `missing provenance` on a memory means it was saved before provenance tracking existed (2026-07-18) — its origin (agent, source tool, working directory) was never recorded and is not fabricated retroactively. Memories saved after that date carry provenance automatically; the warning marks legacy data, not a fault.
