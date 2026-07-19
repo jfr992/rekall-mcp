@@ -45,7 +45,13 @@ def test_pressure_flagged_disputed_list_from_payload(monkeypatch):
 
     fake = MagicMock()
     fake.store.scroll.return_value = [
-        {"memory_id": "d1", "tier": "semantic", "salience": 0.9, "content": "disputed one", "disputed": True},
+        {
+            "memory_id": "d1",
+            "tier": "semantic",
+            "salience": 0.9,
+            "content": "disputed one",
+            "disputed": True,
+        },
         {"memory_id": "ok1", "tier": "semantic", "salience": 0.9, "content": "fine"},
     ]
     fake.knowledge_graph.stats.return_value = {"nodes": 0, "edges": 0}
@@ -79,7 +85,14 @@ def test_pressure_flagged_stale_candidates_from_event_log(monkeypatch):
         {"memory_id": "ok1", "tier": "semantic", "salience": 0.9, "content": "fine"},
     ]
     fake.store.get_many.return_value = [
-        {"memory_id": "s1", "tier": "semantic", "salience": 0.9, "content": "stale one", "type": "fact", "date": "2026-07-01"},
+        {
+            "memory_id": "s1",
+            "tier": "semantic",
+            "salience": 0.9,
+            "content": "stale one",
+            "type": "fact",
+            "date": "2026-07-01",
+        },
     ]
     fake.knowledge_graph.stats.return_value = {"nodes": 0, "edges": 0}
     fake.knowledge_graph.count_contradicts.return_value = 0
