@@ -10,8 +10,11 @@ See PLAN.md (T2) for the full design. Credit sources:
 
 from __future__ import annotations
 
+import fcntl
 import json
 import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -384,3 +387,19 @@ def collect_credits(events: list[MemoryEvent], processed_sessions: frozenset[str
         newly_processed_sessions=newly_processed,
         supersedes_candidates=supersedes,
     )
+
+
+@contextmanager
+def reinforce_lock(lock_path: Path) -> Iterator[None]:
+    """Serialize read-reclassify-write on a memory's payload (Codex F11).
+
+    A blocking flock on a dedicated lock file — same idiom as the embedded
+    store's ownership lock (core/ownership.py), stdlib only.
+    """
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a+") as handle:
+        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
