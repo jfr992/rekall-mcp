@@ -7,7 +7,7 @@ performs the real store write via memory.reinforce.process_events.
 """
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -212,3 +212,31 @@ def test_main_apply_flag_invokes_process_events(tmp_path):
         main(["--events-file", str(events_file), "--apply"])
 
     assert mock_process.called
+
+
+def test_empty_report_explains_sessionless_recalls(capsys):
+    """Legacy recalls carry session_id None (pre-plumbing) — an empty table must
+    say why instead of looking broken."""
+    from datetime import datetime
+
+    from scripts.reinforce_replay import credit_coverage_stats, log_retention_stats, print_report
+
+    from memory.reinforce import MemoryEvent
+
+    events = [
+        MemoryEvent(
+            event_type="memory_recalled",
+            project="p",
+            agent="a",
+            source="recall",
+            payload={"session_id": None, "memories": [{"memory_id": "m1", "score": 0.9}]},
+            event_id="e1",
+            observed_at=datetime.now(UTC).isoformat(),
+        )
+    ]
+    coverage = credit_coverage_stats(events)
+    print_report([], log_retention_stats(events), coverage)
+    out = capsys.readouterr().out
+    assert "no credited memories" in out
+    assert "without session_id" in out
+    assert "1" in out
