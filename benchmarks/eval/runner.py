@@ -108,7 +108,7 @@ def aggregate(records: list[dict], n_items: int) -> dict:
         absent = arm_item_means("absent")
         type_of = {r["item_id"]: r["question_type"] for r in records if r["arm"] == "seeded"}
         per_type_p: dict[str, float] = {}
-        for t in sorted({qt for qt in type_of.values()}):
+        for t in sorted(set(type_of.values())):
             t_items = [i for i in seeded if i in absent and type_of.get(i) == t]
             if len(t_items) < MIN_STRATUM:
                 continue
@@ -117,9 +117,9 @@ def aggregate(records: list[dict], n_items: int) -> dict:
             per_type_p[t] = stats.mcnemar_exact(b, c)
         if per_type_p:
             flags = stats.benjamini_hochberg(list(per_type_p.values()), q=0.10)
-            report["exploratory"]["per_type_delta_bh_significant"] = {
-                t: flag for t, flag in zip(per_type_p, flags)
-            }
+            report["exploratory"]["per_type_delta_bh_significant"] = dict(
+                zip(per_type_p, flags, strict=False)
+            )
     return report
 
 
