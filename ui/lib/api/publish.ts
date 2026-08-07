@@ -13,7 +13,12 @@ export function downloadBundleUrl(project: string): string {
   return `/api/memory/publish?${qs}`;
 }
 
-export async function startSynthesis(project: string): Promise<{ status: string }> {
+export interface SynthStart {
+  status: "started" | "running" | "unconfigured";
+  hint?: string;
+}
+
+export async function startSynthesis(project: string): Promise<SynthStart> {
   const qs = new URLSearchParams(project ? { project } : {});
   return fetchJson(`/api/memory/publish/synthesize?${qs}`, { method: "POST" });
 }

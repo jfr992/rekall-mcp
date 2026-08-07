@@ -3,12 +3,14 @@
 import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { Download, Sparkles, FileText } from "lucide-react";
+import { toast } from "sonner";
 import { usePublish } from "@/lib/queries/use-publish";
 import {
   downloadBundleUrl,
   startSynthesis,
   getSynthesisStatus,
 } from "@/lib/api/publish";
+import { apiErrorMessage } from "@/lib/api/client";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -122,14 +124,31 @@ export function OkfExport({ project }: OkfExportProps) {
 
   async function runSynthesis() {
     setSynth({ running: true, done: 0, total: 0 });
-    await startSynthesis(project);
+    try {
+      const start = await startSynthesis(project);
+      if (start.status === "unconfigured") {
+        setSynth({ running: false, done: 0, total: 0 });
+        toast.error(start.hint ?? "Synthesis needs LLM credentials on the server.");
+        return;
+      }
+    } catch (err) {
+      setSynth({ running: false, done: 0, total: 0 });
+      toast.error(apiErrorMessage(err));
+      return;
+    }
     const poll = setInterval(async () => {
-      const s = await getSynthesisStatus(project);
-      setSynth({ running: s.status === "running", done: s.done ?? 0, total: s.total ?? 0 });
-      if (s.status !== "running") {
+      try {
+        const s = await getSynthesisStatus(project);
+        setSynth({ running: s.status === "running", done: s.done ?? 0, total: s.total ?? 0 });
+        if (s.status !== "running") {
+          clearInterval(poll);
+          if (s.status === "error") toast.error(s.error ?? "Synthesis failed.");
+          queryClient.invalidateQueries({ queryKey: ["publish", project] });
+        }
+      } catch (err) {
         clearInterval(poll);
         setSynth((p) => ({ ...p, running: false }));
-        queryClient.invalidateQueries({ queryKey: ["publish", project] });
+        toast.error(apiErrorMessage(err));
       }
     }, 1500);
   }
