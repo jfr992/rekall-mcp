@@ -44,3 +44,48 @@ def test_synthesis_error_is_not_cached():
 def test_cache_key_stable_across_calls():
     c = [_mem("x", "1"), _mem("y", "2")]
     assert cluster_key(c) == cluster_key(list(reversed(c)))
+
+
+def test_llm_complete_uses_bearer_for_oauth_tokens(monkeypatch):
+    import httpx
+
+    from memory.publish import _llm_complete
+
+    seen = {}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        seen.update(headers)
+        return httpx.Response(
+            200,
+            json={"content": [{"type": "text", "text": "ok"}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    _llm_complete(
+        "hi", model="m", base_url="https://api.anthropic.com", token="sk-ant-oat01-xyz"
+    )
+    assert seen["Authorization"] == "Bearer sk-ant-oat01-xyz"
+    assert seen["anthropic-beta"] == "oauth-2025-04-20"
+    assert "x-api-key" not in seen
+
+
+def test_llm_complete_uses_x_api_key_for_api_keys(monkeypatch):
+    import httpx
+
+    from memory.publish import _llm_complete
+
+    seen = {}
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        seen.update(headers)
+        return httpx.Response(
+            200,
+            json={"content": [{"type": "text", "text": "ok"}]},
+            request=httpx.Request("POST", url),
+        )
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    _llm_complete("hi", model="m", base_url="https://api.anthropic.com", token="sk-ant-api03-xyz")
+    assert seen["x-api-key"] == "sk-ant-api03-xyz"
+    assert "Authorization" not in seen

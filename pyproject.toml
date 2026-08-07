@@ -1,6 +1,6 @@
 [project]
 name = "rekall-mcp"
-version = "1.12.0"
+version = "1.13.0"
 description = "Persistent memory for AI assistants via MCP"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,7 +16,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "mcp>=1.0.0",
+    "mcp>=1.0.0,<2",
     "httpx>=0.27.0",
     "pydantic>=2.0.0",
     "pydantic-settings>=2.0.0",

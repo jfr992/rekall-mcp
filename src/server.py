@@ -1413,11 +1413,24 @@ async def api_memory_publish_synthesize(request):
     """Start (or report) a background synthesis job for a project scope."""
     import threading
 
-    from memory.publish import publish_from_manager
+    from memory.publish import _build_synth, publish_from_manager
 
     q = request.query_params
     project = _safe_project(q.get("project")) or ""
     key = project or "__all__"
+
+    synth, _ = _build_synth()
+    if synth is None:
+        return _ok(
+            {
+                "status": "unconfigured",
+                "hint": (
+                    "Synthesis needs an LLM: set REKALL_PUBLISH_MODEL (or "
+                    "ANTHROPIC_MODEL), ANTHROPIC_BASE_URL, and "
+                    "ANTHROPIC_AUTH_TOKEN or ANTHROPIC_API_KEY on the server."
+                ),
+            }
+        )
 
     job = _PUBLISH_JOBS.get(key)
     if job and job.get("status") == "running":

@@ -41,10 +41,31 @@ def test_tar_mode_returns_gzip(client):
 
 
 @pytest.mark.integration
-def test_synthesize_starts_job_and_status_polls(client):
+def test_synthesize_starts_job_and_status_polls(client, monkeypatch):
+    # Configured env; the nonexistent project has zero clusters, so no LLM call fires.
+    monkeypatch.setenv("REKALL_PUBLISH_MODEL", "m")
+    monkeypatch.setenv("ANTHROPIC_BASE_URL", "http://localhost:9")
+    monkeypatch.setenv("ANTHROPIC_AUTH_TOKEN", "t")
     r = client.post("/api/memory/publish/synthesize?project=nonexistent-xyz")
     assert r.status_code == 200
     assert r.json()["status"] in {"started", "running"}
     s = client.get("/api/memory/publish/status?project=nonexistent-xyz")
     assert s.status_code == 200
     assert s.json()["status"] in {"running", "done", "idle", "error"}
+
+
+@pytest.mark.integration
+def test_synthesize_reports_unconfigured_without_llm_env(client, monkeypatch):
+    for var in (
+        "REKALL_PUBLISH_MODEL",
+        "ANTHROPIC_MODEL",
+        "ANTHROPIC_BASE_URL",
+        "ANTHROPIC_AUTH_TOKEN",
+        "ANTHROPIC_API_KEY",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    r = client.post("/api/memory/publish/synthesize?project=unconfigured-probe-xyz")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["status"] == "unconfigured"
+    assert "ANTHROPIC" in body["hint"]

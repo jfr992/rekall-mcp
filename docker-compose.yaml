@@ -43,6 +43,10 @@ services:
       - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-fastembed}
       - REKALL_ALLOWED_HOSTS=${REKALL_ALLOWED_HOSTS:-mcp}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      # Publish synthesis (optional): LLM-distilled briefs for the /kb Synthesize button
+      - REKALL_PUBLISH_MODEL=${REKALL_PUBLISH_MODEL:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
       - OLLAMA_URL=${OLLAMA_URL:-http://ollama:11434}
       - MCP_TRANSPORT=streamable-http
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
@@ -104,6 +108,9 @@ services:
     environment:
       - QDRANT_URL=http://qdrant:6333
       - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-fastembed}
+      - REKALL_PUBLISH_MODEL=${REKALL_PUBLISH_MODEL:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-}
+      - ANTHROPIC_AUTH_TOKEN=${ANTHROPIC_AUTH_TOKEN:-}
       - MCP_TRANSPORT=streamable-http
       - LOG_LEVEL=DEBUG
       - MEMORY_STORAGE_PATH=/data/memory

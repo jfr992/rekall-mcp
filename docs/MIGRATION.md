@@ -1,3 +1,34 @@
+# Migration Guide — v1.12.0 → v1.13.0 (buttons that fail loudly)
+
+## What's new
+
+- **Publish synthesis works with Claude Code OAuth tokens.** `ANTHROPIC_AUTH_TOKEN`
+  now accepts either an Anthropic API key or a `claude setup-token` OAuth token
+  (`sk-ant-oat*`); the client auto-detects and sends the right auth headers.
+- **Synthesize fails loudly when unconfigured.** `POST /api/memory/publish/synthesize`
+  returns `{"status": "unconfigured", "hint": ...}` when the LLM env vars are
+  missing (previously: a background job that silently did nothing and reported
+  done 0/0). The cockpit shows the hint as a toast, and also surfaces job
+  errors and network failures instead of spinning forever.
+- **Docker can actually enable synthesis.** `docker-compose.yaml` now passes
+  `REKALL_PUBLISH_MODEL`, `ANTHROPIC_BASE_URL`, and `ANTHROPIC_AUTH_TOKEN`
+  through from `.env` — before this the vars never reached the container.
+  Documented in `docs/CLAUDE_MEMORY_SETTINGS.md` and `.env.example`.
+- **Prune plan builder is scope-gated in the UI.** "Build plan" is disabled
+  with an explanation under the all-memories scope (the backend already
+  refused it); hygiene toasts now show the backend's error detail instead of
+  "Request failed: 400".
+- **`mcp` pinned below 2.** mcp 2.0.0 removed `mcp.server.fastmcp`; fresh
+  installs and Docker rebuilds crash-looped. Pinned `mcp>=1.0.0,<2`.
+
+## Upgrading from v1.12.0
+
+No data migrations. `git pull && docker compose up -d --build mcp ui` (or
+`uv sync` for stdio installs). To enable LLM-distilled briefs, set the three
+synthesis env vars in `.env` (see `.env.example`) and restart the mcp service.
+
+---
+
 # Migration Guide — v1.11.0 → v1.12.0 (recall that earns its keep)
 
 ## What's new

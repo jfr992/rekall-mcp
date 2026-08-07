@@ -2219,7 +2219,7 @@ wheels = [
 
 [[package]]
 name = "rekall-mcp"
-version = "1.12.0"
+version = "1.13.0"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
@@ -2265,7 +2265,7 @@ requires-dist = [
     { name = "fastembed", specifier = ">=0.8,<0.9" },
     { name = "google-generativeai", marker = "extra == 'gemini'", specifier = ">=0.3.0" },
     { name = "httpx", specifier = ">=0.27.0" },
-    { name = "mcp", specifier = ">=1.0.0" },
+    { name = "mcp", specifier = ">=1.0.0,<2" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.10.0" },
     { name = "networkx", specifier = ">=3.0.0" },
     { name = "ollama", marker = "extra == 'ollama'", specifier = ">=0.1.0" },

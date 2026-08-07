@@ -39,3 +39,12 @@ export async function fetchJson<T>(
   const data = await res.json();
   return parse ? parse(data) : (data as T);
 }
+
+// Backend errors ship detail as {"error": "..."} — prefer it over the generic status text.
+export function apiErrorMessage(err: unknown): string {
+  if (err instanceof ApiError && err.body && typeof err.body === "object") {
+    const detail = (err.body as Record<string, unknown>).error;
+    if (typeof detail === "string" && detail) return detail;
+  }
+  return err instanceof Error ? err.message : "Unexpected error";
+}

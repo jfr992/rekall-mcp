@@ -322,9 +322,15 @@ def _llm_complete(prompt: str, *, model: str, base_url: str, token: str) -> str:
     """
     import httpx
 
+    # Claude Code OAuth tokens (sk-ant-oat*) require Bearer auth; API keys use x-api-key.
+    if token.startswith("sk-ant-oat"):
+        auth = {"Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20"}
+    else:
+        auth = {"x-api-key": token}
+
     resp = httpx.post(
         f"{base_url.rstrip('/')}/v1/messages",
-        headers={"x-api-key": token, "anthropic-version": "2023-06-01"},
+        headers={**auth, "anthropic-version": "2023-06-01"},
         json={
             "model": model,
             "max_tokens": 400,
