@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { fetchJson } from "@/lib/api/client";
+import { fetchJson, ApiError, apiErrorMessage } from "@/lib/api/client";
 
 function mockFetch() {
   const fn = vi.fn().mockResolvedValue({
@@ -41,5 +41,23 @@ describe("fetchJson browser-guard header", () => {
     expect(headers["X-Rekall-UI"]).toBe("1");
     expect(headers["Content-Type"]).toBe("application/json");
     expect(headers["X-Extra"]).toBe("y");
+  });
+});
+
+describe("apiErrorMessage", () => {
+  it("prefers the backend error detail from the response body", () => {
+    const err = new ApiError(400, "Request failed: 400", { error: "project is required" });
+    expect(apiErrorMessage(err)).toBe("project is required");
+  });
+
+  it("falls back to the Error message when there is no body detail", () => {
+    expect(apiErrorMessage(new ApiError(500, "Request failed: 500", "oops"))).toBe(
+      "Request failed: 500"
+    );
+    expect(apiErrorMessage(new Error("boom"))).toBe("boom");
+  });
+
+  it("handles non-Error throwables", () => {
+    expect(apiErrorMessage("weird")).toBe("Unexpected error");
   });
 });

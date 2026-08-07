@@ -19,6 +19,7 @@ import { usePrunePlanMutation, usePruneApplyMutation } from "@/lib/queries/use-p
 import { useProjectStore } from "@/lib/project-store";
 import { useMemoryDetail } from "@/lib/queries/use-memory-detail";
 import { scopedTitle } from "@/lib/scoped-title";
+import { apiErrorMessage } from "@/lib/api/client";
 import type { PrunePlan } from "@/lib/schemas";
 
 export default function HygienePage() {
@@ -44,7 +45,7 @@ export default function HygienePage() {
               : `Plan ${result.plan_id.slice(0, 8)}… built. ${result.candidates.length} candidates.`
           );
         },
-        onError: (err) => toast.error(err.message),
+        onError: (err) => toast.error(apiErrorMessage(err)),
       }
     );
   };
@@ -59,7 +60,7 @@ export default function HygienePage() {
           setPlan(null);
           toast.success(`Deleted ${res.deleted.length}. Skipped ${res.skipped.length}.`);
         },
-        onError: (err) => toast.error(err.message),
+        onError: (err) => toast.error(apiErrorMessage(err)),
       }
     );
   };
