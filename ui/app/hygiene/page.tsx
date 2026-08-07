@@ -87,7 +87,12 @@ export default function HygienePage() {
       <section className="grid grid-cols-1 gap-3.5 md:grid-cols-2">
         <div className={plan === null ? "" : "md:col-span-2"}>
           {plan === null ? (
-            <PruneBuilder onBuild={handleBuild} loading={planMutation.isPending} />
+            <PruneBuilder
+              onBuild={handleBuild}
+              loading={planMutation.isPending}
+              disabled={!project}
+              hint="Select a project scope above to build a prune plan — pruning never runs across all memories."
+            />
           ) : (
             <PrunePlanReview plan={plan}>
               {({ expired }) => (

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "sonner";
 import HygienePage from "@/app/hygiene/page";
+import { useProjectStore } from "@/lib/project-store";
 import prunePlanFixture from "./fixtures/prune-plan.json";
 import pressureFixture from "./fixtures/pressure.json";
 import * as pressureApi from "@/lib/api/pressure";
@@ -31,6 +32,8 @@ function renderHygiene() {
 
 describe("Prune flow (keystone)", () => {
   beforeEach(() => {
+    // Set project scope so the Build plan button is enabled
+    useProjectStore.setState({ project: "test-project" });
     // Freeze only Date (not setTimeout/setInterval) so waitFor and userEvent still work
     vi.useFakeTimers({ toFake: ["Date"] });
     vi.setSystemTime(new Date("2026-04-10T12:00:00"));
