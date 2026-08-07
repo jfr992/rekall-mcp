@@ -94,6 +94,24 @@ Current compose defaults:
 - `GET /api/memory/context/proactive?limit=120&project=...`
   - Top memories ranked by importance × recency, plus conflict detection
 
+### Publish synthesis (optional)
+
+The `/kb` cockpit page has a Synthesize button (`POST /api/memory/publish/synthesize`) that distills clusters of related memories into short knowledge briefs via an Anthropic-compatible `/v1/messages` endpoint (works against `api.anthropic.com` or a litellm proxy). Results are cached in `_publish_cache.json`, so the LLM is only called for new or changed clusters on subsequent runs.
+
+It activates only when all three env vars are set on the server process:
+
+| Variable | Fallback | Notes |
+|----------|----------|-------|
+| `REKALL_PUBLISH_MODEL` | `ANTHROPIC_MODEL` | model name, e.g. `claude-haiku-4-5-20251001` |
+| `ANTHROPIC_BASE_URL` | — | e.g. `https://api.anthropic.com` |
+| `ANTHROPIC_AUTH_TOKEN` | `ANTHROPIC_API_KEY` | API key or Claude Code OAuth token |
+
+`ANTHROPIC_AUTH_TOKEN` (or its fallback) accepts either a regular Anthropic API key or a Claude Code OAuth token (prefix `sk-ant-oat`, minted by `claude setup-token`). The token type is auto-detected: OAuth tokens get `Authorization: Bearer` plus the oauth beta header, API keys get `x-api-key`.
+
+Docker: compose passes these three vars through from `.env` for both `mcp` and `mcp-dev`. After setting them, restart the server: `docker compose up -d mcp`.
+
+Without this config, `/api/memory/publish/synthesize` returns `{"status": "unconfigured", "hint": "..."}` and the cockpit shows a toast instead of silently doing nothing. Publish/export still works without it, with raw (bulleted memory contents) briefs instead of LLM-distilled ones.
+
 ### Dashboard controls (query surface from UI)
 - `project` text field
 - `type` dropdown (`note`, `fact`, `preference`, `decision`, `learning`, `session`, `requirement`)
