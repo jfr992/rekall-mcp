@@ -61,7 +61,8 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 - `EMBEDDING_PROVIDER` sets embedding backend (`fastembed` default; `sentence-transformers` requires the `[torch]` extra; `ollama`, `gemini`).
 - `LOG_LEVEL` for diagnostics.
 - `OLLAMA_URL`, `GEMINI_API_KEY` as provider-specific settings.
-- `REKALL_MARKER_DIR` — directory where the restore, observe, and reflex hooks write/read per-session marker files (default `/tmp`).
+- `REKALL_MARKER_DIR` — directory where the restore, SessionEnd, prune, and reflex hooks write/read marker files (default `/tmp`).
+- `REKALL_TRANSCRIPT_TAIL_BYTES` — maximum Claude transcript tail read by `rekall-session-end.sh` (default 1 MiB; hard maximum 16 MiB).
 - `REKALL_REFLEX` — dedicated kill switch for `rekall-reflex.sh` (PreToolUse). Set to `0` to disable reflex recalls without touching autosave. Also gated by `REKALL_AUTOSAVE` (see below) — either variable at `0` disables it.
 
 Current compose defaults:
@@ -189,7 +190,7 @@ Rekall detects conflicting memories of the same type at read time, not write tim
 
 ## 7) Hooks: memory-prune.sh (gated daily superseded-prune)
 
-`claude/hooks/memory-prune.sh` is a thin `SessionStart` hook that fires the `/api/memory/prune/superseded` endpoint at most **once per calendar day**. Install it alongside `rekall-restore.sh` and `rekall-observe.sh`.
+`claude/hooks/memory-prune.sh` is a thin `SessionStart` hook that fires the `/api/memory/prune/superseded` endpoint at most **once per calendar day**. The default installer places it alongside `rekall-restore.sh`, `rekall-observe.sh`, `rekall-session-end.sh`, and `rekall-reflex.sh`.
 
 **What it does:**
 - Sends `{"confirm_date": "YYYY-MM-DD"}` to `/api/memory/prune/superseded`.

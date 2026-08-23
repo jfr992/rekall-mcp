@@ -60,8 +60,8 @@ synthesis env vars in `.env` (see `.env.example`) and restart the mcp service.
 - **Session transparency**: sessions list + per-session detail (injected
   memories, recall cards with scores), one-click recall feedback
   (`useful|wrong|stale`) recorded as labeled evidence.
-- **Docs & install**: README install path now includes the full Claude Code
-  wiring (four hooks, settings entries, kill switches, `CLAUDE_CONFIG_DIR`
+- **Docs & install**: README install path now includes the then-current Claude Code
+  wiring (then-current four-hook wiring, settings entries, kill switches, `CLAUDE_CONFIG_DIR`
   profiles); cockpit screenshots and a real recorded Claude Code demo
   session; unverifiable cost claims removed — measured numbers live in
   BENCHMARKS.md.
@@ -138,7 +138,7 @@ reinforcement wiring tests opt back in explicitly.
 **No breaking changes. No migration steps required.**
 
 - **Event log.** The server now emits `memory_recalled` and `memory_surfaced` events into `~/.claude/memory/_events.jsonl`. `memory_recalled` fires on recall, reflex, and cross-project calls; `memory_surfaced` fires at capsule/startup build for coverage auditing only (excluded from utility scoring — surfaced ≠ seen).
-- **Session-summary correlation.** The Stop hook (`rekall-observe.sh`) now has an ungated, LLM-free section that posts one `session_summary` event per session that used recall. It captures recalled memory IDs, edit count after first recall, and test-pass count — no tool payload contents transmitted. Runtime: ≤1 s curl, fail-open on any error. Kill switch: `REKALL_AUTOSAVE=0`. Marker dir configurable via `REKALL_MARKER_DIR` (default `/tmp`).
+- **Session-summary correlation lifecycle.** Current installs use `rekall-session-end.sh` under Claude Code's native `SessionEnd` event. It reads at most `REKALL_TRANSCRIPT_TAIL_BYTES` (default 1 MiB), posts one `session_summary` event only when recall evidence exists, and transmits recalled IDs plus edit/test-pass counts — never transcript or tool content. Runtime: ≤1 s curl, fail-open on any error. Kill switch: `REKALL_AUTOSAVE=0`; marker dir: `REKALL_MARKER_DIR` (default `/tmp`). Re-run `bash claude/setup/install.sh --hooks-only` to wire SessionEnd and retire the obsolete Rekall-owned PreCompact, PostCompact, and commit-nudge entries while preserving foreign hooks.
 - **Ranking is frozen.** No recall ranking changes ship until the exit criterion is met: ≥500 recall→outcome session pairs across ≥20 distinct sessions and ≥3 projects, AND top-10 utility memories exceed the null-hypothesis baseline by >2σ. Check progress with `scripts/utility_report.py` (reads `~/.claude/memory/_events.jsonl`).
 
 ---

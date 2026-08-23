@@ -47,8 +47,11 @@ fi
 
 [[ -f "$H/.claude/hooks/rekall-restore.sh" ]] && pass "rekall-restore.sh installed" || fail "rekall-restore.sh missing"
 [[ -f "$H/.claude/hooks/rekall-observe.sh" ]] && pass "rekall-observe.sh installed" || fail "rekall-observe.sh missing"
+[[ -f "$H/.claude/hooks/rekall-session-end.sh" ]] && pass "rekall-session-end.sh installed" || fail "rekall-session-end.sh missing"
 [[ -f "$H/.claude/hooks/rekall-reflex.sh" ]] && pass "rekall-reflex.sh installed" || fail "rekall-reflex.sh missing"
+[[ -f "$H/.claude/hooks/memory-prune.sh" ]] && pass "memory-prune.sh installed" || fail "memory-prune.sh missing"
 [[ -x "$H/.claude/hooks/rekall-restore.sh" ]] && pass "rekall-restore.sh executable" || fail "rekall-restore.sh not executable"
+[[ -x "$H/.claude/hooks/rekall-session-end.sh" ]] && pass "rekall-session-end.sh executable" || fail "rekall-session-end.sh not executable"
 [[ -x "$H/.claude/hooks/rekall-reflex.sh" ]] && pass "rekall-reflex.sh executable" || fail "rekall-reflex.sh not executable"
 
 UPS=$(jq -r '.hooks.UserPromptSubmit | length' "$H/.claude/settings.json" 2>/dev/null)
@@ -57,9 +60,16 @@ UPS=$(jq -r '.hooks.UserPromptSubmit | length' "$H/.claude/settings.json" 2>/dev
 STOP=$(jq -r '.hooks.Stop | length' "$H/.claude/settings.json" 2>/dev/null)
 [[ "$STOP" == "1" ]] && pass "Stop has 1 entry" || fail "Stop entry count = $STOP (expected 1)"
 
-# 4 hook events wired total: UserPromptSubmit, Stop, SessionStart (memory-prune), PreToolUse (reflex)
+SESSION_END=$(jq -r '.hooks.SessionEnd | length' "$H/.claude/settings.json" 2>/dev/null)
+[[ "$SESSION_END" == "1" ]] && pass "SessionEnd has 1 entry" || fail "SessionEnd entry count = $SESSION_END (expected 1)"
+
+SESSION_END_TIMEOUT=$(jq -r '.hooks.SessionEnd[0].hooks[0].timeout' "$H/.claude/settings.json" 2>/dev/null)
+[[ "$SESSION_END_TIMEOUT" == "3" ]] && pass "SessionEnd timeout is 3 seconds" || fail "SessionEnd timeout = $SESSION_END_TIMEOUT (expected 3)"
+
+# 5 hook events wired total: UserPromptSubmit, Stop, SessionEnd,
+# SessionStart (memory-prune), and PreToolUse (reflex).
 HOOK_EVENTS=$(jq -r '.hooks | keys | length' "$H/.claude/settings.json" 2>/dev/null)
-[[ "$HOOK_EVENTS" == "4" ]] && pass "fresh install wires 4 hook events" || fail "hook event count = $HOOK_EVENTS (expected 4)"
+[[ "$HOOK_EVENTS" == "5" ]] && pass "fresh install wires 5 hook events" || fail "hook event count = $HOOK_EVENTS (expected 5)"
 
 ls "$H/.claude/settings.json.bak-"* >/dev/null 2>&1 && pass "settings.json backup created" || fail "no backup file"
 
@@ -77,6 +87,9 @@ UPS_AFTER=$(jq -r '.hooks.UserPromptSubmit | length' "$H/.claude/settings.json")
 
 STOP_AFTER=$(jq -r '.hooks.Stop | length' "$H/.claude/settings.json")
 [[ "$STOP_AFTER" == "1" ]] && pass "Stop still 1 entry (no duplicate)" || fail "Stop grew to $STOP_AFTER"
+
+SESSION_END_AFTER=$(jq -r '.hooks.SessionEnd | length' "$H/.claude/settings.json")
+[[ "$SESSION_END_AFTER" == "1" ]] && pass "SessionEnd still 1 entry (no duplicate)" || fail "SessionEnd grew to $SESSION_END_AFTER"
 
 PRETOOL_AFTER=$(jq -r '.hooks.PreToolUse | length' "$H/.claude/settings.json")
 [[ "$PRETOOL_AFTER" == "1" ]] && pass "PreToolUse still 1 entry (no duplicate)" || fail "PreToolUse grew to $PRETOOL_AFTER"

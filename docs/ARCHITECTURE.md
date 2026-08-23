@@ -554,4 +554,6 @@ Claude native memory        Codex native memory (~/.codex/memories/)
 (separate, harness-owned)   (separate, harness-owned; never edited by Rekall)
 ```
 
+The Claude adapter is five fail-open hooks installed by `claude/setup/install.sh`. `UserPromptSubmit` announces availability without injecting memory; `PreToolUse` performs cue-gated bounded reflex recall; `Stop` runs a signal-gated judge in safe mode at low effort with no tools or session persistence; `SessionStart` performs daily prune housekeeping; and `SessionEnd` reads a bounded transcript tail (`REKALL_TRANSCRIPT_TAIL_BYTES`, default 1 MiB) to emit an IDs-and-counts-only utility event. The installer preserves foreign settings and removes only three exact obsolete Rekall hook basenames.
+
 The Codex adapter lives under `codex/hooks/rekall_hook.py` and is installed by `codex/setup/install.sh`. Its six lifecycle handlers are bounded, fail-open, and MCP-first: `SessionStart`, `PreToolUse`, `PreCompact`, `PostCompact`, `PostToolUse`, and `SessionEnd`. Reflex packets are untrusted historical evidence, not instructions. Installation migrates only Codex hook configuration and never reads or writes `~/.codex/memories/`.

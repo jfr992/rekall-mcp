@@ -87,7 +87,7 @@ When broad continuity is needed, use `agent_startup` at most once per session—
 
 The shippable `claude/hooks/session-start-memory.sh` hook is opt-in. It prefers `/api/memory/capsule`, falls back to `/api/memory/context/startup`, infers project scope from Claude Code's `cwd` or `project_dir` JSON fields, and emits only a thin `SessionStart` `additionalContext` packet.
 
-Default install preserves the existing `UserPromptSubmit` status line and `Stop` autosave behavior. Add the capsule only when you explicitly want startup injection:
+Default install preserves the existing `UserPromptSubmit` status line and safe-mode `Stop` autosave behavior, and adds bounded `SessionEnd` recall-utility accounting. The SessionEnd hook sends IDs and counts only, never transcript content. Add the capsule only when you explicitly want startup injection:
 
 ```bash
 bash claude/setup/install.sh --install-startup-capsule

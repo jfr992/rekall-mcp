@@ -120,6 +120,21 @@ Claude hooks / CLI / MCP clients / Browser cockpit
 
 **Review-depth update [FACT/JUDGMENT]:** The Claude install, restore, observe, reflex, prune, and capsule hook paths were reviewed specifically for Codex migration and parity. That focused review found marker-token sanitization, raw-content logging, API URL inconsistency, and startup untrusted framing risks; they remain follow-up evidence rather than silent Claude refactors. Existing strengths include `agent_startup(agent="codex")` and the client-neutral backend.
 
+# F17 — Claude's nested judge inherited the entire interactive profile
+
+**[JUDGMENT] Severity: Medium operational cost / lifecycle correctness, with a High-severity credential hygiene residual · Fix tier: Tier 1 repository fix + explicit user credential action**
+
+**[FACT] Remediation status:** Repository hardening and local live-profile normalization are complete on `codex/support`; provider-side credential rotation remains an explicit user action.
+
+- **Evidence [FACT]:** The shipped Stop hook described an isolated judge but invoked ordinary `claude -p --model ...`. A controlled trivial full-profile launch consumed roughly 51k input-context tokens, while a no-tool safe-mode control consumed roughly 4.2k. Disabling configured MCP servers alone still left roughly 16.9k, showing that both plugins and MCP registration contributed. These measurements are directional because cache state and output vary, but the order-of-magnitude profile gap is stable.
+- **Evidence [FACT]:** The same Stop hook reread the full transcript and attempted utility correlation on every assistant turn even though current Claude Code exposes `SessionEnd`. The live settings also retained three unshipped Rekall-owned lifecycle hooks, and reflex URL/debounce behavior had drifted from the repository.
+- **Evidence [FACT]:** The inspected user profile registered Context7 twice: once through the official plugin and once as a manual MCP command with a credential in its argument list. The credential value is intentionally omitted from this report.
+- **Impact [JUDGMENT]:** A cheap judge could pay the cost and attack surface of the user's entire interactive profile; per-turn full-transcript work wasted local resources; installer reruns could preserve incompatible ownership; and a command-line credential could appear in process listings or diagnostics.
+- **Smallest safe fix [FACT/JUDGMENT]:** Run the gated judge with Claude safe mode, `--effort low`, no tools, and no session persistence; move IDs-and-counts-only utility correlation to a bounded native SessionEnd hook; reserve reflex cue markers even on zero-hit responses; standardize `REKALL_API_URL` precedence; and have the installer remove only the exact obsolete Rekall basenames while preserving foreign hooks.
+- **Live verification [FACT]:** The normalized profile retains the official Context7 plugin and Rekall MCP, disables Ponytail, removes the duplicate manual Context7 registration, removes all three obsolete Rekall hook entries, and wires one three-second SessionEnd hook. Ten native Claude `MEMORY.md` checksums were unchanged. A fresh isolated judge returned `OK` in about 0.99 s with 4,048 input tokens (about $0.0042 in that run). A permission-approved full-profile Rekall evaluation retrieved `2026-08-23_learning_7b795c0f` as the top result and correctly used it to explain the judge fix; two lower direct-recall results were unrelated, so the system was useful for this query but ranking precision is not perfect.
+- **Definition of done [JUDGMENT]:** Focused hook and installer contract tests pass; SessionEnd reads no more than `REKALL_TRANSCRIPT_TAIL_BYTES`; no transcript content enters the event body; reinstall is idempotent; live native Claude memory checksums are unchanged; only one Context7 integration remains; and the user rotates or revokes the exposed Context7 key with the provider.
+- **Residual action [USER]:** Removing the duplicate manual registration does not invalidate an exposed key. Rotate or revoke it at Context7, then complete any required interactive authentication. Rekall must not print, store, or attempt to reuse the old value.
+
 # Phase 2 — Audit Report
 
 ## Security and dependencies

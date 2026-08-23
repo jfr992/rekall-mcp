@@ -141,7 +141,9 @@ def _bodies(tmp_path: Path) -> list[dict]:
 
 def _envelope(stdout: str) -> dict:
     assert stdout.strip(), "expected non-empty stdout"
-    return json.loads(stdout)
+    envelope = json.loads(stdout)
+    assert isinstance(envelope, dict)
+    return envelope
 
 
 # ---------------------------------------------------------------------------
@@ -185,6 +187,21 @@ def test_match_posts_exact_command_cwd_and_limit(tmp_path):
 
     calls = _calls(tmp_path)
     assert any("/api/memory/reflex" in c for c in calls), calls
+
+
+def test_canonical_api_url_wins_over_legacy_alias(tmp_path):
+    empty_packet = json.dumps({"cues": ["iac"], "dropped_cues": [], "memories": []})
+    fakebin = _fake_curl(tmp_path, body=empty_packet)
+
+    result = _run_hook(
+        tmp_path,
+        command="terraform plan",
+        fakebin=fakebin,
+        extra_env={"REKALL_API_URL": "http://canonical.test"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert any("http://canonical.test/api/memory/reflex" in call for call in _calls(tmp_path))
 
 
 # ---------------------------------------------------------------------------
@@ -339,6 +356,19 @@ def test_debounce_second_matching_command_same_session_no_second_curl(tmp_path):
     assert len(_calls(tmp_path)) == 1, "debounced: no second curl invocation"
 
 
+def test_debounce_empty_packet_reserves_local_cue_group(tmp_path):
+    empty_packet = json.dumps({"cues": [], "dropped_cues": [], "memories": []})
+    fakebin = _fake_curl(tmp_path, body=empty_packet)
+
+    first = _run_hook(tmp_path, command="terraform plan", fakebin=fakebin)
+    second = _run_hook(tmp_path, command="terraform apply", fakebin=fakebin)
+
+    assert first.returncode == 0, first.stderr
+    assert second.returncode == 0, second.stderr
+    assert first.stdout == second.stdout == ""
+    assert len(_calls(tmp_path)) == 1, "zero-hit responses still debounce the matched cue"
+
+
 def test_debounce_different_session_still_fires(tmp_path):
     fakebin = _fake_curl(tmp_path, body=MATCH_PACKET)
 
@@ -424,9 +454,9 @@ def test_hook_gate_matches_every_server_cue_term():
                 fakebin = _fake_curl(tmp_path, body="{}")
                 result = _run_hook(tmp_path, command=term, fakebin=fakebin)
                 assert result.returncode == 0, result.stderr
-                assert _calls(tmp_path), (
-                    f"hook gate did not match server cue term {term!r} from group {group!r}"
-                )
+                assert _calls(
+                    tmp_path
+                ), f"hook gate did not match server cue term {term!r} from group {group!r}"
 
 
 def test_kill_switch_autosave_disabled(tmp_path):

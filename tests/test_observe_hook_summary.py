@@ -1,4 +1,4 @@
-"""Tests for the ungated session-summary section of rekall-observe.sh.
+"""Tests for the bounded SessionEnd utility-summary hook.
 
 Pattern mirrors test_claude_startup_hook.py: fake curl binary captures
 POST bodies; synthetic JSONL transcripts drive the Python extractor.
@@ -10,7 +10,8 @@ import subprocess
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
-HOOK = REPO / "claude" / "hooks" / "rekall-observe.sh"
+HOOK = REPO / "claude" / "hooks" / "rekall-session-end.sh"
+STOP_HOOK = REPO / "claude" / "hooks" / "rekall-observe.sh"
 
 SESSION_ID = "test-sess-abc123"
 
@@ -217,7 +218,7 @@ def _run_hook(
     extra_env: dict | None = None,
 ) -> tuple[subprocess.CompletedProcess, list[str], list[dict]]:
     """
-    Run rekall-observe.sh with fake curl and return
+    Run rekall-session-end.sh with fake curl and return
     (result, curl_arg_lines, parsed_POST_bodies).
     """
     fakebin, calls, bodies = _make_fake_curl(tmp_path)
@@ -245,8 +246,9 @@ def _run_hook(
     payload = {
         "transcript_path": str(transcript_path),
         "cwd": "/workspaces/rekall-mcp",
-        "stop_hook_active": False,
         "session_id": SESSION_ID,
+        "hook_event_name": "SessionEnd",
+        "reason": "prompt_input_exit",
     }
 
     result = subprocess.run(
@@ -309,6 +311,7 @@ def test_summary_with_recall_edits_and_test_pass(tmp_path):
 
     # One Bash pytest with "passed" = 1 test pass after recall
     assert body["test_passes_after_recall"] == 1, body
+    assert "Use Qdrant for vector storage" not in json.dumps(body)
 
     # Values must be int, not bool (endpoint rejects bools)
     assert isinstance(body["edits_after_recall"], int)
@@ -399,23 +402,52 @@ def test_marker_path_expression_consistent_across_hooks():
     We cannot write to /tmp in tests, so instead we assert the hook source TEXT
     uses the same env variable with the same default on the rekall-restored- line.
     """
-    observe_text = (REPO / "claude" / "hooks" / "rekall-observe.sh").read_text(encoding="utf-8")
+    observe_text = HOOK.read_text(encoding="utf-8")
     restore_text = (REPO / "claude" / "hooks" / "rekall-restore.sh").read_text(encoding="utf-8")
 
     observe_marker_lines = [ln for ln in observe_text.splitlines() if "rekall-restored-" in ln]
     restore_marker_lines = [ln for ln in restore_text.splitlines() if "rekall-restored-" in ln]
 
-    assert observe_marker_lines, "rekall-observe.sh has no line referencing rekall-restored-"
+    assert observe_marker_lines, "rekall-session-end.sh has no line referencing rekall-restored-"
     assert restore_marker_lines, "rekall-restore.sh has no line referencing rekall-restored-"
 
     for line in observe_marker_lines:
-        assert "REKALL_MARKER_DIR:-/tmp" in line, (
-            f"rekall-observe.sh marker line must use REKALL_MARKER_DIR:-/tmp, got: {line!r}"
-        )
+        assert (
+            "REKALL_MARKER_DIR:-/tmp" in line
+        ), f"rekall-session-end.sh marker line must use REKALL_MARKER_DIR:-/tmp, got: {line!r}"
     for line in restore_marker_lines:
-        assert "REKALL_MARKER_DIR:-/tmp" in line, (
-            f"rekall-restore.sh marker line must use REKALL_MARKER_DIR:-/tmp, got: {line!r}"
-        )
+        assert (
+            "REKALL_MARKER_DIR:-/tmp" in line
+        ), f"rekall-restore.sh marker line must use REKALL_MARKER_DIR:-/tmp, got: {line!r}"
+
+
+def test_summary_lifecycle_is_session_end_only_and_tail_is_bounded():
+    session_end_text = HOOK.read_text(encoding="utf-8")
+    stop_text = STOP_HOOK.read_text(encoding="utf-8")
+
+    assert "REKALL_TRANSCRIPT_TAIL_BYTES" in session_end_text
+    assert "session_summary" in session_end_text
+    assert "session_summary" not in stop_text
+
+
+def test_summary_reads_valid_records_from_bounded_transcript_tail(tmp_path):
+    t = tmp_path / f"{SESSION_ID}.jsonl"
+    prefix = json.dumps({"type": "noise", "padding": "x" * 10_000}) + "\n"
+    tail = "".join(json.dumps(entry) + "\n" for entry in _recall_transcript_entries())
+    t.write_text(prefix + tail, encoding="utf-8")
+
+    result, url_lines, bodies = _run_hook(
+        tmp_path,
+        t,
+        extra_env={"REKALL_TRANSCRIPT_TAIL_BYTES": "4096"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert len([line for line in url_lines if "/api/memory/events" in line]) == 1
+    assert set(bodies[0]["recalled_ids"]) == {
+        "2026-07-01_decision_aaaa1111",
+        "2026-07-02_learning_bbbb2222",
+    }
 
 
 def _attachment_entry(

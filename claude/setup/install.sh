@@ -135,7 +135,7 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     step "Installing hooks → ~/.claude/hooks/"
     mkdir -p "$HOME/.claude/hooks"
 
-    HOOKS=(rekall-restore.sh rekall-observe.sh memory-prune.sh rekall-reflex.sh)
+    HOOKS=(rekall-restore.sh rekall-observe.sh rekall-session-end.sh memory-prune.sh rekall-reflex.sh)
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         HOOKS+=(session-start-memory.sh)
     fi
@@ -171,11 +171,12 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     cp "$SETTINGS" "$BACKUP"
     ok "backed up to $(basename "$BACKUP")"
 
-    # Merge: add UserPromptSubmit (rekall-restore) + Stop (rekall-observe) hooks.
-    # memory-prune.sh wires unconditionally (no context injection); session-start-memory.sh (context injector) stays opt-in.
-    # Idempotent — checks if the command path already exists in the array.
+    # Merge Rekall's supported lifecycle hooks and retire exact basenames from
+    # superseded experimental hooks. Foreign hooks and top-level settings are
+    # preserved; session-start-memory.sh (context injector) remains opt-in.
     REST_CMD="$HOME/.claude/hooks/rekall-restore.sh"
     OBS_CMD="$HOME/.claude/hooks/rekall-observe.sh"
+    SESSION_END_CMD="$HOME/.claude/hooks/rekall-session-end.sh"
     PRUNE_CMD="$HOME/.claude/hooks/memory-prune.sh"
     REFLEX_CMD="$HOME/.claude/hooks/rekall-reflex.sh"
     START_CMD=""
@@ -183,13 +184,72 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
         START_CMD="$HOME/.claude/hooks/session-start-memory.sh"
     fi
 
-    /usr/bin/python3 - "$SETTINGS" "$REST_CMD" "$OBS_CMD" "$PRUNE_CMD" "$REFLEX_CMD" "$START_CMD" <<'PY'
-import json, sys
-path, rest_cmd, obs_cmd, prune_cmd, reflex_cmd, start_cmd = sys.argv[1], sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], sys.argv[6]
-with open(path) as f: d = json.load(f)
-d.setdefault("hooks", {})
+    /usr/bin/python3 - "$SETTINGS" "$REST_CMD" "$OBS_CMD" "$SESSION_END_CMD" "$PRUNE_CMD" "$REFLEX_CMD" "$START_CMD" <<'PY'
+import json
+import os
+import shlex
+import sys
 
-def ensure_event_hook(event, command, matcher=""):
+(
+    path,
+    rest_cmd,
+    obs_cmd,
+    session_end_cmd,
+    prune_cmd,
+    reflex_cmd,
+    start_cmd,
+) = sys.argv[1:]
+with open(path) as f:
+    d = json.load(f)
+if not isinstance(d.setdefault("hooks", {}), dict):
+    raise SystemExit("settings hooks must be a JSON object")
+
+
+OBSOLETE_REKALL_HOOKS = {
+    "rekall-precompact.sh",
+    "rekall-postcompact.sh",
+    "rekall-commit-nudge.sh",
+}
+
+
+def command_basename(command):
+    if not isinstance(command, str):
+        return ""
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return ""
+    return os.path.basename(parts[0]) if len(parts) == 1 else ""
+
+
+def prune_obsolete_rekall_hooks():
+    removed = 0
+    for event, entries in list(d["hooks"].items()):
+        if not isinstance(entries, list):
+            continue
+        kept_entries = []
+        for entry in entries:
+            if not isinstance(entry, dict) or not isinstance(entry.get("hooks"), list):
+                kept_entries.append(entry)
+                continue
+            kept_hooks = []
+            for hook in entry["hooks"]:
+                basename = command_basename(hook.get("command")) if isinstance(hook, dict) else ""
+                if basename in OBSOLETE_REKALL_HOOKS:
+                    removed += 1
+                else:
+                    kept_hooks.append(hook)
+            if kept_hooks:
+                entry["hooks"] = kept_hooks
+                kept_entries.append(entry)
+        if kept_entries:
+            d["hooks"][event] = kept_entries
+        else:
+            del d["hooks"][event]
+    return removed
+
+
+def ensure_event_hook(event, command, matcher="", timeout=None):
     """Wire `command` under `event`, keyed on matcher correctness.
 
     Returns "added" (new entry appended), "repaired" (existing entry's
@@ -201,18 +261,26 @@ def ensure_event_hook(event, command, matcher=""):
     for entry in arr:
         for h in entry.get("hooks", []):
             if h.get("command") == command:
+                changed = False
                 existing_matcher = entry.get("matcher", "")
                 if matcher and existing_matcher != matcher:
                     entry["matcher"] = matcher
-                    return "repaired"
-                return None
+                    changed = True
+                if timeout is not None and h.get("timeout") != timeout:
+                    h["timeout"] = timeout
+                    changed = True
+                return "repaired" if changed else None
     # Append (don't clobber existing matchers on OTHER entries)
-    new_entry = {"hooks": [{"type": "command", "command": command}]}
+    hook = {"type": "command", "command": command}
+    if timeout is not None:
+        hook["timeout"] = timeout
+    new_entry = {"hooks": [hook]}
     if matcher:
         new_entry["matcher"] = matcher
     arr.append(new_entry)
     return "added"
 
+removed = prune_obsolete_rekall_hooks()
 added = []
 repaired = []
 
@@ -224,6 +292,10 @@ def record(result, label):
 
 record(ensure_event_hook("UserPromptSubmit", rest_cmd), "UserPromptSubmit → rekall-restore.sh")
 record(ensure_event_hook("Stop", obs_cmd), "Stop → rekall-observe.sh")
+record(
+    ensure_event_hook("SessionEnd", session_end_cmd, timeout=3),
+    "SessionEnd → rekall-session-end.sh",
+)
 record(ensure_event_hook("SessionStart", prune_cmd), "SessionStart → memory-prune.sh")
 record(ensure_event_hook("PreToolUse", reflex_cmd, matcher="Bash"), "PreToolUse → rekall-reflex.sh")
 if start_cmd:
@@ -232,11 +304,13 @@ if start_cmd:
 with open(path, "w") as f:
     json.dump(d, f, indent=2)
 
+if removed:
+    print(f"  ✓ removed {removed} obsolete Rekall hook entr{'y' if removed == 1 else 'ies'}")
 if added:
     print("  ✓ added:", ", ".join(added))
 if repaired:
     print("  ✓ repaired matcher:", ", ".join(repaired))
-if not added and not repaired:
+if not removed and not added and not repaired:
     print("  ✓ already wired (no changes)")
 PY
 fi
@@ -280,6 +354,7 @@ fi
 if [[ "$SKILLS_ONLY" == "0" ]]; then
     [[ -f "$HOME/.claude/hooks/rekall-restore.sh" ]] && ok "rekall-restore.sh in place" || warn "rekall-restore.sh missing"
     [[ -f "$HOME/.claude/hooks/rekall-observe.sh" ]] && ok "rekall-observe.sh in place" || warn "rekall-observe.sh missing"
+    [[ -f "$HOME/.claude/hooks/rekall-session-end.sh" ]] && ok "rekall-session-end.sh in place" || warn "rekall-session-end.sh missing"
     [[ -f "$HOME/.claude/hooks/memory-prune.sh" ]]   && ok "memory-prune.sh in place"   || warn "memory-prune.sh missing"
     [[ -f "$HOME/.claude/hooks/rekall-reflex.sh" ]]  && ok "rekall-reflex.sh in place"  || warn "rekall-reflex.sh missing"
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
@@ -297,5 +372,5 @@ echo "  • Type /memory-stats in a new session to verify slash commands work."
 [[ -n "$LIVE_BACKUP_DIR" ]] && echo "  • Live file backups: $LIVE_BACKUP_DIR"
 echo
 echo "Kill switches (env vars):"
-echo "  REKALL_AUTOSAVE=0   disables restore status, SessionStart capsule, and Stop-hook auto-save"
+echo "  REKALL_AUTOSAVE=0   disables restore, SessionStart capsule, Stop auto-save, and SessionEnd utility"
 echo "  REKALL_REFLEX=0     disables the PreToolUse reflex recall hook (also gated by REKALL_AUTOSAVE=0)"

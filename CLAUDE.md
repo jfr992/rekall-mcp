@@ -100,13 +100,17 @@ A memory record has:
 
 ## Hook discipline (claude/hooks/)
 
-Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/hooks/` with matching `~/.claude/settings.json` entries.
+Five default hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/hooks/` with matching `~/.claude/settings.json` entries. `session-start-memory.sh` is a sixth, explicit opt-in because it injects startup context.
 
 - **`rekall-restore.sh`** (UserPromptSubmit) — fetch-don't-inject. Status line only (~92 bytes/session). **Don't add context dumps here.** If you want context, the agent calls `recall_memories()` on demand.
-- **`rekall-observe.sh`** (Stop) — Haiku judge with cheap signal gate. **Never add a hook that fires Haiku per turn without a gate.** Current gate fires on (a) new commits since last fire, (b) durability keyword in last user message, or (c) 5+ turns AND zero saves today. Without the gate you'd burn ~$30/month per active developer.
-- **`rekall-reflex.sh`** (PreToolUse, Bash) — the sanctioned exception to "no proactive injection" below. Pattern: local per-group cue gate (word-boundary match, no network on a miss) → once-per-session debounce per matched cue → bounded fetch (0.1s connect / 1s total) to `/api/memory/reflex` → ≤800-codepoint untrusted-framed packet injected via `additionalContext`. Never exits 2, never sets `permissionDecision` — it informs, it never gates. Kill switches: `REKALL_AUTOSAVE=0` (master) or `REKALL_REFLEX=0` (dedicated). Any new PreToolUse/PostToolUse hook that injects context must follow this same shape or justify the deviation.
+- **`rekall-observe.sh`** (Stop) — Haiku judge with cheap signal gate. **Never add a hook that fires Haiku per turn without a gate.** Current gate fires on (a) new commits since last fire, (b) durability keyword in last user message, or (c) 5+ turns AND zero saves today. The nested judge must stay isolated with `--safe-mode --effort low --tools "" --no-session-persistence`; otherwise it inherits every plugin, MCP server, and global effort default.
+- **`rekall-session-end.sh`** (SessionEnd) — bounded, LLM-free recall-utility correlation. Reads at most `REKALL_TRANSCRIPT_TAIL_BYTES` (default 1 MiB), emits IDs and counts only, uses a one-second request timeout, and fails open. It owns `session_summary`; never move transcript scanning back into Stop.
+- **`memory-prune.sh`** (SessionStart) — daily gated superseded-memory housekeeping. It is destructive only behind server-side date, count, and backup gates.
+- **`rekall-reflex.sh`** (PreToolUse, Bash) — the sanctioned exception to "no proactive injection" below. Pattern: local per-group cue gate (word-boundary match, no network on a miss) → once-per-session debounce per matched cue, including zero-hit responses → bounded fetch (0.1s connect / 1s total) to `/api/memory/reflex` → ≤800-codepoint untrusted-framed packet injected via `additionalContext`. URL precedence is `REKALL_API_URL`, then legacy `REKALL_URL`, then localhost. Never exits 2, never sets `permissionDecision` — it informs, it never gates. Kill switches: `REKALL_AUTOSAVE=0` (master) or `REKALL_REFLEX=0` (dedicated). Any new PreToolUse/PostToolUse hook that injects context must follow this same shape or justify the deviation.
 
-**Re-entrancy:** if a hook invokes `claude -p`, that inner Claude Code instance fires its own hooks. Guard with `REKALL_JUDGE_INFLIGHT=1` set before exec, checked at the top of the hook. Without this, infinite hook recursion.
+**Re-entrancy:** if a hook invokes `claude -p`, an ordinary nested instance fires its own hooks and loads the user's complete profile. The observe judge uses safe mode and also sets `REKALL_JUDGE_INFLIGHT=1` before exec as defense in depth.
+
+**Installer ownership:** reinstall may remove only the exact obsolete Rekall basenames `rekall-precompact.sh`, `rekall-postcompact.sh`, and `rekall-commit-nudge.sh`. Preserve foreign hook commands, native Claude project memory, and unrelated top-level settings.
 
 **Tool namespace:** the running server registers as `rekall` (in the Claude Code MCP config), so tools are `mcp__rekall__*` — not `mcp__memory__*`. If you copy a hook from another project, namespace-patch first.
 
@@ -133,7 +137,6 @@ Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/h
 - **Auto-resparse trigger** — manual `POST /api/memory/resparse` + loud doctor drift signals cover the current save cadence. Add a trigger (thread via `run_in_executor`, never a bare asyncio task in the sync save path) only if drift recurs unattended for two weeks.
 - **Stable BM25 token IDs (hash-based, bm42-style)** — would make refits incremental and kill the resparse transaction. Revisit at >50k memories or if resparse duration exceeds barrier-hold tolerance.
 - **Auto-compaction** — shipped on main (`src/memory/compact.py`, route `POST /api/memory/compact`). Known issue: asyncio.run inside sync path (see pitfall table).
-- **Session-end summary** — Claude Code has no native end-of-session hook. Workaround would be a slash command the user types at session end. Not worth building until per-turn judge proves insufficient.
 
 ## Pitfalls (real ones we've hit)
 
@@ -146,6 +149,8 @@ Two hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/h
 | Backend resolves scope from its own cwd → all observations under "rekall-mcp" | `/api/memory/observe` (fixed in v1.5.0) | Endpoint accepts `cwd` from caller, plumbs to `ScopeDetector.detect()` |
 | Stop hook fires per turn at $0.001/each → ~$30/month/dev | `rekall-observe.sh` (fixed in v1.5.0) | Cheap signal gate before Haiku call |
 | `claude -p` from a Stop hook recursively fires its own Stop hook | `rekall-observe.sh` | `REKALL_JUDGE_INFLIGHT=1` env var guard |
+| Nested judge inherits plugins, MCP tools, and global `xhigh` effort | `rekall-observe.sh` | `--safe-mode --effort low --tools "" --no-session-persistence` plus the inflight guard |
+| Utility scan runs once per assistant turn and rereads the full transcript | pre-hardening `rekall-observe.sh` | Move IDs-and-counts-only correlation to bounded `SessionEnd` hook |
 | `uv run python -m server` runs the STALE installed copy of `server.py`/`config.py` — hatchling copies force-included top-level modules into site-packages at sync; edits to `src/server.py` are invisible until re-sync | dev workflow (since v1.11 packaging) | `PYTHONPATH=src uv run python -m server` in dev, or `uv sync --reinstall-package rekall-mcp` after editing those two files |
 | Restore hook fetches 12KB of "proactive context" but echoes only the status line | pre-v1.5.0 `rekall-restore.sh` | Either drop the fetch entirely (current — nuclear mode) or actually inject (was the bug we caught) |
 | Compose defaults to named volumes → existing installs mount empty stores and "all memories are gone" | `docker-compose.yaml` (v1.11) | Layer `docker-compose.bind-mounts.example.yaml` (or copy it to `docker-compose.override.yaml`) to keep the `~/.claude/` bind mounts |

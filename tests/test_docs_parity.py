@@ -132,6 +132,67 @@ def test_docs_do_not_repeat_stale_codex_session_end_claim():
     assert "REKALL_AUTOSAVE=0" in text
 
 
+def test_claude_bundle_docs_match_hardened_lifecycle():
+    readme = (REPO / "README.md").read_text()
+    install = (REPO / "claude" / "INSTALL.md").read_text()
+    contributor = (REPO / "CLAUDE.md").read_text()
+    architecture = (REPO / "docs" / "ARCHITECTURE.md").read_text()
+    migration = (REPO / "docs" / "MIGRATION.md").read_text()
+    combined = "\n".join((readme, install, contributor, architecture, migration))
+
+    assert "five hooks" in readme.lower()
+    assert "rekall-session-end.sh" in readme
+    assert "rekall-session-end.sh" in install
+    assert "SessionEnd" in install
+    assert "--safe-mode" in install
+    assert "--effort low" in install
+    assert "REKALL_TRANSCRIPT_TAIL_BYTES" in combined
+    assert "rekall-precompact.sh" in install
+    assert "rekall-postcompact.sh" in install
+    assert "rekall-commit-nudge.sh" in install
+    assert "Claude Code has no native end-of-session hook" not in combined
+    assert "Stop hook (`rekall-observe.sh`) now has an ungated" not in migration
+    assert "safe mode" in architecture.lower()
+
+
+def test_audit_records_claude_runtime_hardening_and_residual_secret_action():
+    audit = (REPO / "AUDIT_REPORT.md").read_text()
+    lowered = audit.lower()
+
+    assert "F17" in audit
+    assert "context7" in lowered
+    assert "rotate" in lowered or "revoke" in lowered
+    assert "sessionend" in lowered
+    assert "safe mode" in lowered
+    assert "51" in audit and "4.2" in audit
+
+
+def test_claude_setup_skill_manual_harness_and_tuning_match_default_hooks():
+    setup_skill = (REPO / "claude" / "skills" / "rekall-setup" / "SKILL.md").read_text()
+    setup_harness = (REPO / "claude" / "setup" / "test.sh").read_text()
+    install = (REPO / "claude" / "INSTALL.md").read_text()
+    tuning = (REPO / "docs" / "TUNING.md").read_text()
+    migration = (REPO / "docs" / "MIGRATION.md").read_text()
+
+    for hook in (
+        "rekall-restore.sh",
+        "rekall-observe.sh",
+        "rekall-session-end.sh",
+        "rekall-reflex.sh",
+        "memory-prune.sh",
+    ):
+        assert hook in setup_skill
+        assert hook in install
+
+    assert "SessionEnd" in setup_skill
+    assert "fresh install wires 5 hook events" in setup_harness
+    assert "expected 5" in setup_harness
+    assert "zero-hit" in tuning
+    assert "rekall-session-end.sh" in tuning
+    assert "then-current four-hook wiring" in migration
+    assert "rm ~/.claude/hooks/rekall-*.sh" not in install
+
+
 def test_qdrant_backed_manager_tests_are_in_integration_lane():
     for path in ("tests/test_manager_pin.py", "tests/test_manager_dispute.py"):
         text = (REPO / path).read_text()

@@ -67,16 +67,17 @@ The MCP server alone gives Claude memory *tools*; the hooks make memory *automat
 bash claude/setup/install.sh
 ```
 
-Idempotent, backs up `~/.claude/settings.json` first. It wires four hooks and nine slash commands:
+Idempotent, backs up `~/.claude/settings.json` first. It wires five hooks and nine slash commands:
 
 | Hook | Event | What it does | Kill switch |
 |---|---|---|---|
 | `rekall-restore.sh` | UserPromptSubmit | once-per-session status line, no injection | `REKALL_AUTOSAVE=0` |
-| `rekall-observe.sh` | Stop | gated Haiku judge auto-saves durable observations + posts session summaries (feeds reinforcement) | `REKALL_AUTOSAVE=0` |
+| `rekall-observe.sh` | Stop | gated, safe-mode Haiku judge auto-saves durable observations | `REKALL_AUTOSAVE=0` |
+| `rekall-session-end.sh` | SessionEnd | bounded, content-free recall-utility summary (feeds reinforcement) | `REKALL_AUTOSAVE=0` |
 | `rekall-reflex.sh` | PreToolUse (Bash) | surfaces relevant memories before risky commands | `REKALL_REFLEX=0` |
 | `memory-prune.sh` | SessionStart | daily gated prune housekeeping | `REKALL_AUTOSAVE=0` |
 
-Optional fifth (manual, injects a thin project capsule at session start): `cp claude/hooks/session-start-memory.sh ~/.claude/hooks/` + a SessionStart entry — see [`claude/INSTALL.md`](claude/INSTALL.md).
+Optional sixth (manual, injects a thin project capsule at session start): `cp claude/hooks/session-start-memory.sh ~/.claude/hooks/` + a SessionStart entry — see [`claude/INSTALL.md`](claude/INSTALL.md).
 
 Using profiles (`CLAUDE_CONFIG_DIR`)? The installer targets `~/.claude`; repeat the settings entries in each profile's `settings.json` (hook files can be shared by absolute path).
 
@@ -217,8 +218,8 @@ bash claude/setup/install.sh
 
 Idempotent, backs up your existing `~/.claude/settings.json` first. It:
 
-- copies four hooks to `~/.claude/hooks/` (`rekall-restore`, `rekall-observe`, `rekall-reflex`, `memory-prune`)
-- merges `UserPromptSubmit`, `Stop`, `SessionStart`, and `PreToolUse` (Bash matcher) entries into `~/.claude/settings.json` (deduped; repairs a wrong/missing reflex matcher)
+- copies five hooks to `~/.claude/hooks/` (`rekall-restore`, `rekall-observe`, `rekall-session-end`, `rekall-reflex`, `memory-prune`)
+- merges `UserPromptSubmit`, `Stop`, `SessionEnd`, `SessionStart`, and `PreToolUse` (Bash matcher) entries into `~/.claude/settings.json` (deduped; repairs a wrong/missing reflex matcher and removes only obsolete Rekall-owned lifecycle entries)
 - copies all nine slash commands to `~/.claude/skills/`
 - verifies backend health
 
@@ -227,8 +228,10 @@ Idempotent, backs up your existing `~/.claude/settings.json` first. It:
 ### Hooks (the auto-save layer)
 
 - **`rekall-restore.sh`** (UserPromptSubmit) — once-per-session status line (`Rekall ready — N memories…`). No context injection.
-- **`rekall-observe.sh`** (Stop) — a Haiku judge that auto-saves durable observations, gated by cheap signal detection (durability keywords, new git commits, or session length) so it doesn't fire on every turn. Kill switch: `REKALL_AUTOSAVE=0`.
-- **`rekall-reflex.sh`** (PreToolUse, Bash) — surfaces relevant memories before risky commands (destructive ops, IaC, memory-data, hooks, helm). A local word-boundary cue match gates the fetch (no network on a miss), debounced once per session per cue. On a match it does a bounded `curl` (0.1s connect / 1s total) to `/api/memory/reflex` and injects a capped, untrusted-framed packet as `additionalContext`. It never blocks the tool call — every failure path exits 0. Kill switches: `REKALL_AUTOSAVE=0` (master) or `REKALL_REFLEX=0` (dedicated).
+- **`rekall-observe.sh`** (Stop) — a Haiku judge that auto-saves durable observations, gated by cheap signal detection (durability keywords, new git commits, or session length) so it doesn't fire on every turn. The nested judge runs in safe mode at low effort with no tools or session persistence. Kill switch: `REKALL_AUTOSAVE=0`.
+- **`rekall-session-end.sh`** (SessionEnd) — reads a bounded transcript tail (default 1 MiB), correlates recalled IDs with later edits/test passes, and posts one IDs-and-counts-only event. No transcript content is sent.
+- **`rekall-reflex.sh`** (PreToolUse, Bash) — surfaces relevant memories before risky commands (destructive ops, IaC, memory-data, hooks, helm). A local word-boundary cue match gates the fetch (no network on a miss), debounced once per session per cue even on a zero-hit response. On a match it does a bounded `curl` (0.1s connect / 1s total) to `/api/memory/reflex` and injects a capped, untrusted-framed packet as `additionalContext`. It never blocks the tool call — every failure path exits 0. `REKALL_API_URL` takes precedence over the legacy `REKALL_URL`. Kill switches: `REKALL_AUTOSAVE=0` (master) or `REKALL_REFLEX=0` (dedicated).
+- **`memory-prune.sh`** (SessionStart) — runs gated superseded-memory housekeeping at most once per day.
 
 ### Slash commands (manual, not auto-triggering)
 
