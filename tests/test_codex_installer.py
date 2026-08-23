@@ -276,6 +276,7 @@ def _run_install(
     args: tuple[str, ...] = (),
     codex_home_name: str = "Codex Home",
     with_codex: bool = True,
+    poison_stat: bool = False,
     extra_env: dict[str, str] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
     tmp_path.mkdir(parents=True, exist_ok=True)
@@ -283,6 +284,10 @@ def _run_install(
     fake_bin.mkdir()
     if with_codex:
         _write_fake_codex(fake_bin)
+    if poison_stat:
+        fake_stat = fake_bin / "stat"
+        fake_stat.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+        fake_stat.chmod(0o755)
     state = tmp_path / "mcp-state.json"
     state.write_text(json.dumps({"mode": mode, "url": configured_url}), encoding="utf-8")
     log = tmp_path / "mcp-argv.jsonl"
@@ -304,6 +309,19 @@ def _run_install(
         text=True,
     )
     return result, codex_home, log
+
+
+def test_install_preserves_hooks_mode_without_platform_specific_stat(tmp_path):
+    codex_home = tmp_path / "Codex Home"
+    codex_home.mkdir(parents=True)
+    hooks_file = codex_home / "hooks.json"
+    hooks_file.write_text("{}", encoding="utf-8")
+    hooks_file.chmod(0o640)
+
+    result, _, _ = _run_install(tmp_path, poison_stat=True)
+
+    assert result.returncode == 0, result.stderr
+    assert stat.S_IMODE(hooks_file.stat().st_mode) == 0o640
 
 
 def test_install_clean_and_semantically_idempotent(tmp_path):

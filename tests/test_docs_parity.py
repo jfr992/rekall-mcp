@@ -130,3 +130,9 @@ def test_docs_do_not_repeat_stale_codex_session_end_claim():
     text = "\n".join((REPO / p).read_text() for p in CODEX_DOCS)
     assert "Codex has no native end-of-session hook" not in text
     assert "REKALL_AUTOSAVE=0" in text
+
+
+def test_qdrant_backed_manager_tests_are_in_integration_lane():
+    for path in ("tests/test_manager_pin.py", "tests/test_manager_dispute.py"):
+        text = (REPO / path).read_text()
+        assert "pytestmark = pytest.mark.integration" in text, path

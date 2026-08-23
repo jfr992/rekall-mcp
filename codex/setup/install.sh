@@ -154,7 +154,13 @@ HOOKS_CHANGED=0
 HOOKS_EXISTED=0
 
 file_mode() {
-  stat -f '%Lp' "$1" 2>/dev/null || stat -c '%a' "$1"
+  python3 - "$1" <<'PY'
+import stat
+import sys
+from pathlib import Path
+
+print(format(stat.S_IMODE(Path(sys.argv[1]).stat().st_mode), "o"))
+PY
 }
 
 rollback_file() {
@@ -292,7 +298,7 @@ if changed "$CANDIDATE_HOOKS" "$HOOKS_FILE"; then
   backup_file "$HOOKS_FILE" "hooks.json"
   hooks_mode=600
   if [ -f "$HOOKS_FILE" ]; then
-    hooks_mode="$(stat -f '%Lp' "$HOOKS_FILE" 2>/dev/null || stat -c '%a' "$HOOKS_FILE")"
+    hooks_mode="$(file_mode "$HOOKS_FILE")"
   fi
 fi
 

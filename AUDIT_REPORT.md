@@ -267,8 +267,8 @@ Claude hooks / CLI / MCP clients / Browser cockpit
 ### F14 — CI is neither currently green nor fully authoritative
 **[JUDGMENT] Severity: Medium · Fix tier: Tier 2**
 
-- **Remediation status [FACT]:** The Ruff format drift in `tests/test_publish_synthesis.py` is fixed on `codex/support`; the Qdrant lane, UI authority, and typed-gate findings remain open.
-- **Found / where:** [FACT] The blocking backend unit job has no Qdrant service, while unmarked pin/dispute tests use `memory_manager`, whose default lane targets Qdrant on port 6334 (`.github/workflows/ci.yml:9-32`, `tests/conftest.py:117-126`, `tests/test_manager_pin.py:13-53`, `tests/test_manager_dispute.py:13-26`).
+- **Remediation status [FACT]:** The Ruff format drift and the mislabeled Qdrant-backed pin/dispute tests are fixed on `codex/support`; the UI authority and typed-gate findings remain open.
+- **Found / where:** [FACT] Before this branch, the blocking backend unit job had no Qdrant service while unmarked pin/dispute tests used `memory_manager`, whose default lane targets Qdrant on port 6334 (`.github/workflows/ci.yml:9-32`, `tests/conftest.py:117-126`, `tests/test_manager_pin.py:13-57`, `tests/test_manager_dispute.py:13-30`).
 - **Found / where:** [FACT] Before this branch, the Ruff format gate failed on `tests/test_publish_synthesis.py`, despite CI describing blocking gates as green (`.github/workflows/ci.yml:18-26`, `tests/test_publish_synthesis.py:1-91`).
 - **Found / where:** [FACT] UI CI runs tests but no production build or explicit TypeScript check, and ESLint is advisory without a committed replacement for deprecated `next lint` (`.github/workflows/ci.yml:182-200`, `ui/package.json:5-11`).
 - **Found / where:** [FACT] Mypy remains advisory with a stale “~110 errors” comment while fresh verification reports 166 (`.github/workflows/ci.yml:27-32`).
