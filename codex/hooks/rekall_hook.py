@@ -117,9 +117,11 @@ def build_startup_context(health: Mapping[str, object], stats: Mapping[str, obje
         parts.insert(1, f"total_memories={total}")
     if health.get("embedder") != "ok":
         parts.append("embedder degraded")
-    return ("Rekall ready — " + " · ".join(parts) + '. Use agent_startup(agent="codex") once.')[
-        :800
-    ]
+    return (
+        "Rekall ready — "
+        + " · ".join(parts)
+        + ". Use targeted recall when history can change the work."
+    )[:800]
 
 
 def marker_path(root: Path, session_id: str, cue: str) -> Path | None:

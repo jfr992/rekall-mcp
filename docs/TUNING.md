@@ -189,7 +189,7 @@ exact-cue path for project names, file paths, flags, ticket IDs, and tool names.
 
 ## Nervous-System Recall Surfaces
 
-- Use `project_capsule(project)` or `agent_startup(agent="claude-code")` once at session start for broad familiarity.
+- When broad familiarity can change the work, use `project_capsule(project)` or `agent_startup(project="<repo-name>", agent="claude-code")` at most once at session start; otherwise prefer targeted recall.
 - Use `recall_memories(query)` only after the prompt supplies a concrete topic.
 - Use `recall_across_projects(query, current_project)` when a lesson from another repo may transfer.
 - Use `reflex_recall(text, project)` before risky infrastructure, memory-data, hook, or deployment work.

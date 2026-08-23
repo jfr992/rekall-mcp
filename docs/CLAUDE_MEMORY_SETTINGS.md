@@ -9,7 +9,7 @@ You can copy the policy blocks into `~/.claude/CLAUDE.md` and adjust without cod
 ## Memory Policy
 
 ### Session start
-- Prefer `agent_startup(project?, agent="claude-code")` once per project at session start.
+- Use `agent_startup(project="<repo-name>", agent="claude-code")` at most once when broad project continuity can change the work; otherwise prefer targeted recall.
 - Read the project capsule before deciding what to recall; call `memory_doctor(project)` only when recall trust is in question.
 - If the optional `SessionStart` capsule hook is installed, treat its injected context as familiarity only; still use targeted recall for the user's actual task.
 - If this is a new project or ambiguous context, pass explicit `project`.

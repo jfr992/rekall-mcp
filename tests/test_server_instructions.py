@@ -31,7 +31,8 @@ def test_mcp_instructions_define_conservative_call_policy() -> None:
     server = importlib.import_module("server")
     instructions = server.MCP_INSTRUCTIONS.lower()
 
-    assert "call agent_startup once at session start" in instructions
+    assert "use agent_startup only when broad project continuity" in instructions
+    assert "pass project explicitly" in instructions
     assert "use recall_memories only when history can change the work" in instructions
     assert "use observe only for explicit requests or durable evidence" in instructions
     assert "claude" not in instructions

@@ -524,6 +524,9 @@ def test_codex_skill_is_mcp_first_and_keeps_native_memory_separate():
         assert tool in text
     assert "~/.codex/memories" in text
     assert "do not edit" in text.lower() or "never edit" in text.lower()
+    assert 'project="<repo-name>"' in text
+    assert "only when broad project continuity" in text.lower()
+    assert "current working directory" not in text.lower()
 
 
 def test_shipped_python_scripts_parse_with_macos_system_python():

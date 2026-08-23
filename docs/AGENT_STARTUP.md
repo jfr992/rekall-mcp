@@ -4,9 +4,9 @@ How Claude Code and Codex should consume the new memory system.
 
 ## Recommended startup flow
 
-Call **one** of these at session start:
+When broad project continuity can change the work, call **one** of these at session start. Otherwise skip broad startup context and use targeted recall only when a prompt or command supplies a useful cue:
 
-1. `agent_startup` (best default)
+1. `agent_startup` (broad-context default)
 2. `resume_packet` (structured continuity)
 3. `handoff_summary` (shorter human-readable momentum summary)
 
@@ -14,30 +14,30 @@ Call **one** of these at session start:
 
 Startup order:
 
-1. Resolve current project from the harness cwd.
-2. Load the project capsule.
+1. Decide whether broad continuity is useful for this task.
+2. If it is, resolve and pass the current project explicitly, then load one startup view.
 3. Skip full doctor scans; call `memory_doctor(project)` on demand when recall trust is in question.
 4. Defer targeted recall until the user prompt or command supplies a cue.
 
-## Best default
+## Conditional broad-context default
 
 ### Claude Code
-- Call `agent_startup(project?, agent="claude-code")`
+- When broad continuity is useful, call `agent_startup(project="<repo-name>", agent="claude-code")`
 - Read `startup_summary`
 - Use `observe()` for durable decisions, learnings, preferences, and requirements
 - Use `memory_pressure` periodically, not every turn
 - Optional: install the `SessionStart` capsule hook with `bash claude/setup/install.sh --install-startup-capsule`
 
 ### Codex
-- Call `agent_startup(project?, agent="codex")`
+- When broad continuity is useful, call `agent_startup(project="<repo-name>", agent="codex")`
 - Read `startup_summary`
 - Use `resume_packet` when you need the structured JSON payload
-- Keep repo/project boundaries strict when switching worktrees or repos
+- Pass `project` explicitly in worktrees; keep repo/project boundaries strict when switching worktrees or repos
 
 ## Tool roles
 
 ### `agent_startup`
-Single best entrypoint for startup.
+Broad-context entrypoint when project continuity is likely to affect the task.
 Returns:
 - scope
 - startup_summary
@@ -81,8 +81,7 @@ Do not save:
 
 ## Operational rule
 
-Prefer `agent_startup` once per session, not every turn.
-That keeps startup coherent and avoids turning memory into prompt spam.
+When broad continuity is needed, use `agent_startup` at most once per session—not every turn. Otherwise skip it and use targeted recall only when relevant. That keeps startup coherent and avoids turning memory into prompt spam.
 
 ## Claude Code SessionStart Capsule
 

@@ -32,8 +32,9 @@ Bundle MCP, hooks, and skills as a catalog plugin. This is attractive later, but
 Codex Desktop / CLI / IDE
           │
           ├── MCP ──────────────────────────────────────────────┐
-          │   agent_startup(agent="codex")                     │
-          │   recall_memories / observe / memory_doctor         │
+          │   targeted recall by default                        │
+          │   conditional agent_startup(project, agent="codex")│
+          │   observe / memory_doctor                           │
           │                                                     ▼
           └── Codex hooks ── bounded HTTP ───────────────► Rekall daemon
               ├── SessionStart: health/status; capsule opt-in     │
@@ -81,7 +82,7 @@ One hook executable avoids six copies of parsing, bounds, HTTP timeouts, token s
 
 MCP server instructions and the `rekall-memory` skill tell Codex to:
 
-- call `agent_startup(agent="codex")` once when Rekall is available;
+- call `agent_startup(project="<repo-name>", agent="codex")` only when broad project continuity can change the work; otherwise prefer targeted recall;
 - recall only when historical context can change the work;
 - observe explicit user requests and genuinely durable decisions, corrections, root causes, requirements, or shipped behavior;
 - skip transient logs, speculation, and session parking;
@@ -179,7 +180,7 @@ A repeated run with identical inputs produces no duplicate hooks and no semantic
 
 ## MCP server instructions
 
-The pinned Python MCP SDK supports a keyword `instructions` field on `FastMCP`. Rekall will define one short client-neutral instruction string near server construction. The first paragraph is self-contained and says to perform one startup call, targeted recall, conservative durable observation, and untrusted-memory handling. A test pins the content and verifies it is present on the server object.
+The pinned Python MCP SDK supports a keyword `instructions` field on `FastMCP`. Rekall will define one short client-neutral instruction string near server construction. The first paragraph is self-contained and makes broad startup context conditional, favors targeted recall, requires conservative durable observation, and defines untrusted-memory handling. A test pins the content and verifies it is present on the server object.
 
 ## Security and failure policy
 
@@ -262,7 +263,7 @@ Restart Codex to load the integration
 At runtime, a successful startup status is intentionally small:
 
 ```text
-Rekall ready — 42 memories · vectors OK. Use agent_startup(agent="codex") once; recall only when relevant.
+Rekall ready — status=healthy · total_memories=42 · vectors OK. Use targeted recall when history can change the work.
 ```
 
 A reflex packet is bounded and framed:

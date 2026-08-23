@@ -64,6 +64,16 @@ def test_frame_and_startup_bounds(hook_module):
     assert len(startup) <= 800 and "TOPSECRET" not in startup
 
 
+def test_startup_status_prefers_targeted_recall_over_unconditional_capsule(hook_module):
+    startup = hook_module.build_startup_context(
+        {"status": "healthy", "vectors": {"zero_vectors": 0}, "embedder": "ok"},
+        {"total_memories": 42},
+    ).lower()
+
+    assert "targeted recall" in startup
+    assert "agent_startup" not in startup
+
+
 def test_marker_containment_and_precompact_bounds(hook_module, tmp_path):
     root = tmp_path / "markers"
     root.mkdir()
