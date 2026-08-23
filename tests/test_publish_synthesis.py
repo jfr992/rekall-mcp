@@ -62,9 +62,7 @@ def test_llm_complete_uses_bearer_for_oauth_tokens(monkeypatch):
         )
 
     monkeypatch.setattr(httpx, "post", fake_post)
-    _llm_complete(
-        "hi", model="m", base_url="https://api.anthropic.com", token="sk-ant-oat01-xyz"
-    )
+    _llm_complete("hi", model="m", base_url="https://api.anthropic.com", token="sk-ant-oat01-xyz")
     assert seen["Authorization"] == "Bearer sk-ant-oat01-xyz"
     assert seen["anthropic-beta"] == "oauth-2025-04-20"
     assert "x-api-key" not in seen
