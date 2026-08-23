@@ -1,6 +1,6 @@
 # Rekall MCP
 
-**Give Claude a memory with associative recall.** Three steps, five minutes.
+**Give coding agents memory with associative recall.** Rekall works with Claude Code and Codex while keeping each harness’s native memory separate.
 
 Rekall MCP is a persistent memory system with a **knowledge graph** layer. It stores memories as YAML + vector embeddings, connects them with typed relationships, and retrieves context using graph-enhanced semantic search.
 
@@ -83,6 +83,22 @@ Using profiles (`CLAUDE_CONFIG_DIR`)? The installer targets `~/.claude`; repeat 
 Recommended agent policy for CLAUDE.md (when to recall, what to save): copy the block from [`docs/CLAUDE_MEMORY_SETTINGS.md`](docs/CLAUDE_MEMORY_SETTINGS.md).
 
 **Done.** Claude now remembers things between sessions — and recalls them before risky commands.
+
+### Wire Codex (hooks + MCP)
+
+From a repository checkout, install the first-class Codex adapter:
+
+```bash
+bash codex/setup/install.sh
+```
+
+Or register the loopback MCP manually:
+
+```bash
+codex mcp add rekall --url http://localhost:8000
+```
+
+The installer is idempotent, failure-atomic, backs up replaced configuration, preserves foreign hooks, and installs bounded `SessionStart`, `PreToolUse`, `PreCompact`, `PostCompact`, `PostToolUse`, and `SessionEnd` handlers. See [`codex/INSTALL.md`](codex/INSTALL.md) for separate MCP/REST URLs, conflict handling, kill switches, uninstall, and rollback. Codex native memory at `~/.codex/memories/` is separate; Rekall never edits it. Restart Codex after installation.
 
 ---
 

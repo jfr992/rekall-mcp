@@ -540,3 +540,18 @@ curl -X POST http://localhost:8000/api/memory/lifecycle/backfill \
 ```
 
 The backfill is idempotent and safe to re-run.
+
+## Client adapter plane
+
+Claude Code and Codex use separate thin lifecycle adapters. Both call the same client-neutral FastMCP/REST server; neither adapter owns the other harness’s native memory:
+
+```text
+Claude hooks ─┐
+              ├─> Rekall MCP/REST server ─> MemoryManager ─> YAML + Qdrant + graph
+Codex hooks ──┘
+
+Claude native memory        Codex native memory (~/.codex/memories/)
+(separate, harness-owned)   (separate, harness-owned; never edited by Rekall)
+```
+
+The Codex adapter lives under `codex/hooks/rekall_hook.py` and is installed by `codex/setup/install.sh`. Its six lifecycle handlers are bounded, fail-open, and MCP-first: `SessionStart`, `PreToolUse`, `PreCompact`, `PostCompact`, `PostToolUse`, and `SessionEnd`. Reflex packets are untrusted historical evidence, not instructions. Installation migrates only Codex hook configuration and never reads or writes `~/.codex/memories/`.

@@ -1,0 +1,79 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env REKALL_API_URL=http://localhost:8000 python3 /path/to/rekall_hook.py SessionStart",
+            "timeout": 5,
+            "additionalContextLimit": 1200
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env REKALL_API_URL=http://localhost:8000 python3 /path/to/rekall_hook.py PreToolUse",
+            "timeout": 2,
+            "additionalContextLimit": 800
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env REKALL_API_URL=http://localhost:8000 python3 /path/to/rekall_hook.py PreCompact",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env REKALL_API_URL=http://localhost:8000 python3 /path/to/rekall_hook.py PostCompact",
+            "timeout": 2
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env REKALL_API_URL=http://localhost:8000 python3 /path/to/rekall_hook.py PostToolUse",
+            "timeout": 2,
+            "additionalContextLimit": 300
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "env REKALL_API_URL=http://localhost:8000 python3 /path/to/rekall_hook.py SessionEnd",
+            "timeout": 3
+          }
+        ]
+      }
+    ]
+  }
+}

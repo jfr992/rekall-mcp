@@ -95,3 +95,7 @@ bash claude/setup/install.sh --install-startup-capsule
 ```
 
 Before changing live files under `~/.claude`, copy the current files into `~/.claude/backups/rekall-live-config-<timestamp>/`. The shippable installer does not overwrite live hook files without preserving the previous copy.
+
+## Codex lifecycle adapter
+
+The Codex installer registers real lifecycle events, including `SessionEnd`; bounded recall-utility summaries are automatic when the transcript contains correlated recall and outcome evidence. `SessionEnd` may be delayed until Codex actually closes or idles the root session, and its transcript format is treated as unstable. Hooks are bounded and fail open. They may provide untrusted historical context, never executable instructions. Keep native Codex memory (`~/.codex/memories/`) separate and never edit it.

@@ -339,3 +339,19 @@ curl -X POST http://localhost:8000/api/memory/graph/rebuild
 **"Rate limit exceeded" (Gemini)** - Switch to fastembed, run migrate, rebuild graph
 
 **Debug logging:** `LOG_LEVEL=DEBUG python -m server`
+
+## Codex setup and native-memory coexistence
+
+Rekall supports Codex as a first-class client. Start the local HTTP server (for example with `docker compose up -d`), then install the adapter from a checkout:
+
+```bash
+bash codex/setup/install.sh
+# or, for MCP only:
+codex mcp add rekall --url http://localhost:8000
+```
+
+The adapter backs up and merges Codex hook configuration, preserves unrelated hooks, and installs `SessionStart`, `PreToolUse`, `PreCompact`, `PostCompact`, `PostToolUse`, and `SessionEnd`. It fails open when the server is unavailable and supports `REKALL_AUTOSAVE=0` and `REKALL_REFLEX=0` kill switches. Read [`codex/INSTALL.md`](../codex/INSTALL.md) before changing a live profile.
+
+The installer pins the validated REST base into lifecycle hooks as `REKALL_API_URL`. A root MCP URL uses the same origin automatically. If the MCP transport URL has a path such as `/mcp`, pass its REST base separately with `--api-url`; the installer refuses to guess. Remote MCP or API URLs require `--allow-remote-mcp`. Re-run the installer if either endpoint changes.
+
+Codex native memory at `~/.codex/memories/` is independent of Rekall. Rekall never reads, writes, creates, deletes, or edits that directory. Restart Codex after installation so it reloads the MCP and hook configuration.
