@@ -42,6 +42,7 @@ services:
       - QDRANT_URL=http://qdrant:6333
       - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-fastembed}
       - REKALL_ALLOWED_HOSTS=${REKALL_ALLOWED_HOSTS:-mcp}
+      - REKALL_API_TOKEN=${REKALL_API_TOKEN:-}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       # Publish synthesis (optional): LLM-distilled briefs for the /kb Synthesize button
       - REKALL_PUBLISH_MODEL=${REKALL_PUBLISH_MODEL:-}
