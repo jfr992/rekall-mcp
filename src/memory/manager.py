@@ -540,17 +540,15 @@ class MemoryManager:
                     "timestamp": timestamp,
                 }
                 self._save_to_file_locked(memory_id, content, payload, type, date, yaml_file)
-
-            # Save to vector store (searchability). Dense = raw content (repr v2:
-            # boilerplate diluted query cosines by ~0.2); sparse BM25 keeps the
-            # enriched embedding_text for lexical entity/project matching.
-            embedding_text = payload["embedding_text"]
-            self.store.save(
-                id=memory_id,
-                vector=vector,
-                payload=payload,
-                content=embedding_text,
-            )
+                # Publication remains inside the decision transaction. The next
+                # contender must see this point before it can decide to append.
+                embedding_text = payload["embedding_text"]
+                self.store.save(
+                    id=memory_id,
+                    vector=vector,
+                    payload=payload,
+                    content=embedding_text,
+                )
 
             self.record_event(
                 event_type="memory_saved",
@@ -697,59 +695,67 @@ class MemoryManager:
             "vector_state": "pending",
         }
 
-        persisted_payload, created, vector_state, durable_response = (
-            self._save_afk_operation_to_file(
-                memory_id=memory_id,
-                content=canonical_content,
-                payload=payload,
-                memory_type=type,
-                operation_date=operation_date,
-                operation_id=operation_id,
-                envelope=envelope,
-                response=response,
+        yaml_file = self.memory_dir / project / f"{operation_date}.yaml"
+        with _yaml_writer_lock(yaml_file):
+            persisted_payload, created, vector_state, durable_response = (
+                self._save_afk_operation_to_file_locked(
+                    memory_id=memory_id,
+                    content=canonical_content,
+                    payload=payload,
+                    memory_type=type,
+                    operation_date=operation_date,
+                    operation_id=operation_id,
+                    envelope=envelope,
+                    response=response,
+                    yaml_file=yaml_file,
+                )
             )
-        )
-        if vector_state == "completed":
-            return durable_response
+            if vector_state == "completed":
+                return durable_response
 
-        # The vector store can acknowledge an upsert and lose the response. A
-        # durable pending/ambiguous YAML state is never permission to blindly
-        # upsert again: first prove the exact envelope is already searchable.
-        reconciliation = self._reconcile_afk_vector(memory_id, envelope)
-        if reconciliation == "completed":
-            self._set_afk_vector_state(memory_id, project, operation_date, envelope, "completed")
-            return durable_response
-        if reconciliation == "conflict":
-            raise AfkOperationConflict("AFK vector record conflicts with its durable envelope")
-        if reconciliation == "unknown":
-            self._set_afk_vector_state(memory_id, project, operation_date, envelope, "ambiguous")
-            raise RuntimeError("AFK vector completion is ambiguous; retry to reconcile")
-
-        # This deliberately happens after YAML. A retry of an accepted pending
-        # operation repairs a missed vector upsert rather than adding YAML data.
-        stored_content = str(persisted_payload["content"])
-        embedding_text = str(
-            persisted_payload.get("embedding_text")
-            or build_embedding_text(stored_content, persisted_payload)
-        )
-        vector = self.embedder.encode(stored_content)
-        try:
-            self.store.save(
-                id=memory_id,
-                vector=vector,
-                payload=persisted_payload,
-                content=embedding_text,
-            )
-        except Exception:
+            # A pending/ambiguous YAML record is not permission to blindly
+            # upsert: prove the exact vector first, while retries stay queued.
             reconciliation = self._reconcile_afk_vector(memory_id, envelope)
             if reconciliation == "completed":
-                self._set_afk_vector_state(
-                    memory_id, project, operation_date, envelope, "completed"
+                self._set_afk_vector_state_locked(
+                    memory_id, envelope, "completed", yaml_file, operation_date
                 )
                 return durable_response
-            self._set_afk_vector_state(memory_id, project, operation_date, envelope, "ambiguous")
-            raise
-        self._set_afk_vector_state(memory_id, project, operation_date, envelope, "completed")
+            if reconciliation == "conflict":
+                raise AfkOperationConflict("AFK vector record conflicts with its durable envelope")
+            if reconciliation == "unknown":
+                self._set_afk_vector_state_locked(
+                    memory_id, envelope, "ambiguous", yaml_file, operation_date
+                )
+                raise RuntimeError("AFK vector completion is ambiguous; retry to reconcile")
+
+            stored_content = str(persisted_payload["content"])
+            embedding_text = str(
+                persisted_payload.get("embedding_text")
+                or build_embedding_text(stored_content, persisted_payload)
+            )
+            vector = self.embedder.encode(stored_content)
+            try:
+                self.store.save(
+                    id=memory_id,
+                    vector=vector,
+                    payload=persisted_payload,
+                    content=embedding_text,
+                )
+            except Exception:
+                reconciliation = self._reconcile_afk_vector(memory_id, envelope)
+                if reconciliation == "completed":
+                    self._set_afk_vector_state_locked(
+                        memory_id, envelope, "completed", yaml_file, operation_date
+                    )
+                    return durable_response
+                self._set_afk_vector_state_locked(
+                    memory_id, envelope, "ambiguous", yaml_file, operation_date
+                )
+                raise
+            self._set_afk_vector_state_locked(
+                memory_id, envelope, "completed", yaml_file, operation_date
+            )
         if created:
             self.record_event(
                 event_type="memory_saved",
@@ -782,7 +788,7 @@ class MemoryManager:
                         return dict(response) if isinstance(response, dict) else None
         return None
 
-    def _save_afk_operation_to_file(
+    def _save_afk_operation_to_file_locked(
         self,
         *,
         memory_id: str,
@@ -793,60 +799,52 @@ class MemoryManager:
         operation_id: str,
         envelope: dict[str, Any],
         response: dict[str, Any],
+        yaml_file: Path,
     ) -> tuple[dict[str, Any], bool, str, dict[str, Any]]:
-        """Lock, reread, and persist an AFK operation exactly once."""
-        project_dir = self.memory_dir / str(payload["project"])
-        yaml_file = project_dir / f"{operation_date}.yaml"
-        with _yaml_writer_lock(yaml_file):
-            document = _read_yaml_document(yaml_file, operation_date)
-            for entries in document.values():
-                if not isinstance(entries, list):
-                    continue
-                for entry in entries:
-                    if not isinstance(entry, dict):
-                        continue
-                    operation = entry.get("afk_operation")
-                    prior_envelope = (
-                        operation.get("envelope") if isinstance(operation, dict) else None
-                    )
-                    if (
-                        not isinstance(prior_envelope, dict)
-                        or prior_envelope.get("operation_id") != operation_id
-                    ):
-                        continue
-                    if prior_envelope != envelope:
-                        raise AfkOperationConflict(
-                            "AFK operation conflicts with its durable envelope"
-                        )
-                    prior_response = operation.get("response")
-                    if not isinstance(prior_response, dict):
-                        raise AfkOperationConflict("AFK operation has an invalid durable response")
-                    stored = dict(entry)
-                    stored.update(
-                        {"memory_id": memory_id, "type": memory_type, "date": operation_date}
-                    )
-                    vector_state = operation.get("vector_state", "pending")
-                    if vector_state not in {"pending", "ambiguous", "completed"}:
-                        raise AfkOperationConflict("AFK operation has an invalid vector state")
-                    return stored, False, vector_state, dict(prior_response)
-
-            type_key = f"{memory_type}s"
-            entries = document.setdefault(type_key, [])
+        """Reread and persist an AFK operation while its writer lock is held."""
+        document = _read_yaml_document(yaml_file, operation_date)
+        for entries in document.values():
             if not isinstance(entries, list):
-                raise ValueError(f"Invalid YAML type section: {type_key}")
-            if any(isinstance(entry, dict) and entry.get("id") == memory_id for entry in entries):
-                raise AfkOperationConflict(
-                    "AFK memory id already exists without its operation envelope"
-                )
-            entry = self._file_entry(memory_id, content, payload)
-            entry["afk_operation"] = {
-                "envelope": envelope,
-                "response": response,
-                "vector_state": "pending",
-            }
-            entries.append(entry)
-            _atomic_write_yaml(yaml_file, document)
-            return payload, True, "pending", response
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict):
+                    continue
+                operation = entry.get("afk_operation")
+                prior_envelope = operation.get("envelope") if isinstance(operation, dict) else None
+                if (
+                    not isinstance(prior_envelope, dict)
+                    or prior_envelope.get("operation_id") != operation_id
+                ):
+                    continue
+                if prior_envelope != envelope:
+                    raise AfkOperationConflict("AFK operation conflicts with its durable envelope")
+                prior_response = operation.get("response")
+                if not isinstance(prior_response, dict):
+                    raise AfkOperationConflict("AFK operation has an invalid durable response")
+                stored = dict(entry)
+                stored.update({"memory_id": memory_id, "type": memory_type, "date": operation_date})
+                vector_state = operation.get("vector_state", "pending")
+                if vector_state not in {"pending", "ambiguous", "completed"}:
+                    raise AfkOperationConflict("AFK operation has an invalid vector state")
+                return stored, False, vector_state, dict(prior_response)
+
+        type_key = f"{memory_type}s"
+        entries = document.setdefault(type_key, [])
+        if not isinstance(entries, list):
+            raise ValueError(f"Invalid YAML type section: {type_key}")
+        if any(isinstance(entry, dict) and entry.get("id") == memory_id for entry in entries):
+            raise AfkOperationConflict(
+                "AFK memory id already exists without its operation envelope"
+            )
+        entry = self._file_entry(memory_id, content, payload)
+        entry["afk_operation"] = {
+            "envelope": envelope,
+            "response": response,
+            "vector_state": "pending",
+        }
+        entries.append(entry)
+        _atomic_write_yaml(yaml_file, document)
+        return payload, True, "pending", response
 
     def _reconcile_afk_vector(self, memory_id: str, envelope: dict[str, Any]) -> str:
         """Classify the vector record without writing it.
@@ -865,32 +863,30 @@ class MemoryManager:
         point_envelope = operation.get("envelope") if isinstance(operation, dict) else None
         return "completed" if point_envelope == envelope else "conflict"
 
-    def _set_afk_vector_state(
+    def _set_afk_vector_state_locked(
         self,
         memory_id: str,
-        project: str,
-        operation_date: str,
         envelope: dict[str, Any],
         vector_state: str,
+        yaml_file: Path,
+        operation_date: str,
     ) -> None:
-        """Durably record whether the exact AFK vector upsert was proven."""
-        yaml_file = self.memory_dir / project / f"{operation_date}.yaml"
-        with _yaml_writer_lock(yaml_file):
-            document = _read_yaml_document(yaml_file, operation_date)
-            for entries in document.values():
-                if not isinstance(entries, list):
+        """Durably record vector completion while the AFK transaction is held."""
+        document = _read_yaml_document(yaml_file, operation_date)
+        for entries in document.values():
+            if not isinstance(entries, list):
+                continue
+            for entry in entries:
+                if not isinstance(entry, dict) or entry.get("id") != memory_id:
                     continue
-                for entry in entries:
-                    if not isinstance(entry, dict) or entry.get("id") != memory_id:
-                        continue
-                    operation = entry.get("afk_operation")
-                    if not isinstance(operation, dict) or operation.get("envelope") != envelope:
-                        raise AfkOperationConflict(
-                            "AFK operation envelope changed during reconciliation"
-                        )
-                    operation["vector_state"] = vector_state
-                    _atomic_write_yaml(yaml_file, document)
-                    return
+                operation = entry.get("afk_operation")
+                if not isinstance(operation, dict) or operation.get("envelope") != envelope:
+                    raise AfkOperationConflict(
+                        "AFK operation envelope changed during reconciliation"
+                    )
+                operation["vector_state"] = vector_state
+                _atomic_write_yaml(yaml_file, document)
+                return
         raise AfkOperationConflict("AFK operation disappeared during vector reconciliation")
 
     def _record_bm25_drift(self, embedding_text: str) -> None:
