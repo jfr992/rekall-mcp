@@ -454,9 +454,9 @@ def test_hook_gate_matches_every_server_cue_term():
                 fakebin = _fake_curl(tmp_path, body="{}")
                 result = _run_hook(tmp_path, command=term, fakebin=fakebin)
                 assert result.returncode == 0, result.stderr
-                assert _calls(
-                    tmp_path
-                ), f"hook gate did not match server cue term {term!r} from group {group!r}"
+                assert _calls(tmp_path), (
+                    f"hook gate did not match server cue term {term!r} from group {group!r}"
+                )
 
 
 def test_kill_switch_autosave_disabled(tmp_path):

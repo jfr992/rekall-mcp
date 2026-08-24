@@ -412,13 +412,13 @@ def test_marker_path_expression_consistent_across_hooks():
     assert restore_marker_lines, "rekall-restore.sh has no line referencing rekall-restored-"
 
     for line in observe_marker_lines:
-        assert (
-            "REKALL_MARKER_DIR:-/tmp" in line
-        ), f"rekall-session-end.sh marker line must use REKALL_MARKER_DIR:-/tmp, got: {line!r}"
+        assert "REKALL_MARKER_DIR:-/tmp" in line, (
+            f"rekall-session-end.sh marker line must use REKALL_MARKER_DIR:-/tmp, got: {line!r}"
+        )
     for line in restore_marker_lines:
-        assert (
-            "REKALL_MARKER_DIR:-/tmp" in line
-        ), f"rekall-restore.sh marker line must use REKALL_MARKER_DIR:-/tmp, got: {line!r}"
+        assert "REKALL_MARKER_DIR:-/tmp" in line, (
+            f"rekall-restore.sh marker line must use REKALL_MARKER_DIR:-/tmp, got: {line!r}"
+        )
 
 
 def test_summary_lifecycle_is_session_end_only_and_tail_is_bounded():
