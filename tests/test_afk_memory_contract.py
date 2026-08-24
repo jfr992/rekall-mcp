@@ -2,6 +2,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from hashlib import sha256
+from threading import Barrier, BrokenBarrierError, Lock
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -24,6 +25,9 @@ def afk_manager(tmp_path):
     manager._store = vector_store.return_value
     manager._embedder = embedder.return_value
     manager._knowledge_graph = MagicMock()
+    manager._event_log = MagicMock()
+    manager._event_log.tail.return_value = []
+    manager.store.get_by_id.return_value = None
     return manager
 
 
@@ -66,12 +70,33 @@ def test_same_operation_is_idempotent_but_changed_normalized_input_conflicts(afk
     first = _save(afk_manager)
     assert _save(afk_manager) == first
     assert len(_entries(afk_manager)) == 1
+    assert afk_manager.store.save.call_count == 1
 
     from memory.manager import AfkOperationConflict
 
     with pytest.raises(AfkOperationConflict):
         _save(afk_manager, proposed="Different durable claim")
     assert len(_entries(afk_manager)) == 1
+
+
+def test_afk_signs_scrubbed_tag_and_proposed_with_normalized_conflicts(afk_manager):
+    first = _save(
+        afk_manager,
+        tag="token=first-secret",
+        proposed="Bearer first-secret is evidence",
+    )
+    retry = _save(
+        afk_manager,
+        tag="token=second-secret",
+        proposed="Bearer second-secret is evidence",
+    )
+
+    assert retry == first
+    assert first["envelope"]["tag"] == "[REDACTED]"
+    assert first["envelope"]["proposed"] == "[REDACTED] is evidence"
+    stored = (afk_manager.memory_dir / "afk-project" / "2026-08-24.yaml").read_text()
+    assert "first-secret" not in stored
+    assert "second-secret" not in stored
 
 
 def test_distinct_operations_keep_same_content_and_isolate_project_and_date(afk_manager):
@@ -115,6 +140,25 @@ def test_retry_repairs_vector_after_crash_following_yaml_durability(afk_manager)
     assert afk_manager.store.save.call_count == 2
 
 
+def test_upsert_then_raise_is_reconciled_without_a_second_vector_write(afk_manager):
+    vector_reads = 0
+
+    def get_by_id(_memory_id):
+        nonlocal vector_reads
+        vector_reads += 1
+        return None if vector_reads == 1 else _entries(afk_manager)[0]
+
+    afk_manager.store.get_by_id.side_effect = get_by_id
+    afk_manager.store.save.side_effect = RuntimeError("response lost after upsert")
+
+    first = _save(afk_manager)
+    retry = _save(afk_manager)
+
+    assert retry == first
+    assert afk_manager.store.save.call_count == 1
+    assert _entries(afk_manager)[0]["afk_operation"]["vector_state"] == "completed"
+
+
 def test_stock_delete_removes_afk_memory(afk_manager):
     result = _save(afk_manager)
     afk_manager.store.client.delete = MagicMock()
@@ -136,6 +180,40 @@ def test_afk_and_ordinary_concurrent_writers_do_not_lose_accepted_records(afk_ma
         [future.result() for future in futures]
 
     assert len(_entries(afk_manager)) == 8
+
+
+def test_concurrent_identical_ordinary_saves_revalidate_deduplication_under_lock(afk_manager):
+    search_barrier = Barrier(2)
+    saved: dict[str, dict] = {}
+    saved_lock = Lock()
+
+    def search(**_kwargs):
+        try:
+            search_barrier.wait(timeout=0.1)
+        except BrokenBarrierError:
+            pass
+        with saved_lock:
+            return list(saved.values())
+
+    def save(*, id, payload, **_kwargs):
+        with saved_lock:
+            saved[id] = {"memory_id": id, "content": payload["content"]}
+
+    afk_manager.store.search.side_effect = search
+    afk_manager.store.save.side_effect = save
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        ids = list(
+            pool.map(
+                lambda _: afk_manager.save(
+                    "identical ordinary memory", type="note", project="afk-project"
+                ),
+                range(2),
+            )
+        )
+
+    assert ids[0] == ids[1]
+    assert len(_entries(afk_manager)) == 1
 
 
 @pytest.fixture
@@ -190,3 +268,14 @@ def test_afk_lookup_returns_404_when_operation_is_absent(client_and_manager):
         params={"project": "afk-project", "operation_date": "2026-08-24"},
     )
     assert response.status_code == 404
+
+
+def test_afk_lookup_rejects_impossible_dates(client_and_manager):
+    client, _ = client_and_manager
+
+    response = client.get(
+        "/api/memory/afk/operations/attack:1",
+        params={"project": "afk-project", "operation_date": "2026-13-41"},
+    )
+
+    assert response.status_code == 400
