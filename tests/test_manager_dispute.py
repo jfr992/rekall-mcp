@@ -7,7 +7,11 @@ set_identity_pin, no new mutation machinery, no tier/reclassification since
 disputed doesn't feed classify().
 """
 
+import pytest
+
 from memory import MemoryManager
+
+pytestmark = pytest.mark.integration
 
 
 def test_set_disputed_false_clears_flag(memory_manager: MemoryManager):

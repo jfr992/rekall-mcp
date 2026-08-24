@@ -7,7 +7,11 @@ emitted — the tier change flows through the existing payload update, same as
 backfill_lifecycle's read-reclassify-write (manager.py ~830-869).
 """
 
+import pytest
+
 from memory import MemoryManager
+
+pytestmark = pytest.mark.integration
 
 
 def test_pin_sets_identity_tier_and_pinned_flag(memory_manager: MemoryManager):

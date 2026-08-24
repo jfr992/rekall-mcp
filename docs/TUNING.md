@@ -189,7 +189,7 @@ exact-cue path for project names, file paths, flags, ticket IDs, and tool names.
 
 ## Nervous-System Recall Surfaces
 
-- Use `project_capsule(project)` or `agent_startup(agent="claude-code")` once at session start for broad familiarity.
+- When broad familiarity can change the work, use `project_capsule(project)` or `agent_startup(project="<repo-name>", agent="claude-code")` at most once at session start; otherwise prefer targeted recall.
 - Use `recall_memories(query)` only after the prompt supplies a concrete topic.
 - Use `recall_across_projects(query, current_project)` when a lesson from another repo may transfer.
 - Use `reflex_recall(text, project)` before risky infrastructure, memory-data, hook, or deployment work.
@@ -201,9 +201,9 @@ Do not turn every turn into proactive recall. The nervous-system model is famili
 
 `claude/hooks/rekall-reflex.sh` (PreToolUse, Bash matcher) surfaces a small recall packet before commands that match a named cue group: `destructive` (rm -rf, drop table, terraform/tofu destroy, kubectl delete, helm uninstall, ...), `iac`, `memory_data`, `hooks`, `helm`. A miss on all groups costs nothing — no network call.
 
-- **Debounce:** once per session per matched cue group. A marker file per cue (`$REKALL_MARKER_DIR/rekall-reflex-<session_id>-<cue>`) suppresses repeat fetches for the same cue in the same session; any unmarked matched cue still fires.
+- **Debounce:** once per session per matched cue group, including a valid zero-hit response. A marker file per cue (`$REKALL_MARKER_DIR/rekall-reflex-<session_id>-<cue>`) suppresses repeat fetches for the same cue in the same session; any unmarked matched cue still fires.
 - **Cue cap:** if a command matches more than 3 groups, the server selects up to 3 by priority (`destructive` first, then `_CUES` declaration order) and merges their queries into a single `recall()` call — one network round trip regardless of match count.
-- **Kill switches:** `REKALL_REFLEX=0` disables reflex only; `REKALL_AUTOSAVE=0` is the master switch and also disables it (same variable that gates `rekall-observe.sh` and `memory-prune.sh`).
+- **Kill switches:** `REKALL_REFLEX=0` disables reflex only; `REKALL_AUTOSAVE=0` is the master switch and also disables it (the same variable gates `rekall-observe.sh`, `rekall-session-end.sh`, and `memory-prune.sh`).
 - **`REKALL_MARKER_DIR`** overrides the debounce marker directory (default `/tmp`), same variable used by the other hooks.
 
 ### Cleaning Up Duplicates

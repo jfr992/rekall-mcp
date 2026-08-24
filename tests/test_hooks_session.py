@@ -191,8 +191,13 @@ def _run_observe_judge(
     git.chmod(0o755)
 
     claude = fakebin / "claude"
+    claude_args = tmp_path / "claude-args.log"
     claude.write_text(
-        f"#!/usr/bin/env bash\ncat >/dev/null\nprintf '%s\\n' '{judge_json}'\n",
+        f"""#!/usr/bin/env bash
+printf '%s\\n' "$*" >> "$FAKE_CLAUDE_ARGS"
+cat >/dev/null
+printf '%s\\n' '{judge_json}'
+""",
         encoding="utf-8",
     )
     claude.chmod(0o755)
@@ -210,6 +215,7 @@ def _run_observe_judge(
             "REKALL_MARKER_DIR": str(tmp_path),
             "REKALL_OBSERVE_LOG": str(tmp_path / "observe.log"),
             "REKALL_LAST_FIRE_FILE": str(tmp_path / "last-fire"),
+            "FAKE_CLAUDE_ARGS": str(claude_args),
         }
     )
     env.pop("CLAUDE_SESSION_ID", None)
@@ -254,6 +260,19 @@ def test_observe_post_carries_session_id(tmp_path):
     observe_bodies = _observe_bodies(url_lines, bodies)
     assert len(observe_bodies) == 1, bodies
     assert observe_bodies[0]["session_id"] == OBSERVE_SESSION
+
+
+def test_observe_judge_runs_isolated_with_low_effort(tmp_path):
+    judge = '{"observe": false}'
+
+    result, _, _ = _run_observe_judge(tmp_path, judge_json=judge, git_commits=1)
+
+    assert result.returncode == 0, result.stderr
+    argv = (tmp_path / "claude-args.log").read_text(encoding="utf-8")
+    assert "--safe-mode" in argv
+    assert "--effort low" in argv
+    assert "--tools " in argv
+    assert "--no-session-persistence" in argv
 
 
 def test_observe_post_carries_judge_evidence_class(tmp_path):

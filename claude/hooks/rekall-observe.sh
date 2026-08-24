@@ -27,6 +27,8 @@ trace "fire: hook invoked"
 payload="$(cat)"
 transcript_path="$(jq -r '.transcript_path // ""' <<<"$payload")"
 stop_hook_active="$(jq -r '.stop_hook_active // false' <<<"$payload")"
+session_id="$(jq -r '.session_id // ""' <<<"$payload")"
+[[ -z "$session_id" ]] && session_id="${CLAUDE_SESSION_ID:-$(basename "$transcript_path" .jsonl)}"
 
 # Caller's working directory — Claude Code provides this in the Stop payload.
 # Falls back to $CLAUDE_PROJECT_DIR then $PWD so the scope attaches to the
@@ -34,144 +36,10 @@ stop_hook_active="$(jq -r '.stop_hook_active // false' <<<"$payload")"
 caller_cwd="$(jq -r '.cwd // ""' <<<"$payload")"
 [[ -z "$caller_cwd" ]] && caller_cwd="${CLAUDE_PROJECT_DIR:-$PWD}"
 
-# Bail if we're re-entering from our own Stop (should never happen with --bare
-# but belt-and-suspenders).
+# Bail if we're re-entering from our own Stop (belt-and-suspenders alongside
+# the isolated judge invocation below).
 [[ "$stop_hook_active" == "true" ]] && exit 0
 [[ -z "$transcript_path" || ! -f "$transcript_path" ]] && exit 0
-
-# ============================================================
-# UNGATED: session-summary utility event (no LLM, fail-open)
-# Runs before the gated Haiku section. One python3 pass over the
-# full transcript extracts recalled memory ids and outcome counts,
-# then emits one POST /api/memory/events. All paths fail-open.
-# ============================================================
-{
-  _sess_id="$(jq -r '.session_id // ""' <<<"$payload" 2>/dev/null || true)"
-  [[ -z "$_sess_id" ]] && _sess_id="${CLAUDE_SESSION_ID:-$(basename "$transcript_path" .jsonl)}"
-  # Use restore-hook marker as backend-alive signal; skip POST if absent.
-  _marker="${REKALL_MARKER_DIR:-/tmp}/rekall-restored-${_sess_id}"
-  if [[ -f "$_marker" ]]; then
-    _proj="$(basename "$caller_cwd")"
-    _sess_json="$(python3 - "$transcript_path" "$_proj" "$_sess_id" 2>/dev/null <<'_PYEOF'
-import sys, json, re
-
-tp, proj, sess = sys.argv[1], sys.argv[2], sys.argv[3]
-MID = re.compile(r'\d{4}-\d{2}-\d{2}_[a-z]+_[0-9a-f]+')
-
-tool_names = {}
-entries = []
-try:
-    with open(tp) as fh:
-        for line in fh:
-            try:
-                e = json.loads(line)
-            except Exception:
-                continue
-            entries.append(e)
-            if e.get("type") == "assistant":
-                for b in e.get("message", {}).get("content", []):
-                    if isinstance(b, dict) and b.get("type") == "tool_use":
-                        _bid = b.get("id")
-                        if _bid:
-                            tool_names[_bid] = b.get("name", "")
-except Exception:
-    sys.exit(0)
-
-recall_tids = {
-    tid for tid, n in tool_names.items()
-    if "recall" in n.lower() or "reflex" in n.lower()
-}
-
-recalled = set()
-first_recall_idx = None
-
-for idx, e in enumerate(entries):
-    if e.get("type") != "user":
-        continue
-    for b in e.get("message", {}).get("content", []):
-        if not (isinstance(b, dict) and b.get("type") == "tool_result"):
-            continue
-        if b.get("tool_use_id", "") not in recall_tids:
-            continue
-        raw = b.get("content", "")
-        text = raw if isinstance(raw, str) else "".join(
-            c.get("text", "") for c in (raw if isinstance(raw, list) else [])
-            if isinstance(c, dict) and c.get("type") == "text"
-        )
-        recalled.update(MID.findall(text))
-        if first_recall_idx is None:
-            first_recall_idx = idx
-
-# PreToolUse reflex packets land as "attachment" entries, not tool_result
-# blocks — invisible to the scan above. Without this, edits_after_recall /
-# test_passes_after_recall never see reflex-driven recalls.
-for idx, e in enumerate(entries):
-    if e.get("type") != "attachment" or e.get("hookEvent") != "PreToolUse":
-        continue
-    try:
-        envelope = json.loads(e.get("stdout", ""))
-    except Exception:
-        continue
-    context = envelope.get("hookSpecificOutput", {}).get("additionalContext") or ""
-    if "REKALL REFLEX" not in context:
-        continue
-    recalled.update(MID.findall(context))
-    if first_recall_idx is None or idx < first_recall_idx:
-        first_recall_idx = idx
-
-if not recalled:
-    sys.exit(0)
-
-edits = 0
-test_passes = 0
-bash_test_ids = set()
-
-for idx, e in enumerate(entries):
-    if first_recall_idx is not None and idx <= first_recall_idx:
-        continue
-    if e.get("type") == "assistant":
-        for b in e.get("message", {}).get("content", []):
-            if not (isinstance(b, dict) and b.get("type") == "tool_use"):
-                continue
-            name = b.get("name", "")
-            if name in ("Edit", "Write"):
-                edits += 1
-            elif name == "Bash":
-                cmd = b.get("input", {}).get("command", "")
-                if re.search(r'pytest|go test|npm test', cmd):
-                    bash_test_ids.add(b.get("id", ""))
-    elif e.get("type") == "user":
-        for b in e.get("message", {}).get("content", []):
-            if not (isinstance(b, dict) and b.get("type") == "tool_result"):
-                continue
-            if b.get("tool_use_id", "") not in bash_test_ids:
-                continue
-            raw = b.get("content", "")
-            text = raw if isinstance(raw, str) else "".join(
-                c.get("text", "") for c in (raw if isinstance(raw, list) else [])
-                if isinstance(c, dict) and c.get("type") == "text"
-            )
-            if re.search(r'\bpassed\b|\bok\b', text, re.IGNORECASE):
-                test_passes += 1
-
-print(json.dumps({
-    "event_type": "session_summary",
-    "session_id": sess,
-    "project": proj,
-    "recalled_ids": sorted(recalled),
-    "edits_after_recall": edits,
-    "test_passes_after_recall": test_passes,
-}))
-_PYEOF
-    )" || true
-    if [[ -n "$_sess_json" ]]; then
-      curl -sfo /dev/null --max-time 1 -X POST "$API/api/memory/events" \
-        -H "Content-Type: application/json" \
-        -d "$_sess_json" 2>/dev/null || true
-    fi
-  fi
-} || true
-# ============================================================
 
 # Backend alive?
 curl -sfo /dev/null --max-time 1 "$API/health" 2>/dev/null || exit 0
@@ -283,10 +151,14 @@ date +%s > "$LAST_FIRE_FILE"
 trace "fire: signal detected, calling haiku"
 # ============================================================
 
-# Call claude in --bare mode so it doesn't recursively fire hooks / load memory.
+# Isolate the cheap judge from the user's plugins, MCP servers, hooks, effort
+# default, and session history. The explicit inflight guard remains defense in
+# depth if a future Claude release changes safe-mode hook behavior.
 judge_out="$(
   printf '%s\n\n%s\n' "$JUDGE_PROMPT" "$exchange" \
-    | REKALL_JUDGE_INFLIGHT=1 perl -e 'alarm 25; exec @ARGV' claude -p --model "$MODEL" 2>/dev/null \
+    | REKALL_JUDGE_INFLIGHT=1 perl -e 'alarm 25; exec @ARGV' \
+        claude --safe-mode -p --model "$MODEL" --effort low \
+        --tools "" --no-session-persistence 2>/dev/null \
     | tr -d '\000' \
     || true
 )"
@@ -333,7 +205,7 @@ fi
 curl -sfo /dev/null --max-time 5 -X POST "$API/api/memory/observe" \
   -H "Content-Type: application/json" \
   -d "$(jq -cn --arg c "$content" --arg t "$mtype" --arg d "$caller_cwd" \
-    --arg s "${_sess_id:-}" --arg e "$evidence_class" \
+    --arg s "$session_id" --arg e "$evidence_class" \
     '{summary:$c, type:$t, cwd:$d,
       session_id:(if $s == "" then null else $s end),
       evidence_class:(if $e == "" then null else $e end)}')" \

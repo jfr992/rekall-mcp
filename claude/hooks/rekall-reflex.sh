@@ -5,10 +5,10 @@
 # and injects it as additionalContext. NEVER blocks the tool call.
 #
 # Kill switches: REKALL_AUTOSAVE=0 (master) or REKALL_REFLEX=0 (dedicated)
-# Backend URL: REKALL_URL (default http://localhost:8000)
+# Backend URL: REKALL_API_URL, then legacy REKALL_URL
 set -euo pipefail
 
-API="${REKALL_URL:-http://localhost:8000}"
+API="${REKALL_API_URL:-${REKALL_URL:-http://localhost:8000}}"
 
 [[ "${REKALL_AUTOSAVE:-1}" == "0" ]] && exit 0
 [[ "${REKALL_REFLEX:-1}" == "0" ]] && exit 0
@@ -59,7 +59,28 @@ response="$(curl -sf --connect-timeout 0.1 --max-time 1 -X POST "$API/api/memory
   -H "Content-Type: application/json" -d "$body" 2>/dev/null || true)"
 [[ -z "$response" ]] && exit 0
 
-packet_cues="$(jq -r '.cues // [] | join(",")' <<<"$response" 2>/dev/null || true)"
+# Reserve before checking whether the packet contains memories. Zero-hit
+# responses still represent a completed lookup and must not hit the server for
+# every matching command in the same session. Trust only locally matched group
+# names when building marker paths; server-provided strings never become paths.
+server_cues="$(jq -r '.cues // [] | .[]' <<<"$response" 2>/dev/null || true)"
+returned_cues=()
+for g in "${matched_groups[@]}"; do
+  if grep -Fxq "$g" <<<"$server_cues" 2>/dev/null; then
+    returned_cues+=("$g")
+  fi
+done
+[[ ${#returned_cues[@]} -eq 0 ]] && returned_cues=("${matched_groups[@]}")
+
+reserved=false
+for cue in "${returned_cues[@]}"; do
+  if mkdir "$MARKER_DIR/rekall-reflex-${session_id}-${cue}" 2>/dev/null; then
+    reserved=true
+  fi
+done
+[[ "$reserved" == "false" ]] && exit 0
+
+packet_cues="$(IFS=,; printf '%s' "${returned_cues[*]}")"
 context="$(
   jq -j --arg cues "$packet_cues" '
     def cp160: (.[0:160]) | gsub("[\\x00-\\x1f]"; " ");
@@ -72,19 +93,6 @@ context="$(
   ' <<<"$response" 2>/dev/null || true
 )"
 [[ -z "$context" ]] && exit 0
-
-# Atomically reserve a marker per server-returned cue BEFORE emitting —
-# mkdir is atomic (fails if the dir exists), guarding concurrent invocations
-# against a double emit. Debounce means "envelope produced," not "accepted."
-returned_cues="$(jq -r '.cues // [] | .[]' <<<"$response" 2>/dev/null || true)"
-reserved=false
-while IFS= read -r cue; do
-  [[ -z "$cue" ]] && continue
-  if mkdir "$MARKER_DIR/rekall-reflex-${session_id}-${cue}" 2>/dev/null; then
-    reserved=true
-  fi
-done <<<"$returned_cues"
-[[ "$reserved" == "false" ]] && exit 0
 
 jq -cn --arg ctx "$context" '{hookSpecificOutput: {hookEventName: "PreToolUse", additionalContext: $ctx}}' 2>/dev/null || true
 

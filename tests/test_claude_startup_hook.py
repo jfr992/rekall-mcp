@@ -48,7 +48,7 @@ exit 99
 
 def _fake_blocking_curl(tmp_path: Path) -> tuple[Path, Path]:
     fakebin = tmp_path / "installer-fakebin"
-    fakebin.mkdir()
+    fakebin.mkdir(exist_ok=True)
     calls = tmp_path / "installer-curl-calls.log"
     curl = fakebin / "curl"
     curl.write_text(
@@ -255,12 +255,110 @@ def test_installer_default_does_not_install_startup_capsule(tmp_path):
     assert "backend not reachable" in result.stdout
     assert (home / ".claude" / "hooks" / "rekall-restore.sh").exists()
     assert (home / ".claude" / "hooks" / "rekall-observe.sh").exists()
+    assert (home / ".claude" / "hooks" / "rekall-session-end.sh").exists()
     assert (home / ".claude" / "hooks" / "memory-prune.sh").exists()
     assert not (home / ".claude" / "hooks" / "session-start-memory.sh").exists()
     settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
     commands = _settings_commands(settings, "SessionStart")
     assert any("memory-prune.sh" in c for c in commands)
     assert not any("session-start-memory.sh" in c for c in commands)
+    session_end_hooks = [
+        hook
+        for entry in settings["hooks"]["SessionEnd"]
+        for hook in entry.get("hooks", [])
+        if hook["command"].endswith("rekall-session-end.sh")
+    ]
+    assert session_end_hooks == [
+        {
+            "type": "command",
+            "command": str(home / ".claude" / "hooks" / "rekall-session-end.sh"),
+            "timeout": 3,
+        }
+    ]
+
+
+def test_installer_removes_only_obsolete_rekall_entries_and_is_idempotent(tmp_path):
+    home = tmp_path / "home"
+    claude_home = home / ".claude"
+    claude_home.mkdir(parents=True)
+    foreign_precompact = "/opt/team/hooks/preserve-precompact.sh"
+    foreign_posttool = "/opt/team/hooks/preserve-posttool.sh"
+    settings_path = claude_home / "settings.json"
+    settings_path.write_text(
+        json.dumps(
+            {
+                "model": "keep-this-model",
+                "permissions": {"defaultMode": "auto"},
+                "hooks": {
+                    "PreCompact": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": str(claude_home / "hooks" / "rekall-precompact.sh"),
+                                },
+                                {"type": "command", "command": foreign_precompact},
+                            ]
+                        }
+                    ],
+                    "PostCompact": [
+                        {
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": str(claude_home / "hooks" / "rekall-postcompact.sh"),
+                                }
+                            ]
+                        }
+                    ],
+                    "PostToolUse": [
+                        {
+                            "matcher": "Bash",
+                            "hooks": [
+                                {
+                                    "type": "command",
+                                    "command": str(
+                                        claude_home / "hooks" / "rekall-commit-nudge.sh"
+                                    ),
+                                },
+                                {"type": "command", "command": foreign_posttool},
+                            ],
+                        }
+                    ],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    first, _ = _run_install(home, "--hooks-only")
+    second, _ = _run_install(home, "--hooks-only")
+
+    assert first.returncode == 0, first.stderr + first.stdout
+    assert second.returncode == 0, second.stderr + second.stdout
+    settings = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert settings["model"] == "keep-this-model"
+    assert settings["permissions"] == {"defaultMode": "auto"}
+    all_commands = [
+        command for event in settings["hooks"] for command in _settings_commands(settings, event)
+    ]
+    assert foreign_precompact in all_commands
+    assert foreign_posttool in all_commands
+    assert not any(
+        command.endswith(
+            ("rekall-precompact.sh", "rekall-postcompact.sh", "rekall-commit-nudge.sh")
+        )
+        for command in all_commands
+    )
+    assert "PostCompact" not in settings["hooks"]
+    session_end = [
+        hook
+        for entry in settings["hooks"]["SessionEnd"]
+        for hook in entry.get("hooks", [])
+        if hook["command"].endswith("rekall-session-end.sh")
+    ]
+    assert len(session_end) == 1
+    assert session_end[0]["timeout"] == 3
 
 
 def test_installer_opt_in_installs_startup_capsule_and_backs_up_existing_hook(tmp_path):

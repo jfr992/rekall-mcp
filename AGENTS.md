@@ -17,9 +17,9 @@ If you're about to do anything destructive (migration, prune, schema change), ta
 
 ```bash
 TS=$(date +%Y%m%d-%H%M%S)
-tar czf ~/backups/pre-$TS-memory.tar.gz -C ~ .claude/memory
+tar czf ~/backups/pre-$TS-memory.tar.gz -C ~ .Codex/memory
 docker compose stop qdrant
-tar czf ~/backups/pre-$TS-qdrant.tar.gz -C ~/.claude qdrant
+tar czf ~/backups/pre-$TS-qdrant.tar.gz -C ~/.Codex qdrant
 docker compose start qdrant
 ```
 
@@ -34,7 +34,7 @@ src/core/                    Embedder, vector_store, telemetry, utils
 ui/                          Next.js cockpit (port 3333)
 benchmarks/                  LongMemEval runner + dataset
 tests/                       pytest suite (mirrors src/ structure)
-claude/                      Shippable Claude Code bundle (NOT auto-loaded)
+codex/                      Shippable Codex adapter, installer, and skill
 docs/                        User-facing docs (SETUP, MIGRATION, ARCHITECTURE, ...)
 ```
 
@@ -55,7 +55,7 @@ The whole pattern lives end-to-end in `/api/memory/kb` (added in v1.5.0) — cop
 
 ## Adding a new MCP tool
 
-`src/tools/builtin/memory.py` exposes tools via the `@mcp.tool()` decorator. The tool name (the function's name) is what the user/agent invokes; the docstring becomes the tool description Claude sees. Keep descriptions short and trigger-shaped — start with "Use when ..." rather than "This function ...".
+`src/tools/builtin/memory.py` exposes tools via the `@mcp.tool()` decorator. The tool name (the function's name) is what the user/agent invokes; the docstring becomes the tool description Codex sees. Keep descriptions short and trigger-shaped — start with "Use when ..." rather than "This function ...".
 
 ## Adding a new cockpit surface
 
@@ -90,29 +90,25 @@ A memory record has:
 
 ## Storage discipline
 
-- Production YAML lives at `MEMORY_STORAGE_PATH` (env var). Default: `~/.claude/memory`. v1.5.0+ writes nested per-project: `<project>/<date>.yaml`. Override `MEMORY_STORAGE_PATH` to relocate.
+- Production YAML lives at `MEMORY_STORAGE_PATH` (env var). Default: `~/.Codex/memory`. v1.5.0+ writes nested per-project: `<project>/<date>.yaml`. Override `MEMORY_STORAGE_PATH` to relocate.
 - The nested layout is what the v1.5.0 scope-aware observe writes. Don't add code that assumes flat — use `Path.rglob("*.yaml")`, not `glob("*.yaml")`.
-- Knowledge graph at `~/.claude/memory/_graph.json` (always there, even when YAML moves).
-- Production Qdrant at `localhost:6333` → `~/.claude/qdrant`. **Read-only from tests.**
+- Knowledge graph at `~/.Codex/memory/_graph.json` (always there, even when YAML moves).
+- Production Qdrant at `localhost:6333` → `~/.Codex/qdrant`. **Read-only from tests.**
 - Test Qdrant at `localhost:6334` → tmpfs. Wiped on stop.
-- Embedded vector store (uvx/serve tiers) at `~/.rekall/qdrant` (`QDRANT_PATH`); YAML home unchanged at `~/.claude/memory`.
+- Embedded vector store (uvx/serve tiers) at `~/.rekall/qdrant` (`QDRANT_PATH`); YAML home unchanged at `~/.Codex/memory`.
 - The ownership protocol (`src/core/ownership.py`) is the only sanctioned way for entry points to decide daemon-vs-embedded — never construct a second store on a locked path.
 
-## Hook discipline (claude/hooks/)
+## Hook discipline (`codex/hooks/`)
 
-Five default hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/hooks/` with matching `~/.claude/settings.json` entries. `session-start-memory.sh` is a sixth, explicit opt-in because it injects startup context.
+The Codex adapter is inert until installed with `bash codex/setup/install.sh`. It registers six lifecycle handlers: `SessionStart`, `PreToolUse`, `PreCompact`, `PostCompact`, `PostToolUse`, and `SessionEnd`. Every handler is fail-open, bounded, and must never block the client or print raw response bodies, transcript content, or secrets. Reflex context is opt-in through cue matching, once-per-session markers, untrusted framing, and an 800-codepoint limit.
 
-- **`rekall-restore.sh`** (UserPromptSubmit) — fetch-don't-inject. Status line only (~92 bytes/session). **Don't add context dumps here.** If you want context, the agent calls `recall_memories()` on demand.
-- **`rekall-observe.sh`** (Stop) — Haiku judge with cheap signal gate. **Never add a hook that fires Haiku per turn without a gate.** Current gate fires on (a) new commits since last fire, (b) durability keyword in last user message, or (c) 5+ turns AND zero saves today. The nested judge must stay isolated with `--safe-mode --effort low --tools "" --no-session-persistence`; otherwise it inherits every plugin, MCP server, and global effort default.
-- **`rekall-session-end.sh`** (SessionEnd) — bounded, LLM-free recall-utility correlation. Reads at most `REKALL_TRANSCRIPT_TAIL_BYTES` (default 1 MiB), emits IDs and counts only, uses a one-second request timeout, and fails open. It owns `session_summary`; never move transcript scanning back into Stop.
-- **`memory-prune.sh`** (SessionStart) — daily gated superseded-memory housekeeping. It is destructive only behind server-side date, count, and backup gates.
-- **`rekall-reflex.sh`** (PreToolUse, Bash) — the sanctioned exception to "no proactive injection" below. Pattern: local per-group cue gate (word-boundary match, no network on a miss) → once-per-session debounce per matched cue, including zero-hit responses → bounded fetch (0.1s connect / 1s total) to `/api/memory/reflex` → ≤800-codepoint untrusted-framed packet injected via `additionalContext`. URL precedence is `REKALL_API_URL`, then legacy `REKALL_URL`, then localhost. Never exits 2, never sets `permissionDecision` — it informs, it never gates. Kill switches: `REKALL_AUTOSAVE=0` (master) or `REKALL_REFLEX=0` (dedicated). Any new PreToolUse/PostToolUse hook that injects context must follow this same shape or justify the deviation.
+Kill switches are `REKALL_AUTOSAVE=0` for all activity and `REKALL_REFLEX=0` for reflex context. Keep the adapter’s MCP-first policy in `codex/skills/rekall-memory/SKILL.md`; call `agent_startup` once, then use targeted `recall_memories` and explicit `observe`. Codex native memory at `~/.codex/memories/` is separate and must never be edited.
 
-**Re-entrancy:** if a hook invokes `claude -p`, an ordinary nested instance fires its own hooks and loads the user's complete profile. The observe judge uses safe mode and also sets `REKALL_JUDGE_INFLIGHT=1` before exec as defense in depth.
+Claude hook risks observed during audit (marker-token sanitization, raw-content logging, URL inconsistency, and startup framing) remain follow-up evidence; do not silently refactor Claude hooks in a Codex documentation change.
 
-**Installer ownership:** reinstall may remove only the exact obsolete Rekall basenames `rekall-precompact.sh`, `rekall-postcompact.sh`, and `rekall-commit-nudge.sh`. Preserve foreign hook commands, native Claude project memory, and unrelated top-level settings.
+**Re-entrancy:** adapters must not invoke a nested client without an explicit guard. Never add a hook that injects unbounded context or gates a tool call.
 
-**Tool namespace:** the running server registers as `rekall` (in the Claude Code MCP config), so tools are `mcp__rekall__*` — not `mcp__memory__*`. If you copy a hook from another project, namespace-patch first.
+**Tool namespace:** the running server registers as `rekall`; MCP tools are `mcp__rekall__*`.
 
 ## Branch + PR rules
 
@@ -127,7 +123,7 @@ Five default hooks ship in `claude/hooks/`. They're inert until installed at `~/
 - **`/dashboard` route.** Removed in v1.5.0 (409 lines of embedded HTML). The cockpit at `:3333` is the supported UI. Don't bring it back.
 - **Firehose proactive injection.** The restore hook stays zero-injection by design — anything in the data is reachable via `recall_memories()` on demand. `rekall-reflex.sh` is the one sanctioned, bounded exception (see hook discipline above); it doesn't reopen the door to per-turn context dumps.
 - **Per-turn LLM judge without a gate.** Cost cliff. See hook discipline above.
-- **Synthesizing rules into CLAUDE.md from imagined sources.** Real incident — a rule about commit footers got fabricated and almost shipped. Verbatim source or explicit author intent only.
+- **Synthesizing rules into AGENTS.md from imagined sources.** Real incident — a rule about commit footers got fabricated and almost shipped. Verbatim source or explicit author intent only.
 - **Partial vocab refits.** BM25 token IDs are assigned at fit time — a refit without rewriting every point's sparse vector in the same transaction (`resparse`) produces silently wrong matches. Never cap or sample the resparse corpus.
 - **More reads over smarter reads.** A new context surface ships only with evidence it reduces duplicate memory_ids across capsule buckets (test-asserted) or feeds the recall-utility loop (event emitted + consumed by the utility report). No evidence, no merge.
 - **Eval corpus and scenario queries in `tests/test_software_evals.py` may not be edited in the same PR as ranking/routing changes, except to add scenarios.**
@@ -137,6 +133,7 @@ Five default hooks ship in `claude/hooks/`. They're inert until installed at `~/
 - **Auto-resparse trigger** — manual `POST /api/memory/resparse` + loud doctor drift signals cover the current save cadence. Add a trigger (thread via `run_in_executor`, never a bare asyncio task in the sync save path) only if drift recurs unattended for two weeks.
 - **Stable BM25 token IDs (hash-based, bm42-style)** — would make refits incremental and kill the resparse transaction. Revisit at >50k memories or if resparse duration exceeds barrier-hold tolerance.
 - **Auto-compaction** — shipped on main (`src/memory/compact.py`, route `POST /api/memory/compact`). Known issue: asyncio.run inside sync path (see pitfall table).
+- **Transcript-dependent session synthesis** — Codex `SessionEnd` is now wired for bounded recall-utility evidence. Do not treat its JSONL transcript as a stable schema or expand it into automatic narrative memory; unknown records must remain a no-op.
 
 ## Pitfalls (real ones we've hit)
 
@@ -148,12 +145,10 @@ Five default hooks ship in `claude/hooks/`. They're inert until installed at `~/
 | RRF prefetch drops `query_filter` at the outer `query_points` level | `vector_store.py:331` (fixed in v1.5.0) | Pass `query_filter=query_filter` to the outer `query_points` call too |
 | Backend resolves scope from its own cwd → all observations under "rekall-mcp" | `/api/memory/observe` (fixed in v1.5.0) | Endpoint accepts `cwd` from caller, plumbs to `ScopeDetector.detect()` |
 | Stop hook fires per turn at $0.001/each → ~$30/month/dev | `rekall-observe.sh` (fixed in v1.5.0) | Cheap signal gate before Haiku call |
-| `claude -p` from a Stop hook recursively fires its own Stop hook | `rekall-observe.sh` | `REKALL_JUDGE_INFLIGHT=1` env var guard |
-| Nested judge inherits plugins, MCP tools, and global `xhigh` effort | `rekall-observe.sh` | `--safe-mode --effort low --tools "" --no-session-persistence` plus the inflight guard |
-| Utility scan runs once per assistant turn and rereads the full transcript | pre-hardening `rekall-observe.sh` | Move IDs-and-counts-only correlation to bounded `SessionEnd` hook |
+| `Codex -p` from a Stop hook recursively fires its own Stop hook | `rekall-observe.sh` | `REKALL_JUDGE_INFLIGHT=1` env var guard |
 | `uv run python -m server` runs the STALE installed copy of `server.py`/`config.py` — hatchling copies force-included top-level modules into site-packages at sync; edits to `src/server.py` are invisible until re-sync | dev workflow (since v1.11 packaging) | `PYTHONPATH=src uv run python -m server` in dev, or `uv sync --reinstall-package rekall-mcp` after editing those two files |
 | Restore hook fetches 12KB of "proactive context" but echoes only the status line | pre-v1.5.0 `rekall-restore.sh` | Either drop the fetch entirely (current — nuclear mode) or actually inject (was the bug we caught) |
-| Compose defaults to named volumes → existing installs mount empty stores and "all memories are gone" | `docker-compose.yaml` (v1.11) | Layer `docker-compose.bind-mounts.example.yaml` (or copy it to `docker-compose.override.yaml`) to keep the `~/.claude/` bind mounts |
+| Compose defaults to named volumes → existing installs mount empty stores and "all memories are gone" | `docker-compose.yaml` (v1.11) | Layer `docker-compose.bind-mounts.example.yaml` (or copy it to `docker-compose.override.yaml`) to keep the `~/.Codex/` bind mounts |
 | Stale `.env` `EMBEDDING_PROVIDER=sentence-transformers` on the slim image (no torch) silently degrades endpoints to zero | v1.11 deploy | Remove the var or set `fastembed` (vectors are identical); #57 tracks making the failure loud |
 | PreToolUse hook exit 2 blocks the tool call — every reflex failure path must exit 0 | `rekall-reflex.sh` | `\|\| exit 0` guards on every fallible step; no bare `set -e` exit |
 | BM25 vocab frozen at fit time → identifiers born later miss recall entirely (silent dense-only degradation) | prod, Jul 5–17 vocab | `POST /api/memory/resparse`; doctor `bm25` block surfaces drift (OOV window, vocab age, identifier flag) |
