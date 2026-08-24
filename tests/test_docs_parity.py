@@ -5,6 +5,7 @@ grew surface README doesn't document, or .env.example names a var nothing reads.
 """
 
 import re
+import tomllib
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -197,3 +198,32 @@ def test_qdrant_backed_manager_tests_are_in_integration_lane():
     for path in ("tests/test_manager_pin.py", "tests/test_manager_dispute.py"):
         text = (REPO / path).read_text()
         assert "pytestmark = pytest.mark.integration" in text, path
+
+
+def test_v1_14_notes_document_supported_clients_and_upgrade_contract():
+    migration = (REPO / "docs" / "MIGRATION.md").read_text()
+    latest = migration.split("\n---\n", 1)[0]
+
+    assert "v1.13.0 → v1.14.0" in latest
+    assert "Codex" in latest
+    assert "Claude Code" in latest
+    assert "No data migration" in latest
+
+
+def test_release_metadata_versions_stay_in_sync():
+    project = tomllib.loads((REPO / "pyproject.toml").read_text())
+    lock = tomllib.loads((REPO / "uv.lock").read_text())
+    project_version = project["project"]["version"]
+    root_packages = [
+        package
+        for package in lock["package"]
+        if package["name"] == "rekall-mcp" and package.get("source") == {"editable": "."}
+    ]
+
+    assert len(root_packages) == 1
+    assert root_packages[0]["version"] == project_version
+
+    migration = (REPO / "docs" / "MIGRATION.md").read_text()
+    target_match = re.match(r"# Migration Guide — v[^ ]+ → v([^ ]+)", migration)
+    assert target_match is not None
+    assert target_match.group(1) == project_version
