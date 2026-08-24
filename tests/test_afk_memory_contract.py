@@ -159,6 +159,35 @@ def test_upsert_then_raise_is_reconciled_without_a_second_vector_write(afk_manag
     assert _entries(afk_manager)[0]["afk_operation"]["vector_state"] == "completed"
 
 
+def test_concurrent_exact_afk_retries_hold_the_transaction_through_vector_publish(afk_manager):
+    reconciliation_barrier = Barrier(2)
+    published: dict[str, dict] = {}
+    published_lock = Lock()
+
+    def get_by_id(memory_id):
+        with published_lock:
+            visible = published.get(memory_id)
+        try:
+            reconciliation_barrier.wait(timeout=0.1)
+        except BrokenBarrierError:
+            pass
+        return visible
+
+    def save(*, id, payload, **_kwargs):
+        with published_lock:
+            published[id] = payload
+
+    afk_manager.store.get_by_id.side_effect = get_by_id
+    afk_manager.store.save.side_effect = save
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _: _save(afk_manager), range(2)))
+
+    assert results[0] == results[1]
+    assert afk_manager.store.save.call_count == 1
+    assert _entries(afk_manager)[0]["afk_operation"]["vector_state"] == "completed"
+
+
 def test_stock_delete_removes_afk_memory(afk_manager):
     result = _save(afk_manager)
     afk_manager.store.client.delete = MagicMock()
@@ -214,6 +243,41 @@ def test_concurrent_identical_ordinary_saves_revalidate_deduplication_under_lock
 
     assert ids[0] == ids[1]
     assert len(_entries(afk_manager)) == 1
+
+
+def test_ordinary_lock_covers_vector_publication_before_second_dedup_check(afk_manager):
+    publication_barrier = Barrier(2)
+    published: dict[str, dict] = {}
+    published_lock = Lock()
+
+    def search(**_kwargs):
+        with published_lock:
+            return list(published.values())
+
+    def save(*, id, payload, **_kwargs):
+        try:
+            publication_barrier.wait(timeout=0.1)
+        except BrokenBarrierError:
+            pass
+        with published_lock:
+            published[id] = {"memory_id": id, "content": payload["content"]}
+
+    afk_manager.store.search.side_effect = search
+    afk_manager.store.save.side_effect = save
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        ids = list(
+            pool.map(
+                lambda _: afk_manager.save(
+                    "ordinary publication boundary", type="note", project="afk-project"
+                ),
+                range(2),
+            )
+        )
+
+    assert ids[0] == ids[1]
+    assert len(_entries(afk_manager)) == 1
+    assert afk_manager.store.save.call_count == 1
 
 
 @pytest.fixture
