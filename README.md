@@ -290,6 +290,8 @@ When set, every request except `/health` requires the token. Point clients at it
 # Claude Code
 claude mcp add --transport http rekall http://localhost:8000 \
   --header "Authorization: Bearer $REKALL_API_TOKEN"
+# Codex (the installer also wires authenticated REST hooks)
+bash codex/setup/install.sh --bearer-token-env-var REKALL_API_TOKEN
 # Cockpit: ui/.env.local
 echo "NEXT_PUBLIC_REKALL_API_TOKEN=$REKALL_API_TOKEN" >> ui/.env.local
 ```

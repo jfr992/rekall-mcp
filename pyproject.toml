@@ -61,7 +61,7 @@ packages = ["src/memory", "src/core", "src/tools"]
 asyncio_mode = "auto"
 pythonpath = ["src", "."]
 testpaths = ["tests"]
-addopts = "-v -m 'not wheel'"
+addopts = "-v -m 'not wheel and not eval_live'"
 markers = [
     "integration: real Qdrant on :6334 required",
     "eval_live: real claude -p invocations, costs money",

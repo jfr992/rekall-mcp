@@ -11,6 +11,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[1]
 INSTALLER = ROOT / "codex" / "setup" / "install.sh"
 
@@ -21,13 +23,18 @@ def _free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-def _request(url: str, path: str, body: dict[str, object] | None = None) -> dict:
+def _request(
+    url: str, path: str, body: dict[str, object] | None = None, token: str | None = None
+) -> dict:
     data = json.dumps(body).encode() if body is not None else None
+    headers = {"Content-Type": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     request = urllib.request.Request(
         url + path,
         data=data,
         method="POST" if data is not None else "GET",
-        headers={"Content-Type": "application/json"},
+        headers=headers,
     )
     with urllib.request.urlopen(request, timeout=10) as response:
         value = json.loads(response.read())
@@ -63,8 +70,13 @@ if [ "$1 $2 $3 $4" = "mcp get rekall --json" ]; then
   exit 1
 fi
 if [ "$1 $2 $3 $4" = "mcp add rekall --url" ] && [ -n "$5" ]; then
-  printf '{"name":"rekall","transport":{"type":"streamable_http","url":"%s"}}\n' \
-    "$5" > "$FAKE_CODEX_STATE"
+  if [ "$6" = "--bearer-token-env-var" ] && [ -n "$7" ]; then
+    printf '{"name":"rekall","transport":{"type":"streamable_http","url":"%s","bearer_token_env_var":"%s"}}\n' \
+      "$5" "$7" > "$FAKE_CODEX_STATE"
+  else
+    printf '{"name":"rekall","transport":{"type":"streamable_http","url":"%s","bearer_token_env_var":null}}\n' \
+      "$5" > "$FAKE_CODEX_STATE"
+  fi
   exit 0
 fi
 if [ "$1 $2 $3" = "mcp remove rekall" ]; then
@@ -86,7 +98,14 @@ exit 64
         }
     )
     result = subprocess.run(
-        ["/bin/bash", str(INSTALLER), "--mcp-url", mcp_url],
+        [
+            "/bin/bash",
+            str(INSTALLER),
+            "--mcp-url",
+            mcp_url,
+            "--bearer-token-env-var",
+            "REKALL_API_TOKEN",
+        ],
         cwd=ROOT,
         env=env,
         capture_output=True,
@@ -96,6 +115,7 @@ exit 64
 
 
 def test_disposable_codex_memory_lifecycle(tmp_path):
+    api_token = "disposable-test-token"
     codex_home = tmp_path / "codex-home"
     native_memory = codex_home / "memories"
     native_memory.mkdir(parents=True)
@@ -125,6 +145,7 @@ def test_disposable_codex_memory_lifecycle(tmp_path):
             "PYTHONPATH": str(ROOT / "src"),
             "EMBEDDING_PROVIDER": "fastembed",
             "REKALL_REINFORCE": "0",
+            "REKALL_API_TOKEN": api_token,
         }
     )
 
@@ -138,6 +159,9 @@ def test_disposable_codex_memory_lifecycle(tmp_path):
         )
     try:
         _wait_healthy(process, base_url, log_path)
+        with pytest.raises(urllib.error.HTTPError) as unauthorized:
+            _request(base_url, "/api/memory/stats")
+        assert unauthorized.value.code == 401
         summary = (
             "Terraform infrastructure safety rule: create backups before terraform destroy "
             "to prevent data loss incidents and repeat prior failures."
@@ -146,6 +170,7 @@ def test_disposable_codex_memory_lifecycle(tmp_path):
             base_url,
             "/api/memory/observe",
             {"summary": summary, "type": "decision", "cwd": str(project_path)},
+            api_token,
         )
         memory_id = observed["memory_id"]
         assert observed["project"] == project_path.name
@@ -159,6 +184,7 @@ def test_disposable_codex_memory_lifecycle(tmp_path):
                 "cwd": str(project_path),
                 "limit": 5,
             },
+            api_token,
         )
         assert memory_id in {item["memory_id"] for item in recalled["memories"]}
 
@@ -196,6 +222,7 @@ def test_disposable_codex_memory_lifecycle(tmp_path):
                 "edits_after_recall": 1,
                 "test_passes_after_recall": 1,
             },
+            api_token,
         )
         assert event == {"status": "recorded"}
         assert "session_summary" in (memory_path / "_events.jsonl").read_text(encoding="utf-8")
@@ -214,5 +241,6 @@ def test_disposable_codex_memory_lifecycle(tmp_path):
             (codex_home / "hooks.json").read_text(encoding="utf-8"),
         )
     )
+    assert api_token not in inspected
     for production_reference in ("localhost:6333", "/.Codex/memory", "/.codex/memories"):
         assert production_reference not in inspected

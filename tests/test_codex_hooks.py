@@ -34,6 +34,44 @@ def test_reflex_miss_has_no_request(hook_module):
     assert out is None and calls == []
 
 
+def test_request_json_adds_only_valid_bearer_token(hook_module, monkeypatch):
+    seen: list[str | None] = []
+
+    class Response:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def read(self, _limit):
+            return b"{}"
+
+    def urlopen(request, *, timeout):
+        assert timeout == 1.0
+        seen.append(request.get_header("Authorization"))
+        return Response()
+
+    monkeypatch.setattr(hook_module.urllib.request, "urlopen", urlopen)
+
+    monkeypatch.setenv("REKALL_API_TOKEN", "test-token")
+    assert "Authorization" not in hook_module.api_headers({})
+    assert hook_module.request_json("GET", "http://localhost/one", None) == {}
+
+    monkeypatch.delenv("REKALL_API_TOKEN")
+    assert hook_module.request_json("GET", "http://localhost/two", None) == {}
+
+    monkeypatch.setenv("REKALL_API_TOKEN", "bad\nvalue")
+    assert hook_module.request_json("GET", "http://localhost/three", None) == {}
+
+    monkeypatch.delenv("REKALL_API_TOKEN")
+    monkeypatch.setenv("REKALL_API_TOKEN_ENV_VAR", "CUSTOM_REKALL_TOKEN")
+    monkeypatch.setenv("CUSTOM_REKALL_TOKEN", "custom-token")
+    assert hook_module.request_json("GET", "http://localhost/four", None) == {}
+
+    assert seen == ["Bearer test-token", None, None, "Bearer custom-token"]
+
+
 def test_session_end_unknown_transcript_is_noop(hook_module, tmp_path):
     transcript = tmp_path / "rollout.jsonl"
     transcript.write_text('{"future_schema": true}\n')
