@@ -38,3 +38,9 @@ def test_published_ports_are_loopback_only():
             if not str(port).startswith("127.0.0.1:"):
                 offenders.append(f"{name}: {port}")
     assert offenders == [], f"ports published beyond loopback: {offenders}"
+
+
+def test_mcp_forwards_optional_rekall_api_token():
+    """An operator export must reach the HTTP server container."""
+    environment = _services()["mcp"]["environment"]
+    assert "REKALL_API_TOKEN=${REKALL_API_TOKEN:-}" in environment

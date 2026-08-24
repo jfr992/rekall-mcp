@@ -26,6 +26,7 @@ def run_merge(
     existing: object,
     adapter: str = "/safe/home/.codex/hooks/rekall_hook.py",
     api_url: str = "http://localhost:8000",
+    bearer_token_env_var: str = "",
 ) -> dict[str, Any]:
     source = tmp_path / "hooks.json"
     source.write_text(json.dumps(existing), encoding="utf-8")
@@ -39,6 +40,8 @@ def run_merge(
             adapter,
             "--api-url",
             api_url,
+            "--bearer-token-env-var",
+            bearer_token_env_var,
         ],
         capture_output=True,
         text=True,
@@ -62,6 +65,20 @@ def test_merge_preserves_foreign_hook_and_is_idempotent(tmp_path):
     assert once == twice
     assert once["foreign"] == {"keep": True}
     assert any(h["hooks"][0]["command"] == "/custom/safety.sh" for h in once["hooks"]["PreToolUse"])
+
+
+def test_authenticated_merge_is_idempotent_and_persists_only_variable_name(tmp_path):
+    once = run_merge(tmp_path, {}, bearer_token_env_var="REKALL_API_TOKEN")
+    twice = run_merge(
+        tmp_path,
+        once,
+        bearer_token_env_var="REKALL_API_TOKEN",
+    )
+
+    assert once == twice
+    serialized = json.dumps(once)
+    assert "REKALL_API_TOKEN_ENV_VAR=REKALL_API_TOKEN" in serialized
+    assert all(len(entries) == 1 for entries in once["hooks"].values())
 
 
 def test_merge_has_exactly_six_canonical_events_and_no_memories(tmp_path):
@@ -238,18 +255,29 @@ if args == ["mcp", "get", "rekall", "--json"]:
     if mode == "stdio":
         transport = {"type": "stdio", "command": "uvx", "args": ["rekall-mcp"]}
     else:
-        transport = {"type": "streamable_http", "url": state["url"]}
+        transport = {
+            "type": "streamable_http",
+            "url": state["url"],
+            "bearer_token_env_var": state.get("bearer_token_env_var"),
+        }
     print(json.dumps({"name": "rekall", "transport": transport}))
     raise SystemExit(0)
 
-if len(args) == 6 and args[:4] == ["mcp", "add", "rekall", "--url"]:
-    # Defensive fallback for future argument-shape changes; current CLI is len 5.
-    pass
-if len(args) == 5 and args[:4] == ["mcp", "add", "rekall", "--url"]:
+if (
+    len(args) in {5, 7}
+    and args[:4] == ["mcp", "add", "rekall", "--url"]
+    and (len(args) == 5 or args[5] == "--bearer-token-env-var")
+):
     with log_path.open("a") as stream:
         stream.write(json.dumps(args) + "\\n")
     if state["mode"] != "missing_noop":
-        state.update({"mode": "http", "url": args[4]})
+        state.update(
+            {
+                "mode": "http",
+                "url": args[4],
+                "bearer_token_env_var": args[6] if len(args) == 7 else None,
+            }
+        )
         state_path.write_text(json.dumps(state))
     raise SystemExit(0)
 
@@ -273,6 +301,7 @@ def _run_install(
     *,
     mode: str = "missing",
     configured_url: str = "http://localhost:8000",
+    configured_bearer: str | None = None,
     args: tuple[str, ...] = (),
     codex_home_name: str = "Codex Home",
     with_codex: bool = True,
@@ -289,7 +318,16 @@ def _run_install(
         fake_stat.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
         fake_stat.chmod(0o755)
     state = tmp_path / "mcp-state.json"
-    state.write_text(json.dumps({"mode": mode, "url": configured_url}), encoding="utf-8")
+    state.write_text(
+        json.dumps(
+            {
+                "mode": mode,
+                "url": configured_url,
+                "bearer_token_env_var": configured_bearer,
+            }
+        ),
+        encoding="utf-8",
+    )
     log = tmp_path / "mcp-argv.jsonl"
     log.write_text("", encoding="utf-8")
     codex_home = tmp_path / codex_home_name
@@ -398,6 +436,60 @@ def test_install_accepts_matching_mcp_without_add(tmp_path):
     result, _, log = _run_install(tmp_path, mode="http")
     assert result.returncode == 0, result.stderr
     assert log.read_text() == ""
+
+
+def test_install_registers_bearer_env_name_without_persisting_token(tmp_path):
+    result, codex_home, log = _run_install(
+        tmp_path,
+        args=("--bearer-token-env-var", "REKALL_API_TOKEN"),
+        extra_env={"REKALL_API_TOKEN": "test-secret-never-persist"},
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert json.loads(log.read_text().splitlines()[0]) == [
+        "mcp",
+        "add",
+        "rekall",
+        "--url",
+        "http://localhost:8000",
+        "--bearer-token-env-var",
+        "REKALL_API_TOKEN",
+    ]
+    installed = "\n".join(
+        (
+            result.stdout,
+            result.stderr,
+            (codex_home / "hooks.json").read_text(encoding="utf-8"),
+        )
+    )
+    assert "test-secret-never-persist" not in installed
+    assert "REKALL_API_TOKEN_ENV_VAR=REKALL_API_TOKEN" in installed
+
+
+def test_install_accepts_matching_bearer_and_rejects_missing_or_invalid_name(tmp_path):
+    matching, _, matching_log = _run_install(
+        tmp_path / "matching",
+        mode="http",
+        configured_bearer="REKALL_API_TOKEN",
+        args=("--bearer-token-env-var", "REKALL_API_TOKEN"),
+    )
+    assert matching.returncode == 0, matching.stderr
+    assert matching_log.read_text() == ""
+
+    missing, missing_home, _ = _run_install(
+        tmp_path / "missing",
+        mode="http",
+        args=("--bearer-token-env-var", "REKALL_API_TOKEN"),
+    )
+    assert missing.returncode != 0
+    assert not missing_home.exists()
+
+    invalid, invalid_home, _ = _run_install(
+        tmp_path / "invalid",
+        args=("--bearer-token-env-var", "BAD-NAME"),
+    )
+    assert invalid.returncode != 0
+    assert not invalid_home.exists()
 
 
 def test_install_refuses_mcp_conflict_before_any_mutation(tmp_path):

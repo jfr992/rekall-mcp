@@ -354,4 +354,6 @@ The adapter backs up and merges Codex hook configuration, preserves unrelated ho
 
 The installer pins the validated REST base into lifecycle hooks as `REKALL_API_URL`. A root MCP URL uses the same origin automatically. If the MCP transport URL has a path such as `/mcp`, pass its REST base separately with `--api-url`; the installer refuses to guess. Remote MCP or API URLs require `--allow-remote-mcp`. Re-run the installer if either endpoint changes.
 
+If the server uses `REKALL_API_TOKEN`, make it available in Codex's launch environment and run `bash codex/setup/install.sh --bearer-token-env-var REKALL_API_TOKEN`. Codex configuration and hooks retain only the variable name, never the token. Remove an existing unauthenticated `rekall` MCP registration before switching it to authenticated mode; the installer refuses the mismatch rather than silently changing security behavior.
+
 Codex native memory at `~/.codex/memories/` is independent of Rekall. Rekall never reads, writes, creates, deletes, or edits that directory. Restart Codex after installation so it reloads the MCP and hook configuration.

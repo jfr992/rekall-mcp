@@ -18,6 +18,15 @@ codex mcp add rekall --url http://localhost:8000
 
 A missing server is added; a matching loopback HTTP server is accepted. A conflicting URL or stdio definition fails without mutating configuration. Remote URLs require the explicit `--allow-remote-mcp` flag and must not contain credentials.
 
+If the server sets `REKALL_API_TOKEN`, expose that token in Codex's launch environment and register only its variable name:
+
+```bash
+export REKALL_API_TOKEN="$(cat /secure/path/rekall-api-token)"
+bash codex/setup/install.sh --bearer-token-env-var REKALL_API_TOKEN
+```
+
+The installer passes `--bearer-token-env-var` to Codex and configures the REST hooks to read the same variable. The secret value is never written to Codex configuration, `hooks.json`, process arguments, or installer output. An existing unauthenticated `rekall` registration intentionally conflicts with an authenticated install; remove that registration with `codex mcp remove rekall`, rerun the installer, and then restart Codex. GUI-launched Codex must receive the variable from its launch environment rather than only from an interactive shell.
+
 MCP transport and REST hook endpoints can differ. With a root MCP URL, the installer safely derives the REST base. If the MCP transport has a path such as `/mcp`, provide the REST base explicitly:
 
 ```bash
@@ -55,4 +64,4 @@ bash codex/setup/test.sh
 codex mcp get rekall --json
 ```
 
-Expected: `rekall` points to `http://localhost:8000`, hook commands pin `REKALL_API_URL=http://localhost:8000`, six lifecycle entries exist, foreign hooks remain, and native memory is unchanged.
+Expected: `rekall` points to `http://localhost:8000`, hook commands pin `REKALL_API_URL=http://localhost:8000`, six lifecycle entries exist, foreign hooks remain, and native memory is unchanged. Authenticated installs also report `bearer_token_env_var` as the configured variable name; they never display its value.

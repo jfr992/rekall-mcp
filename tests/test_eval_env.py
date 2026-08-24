@@ -1,9 +1,28 @@
 """Ephemeral eval backend: never touches prod, seeds via the production write path."""
 
+import tomllib
 from pathlib import Path
 
 import pytest
+import yaml
 from benchmarks.eval.env import assert_not_prod
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_paid_eval_is_excluded_from_default_and_precommit_runs():
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert "not eval_live" in pyproject["tool"]["pytest"]["ini_options"]["addopts"]
+
+    precommit = yaml.safe_load((ROOT / ".pre-commit-config.yaml").read_text(encoding="utf-8"))
+    entries = [
+        hook["entry"]
+        for repository in precommit["repos"]
+        for hook in repository["hooks"]
+        if hook["id"] == "pytest"
+    ]
+    assert len(entries) == 1
+    assert "not eval_live" in entries[0]
 
 
 def test_refuses_prod_qdrant_port():

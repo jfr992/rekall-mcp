@@ -12,14 +12,18 @@ MCP_URL="${REKALL_API_URL:-http://localhost:8000}"
 API_URL=""
 API_URL_EXPLICIT=0
 ALLOW_REMOTE=0
+BEARER_TOKEN_ENV_VAR=""
 
 usage() {
   cat <<'EOF'
 Usage: install.sh [--mcp-url URL] [--api-url URL] [--allow-remote-mcp]
+                  [--bearer-token-env-var ENV_NAME]
 
 Installs Rekall's Codex hooks and MCP-first skill without changing native
 Codex memory. Use --api-url when the MCP transport has a path. Remote URLs
 require --allow-remote-mcp.
+When bearer authentication is enabled, only the environment-variable name is
+stored; the token must be present in Codex's launch environment.
 EOF
 }
 
@@ -45,6 +49,11 @@ while [ "$#" -gt 0 ]; do
       ALLOW_REMOTE=1
       shift
       ;;
+    --bearer-token-env-var)
+      [ "$#" -ge 2 ] || fail "--bearer-token-env-var requires a value"
+      BEARER_TOKEN_ENV_VAR="$2"
+      shift 2
+      ;;
     -h|--help)
       usage
       exit 0
@@ -54,6 +63,16 @@ while [ "$#" -gt 0 ]; do
       ;;
   esac
 done
+
+if [ -n "$BEARER_TOKEN_ENV_VAR" ]; then
+  case "$BEARER_TOKEN_ENV_VAR" in
+    [A-Za-z_]*) ;;
+    *) fail "bearer token environment variable name is invalid" ;;
+  esac
+  case "$BEARER_TOKEN_ENV_VAR" in
+    *[!A-Za-z0-9_]*) fail "bearer token environment variable name is invalid" ;;
+  esac
+fi
 
 for dependency in python3 curl codex; do
   command -v "$dependency" >/dev/null 2>&1 || fail "required command is unavailable: $dependency"
@@ -204,7 +223,8 @@ trap on_exit EXIT
 trap 'exit 130' HUP INT TERM
 
 mcp_config_matches() {
-  MCP_EXPECTED_URL="$MCP_URL" python3 - "$1" <<'PY'
+  MCP_EXPECTED_URL="$MCP_URL" MCP_EXPECTED_BEARER="$BEARER_TOKEN_ENV_VAR" \
+    python3 - "$1" <<'PY'
 import json
 import os
 import sys
@@ -217,6 +237,8 @@ try:
         isinstance(transport, dict)
         and transport.get("type") == "streamable_http"
         and transport.get("url") == os.environ["MCP_EXPECTED_URL"]
+        and (transport.get("bearer_token_env_var") or "")
+        == os.environ["MCP_EXPECTED_BEARER"]
     )
 except (KeyError, OSError, TypeError, ValueError):
     matches = False
@@ -229,7 +251,7 @@ MCP_ERROR="$WORK_DIR/mcp.err"
 MCP_MISSING=0
 if codex mcp get rekall --json >"$MCP_JSON" 2>"$MCP_ERROR"; then
   if ! mcp_config_matches "$MCP_JSON"; then
-    fail "MCP server 'rekall' already exists with a conflicting transport"
+    fail "MCP server 'rekall' already exists with a conflicting transport or bearer setting"
   fi
 else
   if grep -q "No MCP server named ['\"]\{0,1\}rekall" "$MCP_ERROR"; then
@@ -247,7 +269,7 @@ else
   chmod 600 "$CANDIDATE_HOOKS"
 fi
 python3 "$MERGER" --hooks-file "$CANDIDATE_HOOKS" --adapter "$DEST_ADAPTER" \
-  --api-url "$API_URL" || \
+  --api-url "$API_URL" --bearer-token-env-var "$BEARER_TOKEN_ENV_VAR" || \
   fail "hooks.json is invalid"
 
 changed() {
@@ -303,7 +325,14 @@ if changed "$CANDIDATE_HOOKS" "$HOOKS_FILE"; then
 fi
 
 if [ "$MCP_MISSING" -eq 1 ]; then
-  codex mcp add rekall --url "$MCP_URL" >/dev/null || fail "could not register the MCP server"
+  if [ -n "$BEARER_TOKEN_ENV_VAR" ]; then
+    codex mcp add rekall --url "$MCP_URL" \
+      --bearer-token-env-var "$BEARER_TOKEN_ENV_VAR" >/dev/null || \
+      fail "could not register the MCP server"
+  else
+    codex mcp add rekall --url "$MCP_URL" >/dev/null || \
+      fail "could not register the MCP server"
+  fi
   MCP_ADDED=1
 fi
 
@@ -342,6 +371,7 @@ cat <<EOF
 Rekall Codex integration installed
 MCP:           rekall -> $MCP_URL
 Hook API:      $API_URL
+Bearer token:  ${BEARER_TOKEN_ENV_VAR:-disabled}
 Hooks:         6 canonical entries; existing hooks preserved
 Skill:         rekall-memory installed
 Legacy hooks:  removed or none found

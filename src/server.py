@@ -23,10 +23,12 @@ import time
 import weakref
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
+from typing import Literal
 
 from mcp.server.fastmcp import FastMCP
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from core import Telemetry
 from memory.insights import EVENT_WINDOW
@@ -371,6 +373,22 @@ class RequestValidationError(ValueError):
     """Invalid request parameter — mapped to HTTP 400."""
 
 
+class AfkSaveRequest(BaseModel):
+    """Strict wire contract for a retry-safe AFK memory operation."""
+
+    model_config = ConfigDict(extra="forbid", strict=True)
+
+    operation_id: str = Field(min_length=1, max_length=256)
+    operation_date: date
+    content: str = Field(min_length=1, max_length=100_000)
+    tag: str = Field(min_length=1, max_length=256)
+    proposed: str = Field(min_length=1, max_length=10_000)
+    type: Literal[
+        "decision", "learning", "preference", "requirement", "fact", "note", "session", "summary"
+    ]
+    project: str = Field(min_length=1, max_length=64)
+
+
 _PROJECT_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 
 
@@ -412,6 +430,10 @@ def _read_day(query_params, key: str) -> str | None:
         return None
     if not _DAY_RE.match(raw):
         raise RequestValidationError(f"{key} must be a YYYY-MM-DD date")
+    try:
+        datetime.strptime(raw, "%Y-%m-%d")
+    except ValueError as error:
+        raise RequestValidationError(f"{key} must be a YYYY-MM-DD date") from error
     return raw
 
 
@@ -536,6 +558,56 @@ async def api_save_memory(request):
     except Exception as e:
         logger.error(f"Error saving memory: {e}")
         return JSONResponse({"error": str(e)}, status_code=500)
+
+
+@mcp.custom_route("/api/memory/afk/save", methods=["POST"])
+async def api_save_afk_memory_operation(request):
+    """Persist an idempotent AFK operation, with YAML as retry authority."""
+    from starlette.responses import JSONResponse
+
+    try:
+        body = AfkSaveRequest.model_validate_json(await request.body())
+        fields = body.model_dump(mode="json")
+        fields["project"] = _safe_project(fields["project"])
+        manager = _get_memory_manager()
+        async with _maintenance_barrier():
+            result = manager.save_afk_operation(**fields)
+        return JSONResponse(result)
+    except ValidationError as error:
+        return _bad_request(str(error))
+    except RequestValidationError as error:
+        return _bad_request(str(error))
+    except Exception as error:
+        from memory.manager import AfkOperationConflict
+
+        if isinstance(error, AfkOperationConflict):
+            return JSONResponse({"error": str(error)}, status_code=409)
+        logger.error("Error saving AFK memory operation: %s", error)
+        return _server_error(str(error))
+
+
+@mcp.custom_route("/api/memory/afk/operations/{operation_id}", methods=["GET"])
+async def api_get_afk_memory_operation(request):
+    """Return the exact durable response for a scoped AFK operation."""
+    from starlette.responses import JSONResponse
+
+    try:
+        operation_id = request.path_params["operation_id"]
+        if not isinstance(operation_id, str) or not operation_id:
+            raise RequestValidationError("operation_id is required")
+        project = _safe_project(request.query_params.get("project"))
+        operation_date = _read_day(request.query_params, "operation_date")
+        if project is None or operation_date is None:
+            raise RequestValidationError("project and operation_date are required")
+        result = _get_memory_manager().get_afk_operation(operation_id, project, operation_date)
+        if result is None:
+            return JSONResponse({"error": "AFK operation not found"}, status_code=404)
+        return JSONResponse(result)
+    except RequestValidationError as error:
+        return _bad_request(str(error))
+    except Exception as error:
+        logger.error("Error looking up AFK memory operation: %s", error)
+        return _server_error(str(error))
 
 
 @mcp.custom_route("/api/memory/recall", methods=["POST"])

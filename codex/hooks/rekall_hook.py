@@ -64,6 +64,7 @@ _CUES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("helm", ("helm", "chart", "longhorn", "k3s")),
 )
 _MAX_TRANSCRIPT_BYTES = 64 * 1024
+_ENV_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 
 
 def sanitize_token(value: str, *, limit: int = 80) -> str:
@@ -148,14 +149,29 @@ def _reserve(path: Path | None) -> bool:
         return False
 
 
+def api_headers(env: Mapping[str, str] | None = None) -> dict[str, str]:
+    """Build request headers without persisting or exposing bearer credentials."""
+    env = os.environ if env is None else env
+    variable = env.get("REKALL_API_TOKEN_ENV_VAR", "REKALL_API_TOKEN")
+    if not _ENV_NAME.fullmatch(variable):
+        return {"Content-Type": "application/json"}
+    token = env.get(variable, "")
+    if (
+        not token
+        or token != token.strip()
+        or len(token) > 8192
+        or any(ord(char) < 32 or ord(char) == 127 for char in token)
+    ):
+        return {"Content-Type": "application/json"}
+    return {"Content-Type": "application/json", "Authorization": f"Bearer {token}"}
+
+
 def request_json(
     method: str, url: str, body: Mapping[str, object] | None, timeout: float = 1.0
 ) -> object | None:
     try:
         data = json.dumps(body).encode() if body is not None else None
-        request = urllib.request.Request(
-            url, data=data, method=method, headers={"Content-Type": "application/json"}
-        )
+        request = urllib.request.Request(url, data=data, method=method, headers=api_headers())
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return cast(object, json.loads(response.read(128 * 1024).decode("utf-8")))
     except (OSError, ValueError, TypeError, urllib.error.URLError, urllib.error.HTTPError):

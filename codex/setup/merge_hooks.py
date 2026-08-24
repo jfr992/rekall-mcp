@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shlex
 import sys
 import tempfile
@@ -59,13 +60,14 @@ def _canonical_command(command: object, adapter: Path | str, event: str) -> bool
     if len(tokens) == 3 and tokens[0] == "python3" and tokens[2] == event:
         adapter_token = tokens[1]
     elif (
-        len(tokens) == 5
+        len(tokens) in {5, 6}
         and tokens[0] == "env"
         and tokens[1].startswith("REKALL_API_URL=")
-        and tokens[2] == "python3"
-        and tokens[4] == event
+        and (len(tokens) == 5 or tokens[2].startswith("REKALL_API_TOKEN_ENV_VAR="))
+        and tokens[-3] == "python3"
+        and tokens[-1] == event
     ):
-        adapter_token = tokens[3]
+        adapter_token = tokens[-2]
     else:
         return False
     try:
@@ -93,11 +95,18 @@ def _validated_api_url(api_url: str) -> str:
 
 
 def canonical_entries(
-    adapter: Path | str, api_url: str = "http://localhost:8000"
+    adapter: Path | str,
+    api_url: str = "http://localhost:8000",
+    bearer_token_env_var: str = "",
 ) -> dict[str, list[dict[str, Any]]]:
     """Return the sole canonical representation (also used by the example)."""
+    auth_env = ""
+    if bearer_token_env_var:
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", bearer_token_env_var):
+            raise ValueError("bearer token environment variable name is invalid")
+        auth_env = f" REKALL_API_TOKEN_ENV_VAR={bearer_token_env_var}"
     command_base = (
-        f"env REKALL_API_URL={shlex.quote(_validated_api_url(api_url))} "
+        f"env REKALL_API_URL={shlex.quote(_validated_api_url(api_url))}{auth_env} "
         f"python3 {shlex.quote(str(adapter))}"
     )
     result: dict[str, list[dict[str, Any]]] = {}
@@ -115,7 +124,10 @@ def canonical_entries(
 
 
 def merge(
-    existing: dict[str, Any], adapter: Path | str, api_url: str = "http://localhost:8000"
+    existing: dict[str, Any],
+    adapter: Path | str,
+    api_url: str = "http://localhost:8000",
+    bearer_token_env_var: str = "",
 ) -> dict[str, Any]:
     hooks = existing.get("hooks", {})
     if not isinstance(hooks, dict):
@@ -152,7 +164,7 @@ def merge(
                 kept_entries.append(item)
         if kept_entries:
             cleaned[event] = kept_entries
-    for event, canonical in canonical_entries(adapter, api_url).items():
+    for event, canonical in canonical_entries(adapter, api_url, bearer_token_env_var).items():
         # Keep foreign entries in place and append exactly one canonical entry.
         cleaned[event] = cleaned.get(event, []) + canonical
     output["hooks"] = cleaned
@@ -187,6 +199,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--hooks-file", type=Path, required=True)
     parser.add_argument("--adapter", type=Path, required=True)
     parser.add_argument("--api-url", default="http://localhost:8000")
+    parser.add_argument("--bearer-token-env-var", default="")
     args = parser.parse_args(argv)
     if any(part.lower() == "memories" for part in args.hooks_file.parts + args.adapter.parts):
         parser.error("native memory paths are not permitted")
@@ -195,7 +208,7 @@ def main(argv: list[str] | None = None) -> int:
         existing = json.loads(raw)
         if not isinstance(existing, dict):
             raise ValueError("root must be an object")
-        output = merge(existing, args.adapter, args.api_url)
+        output = merge(existing, args.adapter, args.api_url, args.bearer_token_env_var)
         write_atomic(args.hooks_file, output)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         print(f"merge_hooks: {exc}", file=sys.stderr)
