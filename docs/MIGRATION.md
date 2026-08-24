@@ -1,3 +1,52 @@
+# Migration Guide — v1.13.0 → v1.14.0 (memory for Codex, hardened for Claude)
+
+## What's new
+
+- **First-class Codex memory support.** The new `codex/` bundle installs six
+  bounded lifecycle hooks spanning session start/end, tool use, and compaction,
+  plus an MCP-first `rekall-memory` skill. Hooks fail open, frame recalled text
+  as untrusted, and leave Codex's native `~/.codex/memories/` files untouched.
+- **A safe, repeatable Codex installer.** `codex/setup/install.sh` validates the
+  MCP definition before mutation, backs up replaced files, atomically merges
+  hook configuration while preserving foreign hooks, rolls back partial
+  failures, and rejects ambiguous or credential-bearing remote endpoints.
+- **Targeted recall by default.** Codex instructions and startup guidance now
+  prefer task-shaped `recall_memories(...)` queries. Broad `agent_startup(...)`
+  context is conditional and at most once, reducing noisy or unrelated recall.
+  Lifecycle events capture bounded recall-utility evidence without prompts,
+  tool payloads, or memory content.
+- **Claude Code lifecycle hardening.** The default bundle now records a bounded
+  `SessionEnd` utility summary, isolates the nested observation judge with safe
+  mode and low effort, debounces valid zero-hit reflex calls, preserves foreign
+  settings during install, and removes only recognized legacy Rekall commands.
+- **Client-neutral MCP guidance.** FastMCP instructions describe when to recall,
+  observe, and use broad startup context without assuming a Claude-only tool
+  namespace.
+
+## Upgrading from v1.13.0
+
+**No data migration is required.** Memory YAML, Qdrant vectors, the knowledge
+graph, and native Codex memory keep their existing formats.
+
+1. Upgrade the server with `uvx rekall-mcp@1.14.0`, or pull the checkout and
+   run `docker compose up -d --build mcp ui`.
+2. From a checkout, install or refresh the client bundle you use:
+
+   ```bash
+   bash codex/setup/install.sh    # Codex; then restart Codex
+   bash claude/setup/install.sh   # Claude Code; then restart Claude Code
+   ```
+
+   Both installers retain backups. Rekall never replaces Codex native memory.
+3. Verify the selected adapter with `bash codex/setup/test.sh` or
+   `bash claude/setup/test.sh` and confirm the backend `/health` response.
+
+To roll back the client wiring, stop the client, restore the timestamped
+configuration backup created by its installer, and restart the client. No
+memory-store rollback is needed.
+
+---
+
 # Migration Guide — v1.12.0 → v1.13.0 (buttons that fail loudly)
 
 ## What's new
