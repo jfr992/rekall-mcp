@@ -1,7 +1,7 @@
 # AFK memory operation contract — implementation plan
 
-**Base:** `1e0b492` (release v1.14.0)  
-**Branch:** `codex/afk-operation-contract`  
+**Base:** `1e0b492` (release v1.14.0)
+**Branch:** `codex/afk-operation-contract`
 **Scope:** `src/memory/manager.py`, `src/server.py`, focused tests, and the REST table.
 
 ## Problem narrative
