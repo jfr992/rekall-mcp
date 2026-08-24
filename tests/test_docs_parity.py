@@ -202,11 +202,20 @@ def test_qdrant_backed_manager_tests_are_in_integration_lane():
 
 def test_v1_14_notes_document_supported_clients_and_upgrade_contract():
     migration = (REPO / "docs" / "MIGRATION.md").read_text()
+
+    assert "v1.13.0 → v1.14.0" in migration
+    assert "Codex" in migration
+    assert "Claude Code" in migration
+
+
+def test_v1_15_notes_document_afk_auth_and_upgrade_contract():
+    migration = (REPO / "docs" / "MIGRATION.md").read_text()
     latest = migration.split("\n---\n", 1)[0]
 
-    assert "v1.13.0 → v1.14.0" in latest
+    assert "v1.14.0 → v1.15.0" in latest
+    assert "AFK" in latest
+    assert "REKALL_API_TOKEN" in latest
     assert "Codex" in latest
-    assert "Claude Code" in latest
     assert "No data migration" in latest
 
 
@@ -214,6 +223,7 @@ def test_release_metadata_versions_stay_in_sync():
     project = tomllib.loads((REPO / "pyproject.toml").read_text())
     lock = tomllib.loads((REPO / "uv.lock").read_text())
     project_version = project["project"]["version"]
+    assert project_version == "1.15.0"
     root_packages = [
         package
         for package in lock["package"]

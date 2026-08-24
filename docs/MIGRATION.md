@@ -1,3 +1,50 @@
+# Migration Guide — v1.14.0 → v1.15.0 (AFK-safe operations and authenticated clients)
+
+## What's new
+
+- **Retry-safe AFK memory operations.** `POST /api/memory/afk/save` persists a
+  normalized operation envelope under a caller-supplied idempotency key. Exact
+  retries return the original response, changed input conflicts loudly, and
+  `GET /api/memory/afk/operations/{operation_id}` exposes deterministic lookup
+  by project and operation date.
+- **One publication boundary.** Ordinary and AFK saves now hold their scoped
+  writer transaction through YAML and vector publication. A retry reconciles a
+  crash or lost vector response instead of accepting duplicate or half-published
+  memory.
+- **Authenticated Docker and Codex clients.** Compose forwards the optional
+  `REKALL_API_TOKEN`; the Codex installer can register its environment-variable
+  name with `--bearer-token-env-var` while MCP and lifecycle hooks add the
+  runtime bearer header. Secret values are not written to Codex configuration,
+  hook JSON, logs, or process arguments.
+- **Paid evals stay opt-in.** Default pytest and pre-commit selection excludes
+  `eval_live`, preventing an ordinary verification run from invoking a model.
+
+## Upgrading from v1.14.0
+
+**No data migration is required.** Existing YAML, Qdrant vectors, knowledge
+graph data, and native Codex memory remain compatible.
+
+1. Upgrade the server with `uvx rekall-mcp@1.15.0`, or pull the checkout and
+   run `docker compose up -d --build mcp ui`.
+2. If the server uses bearer authentication, export the same runtime token in
+   the Codex launch environment and refresh the adapter:
+
+   ```bash
+   export REKALL_API_TOKEN="$(cat /secure/path/rekall-api-token)"
+   codex mcp remove rekall  # only when replacing an unauthenticated registration
+   bash codex/setup/install.sh --bearer-token-env-var REKALL_API_TOKEN
+   ```
+
+3. Restart Codex, then verify `codex mcp get rekall --json` reports
+   `bearer_token_env_var: "REKALL_API_TOKEN"`. An unauthenticated request to a
+   protected route should return 401; the configured client should succeed.
+
+To roll back the client wiring, restore the timestamped installer backup and
+restart Codex. Server rollback does not require rewriting existing memories,
+but callers must stop using the new AFK endpoints before returning to v1.14.0.
+
+---
+
 # Migration Guide — v1.13.0 → v1.14.0 (memory for Codex, hardened for Claude)
 
 ## What's new
