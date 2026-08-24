@@ -93,7 +93,7 @@ def test_afk_signs_scrubbed_tag_and_proposed_with_normalized_conflicts(afk_manag
 
     assert retry == first
     assert first["envelope"]["tag"] == "[REDACTED]"
-    assert first["envelope"]["proposed"] == "[REDACTED] is evidence"
+    assert first["envelope"]["proposed"] == "[REDACTED][REDACTED] evidence"
     stored = (afk_manager.memory_dir / "afk-project" / "2026-08-24.yaml").read_text()
     assert "first-secret" not in stored
     assert "second-secret" not in stored

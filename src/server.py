@@ -430,6 +430,10 @@ def _read_day(query_params, key: str) -> str | None:
         return None
     if not _DAY_RE.match(raw):
         raise RequestValidationError(f"{key} must be a YYYY-MM-DD date")
+    try:
+        datetime.strptime(raw, "%Y-%m-%d")
+    except ValueError as error:
+        raise RequestValidationError(f"{key} must be a YYYY-MM-DD date") from error
     return raw
 
 
