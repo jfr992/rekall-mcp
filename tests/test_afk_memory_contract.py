@@ -13,9 +13,10 @@ from starlette.testclient import TestClient
 def afk_manager(tmp_path):
     from memory.manager import MemoryManager
 
-    with patch("memory.manager.VectorStore") as vector_store, patch(
-        "memory.manager.Embedder"
-    ) as embedder:
+    with (
+        patch("memory.manager.VectorStore") as vector_store,
+        patch("memory.manager.Embedder") as embedder,
+    ):
         vector_store.return_value.count.return_value = 0
         embedder.return_value.encode.return_value = [0.1] * 384
         embedder.return_value.dimensions = 384
@@ -54,7 +55,10 @@ def test_afk_save_sanitizes_then_signs_and_uses_contract_id(afk_manager):
     assert result["canonical_content"] == "[REDACTED]"
     assert result["sanitized"] is True
     assert result["envelope"]["canonical_content"] == "[REDACTED]"
-    assert "supersecret" not in (afk_manager.memory_dir / "afk-project" / "2026-08-24.yaml").read_text()
+    assert (
+        "supersecret"
+        not in (afk_manager.memory_dir / "afk-project" / "2026-08-24.yaml").read_text()
+    )
     assert _entries(afk_manager)[0]["afk_operation"]["response"] == result
 
 
@@ -76,11 +80,26 @@ def test_distinct_operations_keep_same_content_and_isolate_project_and_date(afk_
     other_project = _save(afk_manager, project="other-project")
     other_date = _save(afk_manager, operation_date="2026-08-25")
 
-    assert len({first["memory_id"], second["memory_id"], other_project["memory_id"], other_date["memory_id"]}) == 4
+    assert (
+        len(
+            {
+                first["memory_id"],
+                second["memory_id"],
+                other_project["memory_id"],
+                other_date["memory_id"],
+            }
+        )
+        == 4
+    )
     assert len(_entries(afk_manager)) == 2
     assert afk_manager.get_afk_operation("attack:receipt-1", "afk-project", "2026-08-24") == first
-    assert afk_manager.get_afk_operation("attack:receipt-1", "other-project", "2026-08-24") == other_project
-    assert afk_manager.get_afk_operation("attack:receipt-1", "afk-project", "2026-08-25") == other_date
+    assert (
+        afk_manager.get_afk_operation("attack:receipt-1", "other-project", "2026-08-24")
+        == other_project
+    )
+    assert (
+        afk_manager.get_afk_operation("attack:receipt-1", "afk-project", "2026-08-25") == other_date
+    )
 
 
 def test_retry_repairs_vector_after_crash_following_yaml_durability(afk_manager):
@@ -109,9 +128,7 @@ def test_afk_and_ordinary_concurrent_writers_do_not_lose_accepted_records(afk_ma
         return _save(afk_manager, operation_id=f"attack:concurrent-{index}")
 
     def save_ordinary(index):
-        return afk_manager.save(
-            f"ordinary content {index}", type="note", project="afk-project"
-        )
+        return afk_manager.save(f"ordinary content {index}", type="note", project="afk-project")
 
     with ThreadPoolExecutor(max_workers=8) as pool:
         futures = [pool.submit(save_afk, i) for i in range(4)]

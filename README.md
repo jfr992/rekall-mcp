@@ -459,6 +459,8 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 |----------|--------|---------|
 | `/health` | GET | Health check |
 | `/api/memory/save` | POST | Save a memory |
+| `/api/memory/afk/save` | POST | Idempotently save an AFK operation; retries require the same normalized operation envelope |
+| `/api/memory/afk/operations/{operation_id}` | GET | Fetch the exact AFK operation record (`?project=&operation_date=YYYY-MM-DD`) |
 | `/api/memory/recall` | POST | Graph-enhanced search (optional `task_hint`: context-matched results first; optional `cwd`: attributes the recall event to the caller's project; optional `session_id`: carried into the memory_recalled event) |
 | `/api/memory/recall/cross-project` | POST | Cross-project transfer recall |
 | `/api/memory/reflex` | POST | Cue-triggered recall packet for risky commands or edits (optional `cwd`: attributes the recall event to the caller's project; optional `session_id`: carried into the memory_recalled event) |

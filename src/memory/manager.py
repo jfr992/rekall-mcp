@@ -23,12 +23,15 @@ All operations:
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
 import json
 import logging
 import os
 import re
 import tempfile
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -46,6 +49,7 @@ from memory.resume import build_resume_packet
 from memory.scope import MemoryScope, ScopeDetector, strip_remote_creds
 from memory.skills import extract_skills, render_skill_context
 from memory.startup import build_agent_startup
+from memory.types import VALID_MEMORY_TYPES
 
 if TYPE_CHECKING:
     from memory.knowledge_graph import KnowledgeGraph
@@ -54,6 +58,61 @@ logger = logging.getLogger(__name__)
 
 # Identifier-shaped token: hyphen/underscore joining alnum runs (i-03470c..., stable_hash_id)
 _BM25_IDENTIFIER_RE = re.compile(r"[a-z0-9]+[-_][a-z0-9_-]+")
+
+
+class AfkOperationConflict(ValueError):
+    """An AFK operation key was reused for different normalized input."""
+
+
+def _afk_memory_id(operation_date: str, memory_type: str, project: str, operation_id: str) -> str:
+    operation_hash = hashlib.sha256(f"{project}\0{operation_id}".encode()).hexdigest()
+    return f"{operation_date}_{memory_type}_{operation_hash}"
+
+
+@contextmanager
+def _yaml_writer_lock(yaml_file: Path) -> Iterator[None]:
+    """Serialize the complete read/modify/replace transaction for one YAML file."""
+    lock_file = yaml_file.with_name(f".{yaml_file.name}.lock")
+    lock_file.parent.mkdir(parents=True, exist_ok=True)
+    with lock_file.open("a+") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+
+
+def _read_yaml_document(yaml_file: Path, date: str) -> dict[str, Any]:
+    if not yaml_file.exists():
+        return {"date": date}
+    with yaml_file.open() as source:
+        loaded = yaml.safe_load(source) or {}
+    return loaded if isinstance(loaded, dict) else {"date": date}
+
+
+def _atomic_write_yaml(yaml_file: Path, document: dict[str, Any]) -> None:
+    """Durably replace YAML, including the directory entry on POSIX filesystems."""
+    yaml_file.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_path = tempfile.mkstemp(dir=yaml_file.parent, suffix=".yaml.tmp")
+    try:
+        with os.fdopen(fd, "w") as target:
+            yaml.dump(
+                document, target, default_flow_style=False, sort_keys=False, allow_unicode=True
+            )
+            target.flush()
+            os.fsync(target.fileno())
+        os.replace(tmp_path, yaml_file)
+        directory_fd = os.open(yaml_file.parent, os.O_RDONLY)
+        try:
+            os.fsync(directory_fd)
+        finally:
+            os.close(directory_fd)
+    except BaseException:
+        try:
+            os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
 
 
 # =============================================================================
@@ -544,6 +603,202 @@ class MemoryManager:
             logger.info(f"Saved memory: {memory_id}")
             return memory_id
 
+    def save_afk_operation(
+        self,
+        *,
+        operation_id: str,
+        operation_date: str,
+        content: str,
+        tag: str,
+        proposed: str,
+        type: str,
+        project: str,
+    ) -> dict[str, Any]:
+        """Persist a retry-safe AFK operation without semantic deduplication.
+
+        The operation envelope is signed *after* content sanitization. YAML is
+        the authority for idempotency: a retry first returns or repairs that
+        durable record, even if a previous process died before vector indexing.
+        """
+        self._assert_reindex_complete()
+        if not isinstance(operation_id, str) or not operation_id.strip():
+            raise ValueError("operation_id must be a non-empty string")
+        if (
+            not isinstance(project, str)
+            or not project
+            or any(c in project for c in ("/", "\\"))
+            or ".." in project
+        ):
+            raise ValueError(f"Invalid project name: {project!r}")
+        if type not in VALID_MEMORY_TYPES:
+            raise ValueError(f"Invalid memory type: {type!r}")
+        try:
+            datetime.strptime(operation_date, "%Y-%m-%d")
+        except (TypeError, ValueError) as error:
+            raise ValueError("operation_date must be YYYY-MM-DD") from error
+        for name, value in {"content": content, "tag": tag, "proposed": proposed}.items():
+            if not isinstance(value, str):
+                raise ValueError(f"{name} must be a string")
+
+        canonical_content = Sanitizer.sanitize(content)
+        sanitized = canonical_content != content
+        signed_fields = {
+            "operation_id": operation_id,
+            "operation_date": operation_date,
+            "project": project,
+            "type": type,
+            "tag": tag,
+            "proposed": proposed,
+            "canonical_content": canonical_content,
+        }
+        envelope = {
+            **signed_fields,
+            "digest": hashlib.sha256(
+                json.dumps(
+                    signed_fields, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+                ).encode()
+            ).hexdigest(),
+        }
+        memory_id = _afk_memory_id(operation_date, type, project, operation_id)
+        response = {
+            "memory_id": memory_id,
+            "envelope": envelope,
+            "canonical_content": canonical_content,
+            "sanitized": sanitized,
+        }
+        scope = ScopeDetector.detect(project=project)
+        timestamp = datetime.now().isoformat()
+        payload: dict[str, Any] = {
+            "memory_id": memory_id,
+            "content": canonical_content,
+            "type": type,
+            "project": project,
+            "date": operation_date,
+            "timestamp": timestamp,
+            "reinforcement_count": 0,
+            **scope.to_metadata(),
+        }
+        payload.update(summarize_lifecycle(payload))
+        payload["entities"] = extract_entities(canonical_content)
+        payload["embedding_text"] = build_embedding_text(canonical_content, payload)
+        payload["repr_version"] = 2
+        payload["afk_operation"] = {"envelope": envelope, "response": response}
+
+        persisted_payload, created = self._save_afk_operation_to_file(
+            memory_id=memory_id,
+            content=canonical_content,
+            payload=payload,
+            memory_type=type,
+            operation_date=operation_date,
+            operation_id=operation_id,
+            envelope=envelope,
+            response=response,
+        )
+        # This deliberately happens after YAML. A retry of an accepted operation
+        # repairs a missed vector upsert rather than creating a new memory.
+        stored_content = str(persisted_payload["content"])
+        embedding_text = str(
+            persisted_payload.get("embedding_text")
+            or build_embedding_text(stored_content, persisted_payload)
+        )
+        vector = self.embedder.encode(stored_content)
+        self.store.save(
+            id=memory_id,
+            vector=vector,
+            payload=persisted_payload,
+            content=embedding_text,
+        )
+        if created:
+            self.record_event(
+                event_type="memory_saved",
+                project=project,
+                source="memory_manager.save_afk_operation",
+                payload={"memory_id": memory_id, "type": type, "capture_origin": "afk"},
+            )
+        return response
+
+    def get_afk_operation(
+        self, operation_id: str, project: str, operation_date: str
+    ) -> dict[str, Any] | None:
+        """Return the exact durable AFK response for a scoped operation key."""
+        yaml_file = self.memory_dir / project / f"{operation_date}.yaml"
+        with _yaml_writer_lock(yaml_file):
+            document = _read_yaml_document(yaml_file, operation_date)
+            for entries in document.values():
+                if not isinstance(entries, list):
+                    continue
+                for entry in entries:
+                    operation = entry.get("afk_operation") if isinstance(entry, dict) else None
+                    envelope = operation.get("envelope") if isinstance(operation, dict) else None
+                    if (
+                        isinstance(envelope, dict)
+                        and envelope.get("operation_id") == operation_id
+                        and envelope.get("project") == project
+                        and envelope.get("operation_date") == operation_date
+                    ):
+                        response = operation.get("response")
+                        return dict(response) if isinstance(response, dict) else None
+        return None
+
+    def _save_afk_operation_to_file(
+        self,
+        *,
+        memory_id: str,
+        content: str,
+        payload: dict[str, Any],
+        memory_type: str,
+        operation_date: str,
+        operation_id: str,
+        envelope: dict[str, Any],
+        response: dict[str, Any],
+    ) -> tuple[dict[str, Any], bool]:
+        """Lock, reread, and persist an AFK operation exactly once."""
+        project_dir = self.memory_dir / str(payload["project"])
+        yaml_file = project_dir / f"{operation_date}.yaml"
+        with _yaml_writer_lock(yaml_file):
+            document = _read_yaml_document(yaml_file, operation_date)
+            for entries in document.values():
+                if not isinstance(entries, list):
+                    continue
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    operation = entry.get("afk_operation")
+                    prior_envelope = (
+                        operation.get("envelope") if isinstance(operation, dict) else None
+                    )
+                    if (
+                        not isinstance(prior_envelope, dict)
+                        or prior_envelope.get("operation_id") != operation_id
+                    ):
+                        continue
+                    if prior_envelope != envelope:
+                        raise AfkOperationConflict(
+                            "AFK operation conflicts with its durable envelope"
+                        )
+                    prior_response = operation.get("response")
+                    if not isinstance(prior_response, dict):
+                        raise AfkOperationConflict("AFK operation has an invalid durable response")
+                    stored = dict(entry)
+                    stored.update(
+                        {"memory_id": memory_id, "type": memory_type, "date": operation_date}
+                    )
+                    return stored, False
+
+            type_key = f"{memory_type}s"
+            entries = document.setdefault(type_key, [])
+            if not isinstance(entries, list):
+                raise ValueError(f"Invalid YAML type section: {type_key}")
+            if any(isinstance(entry, dict) and entry.get("id") == memory_id for entry in entries):
+                raise AfkOperationConflict(
+                    "AFK memory id already exists without its operation envelope"
+                )
+            entry = self._file_entry(memory_id, content, payload)
+            entry["afk_operation"] = {"envelope": envelope, "response": response}
+            entries.append(entry)
+            _atomic_write_yaml(yaml_file, document)
+            return payload, True
+
     def _record_bm25_drift(self, embedding_text: str) -> None:
         """Track per-save OOV rate against the fitted vocab (drift signal)."""
         encoder = self.sparse_encoder
@@ -901,49 +1156,31 @@ class MemoryManager:
         """Save memory to human-readable YAML file, organized by project."""
         project = metadata.get("project", "general")
         project_dir = self.memory_dir / project
-        project_dir.mkdir(parents=True, exist_ok=True)
         yaml_file = project_dir / f"{date}.yaml"
+        with _yaml_writer_lock(yaml_file):
+            data = _read_yaml_document(yaml_file, date)
+            type_key = f"{memory_type}s"
+            entries = data.setdefault(type_key, [])
+            if not isinstance(entries, list):
+                raise ValueError(f"Invalid YAML type section: {type_key}")
+            if any(isinstance(entry, dict) and entry.get("id") == memory_id for entry in entries):
+                return
+            entries.append(self._file_entry(memory_id, content, metadata))
+            _atomic_write_yaml(yaml_file, data)
 
-        # Load existing data for this date
-        if yaml_file.exists():
-            with open(yaml_file) as f:
-                data = yaml.safe_load(f) or {}
-        else:
-            data = {"date": date}
-
-        # Ensure type section exists
-        type_key = f"{memory_type}s"
-        if type_key not in data:
-            data[type_key] = []
-
-        # Add new memory
-        memory_entry = {
+    @staticmethod
+    def _file_entry(memory_id: str, content: str, metadata: dict[str, Any]) -> dict[str, Any]:
+        """Translate a vector payload into the human-readable YAML entry."""
+        entry = {
             "id": memory_id,
             "content": content,
             "project": metadata.get("project", "general"),
             "timestamp": metadata.get("timestamp"),
         }
-
-        # Add any extra metadata (excluding duplicates)
         for key, value in metadata.items():
-            if key not in ["memory_id", "content", "date", "timestamp", "type", "project"]:
-                memory_entry[key] = value
-
-        data[type_key].append(memory_entry)
-
-        # Atomic write: write to temp file, then os.replace() (POSIX atomic)
-        fd, tmp_path = tempfile.mkstemp(dir=project_dir, suffix=".yaml.tmp")
-        try:
-            with os.fdopen(fd, "w") as f:
-                yaml.dump(data, f, default_flow_style=False, sort_keys=False, allow_unicode=True)
-            os.replace(tmp_path, yaml_file)
-        except BaseException:
-            # Clean up temp file on any failure
-            try:
-                os.unlink(tmp_path)
-            except OSError:
-                pass
-            raise
+            if key not in {"memory_id", "content", "date", "timestamp", "type", "project"}:
+                entry[key] = value
+        return entry
 
     def update_memory_content(self, memory_id: str, appended_text: str) -> dict[str, Any]:
         """Append text to a memory's content, id-stable (spec 2026-07-08).
@@ -993,38 +1230,26 @@ class MemoryManager:
         date_prefix = memory_id.split("_")[0]
         pattern = f"{date_prefix}.yaml" if date_prefix.count("-") == 2 else "*.yaml"
         for yaml_file in self.memory_dir.rglob(pattern):
-            with open(yaml_file) as f:
-                data = yaml.safe_load(f) or {}
-            entry = next(
-                (
-                    e
-                    for entries in data.values()
-                    if isinstance(entries, list)
-                    for e in entries
-                    if isinstance(e, dict) and e.get("id") == memory_id
-                ),
-                None,
-            )
-            if entry is None:
-                continue
-            entry["content"] = new_content
-            for key in ("entities", "embedding_text"):
-                if key in entry:
-                    entry[key] = payload[key]
-            fd, tmp_path = tempfile.mkstemp(dir=yaml_file.parent, suffix=".yaml.tmp")
-            try:
-                with os.fdopen(fd, "w") as f:
-                    yaml.dump(
-                        data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
-                    )
-                os.replace(tmp_path, yaml_file)
-            except BaseException:
-                try:
-                    os.unlink(tmp_path)
-                except OSError:
-                    pass
-                raise
-            return
+            with _yaml_writer_lock(yaml_file):
+                data = _read_yaml_document(yaml_file, date_prefix)
+                entry = next(
+                    (
+                        e
+                        for entries in data.values()
+                        if isinstance(entries, list)
+                        for e in entries
+                        if isinstance(e, dict) and e.get("id") == memory_id
+                    ),
+                    None,
+                )
+                if entry is None:
+                    continue
+                entry["content"] = new_content
+                for key in ("entities", "embedding_text"):
+                    if key in entry:
+                        entry[key] = payload[key]
+                _atomic_write_yaml(yaml_file, data)
+                return
         logger.warning(f"YAML entry not found for {memory_id}; only the vector will be updated")
 
     # -------------------------------------------------------------------------
@@ -1066,41 +1291,33 @@ class MemoryManager:
             else:
                 return False
 
-        with open(yaml_file) as f:
-            data = yaml.safe_load(f) or {}
+        with _yaml_writer_lock(yaml_file):
+            data = _read_yaml_document(yaml_file, date)
+            found = False
+            for type_key in list(data.keys()):
+                if not isinstance(data[type_key], list):
+                    continue
+                original_len = len(data[type_key])
+                data[type_key] = [m for m in data[type_key] if m.get("id") != memory_id]
+                if len(data[type_key]) < original_len:
+                    found = True
+                    if not data[type_key]:
+                        del data[type_key]
 
-        found = False
-        for type_key in list(data.keys()):
-            if not isinstance(data[type_key], list):
-                continue
-            original_len = len(data[type_key])
-            data[type_key] = [m for m in data[type_key] if m.get("id") != memory_id]
-            if len(data[type_key]) < original_len:
-                found = True
-                if not data[type_key]:
-                    del data[type_key]
+            if not found:
+                return False
 
-        if not found:
-            return False
-
-        # Check if file is now empty (only 'date' key or nothing)
-        has_memories = any(isinstance(v, list) and v for v in data.values())
-        if not has_memories:
-            yaml_file.unlink()
-        else:
-            fd, tmp = tempfile.mkstemp(dir=self.memory_dir, suffix=".yaml.tmp")
-            try:
-                with os.fdopen(fd, "w") as f:
-                    yaml.dump(
-                        data, f, default_flow_style=False, sort_keys=False, allow_unicode=True
-                    )
-                os.replace(tmp, yaml_file)
-            except BaseException:
+            # Check if file is now empty (only 'date' key or nothing)
+            has_memories = any(isinstance(v, list) and v for v in data.values())
+            if not has_memories:
+                yaml_file.unlink()
+                directory_fd = os.open(yaml_file.parent, os.O_RDONLY)
                 try:
-                    os.unlink(tmp)
-                except OSError:
-                    pass
-                raise
+                    os.fsync(directory_fd)
+                finally:
+                    os.close(directory_fd)
+            else:
+                _atomic_write_yaml(yaml_file, data)
 
         # Best-effort: delete from vector store
         try:
