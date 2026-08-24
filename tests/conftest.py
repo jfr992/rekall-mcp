@@ -25,6 +25,12 @@ TEST_QDRANT_URL = _resolve_test_qdrant_url()
 
 
 @pytest.fixture(autouse=True)
+def _auth_isolation(monkeypatch):
+    """Keep an operator's bearer token out of tests unless a test opts in."""
+    monkeypatch.delenv("REKALL_API_TOKEN", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def _qdrant_isolation(monkeypatch):
     """Force every test toward the disposable test Qdrant and refuse :6333.
 
