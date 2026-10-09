@@ -105,6 +105,7 @@ recall_tool_ids = {
 }
 delivered = {"explicit": [], "capsule": [], "reflex": []}
 first_recall_index = None
+first_delivery_index = None
 
 
 def _add(bucket, ids):
@@ -113,25 +114,30 @@ def _add(bucket, ids):
             delivered[bucket].append(mid)
 
 
+def _envelope_context(stdout):
+    try:
+        envelope = json.loads(stdout or "{}")
+    except (TypeError, ValueError):
+        return ""
+    if not isinstance(envelope, dict):
+        return ""
+    output = envelope.get("hookSpecificOutput")
+    if not isinstance(output, dict):
+        return ""
+    context = output.get("additionalContext") or ""
+    return context if isinstance(context, str) else ""
+
+
 def _attachment_text(entry):
     if entry.get("hookEvent") == "PreToolUse":
         # Older transcripts carry the reflex envelope on the entry itself.
-        try:
-            envelope = json.loads(entry.get("stdout", "") or "{}")
-        except (TypeError, ValueError):
-            return ""
-        context = envelope.get("hookSpecificOutput", {}).get("additionalContext") or ""
-        return context if isinstance(context, str) else ""
+        return _envelope_context(entry.get("stdout", ""))
     att = entry.get("attachment") or {}
     if att.get("type") == "hook_additional_context":
         content = att.get("content")
         return "\n".join(c for c in content if isinstance(c, str)) if isinstance(content, list) else str(content or "")
     if att.get("type") == "hook_success":
-        try:
-            envelope = json.loads(att.get("stdout", "") or "{}")
-        except (TypeError, ValueError):
-            return ""
-        return str(envelope.get("hookSpecificOutput", {}).get("additionalContext") or "")
+        return _envelope_context(att.get("stdout", ""))
     return ""
 
 
@@ -143,16 +149,20 @@ for index, entry in enumerate(entries):
                 _add("explicit", memory_id.findall(result_text(block)))
                 if first_recall_index is None:
                     first_recall_index = index
+                if first_delivery_index is None:
+                    first_delivery_index = index
     elif kind == "attachment":
         text = _attachment_text(entry)
         if "REKALL REFLEX" in text:
             _add("reflex", memory_id.findall(text))
+            if first_recall_index is None:
+                first_recall_index = index
         elif "REKALL STARTUP" in text:
             _add("capsule", memory_id.findall(text))
         else:
             continue
-        if first_recall_index is None or index < first_recall_index:
-            first_recall_index = index
+        if first_delivery_index is None:
+            first_delivery_index = index
 
 all_delivered = set(delivered["explicit"]) | set(delivered["capsule"]) | set(delivered["reflex"])
 if not all_delivered:
@@ -161,7 +171,7 @@ if not all_delivered:
 # A reference is the id in the agent text or tool arguments, never in a tool_result.
 referenced = []
 for index, entry in enumerate(entries):
-    if entry.get("type") != "assistant" or (first_recall_index is not None and index <= first_recall_index):
+    if entry.get("type") != "assistant" or (first_delivery_index is not None and index <= first_delivery_index):
         continue
     for block in content_blocks(entry):
         if not isinstance(block, dict):
@@ -180,7 +190,7 @@ edits = 0
 test_passes = 0
 bash_test_ids = set()
 for index, entry in enumerate(entries):
-    if first_recall_index is not None and index <= first_recall_index:
+    if first_recall_index is None or index <= first_recall_index:
         continue
     if entry.get("type") == "assistant":
         for block in content_blocks(entry):

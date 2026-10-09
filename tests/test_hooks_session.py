@@ -401,7 +401,7 @@ def _transcript_lines():
 def _run_session_end(tmp_path: Path, lines: list[dict], tail_bytes: str | None = None):
     fakebin, calls, bodies = _make_fake_curl(tmp_path)
     transcript = tmp_path / "sess-9.jsonl"
-    transcript.write_text("\n".join(json.dumps(l) for l in lines) + "\n")
+    transcript.write_text("\n".join(json.dumps(line) for line in lines) + "\n")
     (tmp_path / "rekall-restored-sess-9").write_text("")
     env = os.environ.copy()
     env.update({
@@ -435,3 +435,50 @@ def test_session_end_marks_truncated_tail(tmp_path):
     assert r.returncode == 0
     assert body["coverage"]["truncated"] is True
     assert body["coverage"]["transcript_tail_bytes"] == 4096
+
+
+def _tool_use(tool_id, name, tool_input=None):
+    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": tool_id, "name": name, "input": tool_input or {}}]}}
+
+
+def _tool_result(tool_id, text="ok"):
+    return {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": tool_id, "content": [{"type": "text", "text": text}]}]}}
+
+
+def _capsule(mid):
+    return {
+        "type": "attachment",
+        "attachment": {"type": "hook_additional_context", "content": [f"== REKALL STARTUP (p) ==\n- note [{mid}]\n== END REKALL STARTUP =="]},
+    }
+
+
+def test_session_end_capsule_does_not_start_edit_window(tmp_path):
+    cites_capsule = {"type": "assistant", "message": {"content": [{"type": "text", "text": f"Following {MID_C}."}]}}
+    lines = [
+        _capsule(MID_C),
+        cites_capsule,
+        _tool_use("e1", "Edit"), _tool_result("e1"),
+        _tool_use("r1", "mcp__memory__recall_memories", {"query": "x"}), _tool_result("r1", f"- a [{MID_A}]"),
+        _tool_use("e2", "Edit"), _tool_result("e2"),
+    ]
+    r, body = _run_session_end(tmp_path, lines)
+    assert r.returncode == 0
+    assert body["edits_after_recall"] == 1
+    assert MID_C in body["referenced"]
+
+
+def test_session_end_capsule_only_session_has_no_outcome_credit(tmp_path):
+    lines = [_capsule(MID_C), _tool_use("e1", "Edit"), _tool_result("e1")]
+    r, body = _run_session_end(tmp_path, lines)
+    assert body["edits_after_recall"] == 0
+    assert body["test_passes_after_recall"] == 0
+
+
+def test_session_end_survives_non_dict_hook_stdout(tmp_path):
+    def success(stdout):
+        return {"type": "attachment", "attachment": {"type": "hook_success", "stdout": stdout}}
+
+    lines = [success("123"), success("[1,2]"), _capsule(MID_C)]
+    r, body = _run_session_end(tmp_path, lines)
+    assert r.returncode == 0
+    assert body["delivered"]["capsule"] == [MID_C]

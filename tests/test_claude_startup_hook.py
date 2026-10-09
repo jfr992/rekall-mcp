@@ -500,3 +500,9 @@ def test_installer_wires_provenance_hook(tmp_path):
     assert match, entries
     assert any("rekall-provenance.sh" in h["command"] for h in match[0]["hooks"])
     assert (home / ".claude" / "hooks" / "rekall-provenance.sh").exists()
+
+    result, _ = _run_install(home, "--hooks-only")
+    assert result.returncode == 0, result.stderr + result.stdout
+    settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    commands = [h["command"] for e in settings["hooks"]["PreToolUse"] for h in e["hooks"]]
+    assert sum("rekall-provenance.sh" in c for c in commands) == 1, commands
