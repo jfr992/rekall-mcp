@@ -340,7 +340,7 @@ def _run_install(
     }
     env.update(extra_env or {})
     result = subprocess.run(
-        ["/bin/bash", str(INSTALLER), *args],
+        ["/bin/bash", str(INSTALLER), "--no-detect", *args],
         cwd=Path(__file__).parents[1],
         env=env,
         capture_output=True,
@@ -386,7 +386,7 @@ def test_install_clean_and_semantically_idempotent(tmp_path):
     ]
 
     second = subprocess.run(
-        ["/bin/bash", str(INSTALLER)],
+        ["/bin/bash", str(INSTALLER), "--no-detect"],
         cwd=Path(__file__).parents[1],
         env={
             "HOME": str(tmp_path / "home"),
@@ -649,3 +649,89 @@ def test_shipped_python_scripts_parse_with_macos_system_python():
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def _codex_env(tmp_path: Path, state: Path, log: Path) -> dict[str, str]:
+    return {
+        "HOME": str(tmp_path / "home"),
+        "PATH": f"{tmp_path / 'fake bin'}:/usr/bin:/bin:/usr/sbin:/sbin",
+        "FAKE_CODEX_STATE": str(state),
+        "FAKE_CODEX_LOG": str(log),
+    }
+
+
+def _fake_codex_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    fake_bin = tmp_path / "fake bin"
+    fake_bin.mkdir()
+    _write_fake_codex(fake_bin)
+    state = tmp_path / "mcp-state.json"
+    state.write_text(
+        json.dumps({"mode": "missing", "url": "http://localhost:8000"}), encoding="utf-8"
+    )
+    log = tmp_path / "mcp-argv.jsonl"
+    log.write_text("", encoding="utf-8")
+    return state, log
+
+
+def test_install_codex_home_flag_installs_every_home_and_registers_mcp_once(tmp_path):
+    state, log = _fake_codex_fixture(tmp_path)
+    home_a, home_b = tmp_path / "home a", tmp_path / "home b"
+    home_a.mkdir()
+    home_b.mkdir()
+    default_home = tmp_path / "home" / ".codex"
+
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            str(INSTALLER),
+            "--codex-home",
+            str(home_a),
+            "--codex-home",
+            str(home_b),
+            "--no-detect",
+        ],
+        cwd=Path(__file__).parents[1],
+        env=_codex_env(tmp_path, state, log),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    for codex_home in (default_home, home_a, home_b):
+        assert (codex_home / "hooks" / "rekall_hook.py").read_bytes() == ADAPTER.read_bytes()
+        assert (
+            codex_home / "skills" / "rekall-memory" / "SKILL.md"
+        ).read_bytes() == SKILL.read_bytes()
+        merged = json.loads((codex_home / "hooks.json").read_text(encoding="utf-8"))
+        assert len(merged["hooks"]) == 6
+        assert str(codex_home / "hooks" / "rekall_hook.py") in json.dumps(merged)
+    adds = [json.loads(line) for line in log.read_text().splitlines()]
+    assert adds == [["mcp", "add", "rekall", "--url", "http://localhost:8000"]]
+
+
+def test_install_codex_home_missing_dir_is_skipped_and_dedupes(tmp_path):
+    state, log = _fake_codex_fixture(tmp_path)
+    missing = tmp_path / "absent"
+    default_home = tmp_path / "home" / ".codex"
+    default_home.mkdir(parents=True)
+
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            str(INSTALLER),
+            "--codex-home",
+            str(missing),
+            "--codex-home",
+            str(default_home) + "/",
+            "--no-detect",
+        ],
+        cwd=Path(__file__).parents[1],
+        env=_codex_env(tmp_path, state, log),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert f"skipping Codex home {missing}" in result.stdout
+    assert not missing.exists()
+    assert result.stdout.count("Rekall Codex integration installed") == 1
