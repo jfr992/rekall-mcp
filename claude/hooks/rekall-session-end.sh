@@ -103,39 +103,78 @@ recall_tool_ids = {
     for tool_id, name in tool_names.items()
     if "recall" in name.lower() or "reflex" in name.lower()
 }
-recalled = set()
+delivered = {"explicit": [], "capsule": [], "reflex": []}
 first_recall_index = None
 
+
+def _add(bucket, ids):
+    for mid in ids:
+        if mid not in delivered[bucket]:
+            delivered[bucket].append(mid)
+
+
+def _attachment_text(entry):
+    if entry.get("hookEvent") == "PreToolUse":
+        # Older transcripts carry the reflex envelope on the entry itself.
+        try:
+            envelope = json.loads(entry.get("stdout", "") or "{}")
+        except (TypeError, ValueError):
+            return ""
+        context = envelope.get("hookSpecificOutput", {}).get("additionalContext") or ""
+        return context if isinstance(context, str) else ""
+    att = entry.get("attachment") or {}
+    if att.get("type") == "hook_additional_context":
+        content = att.get("content")
+        return "\n".join(c for c in content if isinstance(c, str)) if isinstance(content, list) else str(content or "")
+    if att.get("type") == "hook_success":
+        try:
+            envelope = json.loads(att.get("stdout", "") or "{}")
+        except (TypeError, ValueError):
+            return ""
+        return str(envelope.get("hookSpecificOutput", {}).get("additionalContext") or "")
+    return ""
+
+
 for index, entry in enumerate(entries):
-    if entry.get("type") != "user":
-        continue
-    for block in content_blocks(entry):
-        if not (isinstance(block, dict) and block.get("type") == "tool_result"):
+    kind = entry.get("type")
+    if kind == "user":
+        for block in content_blocks(entry):
+            if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id", "") in recall_tool_ids:
+                _add("explicit", memory_id.findall(result_text(block)))
+                if first_recall_index is None:
+                    first_recall_index = index
+    elif kind == "attachment":
+        text = _attachment_text(entry)
+        if "REKALL REFLEX" in text:
+            _add("reflex", memory_id.findall(text))
+        elif "REKALL STARTUP" in text:
+            _add("capsule", memory_id.findall(text))
+        else:
             continue
-        if block.get("tool_use_id", "") not in recall_tool_ids:
-            continue
-        recalled.update(memory_id.findall(result_text(block)))
-        if first_recall_index is None:
+        if first_recall_index is None or index < first_recall_index:
             first_recall_index = index
 
-# Reflex context is recorded as a PreToolUse attachment rather than a normal
-# tool result. Only the explicitly framed Rekall packet is considered.
-for index, entry in enumerate(entries):
-    if entry.get("type") != "attachment" or entry.get("hookEvent") != "PreToolUse":
-        continue
-    try:
-        envelope = json.loads(entry.get("stdout", ""))
-    except (TypeError, ValueError):
-        continue
-    context = envelope.get("hookSpecificOutput", {}).get("additionalContext") or ""
-    if not isinstance(context, str) or "REKALL REFLEX" not in context:
-        continue
-    recalled.update(memory_id.findall(context))
-    if first_recall_index is None or index < first_recall_index:
-        first_recall_index = index
-
-if not recalled:
+all_delivered = set(delivered["explicit"]) | set(delivered["capsule"]) | set(delivered["reflex"])
+if not all_delivered:
     raise SystemExit(0)
+
+# A reference is the id in the agent text or tool arguments, never in a tool_result.
+referenced = []
+for index, entry in enumerate(entries):
+    if entry.get("type") != "assistant" or (first_recall_index is not None and index <= first_recall_index):
+        continue
+    for block in content_blocks(entry):
+        if not isinstance(block, dict):
+            continue
+        if block.get("type") == "text":
+            found = memory_id.findall(block.get("text", ""))
+        elif block.get("type") == "tool_use":
+            found = memory_id.findall(json.dumps(block.get("input", {})))
+        else:
+            continue
+        for mid in found:
+            if mid in all_delivered and mid not in referenced:
+                referenced.append(mid)
 
 edits = 0
 test_passes = 0
@@ -169,7 +208,11 @@ print(
             "event_type": "session_summary",
             "session_id": session_id,
             "project": project,
-            "recalled_ids": sorted(recalled),
+            "client": "claude-code",
+            "recalled_ids": sorted(all_delivered),
+            "delivered": delivered,
+            "referenced": referenced,
+            "coverage": {"transcript_tail_bytes": limit, "truncated": bool(start)},
             "edits_after_recall": edits,
             "test_passes_after_recall": test_passes,
         },
