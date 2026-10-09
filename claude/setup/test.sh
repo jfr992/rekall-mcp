@@ -39,7 +39,7 @@ printf "\n[test 1] fresh install with --hooks-only on empty settings.json\n"
 H=$(with_isolated_home); TMP_HOMES="$TMP_HOMES $H"
 echo '{}' > "$H/.claude/settings.json"
 
-if HOME="$H" bash "$INSTALL_SH" --hooks-only >"$H/install.log" 2>&1; then
+if HOME="$H" env -u CLAUDE_CONFIG_DIR bash "$INSTALL_SH" --no-detect --hooks-only >"$H/install.log" 2>&1; then
     pass "installer exited 0"
 else
     fail "installer exited non-zero (see $H/install.log)"
@@ -76,7 +76,7 @@ ls "$H/.claude/settings.json.bak-"* >/dev/null 2>&1 && pass "settings.json backu
 # ---- test 2: idempotency ----------------------------------------------------
 printf "\n[test 2] re-run on already-wired install (idempotency)\n"
 
-if HOME="$H" bash "$INSTALL_SH" --hooks-only >"$H/install2.log" 2>&1; then
+if HOME="$H" env -u CLAUDE_CONFIG_DIR bash "$INSTALL_SH" --no-detect --hooks-only >"$H/install2.log" 2>&1; then
     pass "second run exited 0"
 else
     fail "second run failed (see $H/install2.log)"
@@ -128,7 +128,7 @@ cat > "$H2/.claude/settings.json" <<'JSON'
 }
 JSON
 
-if HOME="$H2" bash "$INSTALL_SH" --hooks-only >"$H2/install.log" 2>&1; then
+if HOME="$H2" env -u CLAUDE_CONFIG_DIR bash "$INSTALL_SH" --no-detect --hooks-only >"$H2/install.log" 2>&1; then
     pass "installer exited 0 with pre-existing hooks"
 else
     fail "installer failed against pre-existing config"
@@ -168,7 +168,7 @@ cat > "$H5/.claude/settings.json" <<JSON
 }
 JSON
 
-if HOME="$H5" bash "$INSTALL_SH" --hooks-only >"$H5/install.log" 2>&1; then
+if HOME="$H5" env -u CLAUDE_CONFIG_DIR bash "$INSTALL_SH" --no-detect --hooks-only >"$H5/install.log" 2>&1; then
     pass "installer exited 0 against missing-matcher reflex entry"
 else
     fail "installer failed against missing-matcher reflex entry"
@@ -195,7 +195,7 @@ cat > "$H6/.claude/settings.json" <<JSON
 }
 JSON
 
-if HOME="$H6" bash "$INSTALL_SH" --hooks-only >"$H6/install.log" 2>&1; then
+if HOME="$H6" env -u CLAUDE_CONFIG_DIR bash "$INSTALL_SH" --no-detect --hooks-only >"$H6/install.log" 2>&1; then
     pass "installer exited 0 against wrong-matcher reflex entry"
 else
     fail "installer failed against wrong-matcher reflex entry"
@@ -214,7 +214,7 @@ WRONG_REFLEX=$(jq -r '[.hooks.PreToolUse[].hooks[].command | select(endswith("re
 printf "\n[test 6] --skills-only installs all 9 slash commands\n"
 H3=$(with_isolated_home); TMP_HOMES="$TMP_HOMES $H3"
 
-if HOME="$H3" bash "$INSTALL_SH" --skills-only >"$H3/install.log" 2>&1; then
+if HOME="$H3" env -u CLAUDE_CONFIG_DIR bash "$INSTALL_SH" --no-detect --skills-only >"$H3/install.log" 2>&1; then
     pass "installer exited 0"
 else
     fail "installer failed"
@@ -230,7 +230,7 @@ printf "\n[test 7] backend health (--skip-backend skips, default verifies)\n"
 H4=$(with_isolated_home); TMP_HOMES="$TMP_HOMES $H4"
 
 if curl -sf -o /dev/null --max-time 2 http://localhost:8000/health 2>/dev/null; then
-    HOME="$H4" bash "$INSTALL_SH" --skip-backend >"$H4/install.log" 2>&1
+    HOME="$H4" env -u CLAUDE_CONFIG_DIR bash "$INSTALL_SH" --no-detect --skip-backend >"$H4/install.log" 2>&1
     grep -q "backend:" "$H4/install.log" && pass "backend stats reported" || fail "no backend stats line"
 else
     skip "backend not running (start rekall and re-run)"

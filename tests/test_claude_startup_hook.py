@@ -108,7 +108,9 @@ def _settings_commands(settings: dict, event: str) -> list[str]:
     ]
 
 
-def _run_install(home: Path, *args: str) -> tuple[subprocess.CompletedProcess[str], list[str]]:
+def _run_install(
+    home: Path, *args: str, env_extra: dict[str, str] | None = None
+) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     if not shutil.which("jq"):
         pytest.skip("jq is required by claude/setup/install.sh")
     if not shutil.which("curl"):
@@ -120,8 +122,10 @@ def _run_install(home: Path, *args: str) -> tuple[subprocess.CompletedProcess[st
     env["HOME"] = str(home)
     env["PATH"] = f"{fakebin}:{env['PATH']}"
     env["FAKE_CURL_CALLS"] = str(calls)
+    env.pop("CLAUDE_CONFIG_DIR", None)
+    env.update(env_extra or {})
     result = subprocess.run(
-        ["bash", str(INSTALL), *args],
+        ["bash", str(INSTALL), "--no-detect", *args],
         text=True,
         capture_output=True,
         env=env,
@@ -506,3 +510,84 @@ def test_installer_wires_provenance_hook(tmp_path):
     settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
     commands = [h["command"] for e in settings["hooks"]["PreToolUse"] for h in e["hooks"]]
     assert sum("rekall-provenance.sh" in c for c in commands) == 1, commands
+
+
+PROV_MATCHER = "mcp__memory__.*|mcp__rekall__.*"
+
+
+def test_installer_profile_flag_patches_second_profile_only(tmp_path):
+    home = tmp_path / "home"
+    work = home / ".claude-work"
+    work.mkdir(parents=True)
+    foreign = "/opt/foreign/hook.sh"
+    (work / "settings.json").write_text(
+        json.dumps({"hooks": {"Stop": [{"hooks": [{"type": "command", "command": foreign}]}]}}),
+        encoding="utf-8",
+    )
+
+    result, _ = _run_install(home, "--hooks-only", "--profile", str(work))
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    settings = json.loads((work / "settings.json").read_text(encoding="utf-8"))
+    match = [e for e in settings["hooks"]["PreToolUse"] if e.get("matcher") == PROV_MATCHER]
+    assert match
+    assert match[0]["hooks"][0]["command"] == str(home / ".claude" / "hooks" / "rekall-provenance.sh")
+    assert foreign in _settings_commands(settings, "Stop")
+    assert not (work / "hooks").exists()
+    assert (home / ".claude" / "hooks" / "rekall-provenance.sh").exists()
+
+
+def test_installer_profile_rerun_is_byte_identical(tmp_path):
+    home = tmp_path / "home"
+    work = home / ".claude-work"
+    work.mkdir(parents=True)
+    paths = [home / ".claude" / "settings.json", work / "settings.json"]
+
+    first, _ = _run_install(home, "--hooks-only", "--profile", str(work))
+    before = [p.read_bytes() for p in paths]
+    second, _ = _run_install(home, "--hooks-only", "--profile", str(work))
+
+    assert first.returncode == 0 and second.returncode == 0, second.stderr + second.stdout
+    assert [p.read_bytes() for p in paths] == before
+
+
+def test_installer_profile_missing_dir_is_skipped(tmp_path):
+    home = tmp_path / "home"
+    missing = home / ".claude-nope"
+
+    result, _ = _run_install(home, "--hooks-only", "--profile", str(missing))
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert f"skipping profile {missing}" in result.stdout
+    assert not missing.exists()
+
+
+def test_installer_honors_claude_config_dir_env(tmp_path):
+    home = tmp_path / "home"
+    work = home / ".claude-work"
+    work.mkdir(parents=True)
+
+    result, _ = _run_install(
+        home, "--hooks-only", env_extra={"CLAUDE_CONFIG_DIR": f"{work}/"}
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    settings = json.loads((work / "settings.json").read_text(encoding="utf-8"))
+    assert any(e.get("matcher") == PROV_MATCHER for e in settings["hooks"]["PreToolUse"])
+
+
+def test_installer_refreshes_existing_startup_hook_without_wiring(tmp_path):
+    home = tmp_path / "home"
+    hooks = home / ".claude" / "hooks"
+    hooks.mkdir(parents=True)
+    stale = hooks / "session-start-memory.sh"
+    stale.write_text("#!/usr/bin/env bash\n# stale\n", encoding="utf-8")
+
+    result, _ = _run_install(home, "--hooks-only")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert stale.read_bytes() == (REPO / "claude" / "hooks" / "session-start-memory.sh").read_bytes()
+    settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    assert not any(
+        "session-start-memory.sh" in c for c in _settings_commands(settings, "SessionStart")
+    )
