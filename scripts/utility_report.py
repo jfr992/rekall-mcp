@@ -214,20 +214,26 @@ def compute_null_baseline(
         return []
 
     null_sessions_recalled: dict[str, set[str]] = defaultdict(set)
-    null_sessions_outcome: dict[str, set[str]] = defaultdict(set)
+    null_sessions_credited: dict[str, set[str]] = defaultdict(set)
+    ever_referenced: set[str] = set()
 
     for ss in summaries:
         sid = ss["session_id"] or ""
         has_outcome = ss["edits_after_recall"] > 0 or ss["test_passes_after_recall"] > 0
+        referenced = set(ss.get("referenced") or [])
         for _ in ss["recalled_ids"]:
             null_mid = rng.choice(universe)
             null_sessions_recalled[null_mid].add(sid)
-            if has_outcome:
-                null_sessions_outcome[null_mid].add(sid)
+            if null_mid in referenced:
+                ever_referenced.add(null_mid)
+                if has_outcome:
+                    null_sessions_credited[null_mid].add(sid)
 
+    # same rule as compute_utility_map: never-referenced memories are unknown and excluded
     return [
-        len(null_sessions_outcome.get(mid, set())) / len(sess_set)
+        len(null_sessions_credited.get(mid, set())) / len(sess_set)
         for mid, sess_set in null_sessions_recalled.items()
+        if mid in ever_referenced
     ]
 
 
@@ -271,10 +277,13 @@ def print_report(
     mean_null = _mean(null_utilities)
     delta = mean_real - mean_null
     sign = "+" if delta >= 0 else ""
-    print(
-        f"Null baseline: mean_real={mean_real:.3f}  "
-        f"mean_null={mean_null:.3f}  (delta={sign}{delta:.3f})"
-    )
+    if real_vals and null_utilities:
+        print(
+            f"Null baseline: mean_real={mean_real:.3f}  "
+            f"mean_null={mean_null:.3f}  (delta={sign}{delta:.3f})"
+        )
+    else:
+        print("Null baseline: n/a (no referenced memories to compare)")
     if null_utilities and real_vals:
         std_null = _stddev(null_utilities)
         threshold = mean_null + 2 * std_null

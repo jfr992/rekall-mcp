@@ -634,3 +634,51 @@ def test_referenced_outcome_ratio_two_thirds(tmp_path):
     )
     umap = compute_utility_map(collapse_sessions(build_session_summaries(parse_events(f))))
     assert umap["mem-x"] == pytest.approx(2 / 3)
+
+
+def test_null_baseline_legacy_has_no_delta(tmp_path, capsys):
+    import random
+
+    from scripts.utility_report import (
+        build_session_summaries,
+        build_universe,
+        collapse_sessions,
+        compute_null_baseline,
+        main,
+        parse_events,
+    )
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(_ss("s1", "p", ["a", "b"], edits=1) + "\n" + _ss("s2", "p", ["a"], edits=1, eid="e2") + "\n")
+    events = parse_events(f)
+    summaries = collapse_sessions(build_session_summaries(events))
+    assert compute_null_baseline(summaries, build_universe(events), random.Random(42)) == []
+    main(["--events-file", str(f)])
+    out = capsys.readouterr().out
+    assert "delta=" not in out
+    assert "Null baseline: n/a" in out
+
+
+def test_null_baseline_not_above_real_when_references_align(tmp_path):
+    import random
+    from statistics import mean
+
+    from scripts.utility_report import (
+        build_session_summaries,
+        build_universe,
+        collapse_sessions,
+        compute_null_baseline,
+        compute_utility_map,
+        parse_events,
+    )
+
+    f = tmp_path / "_events.jsonl"
+    lines = [_ss("s1", "p", ["a"], edits=1, referenced=["a"], eid="e1"), _ss("s2", "p", ["a"], edits=1, referenced=["a"], eid="e2")]
+    lines += [_ss(f"n{i}", "p", ["b"], referenced=[], eid=f"n{i}") for i in range(4)]
+    f.write_text("\n".join(lines) + "\n")
+    events = parse_events(f)
+    summaries = collapse_sessions(build_session_summaries(events))
+    real = [u for u in compute_utility_map(summaries).values() if u is not None]
+    null = compute_null_baseline(summaries, build_universe(events), random.Random(42))
+    assert real and null
+    assert mean(null) <= mean(real)
