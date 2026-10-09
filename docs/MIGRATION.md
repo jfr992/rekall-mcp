@@ -1,3 +1,40 @@
+# Migration Guide — v1.16.0 → v1.17.0 (installers for every profile)
+
+## What's new
+
+- **Claude installer wires every config profile.** `claude/setup/install.sh`
+  takes a repeatable `--profile <dir>` and, unless `--no-detect`, also finds
+  `CLAUDE_CONFIG_DIR` values of running Claude Code sessions. Hook files stay
+  in `~/.claude/hooks`; each profile's `settings.json` gets the same patch with
+  its own backup. A detected profile that is unwritable, has no
+  `settings.json`, or holds invalid JSON is skipped with a warning; an explicit
+  `--profile` stays fatal. An existing `session-start-memory.sh` is refreshed
+  even when the capsule is not wired.
+- **Codex installer handles several homes.** `codex/setup/install.sh` takes a
+  repeatable `--codex-home <dir>` with the same detection and runs
+  transactionally: any failure restores every home it touched and removes the
+  MCP registration only if this run added it.
+- **Generic CLAUDE.md snippet.** `claude/CLAUDE.snippet.md` is the memory
+  section to paste into a global `CLAUDE.md`.
+- **CI is green again.** Four date-pinned tests that had failed since
+  2026-08-25 now derive their dates from today.
+
+## Upgrading from v1.16.0
+
+**No data migration is required.** Server code is unchanged apart from the
+version string.
+
+1. Upgrade the server with `uvx rekall-mcp@1.17.0`, or pull the checkout and
+   run `docker compose up -d --build mcp ui`.
+2. Re-run `bash claude/setup/install.sh`; add `--profile <dir>` for any
+   profile detection cannot see (paths with spaces are truncated by detection).
+3. Re-run `bash codex/setup/install.sh`; add `--codex-home <dir>` per extra
+   home.
+
+Rollback: restore the timestamped installer backups; nothing else changed.
+
+---
+
 # Migration Guide — v1.15.0 → v1.16.0 (measurable memory)
 
 ## What's new
