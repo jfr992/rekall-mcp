@@ -56,7 +56,11 @@ def test_rekall_namespace_also_matches():
 
 
 def test_does_not_overwrite_model_supplied_fields():
-    r = _run(_payload("mcp__memory__observe", {"summary": "x", "cwd": "/elsewhere", "session_id": "mine"}))
+    r = _run(
+        _payload(
+            "mcp__memory__observe", {"summary": "x", "cwd": "/elsewhere", "session_id": "mine"}
+        )
+    )
     out = json.loads(r.stdout)["hookSpecificOutput"]["updatedInput"]
     assert out["cwd"] == "/elsewhere"
     assert out["session_id"] == "mine"
@@ -83,6 +87,8 @@ def test_kill_switch():
 
 def test_malformed_stdin_exits_zero_silently():
     env = os.environ.copy()
-    r = subprocess.run(["bash", str(HOOK)], input="not json", text=True, capture_output=True, env=env, timeout=10)
+    r = subprocess.run(
+        ["bash", str(HOOK)], input="not json", text=True, capture_output=True, env=env, timeout=10
+    )
     assert r.returncode == 0
     assert r.stdout.strip() == ""

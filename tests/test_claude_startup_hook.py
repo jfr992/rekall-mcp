@@ -545,7 +545,9 @@ def test_installer_profile_flag_patches_second_profile_only(tmp_path):
     settings = json.loads((work / "settings.json").read_text(encoding="utf-8"))
     match = [e for e in settings["hooks"]["PreToolUse"] if e.get("matcher") == PROV_MATCHER]
     assert match
-    assert match[0]["hooks"][0]["command"] == str(home / ".claude" / "hooks" / "rekall-provenance.sh")
+    assert match[0]["hooks"][0]["command"] == str(
+        home / ".claude" / "hooks" / "rekall-provenance.sh"
+    )
     assert foreign in _settings_commands(settings, "Stop")
     assert not (work / "hooks").exists()
     assert (home / ".claude" / "hooks" / "rekall-provenance.sh").exists()
@@ -581,9 +583,7 @@ def test_installer_honors_claude_config_dir_env(tmp_path):
     work = home / ".claude-work"
     work.mkdir(parents=True)
 
-    result, _ = _run_install(
-        home, "--hooks-only", env_extra={"CLAUDE_CONFIG_DIR": f"{work}/"}
-    )
+    result, _ = _run_install(home, "--hooks-only", env_extra={"CLAUDE_CONFIG_DIR": f"{work}/"})
 
     assert result.returncode == 0, result.stderr + result.stdout
     settings = json.loads((work / "settings.json").read_text(encoding="utf-8"))
@@ -600,7 +600,9 @@ def test_installer_refreshes_existing_startup_hook_without_wiring(tmp_path):
     result, _ = _run_install(home, "--hooks-only")
 
     assert result.returncode == 0, result.stderr + result.stdout
-    assert stale.read_bytes() == (REPO / "claude" / "hooks" / "session-start-memory.sh").read_bytes()
+    assert (
+        stale.read_bytes() == (REPO / "claude" / "hooks" / "session-start-memory.sh").read_bytes()
+    )
     settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
     assert not any(
         "session-start-memory.sh" in c for c in _settings_commands(settings, "SessionStart")

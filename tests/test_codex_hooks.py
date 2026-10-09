@@ -169,7 +169,10 @@ def test_session_summary_recall_edits_tests(hook_module):
         "client": "codex",
         "delivered": {"explicit": ["m1", "m2"]},
         "referenced": [],
-        "coverage": {"transcript_tail_bytes": hook_module._MAX_TRANSCRIPT_BYTES, "truncated": False},
+        "coverage": {
+            "transcript_tail_bytes": hook_module._MAX_TRANSCRIPT_BYTES,
+            "truncated": False,
+        },
     }
 
 
@@ -450,7 +453,10 @@ def test_session_summary_correlates_call_outputs(hook_module):
         "client": "codex",
         "delivered": {"explicit": ["2026-08-23_learning_abc12345"]},
         "referenced": [],
-        "coverage": {"transcript_tail_bytes": hook_module._MAX_TRANSCRIPT_BYTES, "truncated": False},
+        "coverage": {
+            "transcript_tail_bytes": hook_module._MAX_TRANSCRIPT_BYTES,
+            "truncated": False,
+        },
     }
 
 
@@ -640,19 +646,34 @@ def test_bounded_lines_reports_truncation(hook_module, tmp_path, monkeypatch):
 
 def test_summary_coverage_carries_truncated(hook_module):
     lines = [
-        json.dumps({"type": "tool_call", "call_id": "c1", "tool_name": "recall_memories", "arguments": {}}),
-        json.dumps({"type": "tool_result", "call_id": "c1", "content": "- a [2026-10-09_fact_aaaa1111]"}),
+        json.dumps(
+            {"type": "tool_call", "call_id": "c1", "tool_name": "recall_memories", "arguments": {}}
+        ),
+        json.dumps(
+            {"type": "tool_result", "call_id": "c1", "content": "- a [2026-10-09_fact_aaaa1111]"}
+        ),
     ]
     payload = {"session_id": "s", "cwd": "/r"}
-    assert hook_module.summarize_session(payload, lines, truncated=True)["coverage"]["truncated"] is True
+    assert (
+        hook_module.summarize_session(payload, lines, truncated=True)["coverage"]["truncated"]
+        is True
+    )
     assert hook_module.summarize_session(payload, lines)["coverage"]["truncated"] is False
 
 
 def test_referenced_is_subset_of_delivered_when_recalls_exceed_cap(hook_module):
     ids = [f"2026-10-09_fact_{n:08x}" for n in range(40)]
     lines = [
-        json.dumps({"type": "tool_call", "call_id": "c1", "tool_name": "recall_memories", "arguments": {}}),
-        json.dumps({"type": "tool_result", "call_id": "c1", "content": "\n".join(f"- x [{i}]" for i in ids)}),
+        json.dumps(
+            {"type": "tool_call", "call_id": "c1", "tool_name": "recall_memories", "arguments": {}}
+        ),
+        json.dumps(
+            {
+                "type": "tool_result",
+                "call_id": "c1",
+                "content": "\n".join(f"- x [{i}]" for i in ids),
+            }
+        ),
         json.dumps(
             {
                 "type": "message",

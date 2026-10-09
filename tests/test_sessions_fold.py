@@ -75,7 +75,13 @@ def test_fold_groups_summary_and_surfaced_by_session_id():
     assert s1["last_at"] == "2026-07-14T09:20:00"
     assert [i["memory_id"] for i in s1["injected"]] == ["m1", "m2"]
     assert s1["recalls"] == []
-    assert s1["totals"] == {"recalls": 0, "injected": 2, "tokens": 40, "referenced": 0, "delivered": 1}
+    assert s1["totals"] == {
+        "recalls": 0,
+        "injected": 2,
+        "tokens": 40,
+        "referenced": 0,
+        "delivered": 1,
+    }
 
 
 def test_null_session_recall_joins_via_memory_ids_intersection():
@@ -233,7 +239,13 @@ def test_get_sessions_list_shape_limit_and_window(monkeypatch, tmp_path):
     assert row["session_id"] == "s2"  # newest activity first
     assert row["project"] == "proj-a"
     assert set(row) == {"session_id", "project", "started_at", "last_at", "totals"}
-    assert row["totals"] == {"recalls": 0, "injected": 0, "tokens": 0, "referenced": 0, "delivered": 1}
+    assert row["totals"] == {
+        "recalls": 0,
+        "injected": 0,
+        "tokens": 0,
+        "referenced": 0,
+        "delivered": 1,
+    }
 
 
 def test_get_sessions_project_filter_returns_scoped_plus_unattributed(monkeypatch, tmp_path):
@@ -296,7 +308,13 @@ def test_get_session_detail_returns_full_object(monkeypatch, tmp_path):
     assert body["injected"] == [{"memory_id": "m1", "token_estimate": None}]
     assert body["recalls"][0]["query"] == "why m1"
     assert body["recalls"][0]["memories"] == [{"memory_id": "m1", "score": 0.9}]
-    assert body["totals"] == {"recalls": 1, "injected": 1, "tokens": 15, "referenced": 0, "delivered": 1}
+    assert body["totals"] == {
+        "recalls": 1,
+        "injected": 1,
+        "tokens": 15,
+        "referenced": 0,
+        "delivered": 1,
+    }
     assert body["window"] == 5000
 
 
@@ -402,7 +420,13 @@ def _recall(session_id, project, memory_ids, observed_at):
     return _ev(
         "memory_recalled",
         project,
-        {"memory_ids": memory_ids, "session_id": session_id, "query": "q", "memories": [], "token_estimate": 10},
+        {
+            "memory_ids": memory_ids,
+            "session_id": session_id,
+            "query": "q",
+            "memories": [],
+            "token_estimate": 10,
+        },
         observed_at,
     )
 
@@ -412,7 +436,12 @@ def _summary_v2(session_id, project, delivered, referenced, observed_at):
     return _ev(
         "session_summary",
         project,
-        {"memory_ids": all_ids, "session_id": session_id, "delivered": delivered, "referenced": referenced},
+        {
+            "memory_ids": all_ids,
+            "session_id": session_id,
+            "delivered": delivered,
+            "referenced": referenced,
+        },
         observed_at,
     )
 

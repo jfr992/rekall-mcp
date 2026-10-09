@@ -372,15 +372,42 @@ MID_C = "2026-10-09_learning_cccc3333"
 def _transcript_lines():
     recall_use = {
         "type": "assistant",
-        "message": {"content": [{"type": "tool_use", "id": "t1", "name": "mcp__memory__recall_memories", "input": {"query": "x"}}]},
+        "message": {
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "t1",
+                    "name": "mcp__memory__recall_memories",
+                    "input": {"query": "x"},
+                }
+            ]
+        },
     }
     recall_result = {
         "type": "user",
-        "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": [{"type": "text", "text": f"- port 8000 (2026-10-09) [{MID_A}]\n- other (2026-10-09) [{MID_B}]"}]}]},
+        "message": {
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "t1",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"- port 8000 (2026-10-09) [{MID_A}]\n- other (2026-10-09) [{MID_B}]",
+                        }
+                    ],
+                }
+            ]
+        },
     }
     capsule = {
         "type": "attachment",
-        "attachment": {"type": "hook_additional_context", "content": [f"== REKALL STARTUP (p) ==\n- [2026-10-09] use uv [{MID_C}]\n== END REKALL STARTUP =="]},
+        "attachment": {
+            "type": "hook_additional_context",
+            "content": [
+                f"== REKALL STARTUP (p) ==\n- [2026-10-09] use uv [{MID_C}]\n== END REKALL STARTUP =="
+            ],
+        },
     }
     assistant_cites_a = {
         "type": "assistant",
@@ -388,12 +415,24 @@ def _transcript_lines():
     }
     bash_use = {
         "type": "assistant",
-        "message": {"content": [{"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": "echo hi"}}]},
+        "message": {
+            "content": [
+                {"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": "echo hi"}}
+            ]
+        },
     }
     # MID_B appears only inside a later tool_result: exposure, not a reference.
     bash_result = {
         "type": "user",
-        "message": {"content": [{"type": "tool_result", "tool_use_id": "t2", "content": [{"type": "text", "text": f"log mentions {MID_B}"}]}]},
+        "message": {
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "t2",
+                    "content": [{"type": "text", "text": f"log mentions {MID_B}"}],
+                }
+            ]
+        },
     }
     return [capsule, recall_use, recall_result, assistant_cites_a, bash_use, bash_result]
 
@@ -404,16 +443,32 @@ def _run_session_end(tmp_path: Path, lines: list[dict], tail_bytes: str | None =
     transcript.write_text("\n".join(json.dumps(line) for line in lines) + "\n")
     (tmp_path / "rekall-restored-sess-9").write_text("")
     env = os.environ.copy()
-    env.update({
-        "PATH": f"{fakebin}:{env['PATH']}",
-        "REKALL_API_URL": "http://rekall.test",
-        "REKALL_AUTOSAVE": "1",
-        "REKALL_MARKER_DIR": str(tmp_path),
-    })
+    env.update(
+        {
+            "PATH": f"{fakebin}:{env['PATH']}",
+            "REKALL_API_URL": "http://rekall.test",
+            "REKALL_AUTOSAVE": "1",
+            "REKALL_MARKER_DIR": str(tmp_path),
+        }
+    )
     if tail_bytes:
         env["REKALL_TRANSCRIPT_TAIL_BYTES"] = tail_bytes
-    payload = {"hook_event_name": "SessionEnd", "session_id": "sess-9", "cwd": str(tmp_path / "proj"), "transcript_path": str(transcript)}
-    r = subprocess.run(["bash", str(SESSION_END_HOOK)], input=json.dumps(payload), text=True, capture_output=True, env=env, cwd=tmp_path, timeout=10, check=False)
+    payload = {
+        "hook_event_name": "SessionEnd",
+        "session_id": "sess-9",
+        "cwd": str(tmp_path / "proj"),
+        "transcript_path": str(transcript),
+    }
+    r = subprocess.run(
+        ["bash", str(SESSION_END_HOOK)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        env=env,
+        cwd=tmp_path,
+        timeout=10,
+        check=False,
+    )
     body = json.loads(bodies.read_text().strip().splitlines()[-1]) if bodies.exists() else None
     return r, body
 
@@ -438,28 +493,55 @@ def test_session_end_marks_truncated_tail(tmp_path):
 
 
 def _tool_use(tool_id, name, tool_input=None):
-    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": tool_id, "name": name, "input": tool_input or {}}]}}
+    return {
+        "type": "assistant",
+        "message": {
+            "content": [
+                {"type": "tool_use", "id": tool_id, "name": name, "input": tool_input or {}}
+            ]
+        },
+    }
 
 
 def _tool_result(tool_id, text="ok"):
-    return {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": tool_id, "content": [{"type": "text", "text": text}]}]}}
+    return {
+        "type": "user",
+        "message": {
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": tool_id,
+                    "content": [{"type": "text", "text": text}],
+                }
+            ]
+        },
+    }
 
 
 def _capsule(mid):
     return {
         "type": "attachment",
-        "attachment": {"type": "hook_additional_context", "content": [f"== REKALL STARTUP (p) ==\n- note [{mid}]\n== END REKALL STARTUP =="]},
+        "attachment": {
+            "type": "hook_additional_context",
+            "content": [f"== REKALL STARTUP (p) ==\n- note [{mid}]\n== END REKALL STARTUP =="],
+        },
     }
 
 
 def test_session_end_capsule_does_not_start_edit_window(tmp_path):
-    cites_capsule = {"type": "assistant", "message": {"content": [{"type": "text", "text": f"Following {MID_C}."}]}}
+    cites_capsule = {
+        "type": "assistant",
+        "message": {"content": [{"type": "text", "text": f"Following {MID_C}."}]},
+    }
     lines = [
         _capsule(MID_C),
         cites_capsule,
-        _tool_use("e1", "Edit"), _tool_result("e1"),
-        _tool_use("r1", "mcp__memory__recall_memories", {"query": "x"}), _tool_result("r1", f"- a [{MID_A}]"),
-        _tool_use("e2", "Edit"), _tool_result("e2"),
+        _tool_use("e1", "Edit"),
+        _tool_result("e1"),
+        _tool_use("r1", "mcp__memory__recall_memories", {"query": "x"}),
+        _tool_result("r1", f"- a [{MID_A}]"),
+        _tool_use("e2", "Edit"),
+        _tool_result("e2"),
     ]
     r, body = _run_session_end(tmp_path, lines)
     assert r.returncode == 0
