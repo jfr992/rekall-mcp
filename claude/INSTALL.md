@@ -16,6 +16,7 @@ claude/
 │   ├── rekall-session-end.sh   SessionEnd — bounded recall-utility summary
 │   ├── memory-prune.sh         SessionStart — once-per-day debounced trigger for the gated superseded-prune
 │   ├── rekall-reflex.sh        PreToolUse (Bash) — cue-triggered recall before risky commands
+│   ├── rekall-provenance.sh    PreToolUse (mcp__memory__.*|mcp__rekall__.*) — fills cwd, session_id, agent
 │   └── session-start-memory.sh SessionStart — optional thin project capsule injection
 └── skills/
     ├── rekall-setup/SKILL.md       /rekall-setup             — re-run installer from inside Claude Code
@@ -38,7 +39,7 @@ bash claude/setup/install.sh
 What it does (all idempotent):
 - Preflight: checks `docker`, `jq`, `curl`, `python3`
 - Starts Qdrant + backend if not already running
-- Copies the 5 default hooks (`rekall-restore.sh`, `rekall-observe.sh`, `rekall-session-end.sh`, `memory-prune.sh`, `rekall-reflex.sh`) to `~/.claude/hooks/`
+- Copies the 6 default hooks (`rekall-restore.sh`, `rekall-observe.sh`, `rekall-session-end.sh`, `memory-prune.sh`, `rekall-reflex.sh`, `rekall-provenance.sh`) to `~/.claude/hooks/`
 - Backs up `~/.claude/settings.json` then merges `UserPromptSubmit`, `Stop`, `SessionEnd`, `SessionStart`, and `PreToolUse` (Bash) entries (deduped; repairs the reflex matcher and SessionEnd timeout in place)
 - Removes only exact obsolete Rekall-owned commands named `rekall-precompact.sh`, `rekall-postcompact.sh`, or `rekall-commit-nudge.sh`; foreign hooks and unrelated settings are preserved
 - Copies all 9 slash commands to `~/.claude/skills/`
@@ -145,6 +146,13 @@ The installer wires this command under `SessionEnd` with a three-second Claude t
 Cue-triggered recall before risky commands (`rm -rf`, `terraform`/`terragrunt`, `qdrant`/`memory sync`, hook/settings edits, `helm`/`k3s`). Fires on the Bash matcher, fetches a small `/api/memory/reflex` packet, and injects it as `additionalContext` — never blocks the tool call. Debounced once per cue group per session, including valid zero-hit responses. URL precedence is `REKALL_API_URL`, then legacy `REKALL_URL`, then `http://localhost:8000`.
 
 Kill switches: `REKALL_AUTOSAVE=0` (master) or `REKALL_REFLEX=0` (dedicated).
+
+### `rekall-provenance.sh` — PreToolUse (Rekall MCP tools)
+
+Matcher `mcp__memory__.*|mcp__rekall__.*`. For `recall_memories`, `observe`
+and `save_memory` it returns `updatedInput` with `cwd`, `session_id` and
+`agent: "claude-code"` filled in when the model omitted them. Never sets a
+permission decision. Other tools: no output. Kill switch `REKALL_AUTOSAVE=0`.
 
 ### `session-start-memory.sh` — SessionStart (opt-in)
 

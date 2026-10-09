@@ -112,7 +112,7 @@ Five default hooks ship in `claude/hooks/`. They're inert until installed at `~/
 
 **Installer ownership:** reinstall may remove only the exact obsolete Rekall basenames `rekall-precompact.sh`, `rekall-postcompact.sh`, and `rekall-commit-nudge.sh`. Preserve foreign hook commands, native Claude project memory, and unrelated top-level settings.
 
-**Tool namespace:** the running server registers as `rekall` (in the Claude Code MCP config), so tools are `mcp__rekall__*` — not `mcp__memory__*`. If you copy a hook from another project, namespace-patch first.
+**Tool namespace:** tool names are `mcp__<server>__<tool>` where `<server>` is whatever name the Claude Code MCP config registered (`memory` on the maintainer's machine, `rekall` in the shipped example). Hook matchers in this repo cover both: `mcp__memory__.*|mcp__rekall__.*`. If you copy a hook from another project, namespace-patch first.
 
 ## Branch + PR rules
 
