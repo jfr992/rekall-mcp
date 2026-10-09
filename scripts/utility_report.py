@@ -64,6 +64,8 @@ def build_session_summaries(events: list[dict]) -> list[dict]:
                 "recalled_ids": recalled,
                 "edits_after_recall": int(payload.get("edits_after_recall", 0)),
                 "test_passes_after_recall": int(payload.get("test_passes_after_recall", 0)),
+                "referenced": list(payload["referenced"]) if payload.get("referenced") is not None else None,
+                "delivered": payload.get("delivered") or {},
             }
         )
     return summaries
@@ -92,6 +94,10 @@ def collapse_sessions(summaries: list[dict]) -> list[dict]:
         all_ids: set[str] = set()
         for s in group:
             all_ids.update(s["recalled_ids"])
+        delivered_ids: set[str] = set()
+        for s in group:
+            for ids in (s.get("delivered") or {}).values():
+                delivered_ids.update(ids)
         collapsed.append(
             {
                 "session_id": first["session_id"],
@@ -99,33 +105,42 @@ def collapse_sessions(summaries: list[dict]) -> list[dict]:
                 "recalled_ids": sorted(all_ids),
                 "edits_after_recall": max(s["edits_after_recall"] for s in group),
                 "test_passes_after_recall": max(s["test_passes_after_recall"] for s in group),
+                "referenced": next((s["referenced"] for s in reversed(group) if s.get("referenced") is not None), None),
+                "delivered_ids": sorted(delivered_ids) if delivered_ids else sorted(all_ids),
             }
         )
     return collapsed
 
 
-def compute_utility_map(summaries: list[dict]) -> dict[str, float]:
-    """Per-memory utility = sessions_with_outcome / sessions_recalled.
-
-    Denominator: distinct sessions where the memory appeared in a
-    session_summary's recalled_ids.  Has-outcome: edits_after_recall > 0
-    OR test_passes_after_recall > 0.
-    """
+def compute_utility_map(summaries: list[dict]) -> dict[str, float | None]:
+    """Per-memory outcome credit requires the memory to be referenced; otherwise unknown (None)."""
     sessions_recalled: dict[str, set[str]] = defaultdict(set)
-    sessions_with_outcome: dict[str, set[str]] = defaultdict(set)
+    sessions_credited: dict[str, set[str]] = defaultdict(set)
+    ever_referenced: set[str] = set()
 
     for ss in summaries:
         sid = ss["session_id"] or ""
         has_outcome = ss["edits_after_recall"] > 0 or ss["test_passes_after_recall"] > 0
+        referenced = set(ss.get("referenced") or [])
         for mid in ss["recalled_ids"]:
             sessions_recalled[mid].add(sid)
-            if has_outcome:
-                sessions_with_outcome[mid].add(sid)
+            if mid in referenced:
+                ever_referenced.add(mid)
+                if has_outcome:
+                    sessions_credited[mid].add(sid)
 
     return {
-        mid: len(sessions_with_outcome.get(mid, set())) / len(sess_set)
+        mid: (len(sessions_credited.get(mid, set())) / len(sess_set)) if mid in ever_referenced else None
         for mid, sess_set in sessions_recalled.items()
     }
+
+
+def compute_citation_coverage(summaries: list[dict]) -> dict:
+    """Delivered vs referenced over collapsed sessions. Telemetry, not utility."""
+    measured = [ss for ss in summaries if ss.get("referenced") is not None]
+    delivered = sum(len(ss["delivered_ids"]) for ss in measured)
+    referenced = sum(len(set(ss["referenced"]) & set(ss["delivered_ids"])) for ss in measured)
+    return {"delivered": delivered, "referenced": referenced, "coverage": (referenced / delivered) if delivered else 0.0}
 
 
 def build_surfaced_counts(events: list[dict]) -> dict[str, int]:
@@ -200,29 +215,36 @@ def compute_null_baseline(
         return []
 
     null_sessions_recalled: dict[str, set[str]] = defaultdict(set)
-    null_sessions_outcome: dict[str, set[str]] = defaultdict(set)
+    null_sessions_credited: dict[str, set[str]] = defaultdict(set)
+    ever_referenced: set[str] = set()
 
     for ss in summaries:
         sid = ss["session_id"] or ""
         has_outcome = ss["edits_after_recall"] > 0 or ss["test_passes_after_recall"] > 0
+        referenced = set(ss.get("referenced") or [])
         for _ in ss["recalled_ids"]:
             null_mid = rng.choice(universe)
             null_sessions_recalled[null_mid].add(sid)
-            if has_outcome:
-                null_sessions_outcome[null_mid].add(sid)
+            if null_mid in referenced:
+                ever_referenced.add(null_mid)
+                if has_outcome:
+                    null_sessions_credited[null_mid].add(sid)
 
+    # same rule as compute_utility_map: never-referenced memories are unknown and excluded
     return [
-        len(null_sessions_outcome.get(mid, set())) / len(sess_set)
+        len(null_sessions_credited.get(mid, set())) / len(sess_set)
         for mid, sess_set in null_sessions_recalled.items()
+        if mid in ever_referenced
     ]
 
 
 def print_report(
-    utility_map: dict[str, float],
+    utility_map: dict[str, float | None],
     surfaced_counts: dict[str, int],
     null_utilities: list[float],
     progress: str,
     feedback_tallies: dict[str, dict[str, int]] | None = None,
+    citation_coverage: dict | None = None,
 ) -> None:
     """Print the full report to stdout."""
     print(f"Exit criterion: {progress}")
@@ -233,10 +255,13 @@ def print_report(
     print("Recall Utility — heuristic co-occurrence (denominator: distinct sessions with recall)")
     if utility_map:
         print(f"  {'memory_id':<45} {'utility':>7}")
-        for mid, u in sorted(utility_map.items(), key=lambda kv: -kv[1]):
-            print(f"  {mid:<45} {u:>7.3f}")
+        for mid, u in sorted(utility_map.items(), key=lambda kv: (kv[1] is None, -(kv[1] or 0.0))):
+            print(f"  {mid:<45} {'unknown' if u is None else f'{u:.3f}':>7}")
     else:
         print("  (no session_summary data)")
+    if citation_coverage is not None:
+        c = citation_coverage
+        print(f"Citation coverage: {c['referenced']}/{c['delivered']} ({c['coverage']:.0%})")
     print()
 
     print("Labeled evidence — memory_feedback verdicts")
@@ -248,15 +273,18 @@ def print_report(
         print("  (no feedback events)")
     print()
 
-    real_vals = list(utility_map.values())
+    real_vals = [u for u in utility_map.values() if u is not None]
     mean_real = _mean(real_vals)
     mean_null = _mean(null_utilities)
     delta = mean_real - mean_null
     sign = "+" if delta >= 0 else ""
-    print(
-        f"Null baseline: mean_real={mean_real:.3f}  "
-        f"mean_null={mean_null:.3f}  (delta={sign}{delta:.3f})"
-    )
+    if real_vals and null_utilities:
+        print(
+            f"Null baseline: mean_real={mean_real:.3f}  "
+            f"mean_null={mean_null:.3f}  (delta={sign}{delta:.3f})"
+        )
+    else:
+        print("Null baseline: n/a (no referenced memories to compare)")
     if null_utilities and real_vals:
         std_null = _stddev(null_utilities)
         threshold = mean_null + 2 * std_null
@@ -308,7 +336,9 @@ def main(argv=None) -> None:
     progress = progress_line(summaries)
     feedback_tallies = build_feedback_tallies(events)
 
-    print_report(utility_map, surfaced_counts, null_utilities, progress, feedback_tallies)
+    print_report(
+        utility_map, surfaced_counts, null_utilities, progress, feedback_tallies, compute_citation_coverage(summaries)
+    )
 
 
 if __name__ == "__main__":

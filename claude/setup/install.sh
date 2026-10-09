@@ -135,7 +135,7 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     step "Installing hooks → ~/.claude/hooks/"
     mkdir -p "$HOME/.claude/hooks"
 
-    HOOKS=(rekall-restore.sh rekall-observe.sh rekall-session-end.sh memory-prune.sh rekall-reflex.sh)
+    HOOKS=(rekall-restore.sh rekall-observe.sh rekall-session-end.sh memory-prune.sh rekall-reflex.sh rekall-provenance.sh)
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         HOOKS+=(session-start-memory.sh)
     fi
@@ -179,12 +179,13 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     SESSION_END_CMD="$HOME/.claude/hooks/rekall-session-end.sh"
     PRUNE_CMD="$HOME/.claude/hooks/memory-prune.sh"
     REFLEX_CMD="$HOME/.claude/hooks/rekall-reflex.sh"
+    PROV_CMD="$HOME/.claude/hooks/rekall-provenance.sh"
     START_CMD=""
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         START_CMD="$HOME/.claude/hooks/session-start-memory.sh"
     fi
 
-    /usr/bin/python3 - "$SETTINGS" "$REST_CMD" "$OBS_CMD" "$SESSION_END_CMD" "$PRUNE_CMD" "$REFLEX_CMD" "$START_CMD" <<'PY'
+    /usr/bin/python3 - "$SETTINGS" "$REST_CMD" "$OBS_CMD" "$SESSION_END_CMD" "$PRUNE_CMD" "$REFLEX_CMD" "$PROV_CMD" "$START_CMD" <<'PY'
 import json
 import os
 import shlex
@@ -197,6 +198,7 @@ import sys
     session_end_cmd,
     prune_cmd,
     reflex_cmd,
+    prov_cmd,
     start_cmd,
 ) = sys.argv[1:]
 with open(path) as f:
@@ -298,6 +300,10 @@ record(
 )
 record(ensure_event_hook("SessionStart", prune_cmd), "SessionStart → memory-prune.sh")
 record(ensure_event_hook("PreToolUse", reflex_cmd, matcher="Bash"), "PreToolUse → rekall-reflex.sh")
+record(
+    ensure_event_hook("PreToolUse", prov_cmd, matcher="mcp__memory__.*|mcp__rekall__.*"),
+    "PreToolUse → rekall-provenance.sh",
+)
 if start_cmd:
     record(ensure_event_hook("SessionStart", start_cmd), "SessionStart → session-start-memory.sh")
 
@@ -357,6 +363,7 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     [[ -f "$HOME/.claude/hooks/rekall-session-end.sh" ]] && ok "rekall-session-end.sh in place" || warn "rekall-session-end.sh missing"
     [[ -f "$HOME/.claude/hooks/memory-prune.sh" ]]   && ok "memory-prune.sh in place"   || warn "memory-prune.sh missing"
     [[ -f "$HOME/.claude/hooks/rekall-reflex.sh" ]]  && ok "rekall-reflex.sh in place"  || warn "rekall-reflex.sh missing"
+    [[ -f "$HOME/.claude/hooks/rekall-provenance.sh" ]] && ok "rekall-provenance.sh in place" || warn "rekall-provenance.sh missing"
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         [[ -f "$HOME/.claude/hooks/session-start-memory.sh" ]] && ok "session-start-memory.sh in place" || warn "session-start-memory.sh missing"
     fi

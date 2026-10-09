@@ -16,6 +16,7 @@ claude/
 │   ├── rekall-session-end.sh   SessionEnd — bounded recall-utility summary
 │   ├── memory-prune.sh         SessionStart — once-per-day debounced trigger for the gated superseded-prune
 │   ├── rekall-reflex.sh        PreToolUse (Bash) — cue-triggered recall before risky commands
+│   ├── rekall-provenance.sh    PreToolUse (mcp__memory__.*|mcp__rekall__.*) — fills cwd, session_id, agent
 │   └── session-start-memory.sh SessionStart — optional thin project capsule injection
 └── skills/
     ├── rekall-setup/SKILL.md       /rekall-setup             — re-run installer from inside Claude Code
@@ -38,8 +39,8 @@ bash claude/setup/install.sh
 What it does (all idempotent):
 - Preflight: checks `docker`, `jq`, `curl`, `python3`
 - Starts Qdrant + backend if not already running
-- Copies the 5 default hooks (`rekall-restore.sh`, `rekall-observe.sh`, `rekall-session-end.sh`, `memory-prune.sh`, `rekall-reflex.sh`) to `~/.claude/hooks/`
-- Backs up `~/.claude/settings.json` then merges `UserPromptSubmit`, `Stop`, `SessionEnd`, `SessionStart`, and `PreToolUse` (Bash) entries (deduped; repairs the reflex matcher and SessionEnd timeout in place)
+- Copies the 6 default hooks (`rekall-restore.sh`, `rekall-observe.sh`, `rekall-session-end.sh`, `memory-prune.sh`, `rekall-reflex.sh`, `rekall-provenance.sh`) to `~/.claude/hooks/`
+- Backs up `~/.claude/settings.json` then merges `UserPromptSubmit`, `Stop`, `SessionEnd`, `SessionStart`, and both `PreToolUse` entries (Bash for reflex, `mcp__memory__.*|mcp__rekall__.*` for provenance; deduped; repairs the reflex matcher and SessionEnd timeout in place)
 - Removes only exact obsolete Rekall-owned commands named `rekall-precompact.sh`, `rekall-postcompact.sh`, or `rekall-commit-nudge.sh`; foreign hooks and unrelated settings are preserved
 - Copies all 9 slash commands to `~/.claude/skills/`
 - Verifies backend health + reports memory count
@@ -146,6 +147,13 @@ Cue-triggered recall before risky commands (`rm -rf`, `terraform`/`terragrunt`, 
 
 Kill switches: `REKALL_AUTOSAVE=0` (master) or `REKALL_REFLEX=0` (dedicated).
 
+### `rekall-provenance.sh` — PreToolUse (Rekall MCP tools)
+
+Matcher `mcp__memory__.*|mcp__rekall__.*`. For `recall_memories`, `observe`
+and `save_memory` it returns `updatedInput` with `cwd`, `session_id` and
+`agent: "claude-code"` filled in when the model omitted them. Never sets a
+permission decision. Other tools: no output. Kill switch `REKALL_AUTOSAVE=0`.
+
 ### `session-start-memory.sh` — SessionStart (opt-in)
 
 Installs only when you pass `--install-startup-capsule`. It reads Claude Code's SessionStart JSON from stdin, infers the project from `cwd` or `project_dir`, calls `/api/memory/capsule` first, and falls back to `/api/memory/context/startup`.
@@ -154,7 +162,7 @@ It prints a thin JSON packet with `hookSpecificOutput.hookEventName = "SessionSt
 
 ## Settings example
 
-See `claude/settings.example.json` for a copy-pastable JSON snippet wiring the default hooks. `Stop`, `SessionEnd`, `UserPromptSubmit`, and the opt-in `SessionStart` hook don't need a matcher; `rekall-reflex.sh` requires `"matcher": "Bash"` under `PreToolUse`.
+See `claude/settings.example.json` for a copy-pastable JSON snippet wiring the default hooks. `Stop`, `SessionEnd`, `UserPromptSubmit`, and the opt-in `SessionStart` hook don't need a matcher; both PreToolUse hooks need a matcher: `rekall-reflex.sh` uses `"Bash"` and `rekall-provenance.sh` uses `"mcp__memory__.*|mcp__rekall__.*"`.
 
 ## Uninstall
 

@@ -166,6 +166,8 @@ def build_project_capsule(
 
 def render_project_capsule(capsule: dict[str, Any]) -> str:
     lines = [f"# Project Capsule: {capsule['project']}", ""]
+    budget = _MAX_RENDER_CHARS - 40  # headroom so the final id is never cut
+    used = sum(len(line) + 1 for line in lines)
 
     sections = [
         ("Standing Context", "standing_context"),
@@ -177,11 +179,27 @@ def render_project_capsule(capsule: dict[str, Any]) -> str:
         if not items:
             continue
         lines.append(f"## {title}")
+        used += len(title) + 4
         for item in items:
-            lines.append(f"- [{item.get('date', 'unknown')}] {item.get('content', '')}")
+            tag = f" [{item['memory_id']}]" if item.get("memory_id") else ""
+            head = f"- [{item.get('date', 'unknown')}] "
+            room = budget - used - len(head) - len(tag)
+            if room <= 0:
+                break
+            content = str(item.get("content", ""))
+            if len(content) > room:
+                content = content[: max(room - 3, 0)].rstrip() + "..."
+            line = f"{head}{content}{tag}"
+            lines.append(line)
+            used += len(line) + 1
         lines.append("")
 
     text = "\n".join(lines).strip() + "\n"
-    if len(text) <= _MAX_RENDER_CHARS:
-        return text
-    return text[: _MAX_RENDER_CHARS - 4].rstrip() + "...\n"
+    if len(text) > _MAX_RENDER_CHARS:
+        kept = text.splitlines()
+        while kept and len("\n".join(kept)) + 1 > _MAX_RENDER_CHARS:
+            kept.pop()
+        while kept and (not kept[-1].strip() or kept[-1].startswith("## ")):
+            kept.pop()
+        text = "\n".join(kept) + "\n"
+    return text

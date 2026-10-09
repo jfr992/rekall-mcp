@@ -166,7 +166,44 @@ def test_session_summary_recall_edits_tests(hook_module):
         "recalled_ids": ["m1", "m2"],
         "edits_after_recall": 1,
         "test_passes_after_recall": 1,
+        "client": "codex",
+        "delivered": {"explicit": ["m1", "m2"]},
+        "referenced": [],
+        "coverage": {"transcript_tail_bytes": hook_module._MAX_TRANSCRIPT_BYTES, "truncated": False},
     }
+
+
+def test_summarize_session_reports_delivered_and_referenced(hook_module):
+    mid_a = "2026-10-09_fact_aaaa1111"
+    mid_b = "2026-10-09_decision_bbbb2222"
+
+    def call(call_id, name, arguments):
+        return json.dumps(
+            {"type": "tool_call", "call_id": call_id, "tool_name": name, "arguments": arguments}
+        )
+
+    def result(call_id, content):
+        return json.dumps({"type": "tool_result", "call_id": call_id, "content": content})
+
+    lines = [
+        call("c1", "recall_memories", {"query": "x"}),
+        result("c1", f"- a (2026-10-09) [{mid_a}]\n- b (2026-10-09) [{mid_b}]"),
+        json.dumps(
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": f"Using {mid_a}: port is 8000."}],
+            }
+        ),
+        call("c2", "shell", {"command": "echo hi"}),
+        result("c2", f"unrelated {mid_b}"),
+    ]
+    summary = hook_module.summarize_session({"session_id": "s1", "cwd": "/tmp/proj"}, lines)
+    assert summary["client"] == "codex"
+    assert summary["delivered"] == {"explicit": [mid_a, mid_b]}
+    assert summary["referenced"] == [mid_a]
+    assert summary["recalled_ids"] == [mid_a, mid_b]
+    assert summary["coverage"]["truncated"] is False
 
 
 def test_missing_malformed_and_fail_open(hook_module, tmp_path):
@@ -410,6 +447,10 @@ def test_session_summary_correlates_call_outputs(hook_module):
         "recalled_ids": ["2026-08-23_learning_abc12345"],
         "edits_after_recall": 1,
         "test_passes_after_recall": 1,
+        "client": "codex",
+        "delivered": {"explicit": ["2026-08-23_learning_abc12345"]},
+        "referenced": [],
+        "coverage": {"transcript_tail_bytes": hook_module._MAX_TRANSCRIPT_BYTES, "truncated": False},
     }
 
 
@@ -584,4 +625,42 @@ def test_bounded_lines_rejects_symlink(hook_module, tmp_path):
     target.write_text('{"secret":"SENTINEL"}\n')
     link = tmp_path / "link"
     link.symlink_to(target)
-    assert hook_module._bounded_lines(str(link)) == []
+    assert hook_module._bounded_lines(str(link)) == ([], False)
+
+
+def test_bounded_lines_reports_truncation(hook_module, tmp_path, monkeypatch):
+    monkeypatch.setattr(hook_module, "_MAX_TRANSCRIPT_BYTES", 64)
+    big = tmp_path / "big.jsonl"
+    big.write_text("\n".join(json.dumps({"n": i}) for i in range(40)) + "\n")
+    small = tmp_path / "small.jsonl"
+    small.write_text('{"n":1}\n')
+    assert hook_module._bounded_lines(str(big))[1] is True
+    assert hook_module._bounded_lines(str(small)) == (['{"n":1}'], False)
+
+
+def test_summary_coverage_carries_truncated(hook_module):
+    lines = [
+        json.dumps({"type": "tool_call", "call_id": "c1", "tool_name": "recall_memories", "arguments": {}}),
+        json.dumps({"type": "tool_result", "call_id": "c1", "content": "- a [2026-10-09_fact_aaaa1111]"}),
+    ]
+    payload = {"session_id": "s", "cwd": "/r"}
+    assert hook_module.summarize_session(payload, lines, truncated=True)["coverage"]["truncated"] is True
+    assert hook_module.summarize_session(payload, lines)["coverage"]["truncated"] is False
+
+
+def test_referenced_is_subset_of_delivered_when_recalls_exceed_cap(hook_module):
+    ids = [f"2026-10-09_fact_{n:08x}" for n in range(40)]
+    lines = [
+        json.dumps({"type": "tool_call", "call_id": "c1", "tool_name": "recall_memories", "arguments": {}}),
+        json.dumps({"type": "tool_result", "call_id": "c1", "content": "\n".join(f"- x [{i}]" for i in ids)}),
+        json.dumps(
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": f"Using {ids[0]} and {ids[39]}."}],
+            }
+        ),
+    ]
+    summary = hook_module.summarize_session({"session_id": "s", "cwd": "/r"}, lines)
+    assert summary["referenced"] == [ids[0]]
+    assert set(summary["referenced"]) <= set(summary["delivered"]["explicit"])

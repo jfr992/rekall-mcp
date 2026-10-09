@@ -67,7 +67,7 @@ The MCP server alone gives Claude memory *tools*; the hooks make memory *automat
 bash claude/setup/install.sh
 ```
 
-Idempotent, backs up `~/.claude/settings.json` first. It wires five hooks and nine slash commands:
+Idempotent, backs up `~/.claude/settings.json` first. It wires six hooks and nine slash commands:
 
 | Hook | Event | What it does | Kill switch |
 |---|---|---|---|
@@ -75,9 +75,10 @@ Idempotent, backs up `~/.claude/settings.json` first. It wires five hooks and ni
 | `rekall-observe.sh` | Stop | gated, safe-mode Haiku judge auto-saves durable observations | `REKALL_AUTOSAVE=0` |
 | `rekall-session-end.sh` | SessionEnd | bounded, content-free recall-utility summary (feeds reinforcement) | `REKALL_AUTOSAVE=0` |
 | `rekall-reflex.sh` | PreToolUse (Bash) | surfaces relevant memories before risky commands | `REKALL_REFLEX=0` |
+| `rekall-provenance.sh` | PreToolUse (Rekall MCP tools) | fills `cwd`, `session_id`, `agent` on `recall_memories`/`observe`/`save_memory` when omitted | `REKALL_AUTOSAVE=0` |
 | `memory-prune.sh` | SessionStart | daily gated prune housekeeping | `REKALL_AUTOSAVE=0` |
 
-Optional sixth (manual, injects a thin project capsule at session start): `cp claude/hooks/session-start-memory.sh ~/.claude/hooks/` + a SessionStart entry — see [`claude/INSTALL.md`](claude/INSTALL.md).
+Optional seventh (manual, injects a thin project capsule at session start): `cp claude/hooks/session-start-memory.sh ~/.claude/hooks/` + a SessionStart entry — see [`claude/INSTALL.md`](claude/INSTALL.md).
 
 Using profiles (`CLAUDE_CONFIG_DIR`)? The installer targets `~/.claude`; repeat the settings entries in each profile's `settings.json` (hook files can be shared by absolute path).
 
@@ -218,8 +219,8 @@ bash claude/setup/install.sh
 
 Idempotent, backs up your existing `~/.claude/settings.json` first. It:
 
-- copies five hooks to `~/.claude/hooks/` (`rekall-restore`, `rekall-observe`, `rekall-session-end`, `rekall-reflex`, `memory-prune`)
-- merges `UserPromptSubmit`, `Stop`, `SessionEnd`, `SessionStart`, and `PreToolUse` (Bash matcher) entries into `~/.claude/settings.json` (deduped; repairs a wrong/missing reflex matcher and removes only obsolete Rekall-owned lifecycle entries)
+- copies six hooks to `~/.claude/hooks/` (`rekall-restore`, `rekall-observe`, `rekall-session-end`, `rekall-reflex`, `rekall-provenance`, `memory-prune`)
+- merges `UserPromptSubmit`, `Stop`, `SessionEnd`, `SessionStart`, and `PreToolUse` (Bash and Rekall-MCP matchers) entries into `~/.claude/settings.json` (deduped; repairs a wrong/missing reflex matcher and removes only obsolete Rekall-owned lifecycle entries)
 - copies all nine slash commands to `~/.claude/skills/`
 - verifies backend health
 
@@ -231,6 +232,7 @@ Idempotent, backs up your existing `~/.claude/settings.json` first. It:
 - **`rekall-observe.sh`** (Stop) — a Haiku judge that auto-saves durable observations, gated by cheap signal detection (durability keywords, new git commits, or session length) so it doesn't fire on every turn. The nested judge runs in safe mode at low effort with no tools or session persistence. Kill switch: `REKALL_AUTOSAVE=0`.
 - **`rekall-session-end.sh`** (SessionEnd) — reads a bounded transcript tail (default 1 MiB), correlates recalled IDs with later edits/test passes, and posts one IDs-and-counts-only event. No transcript content is sent.
 - **`rekall-reflex.sh`** (PreToolUse, Bash) — surfaces relevant memories before risky commands (destructive ops, IaC, memory-data, hooks, helm). A local word-boundary cue match gates the fetch (no network on a miss), debounced once per session per cue even on a zero-hit response. On a match it does a bounded `curl` (0.1s connect / 1s total) to `/api/memory/reflex` and injects a capped, untrusted-framed packet as `additionalContext`. It never blocks the tool call — every failure path exits 0. `REKALL_API_URL` takes precedence over the legacy `REKALL_URL`. Kill switches: `REKALL_AUTOSAVE=0` (master) or `REKALL_REFLEX=0` (dedicated).
+- **`rekall-provenance.sh`** (PreToolUse, `mcp__memory__.*|mcp__rekall__.*`) — for `recall_memories`, `observe`, and `save_memory` it fills `cwd`, `session_id`, and `agent` through `updatedInput` when the caller omitted them, so saves land in the right project and recalls attribute to the session. It never sets a permission decision and every failure path exits 0. Kill switch: `REKALL_AUTOSAVE=0`.
 - **`memory-prune.sh`** (SessionStart) — runs gated superseded-memory housekeeping at most once per day.
 
 ### Slash commands (manual, not auto-triggering)
@@ -499,7 +501,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/publish` | GET, POST | Export memory to an OKF v0.1 bundle (`mode=preview\|tar\|dir`) |
 | `/api/memory/publish/synthesize` | POST | Start (or report) a background LLM synthesis job for a project scope |
 | `/api/memory/publish/status` | GET | Poll a synthesis job's progress |
-| `/api/memory/events` | GET, POST | GET: cursor-paginated event feed (`cursor=&limit=`, truncation-safe); POST: append a client-side session-summary event |
+| `/api/memory/events` | GET, POST | GET: cursor-paginated event feed (`cursor=&limit=`, truncation-safe); POST: append a client-side session-summary event (optional: client, delivered{surface: ids}, referenced, coverage) |
 | `/api/memory/review` | POST | Record a review verdict (`keep\|fix\|kill`; kill deletes then records, fix is 501 until U3) |
 | `/api/memory/sessions` | GET | Session transparency list folded from events (`?limit=`; `?project=` scopes to one project incl. its unattributed bucket, absent or `all` = every project; `after`/`before` are inclusive `YYYY-MM-DD` day bounds on each session's last activity; `window` = event-tail cap; `event_window.oldest_at` marks where the fold truncates; emits a `view_opened` counter) |
 | `/api/memory/sessions/{id}` | GET | Full session detail: injected memories + recall cards with scores; unattributed recalls under `unattributed:<project>` |

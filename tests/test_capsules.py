@@ -179,6 +179,31 @@ def test_render_project_capsule_is_thin():
     assert len(text) < 2000
 
 
+def test_render_project_capsule_stays_within_budget_and_keeps_ids(monkeypatch):
+    import memory.capsules as capsules
+    from memory.capsules import render_project_capsule
+
+    monkeypatch.setattr(capsules, "_MAX_RENDER_CHARS", 60)
+
+    def item(n):
+        return [
+            {"content": "x" * 1700, "date": "2026-07-01", "memory_id": f"2026-07-01_fact_{n:08x}"}
+        ]
+
+    text = render_project_capsule(
+        {
+            "project": "p",
+            "standing_context": item(1),
+            "danger_zones": item(2),
+            "open_loops": item(3),
+        }
+    )
+
+    assert len(text) <= 60
+    bullets = [line for line in text.splitlines() if line.startswith("- ")]
+    assert all(line.endswith("]") for line in bullets)
+
+
 # ---------------------------------------------------------------------------
 # New tests — routing contract
 # ---------------------------------------------------------------------------
@@ -419,6 +444,44 @@ def test_build_capsule_retains_entities_field(capsule_manager):
     capsule = build_project_capsule(manager, "test")
 
     assert "entities" in capsule, "entities field must survive in capsule dict"
+
+
+def test_render_project_capsule_prints_memory_id():
+    from memory.capsules import render_project_capsule
+
+    text = render_project_capsule(
+        {
+            "project": "p",
+            "standing_context": [
+                {
+                    "memory_id": "2026-10-09_decision_ab12cd34",
+                    "date": "2026-10-09",
+                    "content": "use uv",
+                }
+            ],
+            "danger_zones": [],
+            "open_loops": [],
+        }
+    )
+    assert "- [2026-10-09] use uv [2026-10-09_decision_ab12cd34]" in text
+
+
+def test_render_project_capsule_truncation_keeps_last_id_whole():
+    from memory.capsules import _MAX_RENDER_CHARS, render_project_capsule
+
+    long = "x" * _MAX_RENDER_CHARS
+    text = render_project_capsule(
+        {
+            "project": "p",
+            "standing_context": [
+                {"memory_id": "2026-10-09_decision_ab12cd34", "date": "2026-10-09", "content": long}
+            ],
+            "danger_zones": [],
+            "open_loops": [],
+        }
+    )
+    assert len(text) <= _MAX_RENDER_CHARS
+    assert text.rstrip().endswith("[2026-10-09_decision_ab12cd34]")
 
 
 @pytest.mark.parametrize(

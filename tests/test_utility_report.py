@@ -9,19 +9,24 @@ import json
 import pytest
 
 
-def _ss(session_id, project, recalled_ids, edits=0, test_passes=0, eid="ev0"):
+def _ss(session_id, project, recalled_ids, edits=0, test_passes=0, eid="ev0", referenced=None, delivered=None):
+    payload = {
+        "edits_after_recall": edits,
+        "memory_ids": recalled_ids,
+        "session_id": session_id,
+        "test_passes_after_recall": test_passes,
+    }
+    if referenced is not None:
+        payload["referenced"] = referenced
+    if delivered is not None:
+        payload["delivered"] = delivered
     return json.dumps(
         {
             "agent": "unknown",
             "event_id": eid,
             "event_type": "session_summary",
             "observed_at": "2026-07-03T10:00:00",
-            "payload": {
-                "edits_after_recall": edits,
-                "memory_ids": recalled_ids,
-                "session_id": session_id,
-                "test_passes_after_recall": test_passes,
-            },
+            "payload": payload,
             "project": project,
             "source": "client",
         }
@@ -175,7 +180,7 @@ def test_compute_utility_map_two_thirds():
     ]
     utility = compute_utility_map(summaries)
     assert "mem-x" in utility
-    assert abs(utility["mem-x"] - 2 / 3) < 0.001
+    assert utility["mem-x"] is None  # never referenced: unknown, not credited
 
 
 def test_utility_two_thirds(tmp_path):
@@ -199,7 +204,7 @@ def test_utility_two_thirds(tmp_path):
     utility = compute_utility_map(summaries)
 
     assert "mem-x" in utility
-    assert abs(utility["mem-x"] - 2 / 3) < 0.001
+    assert utility["mem-x"] is None  # never referenced: unknown, not credited
 
 
 def test_main_prints_utility_value(tmp_path, capsys):
@@ -221,8 +226,9 @@ def test_main_prints_utility_value(tmp_path, capsys):
     main(["--events-file", str(f)])
 
     out = capsys.readouterr().out
-    assert "0.667" in out
     assert "mem-x" in out
+    assert "unknown" in out
+    assert "Recall Utility" in out and "mem-x                                         0." not in out
 
 
 def test_main_surfaced_only_in_coverage_output(tmp_path, capsys):
@@ -391,8 +397,8 @@ def test_utility_uses_collapsed_outcomes():
     utility = compute_utility_map(collapse_sessions(summaries))
 
     # s1 outcome yes (test_passes=1 via second Stop fire), s2 outcome no
-    assert abs(utility["mem-x"] - 0.5) < 0.001
-    assert abs(utility["mem-y"] - 1.0) < 0.001
+    assert utility["mem-x"] is None  # never referenced: unknown, not credited
+    assert utility["mem-y"] is None
 
 
 def _fb(memory_id, verdict, project="proj-a", eid="ev-f", session_id=None):
@@ -539,3 +545,188 @@ def test_main_pairs_collapsed_in_output(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "pairs=3" in out
     assert "sessions=2" in out
+
+
+def test_unreferenced_memory_is_unknown_not_credited(tmp_path):
+    from scripts.utility_report import (
+        build_session_summaries,
+        collapse_sessions,
+        compute_utility_map,
+        parse_events,
+    )
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(_ss("sess-1", "p", ["mem-x", "mem-y"], edits=2, referenced=["mem-x"]) + "\n")
+    umap = compute_utility_map(collapse_sessions(build_session_summaries(parse_events(f))))
+    assert umap["mem-x"] == 1.0
+    assert umap["mem-y"] is None
+
+
+def test_legacy_summary_without_referenced_is_unknown(tmp_path):
+    from scripts.utility_report import (
+        build_session_summaries,
+        collapse_sessions,
+        compute_utility_map,
+        parse_events,
+    )
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(_ss("sess-1", "p", ["mem-x"], edits=2) + "\n")
+    umap = compute_utility_map(collapse_sessions(build_session_summaries(parse_events(f))))
+    assert umap["mem-x"] is None
+
+
+def test_citation_coverage_counts_over_collapsed_sessions(tmp_path):
+    from scripts.utility_report import (
+        build_session_summaries,
+        collapse_sessions,
+        compute_citation_coverage,
+        parse_events,
+    )
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(
+        _ss("s1", "p", ["a", "b"], referenced=["a"], delivered={"explicit": ["a", "b"]})
+        + "\n"
+        + _ss("s1", "p", ["a", "b"], referenced=["a", "b"], delivered={"explicit": ["a", "b"]}, eid="ev1")
+        + "\n"
+        + _ss("s2", "p", ["c"], referenced=[], delivered={"capsule": ["c"]}, eid="ev2")
+        + "\n"
+    )
+    cov = compute_citation_coverage(collapse_sessions(build_session_summaries(parse_events(f))))
+    assert cov == {"delivered": 3, "referenced": 2, "coverage": pytest.approx(2 / 3)}
+
+
+def test_citation_coverage_excludes_sessions_without_referenced(tmp_path):
+    from scripts.utility_report import (
+        build_session_summaries,
+        collapse_sessions,
+        compute_citation_coverage,
+        parse_events,
+    )
+
+    f = tmp_path / "_events.jsonl"
+    legacy = json.loads(_ss("legacy", "p", ["x", "y"], eid="e0"))
+    legacy["payload"]["referenced"] = None
+    legacy["payload"]["delivered"] = None
+    f.write_text(
+        json.dumps(legacy)
+        + "\n"
+        + _ss("v2", "p", ["a", "b"], referenced=["a"], delivered={"explicit": ["a", "b"]}, eid="e1")
+        + "\n"
+    )
+    cov = compute_citation_coverage(collapse_sessions(build_session_summaries(parse_events(f))))
+    assert cov == {"delivered": 2, "referenced": 1, "coverage": pytest.approx(0.5)}
+
+
+def test_collapse_takes_latest_summary_that_has_referenced(tmp_path):
+    from scripts.utility_report import build_session_summaries, collapse_sessions, parse_events
+
+    f = tmp_path / "_events.jsonl"
+    late_legacy = json.loads(_ss("s1", "p", ["a"], eid="e2"))
+    late_legacy["payload"]["referenced"] = None
+    f.write_text(_ss("s1", "p", ["a"], referenced=["a"], eid="e1") + "\n" + json.dumps(late_legacy) + "\n")
+    (collapsed,) = collapse_sessions(build_session_summaries(parse_events(f)))
+    assert collapsed["referenced"] == ["a"]
+
+
+def test_unknown_utility_rows_sort_last(tmp_path, capsys):
+    from scripts.utility_report import main
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(_ss("s1", "p", ["a", "b"], edits=0, referenced=["b"]) + "\n")
+    main(["--events-file", str(f)])
+    out = capsys.readouterr().out
+    assert out.index("  b ") < out.index("  a ")
+
+
+def test_report_prints_citation_coverage_not_used(tmp_path, capsys):
+    from scripts.utility_report import main
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(_ss("s1", "p", ["a"], referenced=["a"], delivered={"explicit": ["a"]}) + "\n")
+    main(["--events-file", str(f)])
+    out = capsys.readouterr().out
+    assert "Citation coverage: 1/1 (100%)" in out
+    assert " used" not in out.lower()
+
+
+def test_report_prints_unknown_for_unreferenced(tmp_path, capsys):
+    from scripts.utility_report import main
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(_ss("s1", "p", ["a", "b"], edits=1, referenced=["a"]) + "\n")
+    main(["--events-file", str(f)])
+    out = capsys.readouterr().out
+    assert "unknown" in out
+
+
+def test_referenced_outcome_ratio_two_thirds(tmp_path):
+    from scripts.utility_report import (
+        build_session_summaries,
+        collapse_sessions,
+        compute_utility_map,
+        parse_events,
+    )
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(
+        "\n".join(
+            [
+                _ss("s1", "p", ["mem-x"], edits=1, referenced=["mem-x"], eid="e1"),
+                _ss("s2", "p", ["mem-x"], referenced=["mem-x"], eid="e2"),
+                _ss("s3", "p", ["mem-x"], test_passes=1, referenced=["mem-x"], eid="e3"),
+            ]
+        )
+        + "\n"
+    )
+    umap = compute_utility_map(collapse_sessions(build_session_summaries(parse_events(f))))
+    assert umap["mem-x"] == pytest.approx(2 / 3)
+
+
+def test_null_baseline_legacy_has_no_delta(tmp_path, capsys):
+    import random
+
+    from scripts.utility_report import (
+        build_session_summaries,
+        build_universe,
+        collapse_sessions,
+        compute_null_baseline,
+        main,
+        parse_events,
+    )
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(_ss("s1", "p", ["a", "b"], edits=1) + "\n" + _ss("s2", "p", ["a"], edits=1, eid="e2") + "\n")
+    events = parse_events(f)
+    summaries = collapse_sessions(build_session_summaries(events))
+    assert compute_null_baseline(summaries, build_universe(events), random.Random(42)) == []
+    main(["--events-file", str(f)])
+    out = capsys.readouterr().out
+    assert "delta=" not in out
+    assert "Null baseline: n/a" in out
+
+
+def test_null_baseline_not_above_real_when_references_align(tmp_path):
+    import random
+    from statistics import mean
+
+    from scripts.utility_report import (
+        build_session_summaries,
+        build_universe,
+        collapse_sessions,
+        compute_null_baseline,
+        compute_utility_map,
+        parse_events,
+    )
+
+    f = tmp_path / "_events.jsonl"
+    lines = [_ss("s1", "p", ["a"], edits=1, referenced=["a"], eid="e1"), _ss("s2", "p", ["a"], edits=1, referenced=["a"], eid="e2")]
+    lines += [_ss(f"n{i}", "p", ["b"], referenced=[], eid=f"n{i}") for i in range(4)]
+    f.write_text("\n".join(lines) + "\n")
+    events = parse_events(f)
+    summaries = collapse_sessions(build_session_summaries(events))
+    real = [u for u in compute_utility_map(summaries).values() if u is not None]
+    null = compute_null_baseline(summaries, build_universe(events), random.Random(42))
+    assert real and null
+    assert mean(null) <= mean(real)

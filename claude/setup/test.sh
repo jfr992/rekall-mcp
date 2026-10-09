@@ -67,7 +67,7 @@ SESSION_END_TIMEOUT=$(jq -r '.hooks.SessionEnd[0].hooks[0].timeout' "$H/.claude/
 [[ "$SESSION_END_TIMEOUT" == "3" ]] && pass "SessionEnd timeout is 3 seconds" || fail "SessionEnd timeout = $SESSION_END_TIMEOUT (expected 3)"
 
 # 5 hook events wired total: UserPromptSubmit, Stop, SessionEnd,
-# SessionStart (memory-prune), and PreToolUse (reflex).
+# SessionStart (memory-prune), and PreToolUse (reflex, provenance).
 HOOK_EVENTS=$(jq -r '.hooks | keys | length' "$H/.claude/settings.json" 2>/dev/null)
 [[ "$HOOK_EVENTS" == "5" ]] && pass "fresh install wires 5 hook events" || fail "hook event count = $HOOK_EVENTS (expected 5)"
 
@@ -92,7 +92,13 @@ SESSION_END_AFTER=$(jq -r '.hooks.SessionEnd | length' "$H/.claude/settings.json
 [[ "$SESSION_END_AFTER" == "1" ]] && pass "SessionEnd still 1 entry (no duplicate)" || fail "SessionEnd grew to $SESSION_END_AFTER"
 
 PRETOOL_AFTER=$(jq -r '.hooks.PreToolUse | length' "$H/.claude/settings.json")
-[[ "$PRETOOL_AFTER" == "1" ]] && pass "PreToolUse still 1 entry (no duplicate)" || fail "PreToolUse grew to $PRETOOL_AFTER"
+[[ "$PRETOOL_AFTER" == "2" ]] && pass "PreToolUse still 2 entries (no duplicate)" || fail "PreToolUse grew to $PRETOOL_AFTER (expected 2)"
+
+PRETOOL_REFLEX=$(jq -r '[.hooks.PreToolUse[] | select(.matcher == "Bash") | .hooks[].command | select(endswith("rekall-reflex.sh"))] | length' "$H/.claude/settings.json")
+[[ "$PRETOOL_REFLEX" == "1" ]] && pass "Bash matcher wires rekall-reflex.sh once" || fail "reflex entries under Bash = $PRETOOL_REFLEX"
+
+PRETOOL_PROV=$(jq -r '[.hooks.PreToolUse[] | select(.matcher == "mcp__memory__.*|mcp__rekall__.*") | .hooks[].command | select(endswith("rekall-provenance.sh"))] | length' "$H/.claude/settings.json")
+[[ "$PRETOOL_PROV" == "1" ]] && pass "MCP matcher wires rekall-provenance.sh once" || fail "provenance entries under MCP matcher = $PRETOOL_PROV"
 
 grep -q "already" "$H/install2.log" && pass "log reports 'already' on re-run" || fail "log doesn't show idempotent path"
 
@@ -199,7 +205,10 @@ WRONG_REPAIRED=$(jq -r '.hooks.PreToolUse[0].matcher' "$H6/.claude/settings.json
 [[ "$WRONG_REPAIRED" == "Bash" ]] && pass "wrong matcher (Write) repaired to Bash" || fail "matcher = $WRONG_REPAIRED (expected Bash)"
 
 WRONG_COUNT=$(jq -r '.hooks.PreToolUse | length' "$H6/.claude/settings.json")
-[[ "$WRONG_COUNT" == "1" ]] && pass "repair corrects in place, no duplicate entry" || fail "PreToolUse count = $WRONG_COUNT (expected 1)"
+[[ "$WRONG_COUNT" == "2" ]] && pass "repair corrects in place (reflex repaired, provenance added)" || fail "PreToolUse count = $WRONG_COUNT (expected 2)"
+
+WRONG_REFLEX=$(jq -r '[.hooks.PreToolUse[].hooks[].command | select(endswith("rekall-reflex.sh"))] | length' "$H6/.claude/settings.json")
+[[ "$WRONG_REFLEX" == "1" ]] && pass "no duplicate reflex entry after repair" || fail "reflex entries = $WRONG_REFLEX (expected 1)"
 
 # ---- test 6: skills install -------------------------------------------------
 printf "\n[test 6] --skills-only installs all 9 slash commands\n"

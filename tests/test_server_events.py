@@ -110,3 +110,58 @@ def test_post_events_bool_test_passes_returns_400(client):
     )
     assert r.status_code == 400
     manager.record_event.assert_not_called()
+
+
+def test_post_events_records_delivered_referenced_client(client):
+    tc, manager = client
+    r = tc.post(
+        "/api/memory/events",
+        json={
+            "event_type": "session_summary",
+            "session_id": "sess-abc",
+            "project": "my-proj",
+            "client": "claude-code",
+            "recalled_ids": ["id-1", "id-2", "id-3"],
+            "delivered": {"explicit": ["id-1", "id-2"], "capsule": ["id-3"], "reflex": []},
+            "referenced": ["id-1"],
+            "coverage": {"transcript_tail_bytes": 1048576, "truncated": False},
+        },
+    )
+    assert r.status_code == 200
+    p = manager.record_event.call_args.kwargs["payload"]
+    assert p["client"] == "claude-code"
+    assert p["delivered"] == {"explicit": ["id-1", "id-2"], "capsule": ["id-3"], "reflex": []}
+    assert p["referenced"] == ["id-1"]
+    assert p["coverage"] == {"transcript_tail_bytes": 1048576, "truncated": False}
+
+
+def test_post_events_old_client_shape_still_accepted(client):
+    tc, manager = client
+    r = tc.post(
+        "/api/memory/events",
+        json={"event_type": "session_summary", "session_id": "s", "project": "p", "recalled_ids": ["id-1"]},
+    )
+    assert r.status_code == 200
+    p = manager.record_event.call_args.kwargs["payload"]
+    assert p["client"] is None
+    assert p["delivered"] is None
+    assert p["referenced"] is None
+    assert p["coverage"] is None
+
+
+def test_post_events_rejects_bad_referenced(client):
+    tc, _ = client
+    r = tc.post(
+        "/api/memory/events",
+        json={"event_type": "session_summary", "session_id": "s", "project": "p", "recalled_ids": [], "referenced": "id-1"},
+    )
+    assert r.status_code == 400
+
+
+def test_post_events_rejects_bad_delivered(client):
+    tc, _ = client
+    r = tc.post(
+        "/api/memory/events",
+        json={"event_type": "session_summary", "session_id": "s", "project": "p", "recalled_ids": [], "delivered": {"explicit": "id-1"}},
+    )
+    assert r.status_code == 400

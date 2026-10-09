@@ -11,6 +11,14 @@ set -euo pipefail
 
 MEMORY_API="${REKALL_API_URL:-http://127.0.0.1:8000}"
 INPUT="$(cat || true)"
+# Subagent hooks carry agent_id; the capsule is for the main session only.
+AGENT_ID="$(
+  printf '%s' "$INPUT" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("agent_id") or "")' \
+      2>/dev/null \
+    || true
+)"
+[[ -n "$AGENT_ID" ]] && exit 0
 PROJECT_DIR="$(
   printf '%s' "$INPUT" \
     | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("cwd") or d.get("project_dir") or "")' \
@@ -57,7 +65,9 @@ def _item_text(item):
     if isinstance(item, dict):
         date = item.get("date") or "unknown"
         content = " ".join(str(item.get("content") or "").split())
-        return f"- [{date}] {content}" if content else ""
+        mid = item.get("memory_id") or ""
+        tag = f" [{mid}]" if mid else ""
+        return f"- [{date}] {content}{tag}" if content else ""
     return f"- {str(item)}"
 
 
@@ -96,7 +106,19 @@ def _render_capsule(data):
     return "\n".join(lines).strip()
 
 
-text = _render_capsule(payload)[:3500]
+def _cap(text, limit=3500):
+    out, used = [], 0
+    for line in text.splitlines():
+        if used + len(line) + 1 > limit:
+            if not out:
+                out.append(line[:limit])  # one oversized summary line: hard-cut
+            break
+        out.append(line)
+        used += len(line) + 1
+    return "\n".join(out)
+
+
+text = _cap(_render_capsule(payload))
 instruction = (
     "Use Rekall for targeted recall. Save durable decisions, requirements, "
     "root causes, and user preferences."

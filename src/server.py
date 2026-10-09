@@ -789,6 +789,28 @@ async def api_record_events(request):
         ):
             return _bad_request("test_passes_after_recall must be a non-negative integer")
 
+        def _ids(value, name):
+            if not isinstance(value, list) or not all(isinstance(i, str) for i in value):
+                raise ValueError(f"{name} must be a list of strings")
+            return value
+
+        try:
+            referenced = _ids(body["referenced"], "referenced") if "referenced" in body else None
+            delivered = None
+            if "delivered" in body:
+                delivered_raw = body["delivered"]
+                if not isinstance(delivered_raw, dict):
+                    raise ValueError("delivered must be an object")
+                delivered = {k: _ids(v, f"delivered.{k}") for k, v in delivered_raw.items()}
+        except ValueError as exc:
+            return _bad_request(str(exc))
+        client_name = body.get("client")
+        if client_name is not None and not isinstance(client_name, str):
+            return _bad_request("client must be a string")
+        coverage = body.get("coverage")
+        if coverage is not None and not isinstance(coverage, dict):
+            return _bad_request("coverage must be an object")
+
         manager = _get_memory_manager()
         manager.record_event(
             event_type=event_type,
@@ -797,6 +819,10 @@ async def api_record_events(request):
             source="client",
             payload={
                 "session_id": session_id,
+                "client": client_name,
+                "delivered": delivered,
+                "referenced": referenced,
+                "coverage": coverage,
                 "edits_after_recall": edits_after_recall,
                 "test_passes_after_recall": test_passes_after_recall,
             },

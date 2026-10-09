@@ -361,3 +361,124 @@ def test_session_start_without_session_id_sends_no_param(tmp_path):
     gets = [u for u in url_lines if "/api/memory/" in u]
     assert gets, url_lines
     assert all("session_id=" not in u for u in gets), url_lines
+
+
+SESSION_END_HOOK = REPO / "claude" / "hooks" / "rekall-session-end.sh"
+MID_A = "2026-10-09_fact_aaaa1111"
+MID_B = "2026-10-09_decision_bbbb2222"
+MID_C = "2026-10-09_learning_cccc3333"
+
+
+def _transcript_lines():
+    recall_use = {
+        "type": "assistant",
+        "message": {"content": [{"type": "tool_use", "id": "t1", "name": "mcp__memory__recall_memories", "input": {"query": "x"}}]},
+    }
+    recall_result = {
+        "type": "user",
+        "message": {"content": [{"type": "tool_result", "tool_use_id": "t1", "content": [{"type": "text", "text": f"- port 8000 (2026-10-09) [{MID_A}]\n- other (2026-10-09) [{MID_B}]"}]}]},
+    }
+    capsule = {
+        "type": "attachment",
+        "attachment": {"type": "hook_additional_context", "content": [f"== REKALL STARTUP (p) ==\n- [2026-10-09] use uv [{MID_C}]\n== END REKALL STARTUP =="]},
+    }
+    assistant_cites_a = {
+        "type": "assistant",
+        "message": {"content": [{"type": "text", "text": f"Per memory {MID_A}, port is 8000."}]},
+    }
+    bash_use = {
+        "type": "assistant",
+        "message": {"content": [{"type": "tool_use", "id": "t2", "name": "Bash", "input": {"command": "echo hi"}}]},
+    }
+    # MID_B appears only inside a later tool_result: exposure, not a reference.
+    bash_result = {
+        "type": "user",
+        "message": {"content": [{"type": "tool_result", "tool_use_id": "t2", "content": [{"type": "text", "text": f"log mentions {MID_B}"}]}]},
+    }
+    return [capsule, recall_use, recall_result, assistant_cites_a, bash_use, bash_result]
+
+
+def _run_session_end(tmp_path: Path, lines: list[dict], tail_bytes: str | None = None):
+    fakebin, calls, bodies = _make_fake_curl(tmp_path)
+    transcript = tmp_path / "sess-9.jsonl"
+    transcript.write_text("\n".join(json.dumps(line) for line in lines) + "\n")
+    (tmp_path / "rekall-restored-sess-9").write_text("")
+    env = os.environ.copy()
+    env.update({
+        "PATH": f"{fakebin}:{env['PATH']}",
+        "REKALL_API_URL": "http://rekall.test",
+        "REKALL_AUTOSAVE": "1",
+        "REKALL_MARKER_DIR": str(tmp_path),
+    })
+    if tail_bytes:
+        env["REKALL_TRANSCRIPT_TAIL_BYTES"] = tail_bytes
+    payload = {"hook_event_name": "SessionEnd", "session_id": "sess-9", "cwd": str(tmp_path / "proj"), "transcript_path": str(transcript)}
+    r = subprocess.run(["bash", str(SESSION_END_HOOK)], input=json.dumps(payload), text=True, capture_output=True, env=env, cwd=tmp_path, timeout=10, check=False)
+    body = json.loads(bodies.read_text().strip().splitlines()[-1]) if bodies.exists() else None
+    return r, body
+
+
+def test_session_end_reports_delivered_by_surface_and_referenced(tmp_path):
+    r, body = _run_session_end(tmp_path, _transcript_lines())
+    assert r.returncode == 0
+    assert body["client"] == "claude-code"
+    assert body["delivered"] == {"explicit": [MID_A, MID_B], "capsule": [MID_C], "reflex": []}
+    assert body["referenced"] == [MID_A]
+    assert body["recalled_ids"] == sorted([MID_A, MID_B, MID_C])
+    assert body["coverage"] == {"transcript_tail_bytes": 1048576, "truncated": False}
+
+
+def test_session_end_marks_truncated_tail(tmp_path):
+    lines = _transcript_lines()
+    pad = {"type": "progress", "pad": "x" * 6000}
+    r, body = _run_session_end(tmp_path, [pad] + lines, tail_bytes="4096")
+    assert r.returncode == 0
+    assert body["coverage"]["truncated"] is True
+    assert body["coverage"]["transcript_tail_bytes"] == 4096
+
+
+def _tool_use(tool_id, name, tool_input=None):
+    return {"type": "assistant", "message": {"content": [{"type": "tool_use", "id": tool_id, "name": name, "input": tool_input or {}}]}}
+
+
+def _tool_result(tool_id, text="ok"):
+    return {"type": "user", "message": {"content": [{"type": "tool_result", "tool_use_id": tool_id, "content": [{"type": "text", "text": text}]}]}}
+
+
+def _capsule(mid):
+    return {
+        "type": "attachment",
+        "attachment": {"type": "hook_additional_context", "content": [f"== REKALL STARTUP (p) ==\n- note [{mid}]\n== END REKALL STARTUP =="]},
+    }
+
+
+def test_session_end_capsule_does_not_start_edit_window(tmp_path):
+    cites_capsule = {"type": "assistant", "message": {"content": [{"type": "text", "text": f"Following {MID_C}."}]}}
+    lines = [
+        _capsule(MID_C),
+        cites_capsule,
+        _tool_use("e1", "Edit"), _tool_result("e1"),
+        _tool_use("r1", "mcp__memory__recall_memories", {"query": "x"}), _tool_result("r1", f"- a [{MID_A}]"),
+        _tool_use("e2", "Edit"), _tool_result("e2"),
+    ]
+    r, body = _run_session_end(tmp_path, lines)
+    assert r.returncode == 0
+    assert body["edits_after_recall"] == 1
+    assert MID_C in body["referenced"]
+
+
+def test_session_end_capsule_only_session_has_no_outcome_credit(tmp_path):
+    lines = [_capsule(MID_C), _tool_use("e1", "Edit"), _tool_result("e1")]
+    r, body = _run_session_end(tmp_path, lines)
+    assert body["edits_after_recall"] == 0
+    assert body["test_passes_after_recall"] == 0
+
+
+def test_session_end_survives_non_dict_hook_stdout(tmp_path):
+    def success(stdout):
+        return {"type": "attachment", "attachment": {"type": "hook_success", "stdout": stdout}}
+
+    lines = [success("123"), success("[1,2]"), _capsule(MID_C)]
+    r, body = _run_session_end(tmp_path, lines)
+    assert r.returncode == 0
+    assert body["delivered"]["capsule"] == [MID_C]

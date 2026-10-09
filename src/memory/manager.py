@@ -1649,6 +1649,7 @@ class MemoryManager:
         cwd: str | None = None,
         source: str = "recall",
         session_id: str | None = None,
+        agent: str | None = None,
     ) -> list[dict[str, Any]]:
         """Recall relevant memories using semantic search.
 
@@ -1879,6 +1880,7 @@ class MemoryManager:
                 self.record_event(
                     event_type="memory_recalled",
                     project=attributed or "general",
+                    agent=agent or "unknown",
                     memory_ids=[m["memory_id"] for m in results if m.get("memory_id")],
                     source=source,
                     session_id=session_id,
@@ -1980,6 +1982,7 @@ class MemoryManager:
         task_hint: str | None = None,
         cwd: str | None = None,
         session_id: str | None = None,
+        agent: str | None = None,
     ) -> str:
         """Recall memories with smart formatting that guides AI behavior.
 
@@ -2010,6 +2013,7 @@ class MemoryManager:
             task_hint=task_hint,
             cwd=cwd,
             session_id=session_id,
+            agent=agent,
         )
 
         if not memories:
@@ -2050,9 +2054,11 @@ class MemoryManager:
             by_type.setdefault(t, []).append(mem)
 
         def _line(m: dict) -> str:
+            mid = m.get("memory_id") or m.get("id") or ""
+            tag = f" [{mid}]" if mid else ""
             if m.get("_outdated"):
-                return "- [outdated — replaced by the newer entry above]"
-            return f"- {m['content']} ({m.get('date', 'unknown date')})"
+                return f"- [outdated — replaced by the newer entry above]{tag}"
+            return f"- {m['content']} ({m.get('date', 'unknown date')}){tag}"
 
         sections = []
 

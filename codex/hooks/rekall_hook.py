@@ -40,6 +40,10 @@ class SessionSummary(TypedDict):
     recalled_ids: list[str]
     edits_after_recall: int
     test_passes_after_recall: int
+    client: Literal["codex"]
+    delivered: dict[str, list[str]]
+    referenced: list[str]
+    coverage: dict[str, int | bool]
 
 
 _CUES: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -236,16 +240,18 @@ def handle_pre_tool_use(
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": context}}
 
 
-def _bounded_lines(path: str) -> list[str]:
+def _bounded_lines(path: str) -> tuple[list[str], bool]:
     try:
         if not stat.S_ISREG(os.lstat(path).st_mode):
-            return []
+            return [], False
         with open(path, "rb") as stream:
             stream.seek(0, os.SEEK_END)
-            stream.seek(max(0, stream.tell() - _MAX_TRANSCRIPT_BYTES))
-            return stream.read(_MAX_TRANSCRIPT_BYTES).decode("utf-8", "replace").splitlines()
+            size = stream.tell()
+            stream.seek(max(0, size - _MAX_TRANSCRIPT_BYTES))
+            lines = stream.read(_MAX_TRANSCRIPT_BYTES).decode("utf-8", "replace").splitlines()
+            return lines, size > _MAX_TRANSCRIPT_BYTES
     except OSError:
-        return []
+        return [], False
 
 
 def _walk(value: object) -> Iterable[Mapping[str, object]]:
@@ -291,6 +297,20 @@ def _command_from(value: object) -> str:
     return decoded if isinstance(decoded, str) else ""
 
 
+_MEMORY_ID_RE = re.compile(r"\d{4}-\d{2}-\d{2}_[a-z]+_[0-9a-f]+")
+
+
+def _walk_strings(value: object) -> Iterable[str]:
+    if isinstance(value, str):
+        yield value
+    elif isinstance(value, Mapping):
+        for child in value.values():
+            yield from _walk_strings(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from _walk_strings(child)
+
+
 def _extract_memory_ids(value: object) -> list[str]:
     decoded = _decode_json(value)
     found: list[str] = []
@@ -298,14 +318,17 @@ def _extract_memory_ids(value: object) -> list[str]:
         memory_id = item.get("memory_id")
         if isinstance(memory_id, str) and memory_id not in found:
             found.append(memory_id)
-    if isinstance(decoded, str):
-        for matched_id in re.findall(
-            r"\b\d{4}-\d{2}-\d{2}_(?:decision|learning|preference|requirement|fact|note|session|summary)_[A-Za-z0-9]+\b",
-            decoded,
-        ):
+    for text in _walk_strings(decoded):
+        for matched_id in _MEMORY_ID_RE.findall(text):
             if matched_id not in found:
                 found.append(matched_id)
     return found
+
+
+def _assistant_text(body: Mapping[str, object]) -> str:
+    if body.get("role") != "assistant":
+        return ""
+    return "\n".join(_walk_strings(body.get("content")))
 
 
 def _test_succeeded(value: object) -> bool:
@@ -336,11 +359,20 @@ def _is_file_edit_name(name: str) -> bool:
     return parts[-1] in {"edit", "write", "apply_patch", "applypatch"}
 
 
-def summarize_session(payload: CodexHookInput, lines: Iterable[str]) -> SessionSummary | None:
+def summarize_session(
+    payload: CodexHookInput, lines: Iterable[str], *, truncated: bool = False
+) -> SessionSummary | None:
     recalled: list[str] = []
     edits = tests = 0
     after_recall = False
+    referenced: list[str] = []
     pending: dict[str, Literal["recall", "edit", "test"]] = {}
+
+    def note_references(source: object) -> None:
+        for memory_id in _extract_memory_ids(source):
+            if memory_id in recalled and memory_id not in referenced:
+                referenced.append(memory_id)
+
     for line in lines:
         try:
             event = json.loads(line)
@@ -350,12 +382,17 @@ def summarize_session(payload: CodexHookInput, lines: Iterable[str]) -> SessionS
         if body is None:
             continue
         event_type = str(body.get("type", "")).lower()
+        text = _assistant_text(body)
+        if text and recalled:
+            note_references(text)
         call_id = body.get("call_id")
         if not isinstance(call_id, str):
             continue
         if event_type in {"function_call", "custom_tool_call", "tool_call"}:
             name = str(body.get("tool_name", body.get("name", ""))).lower()
             value = _call_input(body)
+            if recalled:
+                note_references(value)
             command = _command_from(value)
             if name == "recall_memories" or name.endswith("__recall_memories"):
                 pending[call_id] = "recall"
@@ -388,13 +425,18 @@ def summarize_session(payload: CodexHookInput, lines: Iterable[str]) -> SessionS
     if not isinstance(session, str) or not isinstance(cwd, str):
         return None
     project = sanitize_token(Path(cwd).name)
+    delivered = recalled[:32]
     return {
         "event_type": "session_summary",
         "session_id": session,
         "project": project,
-        "recalled_ids": recalled[:32],
+        "recalled_ids": delivered,
         "edits_after_recall": edits,
         "test_passes_after_recall": tests,
+        "client": "codex",
+        "delivered": {"explicit": delivered},
+        "referenced": [memory_id for memory_id in referenced if memory_id in delivered],
+        "coverage": {"transcript_tail_bytes": _MAX_TRANSCRIPT_BYTES, "truncated": truncated},
     }
 
 
@@ -494,12 +536,12 @@ def dispatch(
     if event == "PostToolUse":
         return handle_post_tool_use(payload)
     if event == "SessionEnd":
-        lines = (
+        lines, truncated = (
             _bounded_lines(payload.get("transcript_path", ""))
             if payload.get("transcript_path")
-            else []
+            else ([], False)
         )
-        summary = summarize_session(payload, lines)
+        summary = summarize_session(payload, lines, truncated=truncated)
         if summary and summary["recalled_ids"]:
             request_json(
                 "POST",

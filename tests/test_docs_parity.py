@@ -141,7 +141,7 @@ def test_claude_bundle_docs_match_hardened_lifecycle():
     migration = (REPO / "docs" / "MIGRATION.md").read_text()
     combined = "\n".join((readme, install, contributor, architecture, migration))
 
-    assert "five hooks" in readme.lower()
+    assert "six hooks" in readme.lower()
     assert "rekall-session-end.sh" in readme
     assert "rekall-session-end.sh" in install
     assert "SessionEnd" in install

@@ -75,7 +75,7 @@ def test_fold_groups_summary_and_surfaced_by_session_id():
     assert s1["last_at"] == "2026-07-14T09:20:00"
     assert [i["memory_id"] for i in s1["injected"]] == ["m1", "m2"]
     assert s1["recalls"] == []
-    assert s1["totals"] == {"recalls": 0, "injected": 2, "tokens": 40}
+    assert s1["totals"] == {"recalls": 0, "injected": 2, "tokens": 40, "referenced": 0, "delivered": 1}
 
 
 def test_null_session_recall_joins_via_memory_ids_intersection():
@@ -233,7 +233,7 @@ def test_get_sessions_list_shape_limit_and_window(monkeypatch, tmp_path):
     assert row["session_id"] == "s2"  # newest activity first
     assert row["project"] == "proj-a"
     assert set(row) == {"session_id", "project", "started_at", "last_at", "totals"}
-    assert row["totals"] == {"recalls": 0, "injected": 0, "tokens": 0}
+    assert row["totals"] == {"recalls": 0, "injected": 0, "tokens": 0, "referenced": 0, "delivered": 1}
 
 
 def test_get_sessions_project_filter_returns_scoped_plus_unattributed(monkeypatch, tmp_path):
@@ -296,7 +296,7 @@ def test_get_session_detail_returns_full_object(monkeypatch, tmp_path):
     assert body["injected"] == [{"memory_id": "m1", "token_estimate": None}]
     assert body["recalls"][0]["query"] == "why m1"
     assert body["recalls"][0]["memories"] == [{"memory_id": "m1", "score": 0.9}]
-    assert body["totals"] == {"recalls": 1, "injected": 1, "tokens": 15}
+    assert body["totals"] == {"recalls": 1, "injected": 1, "tokens": 15, "referenced": 0, "delivered": 1}
     assert body["window"] == 5000
 
 
@@ -396,3 +396,54 @@ def test_sessions_list_get_emits_view_opened_counter(monkeypatch, tmp_path):
     kw = manager.record_event.call_args.kwargs
     assert kw["event_type"] == "view_opened"
     assert kw["payload"]["view"] == "sessions"
+
+
+def _recall(session_id, project, memory_ids, observed_at):
+    return _ev(
+        "memory_recalled",
+        project,
+        {"memory_ids": memory_ids, "session_id": session_id, "query": "q", "memories": [], "token_estimate": 10},
+        observed_at,
+    )
+
+
+def _summary_v2(session_id, project, delivered, referenced, observed_at):
+    all_ids = sorted({m for ids in delivered.values() for m in ids})
+    return _ev(
+        "session_summary",
+        project,
+        {"memory_ids": all_ids, "session_id": session_id, "delivered": delivered, "referenced": referenced},
+        observed_at,
+    )
+
+
+def test_tagged_recall_creates_session_without_summary():
+    from memory.sessions import fold_sessions
+
+    out = fold_sessions([_recall("s-new", "proj", ["m1"], "2026-10-09T10:00:00")])
+    ids = [s["session_id"] for s in out]
+    assert "s-new" in ids
+    assert not any(i.startswith("unattributed:") for i in ids)
+    assert out[0]["totals"]["recalls"] == 1
+
+
+def test_untagged_recall_still_lands_unattributed():
+    from memory.sessions import fold_sessions
+
+    ev = _ev("memory_recalled", "proj", {"memory_ids": ["m1"], "query": "q"}, "2026-10-09T10:00:00")
+    out = fold_sessions([ev])
+    assert out[0]["session_id"] == "unattributed:proj"
+
+
+def test_summary_referenced_totals_last_wins():
+    from memory.sessions import fold_sessions
+
+    events = [
+        _summary_v2("s1", "proj", {"explicit": ["m1", "m2"]}, ["m1"], "2026-10-09T10:00:00"),
+        _summary_v2("s1", "proj", {"explicit": ["m1", "m2"]}, ["m1", "m2"], "2026-10-09T11:00:00"),
+    ]
+    out = fold_sessions(events)
+    s = next(x for x in out if x["session_id"] == "s1")
+    assert s["referenced"] == ["m1", "m2"]
+    assert s["totals"]["referenced"] == 2
+    assert s["totals"]["delivered"] == 2
