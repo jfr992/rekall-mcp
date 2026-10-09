@@ -44,7 +44,12 @@ from memory.events import EventLog, MemoryEvent
 from memory.lifecycle import summarize_lifecycle
 from memory.linker import auto_link
 from memory.observe import ObservationCandidate, ObservationEngine, sanitize_observation_metadata
-from memory.representation import build_embedding_text, extract_entities
+from memory.representation import (
+    RESOLVED_PATTERN,
+    build_embedding_text,
+    extract_entities,
+    hard_identifiers,
+)
 from memory.resume import build_resume_packet
 from memory.scope import MemoryScope, ScopeDetector, strip_remote_creds
 from memory.skills import extract_skills, render_skill_context
@@ -529,6 +534,12 @@ class MemoryManager:
                     )
                     return recalled_id
 
+                superseded = self._find_resolved_predecessors(
+                    content=content,
+                    entities=payload["entities"],
+                    project=project_name,
+                    vector=vector,
+                )
                 timestamp = datetime.now().isoformat()
                 unique_string = f"{content}|{timestamp}"
                 content_hash = hashlib.sha256(unique_string.encode()).hexdigest()[:8]
@@ -580,6 +591,22 @@ class MemoryManager:
 
             # Auto-link to related memories
             try:
+                for predecessor in superseded:
+                    self.knowledge_graph.add_node(
+                        predecessor["memory_id"],
+                        topic=project_name,
+                        memory_type=predecessor.get("type", "note"),
+                    )
+                    self.knowledge_graph.add_edge(
+                        memory_id,
+                        predecessor["memory_id"],
+                        "supersedes",
+                        weight=predecessor["score"],
+                        band="provisional",
+                    )
+                # Persist resolution edges even if the general linker fails.
+                if superseded:
+                    self.knowledge_graph.save()
                 link_result = auto_link(
                     graph=self.knowledge_graph,
                     memory_id=memory_id,
@@ -588,6 +615,7 @@ class MemoryManager:
                     project=project_name,
                     embedder=self.embedder,
                     store=self.store,
+                    exclude_ids={point["memory_id"] for point in superseded},
                 )
                 self.knowledge_graph.save()
                 if link_result.edges_created:
@@ -1021,6 +1049,32 @@ class MemoryManager:
                 return duplicate_id
 
         return None
+
+    def _find_resolved_predecessors(
+        self, *, content: str, entities: list[str], project: str, vector: list[float]
+    ) -> list[dict[str, Any]]:
+        identifiers = hard_identifiers(content, entities)
+        if not identifiers or not RESOLVED_PATTERN.search(content):
+            return []
+        try:
+            candidates = self.store.search(
+                vector=vector,
+                limit=10,
+                filters={"project": project},
+                score_threshold=0.80,
+            )
+            return [
+                candidate
+                for candidate in candidates
+                if candidate.get("memory_id")
+                and candidate.get("project") == project
+                and candidate.get("score", 0.0) >= 0.80
+                and identifiers
+                & hard_identifiers(candidate.get("content") or "", candidate.get("entities"))
+            ]
+        except Exception:
+            logger.warning("Resolved-memory supersedes lookup failed", exc_info=True)
+            return []
 
     def _find_recently_recalled_duplicate(self, *, project: str, vector: list[float]) -> str | None:
         """Feedback-loop guard (mem0 #4573): the id of a memory recalled or
@@ -1696,6 +1750,8 @@ class MemoryManager:
                 # not vector similarity, so their vector score is 0.
                 new_ids = [mid for mid in (expanded_ids - seed_ids) if isinstance(mid, str)]
                 for result in self.store.get_many(new_ids):
+                    if any(result.get(key) != value for key, value in filters.items()):
+                        continue
                     memory_id = result.get("memory_id")
                     if memory_id and memory_id not in seed_ids:
                         seed_results.append({**result, "score": 0.0, "_graph_expanded": True})
@@ -2270,8 +2326,6 @@ class MemoryManager:
             if not points:
                 return "No memories available for a proactive summary."
 
-            points_by_id = {point.get("memory_id", ""): point for point in points}
-            memory_ids = {mid for mid in points_by_id if mid}
             graph = self.knowledge_graph
 
             def _score_memory(point: dict) -> float:
@@ -2290,12 +2344,6 @@ class MemoryManager:
                         days_old = 0
                 recency = max(0.0, 1.0 - days_old / 365)
                 return importance * 0.6 + recency * 0.4
-
-            conflict_edges = []
-            for source_id in memory_ids:
-                for edge in graph.get_edges(source_id, direction="out"):
-                    if edge.relation == "contradicts" and edge.target in memory_ids:
-                        conflict_edges.append((edge.source, edge.target))
 
             ranked_points = sorted(
                 points,
@@ -2316,27 +2364,6 @@ class MemoryManager:
                 lines.append(
                     f"- [{point.get('type', 'note')}] {snippet} (memory: {point.get('memory_id', 'n/a')})"
                 )
-
-            if conflict_edges:
-                lines.append("")
-                lines.append("## Conflicts to Review")
-                for source_id, target_id in sorted(set(conflict_edges)):
-                    source = self._memory_snippet(
-                        points_by_id.get(source_id, {}).get("content", "")
-                    )
-                    target = self._memory_snippet(
-                        points_by_id.get(target_id, {}).get("content", "")
-                    )
-                    lines.append(f"- `{source_id}` conflicts with `{target_id}`")
-                    if source:
-                        lines.append(f"  - {source}")
-                    if target:
-                        lines.append(f"  - {target}")
-
-            if not conflict_edges:
-                lines.append("")
-                lines.append("## Conflicts to Review")
-                lines.append("No contradictions detected among ranked memories.")
 
             return "\n".join(lines)
 

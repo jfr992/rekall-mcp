@@ -23,6 +23,40 @@ def _mock_embedder() -> MagicMock:
     return embedder
 
 
+def test_reflex_project_scope_excludes_cross_project_graph_neighbors(tmp_path):
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    kg.add_node("local", memory_type="decision")
+    kg.add_node("foreign", memory_type="requirement", importance=1.0)
+    kg.add_edge("local", "foreign", "related_to", weight=0.9)
+    store = MagicMock()
+    store.search.return_value = [
+        {
+            "memory_id": "local",
+            "project": "rekall-mcp",
+            "score": 0.8,
+            "content": "Helm documentation paths",
+            "type": "decision",
+        }
+    ]
+    store.get_many.return_value = [
+        {
+            "memory_id": "foreign",
+            "project": "byte-edge",
+            "tier": "identity",
+            "content": "Helm cluster warning",
+            "type": "requirement",
+        }
+    ]
+    manager = _manager_with_graph(tmp_path, store, _mock_embedder(), kg)
+
+    packet = manager.reflex(text="cat docs/helm/chart.md", project="rekall-mcp")
+
+    assert [memory["memory_id"] for memory in packet["memories"]] == ["local"]
+    assert store.search.call_args.kwargs["filters"] == {"project": "rekall-mcp"}
+    event = manager.event_log.tail(limit=1)[0]
+    assert event.payload["memory_ids"] == ["local"]
+
+
 def test_recall_includes_graph_neighbors(tmp_path):
     kg = KnowledgeGraph(tmp_path / "_graph.json")
     kg.add_node("decision_pg", memory_type="decision")

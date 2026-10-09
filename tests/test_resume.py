@@ -4,7 +4,7 @@ from memory.resume import build_resume_packet
 from memory.scope import MemoryScope
 
 
-def test_build_resume_packet_groups_recent_important_and_conflicts(tmp_path):
+def test_build_resume_packet_does_not_inject_unverified_conflicts(tmp_path):
     from memory.knowledge_graph import KnowledgeGraph
     from memory.manager import MemoryManager
 
@@ -24,14 +24,15 @@ def test_build_resume_packet_groups_recent_important_and_conflicts(tmp_path):
             "memory_id": "a",
             "type": "decision",
             "date": "2026-04-10",
-            "content": "Use PostgreSQL",
+            "content": "PR #83 merged and deployed",
+            "disputed": True,
             "project": "brain",
         },
         {
             "memory_id": "b",
             "type": "decision",
             "date": "2026-04-01",
-            "content": "Use MySQL",
+            "content": "PR #83 pending review",
             "project": "brain",
         },
     ]
@@ -43,7 +44,10 @@ def test_build_resume_packet_groups_recent_important_and_conflicts(tmp_path):
 
     assert packet["scope"]["project"] == "brain"
     assert len(packet["important"]) >= 1
-    assert len(packet["unresolved"]) == 1
+    assert packet["unresolved"] == []
+    assert "Unresolved Conflicts" not in packet["summary"]
+    assert {item["memory_id"] for item in packet["important"]} == {"a", "b"}
+    assert packet["recent"][0]["memory_id"] == "a"
     assert "promotion" in packet
     assert "next_steps" in packet
     assert "handoff" in packet

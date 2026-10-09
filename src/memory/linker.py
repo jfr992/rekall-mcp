@@ -110,6 +110,7 @@ def auto_link(
     project: str,
     embedder: Embedder,
     store: VectorStore,
+    exclude_ids: set[str] | None = None,
 ) -> LinkResult:
     """Find and persist likely relationships for a new memory."""
     # Repr v2: stored dense vectors are encode(content) — search with the same
@@ -138,6 +139,9 @@ def auto_link(
     for candidate in candidates:
         candidate_id = candidate.get("memory_id", "")
         if candidate_id == memory_id or not candidate_id:
+            continue
+        # Save-time resolution edges are informational; do not reclassify or demote them.
+        if exclude_ids and candidate_id in exclude_ids:
             continue
 
         relation, llm_refined = _classify_relation(

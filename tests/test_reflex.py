@@ -139,7 +139,7 @@ def test_reflex_packet_passes_session_id_through_to_manager_recall():
     build_reflex_packet(
         Manager(),
         text="terraform apply",
-        project=None,
+        project="rekall-mcp",
         limit=4,
         session_id="sess-42",
     )
@@ -231,7 +231,7 @@ async def test_api_memory_reflex_passes_cwd_to_manager(monkeypatch):
     await api_memory_reflex(JsonRequest({"text": "terraform apply", "cwd": "/Users/dev/proj"}))
 
     manager.reflex.assert_called_once_with(
-        text="terraform apply", project=None, limit=4, cwd="/Users/dev/proj", session_id=None
+        text="terraform apply", project="proj", limit=4, cwd="/Users/dev/proj", session_id=None
     )
 
 
@@ -261,7 +261,7 @@ async def test_api_memory_reflex_accepts_workspace_root_alias(monkeypatch):
     )
 
     manager.reflex.assert_called_once_with(
-        text="terraform apply", project=None, limit=4, cwd="/Users/dev/proj", session_id=None
+        text="terraform apply", project="proj", limit=4, cwd="/Users/dev/proj", session_id=None
     )
 
 
@@ -416,3 +416,102 @@ def test_reflex_recall_events_carry_reflex_source(monkeypatch):
     build_reflex_packet(manager, text="terraform destroy", limit=4)
     kwargs = manager.recall.call_args.kwargs
     assert kwargs.get("source") == "reflex"
+
+
+@pytest.mark.parametrize(
+    "text", ["terraform apply", "qdrant sync", "claude hooks", "cat docs/helm/chart.md"]
+)
+def test_non_destructive_reflex_derives_hard_project_filter(text):
+    from memory.reflex import build_reflex_packet
+
+    manager = MagicMock()
+    manager.recall.return_value = []
+    packet = build_reflex_packet(manager, text=text, cwd="/Users/dev/rekall-mcp")
+
+    assert packet["project"] == "rekall-mcp"
+    assert manager.recall.call_args.kwargs["project"] == "rekall-mcp"
+
+
+@pytest.mark.parametrize(
+    "text", ["terraform apply", "qdrant sync", "claude hooks", "cat docs/helm/chart.md"]
+)
+def test_non_destructive_reflex_without_scope_skips_recall(text):
+    from memory.reflex import build_reflex_packet
+
+    manager = MagicMock()
+    packet = build_reflex_packet(manager, text=text)
+
+    manager.recall.assert_not_called()
+    assert packet["memories"] == []
+    assert packet["cues"] == []
+    assert packet["dropped_cues"]
+
+
+def test_mixed_reflex_queries_keep_only_destructive_cross_project():
+    from memory.reflex import _CUES, build_reflex_packet
+
+    calls = []
+
+    class Manager:
+        def recall(self, **kwargs):
+            calls.append(kwargs)
+            return [
+                {"memory_id": "shared", "project": "rekall-mcp"},
+                {"memory_id": "global" if kwargs["project"] is None else "local"},
+            ]
+
+    packet = build_reflex_packet(
+        Manager(), text="terraform destroy; cat docs/helm/chart.md", project="rekall-mcp", limit=3
+    )
+
+    assert len(calls) == 2
+    assert calls[0]["project"] is None
+    assert calls[0]["query"] == _CUES["destructive"]["query"]
+    assert calls[1]["project"] == "rekall-mcp"
+    assert calls[1]["query"] == " ".join(_CUES[cue]["query"] for cue in ("iac", "helm"))
+    assert [memory["memory_id"] for memory in packet["memories"]] == ["shared", "global", "local"]
+
+
+def test_destructive_reflex_without_scope_still_recalls():
+    from memory.reflex import _CUES, build_reflex_packet
+
+    manager = MagicMock()
+    manager.recall.return_value = [{"memory_id": "other-project-warning"}]
+    packet = build_reflex_packet(manager, text="terraform destroy")
+
+    assert packet["cues"] == ["destructive"]
+    assert packet["dropped_cues"] == ["iac"]
+    assert manager.recall.call_args.kwargs["project"] is None
+    assert manager.recall.call_args.kwargs["query"] == _CUES["destructive"]["query"]
+
+
+@pytest.mark.asyncio
+async def test_reflex_route_resolves_hook_cwd_to_project(monkeypatch, tmp_path):
+    import subprocess
+
+    from memory.manager import MemoryManager
+    from server import api_memory_reflex
+
+    repo = tmp_path / "caller-project"
+    repo.mkdir()
+    subprocess.run(["git", "init", str(repo)], check=True, capture_output=True)
+    caller_cwd = repo / "docs" / "helm"
+    caller_cwd.mkdir(parents=True)
+    manager = MemoryManager(memory_dir=tmp_path, qdrant_url="http://localhost:6334")
+    manager.recall = MagicMock(return_value=[])
+    monkeypatch.setattr("server._get_memory_manager", lambda: manager)
+
+    response = await api_memory_reflex(
+        JsonRequest(
+            {
+                "text": "cat docs/helm/chart.md",
+                "cwd": str(caller_cwd),
+                "session_id": "hook-session",
+            }
+        )
+    )
+
+    assert response.status_code == 200
+    assert json.loads(response.body)["project"] == "caller-project"
+    assert manager.recall.call_args.kwargs["project"] == "caller-project"
+    assert manager.recall.call_args.kwargs["session_id"] == "hook-session"

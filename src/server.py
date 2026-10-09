@@ -705,8 +705,12 @@ async def api_memory_reflex(request):
         text = raw_text.strip()
         project = _safe_project(body.get("project"))
         limit = _body_int(body, "limit", 4, lo=1, hi=12)
-        # Caller's cwd, not the backend's — attribution only (v1.5.0 scope pitfall)
+        # Resolve the hook's workspace before recall; never infer from the backend cwd.
         caller_cwd = body.get("cwd") or body.get("workspace_root") or None
+        if not project and caller_cwd:
+            from memory.scope import ScopeDetector
+
+            project = ScopeDetector.detect(cwd=caller_cwd).project
         session_id = body.get("session_id")
 
         if not text:

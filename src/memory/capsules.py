@@ -6,6 +6,8 @@ from collections import Counter
 from datetime import datetime, timedelta
 from typing import Any
 
+from memory.representation import RESOLVED_PATTERN, hard_identifiers
+
 logger = logging.getLogger(__name__)
 
 _DANGER_PATTERNS = tuple(
@@ -72,6 +74,7 @@ def build_project_capsule(
     points = manager.store.scroll(filters={"project": project}, limit=scan_limit)
     enriched: list[tuple[dict[str, Any], float]] = []
     entity_counts: Counter[str] = Counter()
+    resolved_at: dict[str, str] = {}
 
     for point in points:
         memory_id = point.get("memory_id", "")
@@ -79,6 +82,11 @@ def build_project_capsule(
         enriched.append((point, importance))
         for entity in point.get("entities") or []:
             entity_counts[str(entity)] += 1
+        content = point.get("content") or ""
+        if point.get("project", project) == project and RESOLVED_PATTERN.search(content):
+            timestamp = point.get("timestamp") or point.get("date") or ""
+            for entity in hard_identifiers(content, point.get("entities")):
+                resolved_at[entity] = max(resolved_at.get(entity, ""), timestamp)
 
     enriched.sort(key=lambda pair: (pair[0].get("date", ""), pair[1]), reverse=True)
 
@@ -94,6 +102,20 @@ def build_project_capsule(
         row = _item(point, importance)
 
         if memory_type in _DANGER_TYPES and any(p.search(content) for p in _DANGER_PATTERNS):
+            timestamp = point.get("timestamp") or point.get("date") or ""
+            latest_resolution = max(
+                (
+                    resolved_at.get(entity, "")
+                    for entity in hard_identifiers(
+                        point.get("content") or "", point.get("entities")
+                    )
+                ),
+                default="",
+            )
+            if not point.get("timestamp"):
+                latest_resolution = latest_resolution[:10]
+            if _RESOLVED_STAMP.search(content) or (timestamp and latest_resolution > timestamp):
+                continue
             danger_zones.append(row)
         elif (
             (point.get("date", "") >= cutoff)
