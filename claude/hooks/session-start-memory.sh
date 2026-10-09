@@ -11,6 +11,14 @@ set -euo pipefail
 
 MEMORY_API="${REKALL_API_URL:-http://127.0.0.1:8000}"
 INPUT="$(cat || true)"
+# Subagent hooks carry agent_id; the capsule is for the main session only.
+AGENT_ID="$(
+  printf '%s' "$INPUT" \
+    | python3 -c 'import json,sys; print(json.load(sys.stdin).get("agent_id") or "")' \
+      2>/dev/null \
+    || true
+)"
+[[ -n "$AGENT_ID" ]] && exit 0
 PROJECT_DIR="$(
   printf '%s' "$INPUT" \
     | python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("cwd") or d.get("project_dir") or "")' \

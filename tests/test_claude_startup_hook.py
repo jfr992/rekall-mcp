@@ -459,3 +459,23 @@ exit 99
     packet = json.loads(result.stdout)
     additional_context = packet["hookSpecificOutput"]["additionalContext"]
     assert "Entities:" not in additional_context
+
+
+def test_session_start_hook_skips_subagents(tmp_path):
+    result, calls = _run_hook(
+        tmp_path,
+        {"cwd": "/workspaces/rekall-mcp", "session_id": "s1", "agent_id": "a1b2c3"},
+    )
+    assert result.returncode == 0
+    assert result.stdout.strip() == ""
+    assert calls == []
+
+
+def test_session_start_hook_treats_empty_agent_id_as_main_session(tmp_path):
+    result, calls = _run_hook(
+        tmp_path,
+        {"cwd": "/workspaces/rekall-mcp", "session_id": "s1", "agent_id": ""},
+    )
+    assert result.returncode == 0
+    assert "REKALL STARTUP" in result.stdout
+    assert any("/api/memory/capsule" in c for c in calls)
