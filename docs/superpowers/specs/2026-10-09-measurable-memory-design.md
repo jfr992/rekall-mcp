@@ -132,18 +132,32 @@ allowlist; nothing else in this design changes.
   **citation coverage** everywhere it is printed. Reinforcement
   (`reinforce.py`) is untouched by this change.
 
-### 6. Decision metric (offline, read-only)
+### 6. Decision metric and capsule default
 
-Computed from existing transcripts, not from the live loop:
+Computed offline on 2026-10-09 from 36 sessions, 120 hand-labeled delivered
+instances (archive: `~/backups/rekall-eval-2026-10-09.tar.gz`):
 
-- Stratified sample of delivered instances across surfaces, echoed and not.
-- Each labeled helpful / harmful / irrelevant / indeterminate with the cited
-  later action; information already present before delivery is not helpful.
-- Report: helpful per 100 sessions, harmful per 100 sessions, delivered
-  tokens per helpful application, with coverage and a human spot-check table.
+| Surface | Sampled | Helpful | Harmful |
+|---|---|---|---|
+| Explicit `recall_memories` | 40 | 4 | 0 |
+| Startup capsule | 40 | 0 | 0 |
+| Reflex | 40 | 0 | 0 |
 
-Follow-up, not in A: one week with the capsule off and explicit recall
-unchanged, as the controlled comparison.
+About 2,000 delivered tokens per helpful application frame-wide; capsule and
+reflex delivered about 63k tokens with no helpful hit. Echo is a weak proxy
+(2 of 4 helpful never echoed; 23 of 25 echoed not helpful).
+
+Consequence, in scope for A: **the startup capsule hook ships off by
+default.** `session-start-memory.sh` exits 0 unless `REKALL_CAPSULE=1`.
+Explicit recall unchanged. The following week with the capsule off, with the
+measurement contract live, is the controlled check that nothing was lost;
+if explicit recall usage or the helpful rate drops, the default flips back.
+
+The labeling method is kept as the reusable decision metric: stratified
+sample across surfaces, labels helpful / harmful / irrelevant /
+indeterminate with the cited later action, information already present
+before delivery is not helpful. Reported as helpful per 100 sessions,
+harmful per 100 sessions, delivered tokens per helpful application.
 
 ## Testing
 
