@@ -139,7 +139,12 @@ def test_post_events_old_client_shape_still_accepted(client):
     tc, manager = client
     r = tc.post(
         "/api/memory/events",
-        json={"event_type": "session_summary", "session_id": "s", "project": "p", "recalled_ids": ["id-1"]},
+        json={
+            "event_type": "session_summary",
+            "session_id": "s",
+            "project": "p",
+            "recalled_ids": ["id-1"],
+        },
     )
     assert r.status_code == 200
     p = manager.record_event.call_args.kwargs["payload"]
@@ -153,7 +158,13 @@ def test_post_events_rejects_bad_referenced(client):
     tc, _ = client
     r = tc.post(
         "/api/memory/events",
-        json={"event_type": "session_summary", "session_id": "s", "project": "p", "recalled_ids": [], "referenced": "id-1"},
+        json={
+            "event_type": "session_summary",
+            "session_id": "s",
+            "project": "p",
+            "recalled_ids": [],
+            "referenced": "id-1",
+        },
     )
     assert r.status_code == 400
 
@@ -162,6 +173,12 @@ def test_post_events_rejects_bad_delivered(client):
     tc, _ = client
     r = tc.post(
         "/api/memory/events",
-        json={"event_type": "session_summary", "session_id": "s", "project": "p", "recalled_ids": [], "delivered": {"explicit": "id-1"}},
+        json={
+            "event_type": "session_summary",
+            "session_id": "s",
+            "project": "p",
+            "recalled_ids": [],
+            "delivered": {"explicit": "id-1"},
+        },
     )
     assert r.status_code == 400

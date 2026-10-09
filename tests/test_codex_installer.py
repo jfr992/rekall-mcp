@@ -340,7 +340,7 @@ def _run_install(
     }
     env.update(extra_env or {})
     result = subprocess.run(
-        ["/bin/bash", str(INSTALLER), *args],
+        ["/bin/bash", str(INSTALLER), "--no-detect", *args],
         cwd=Path(__file__).parents[1],
         env=env,
         capture_output=True,
@@ -386,7 +386,7 @@ def test_install_clean_and_semantically_idempotent(tmp_path):
     ]
 
     second = subprocess.run(
-        ["/bin/bash", str(INSTALLER)],
+        ["/bin/bash", str(INSTALLER), "--no-detect"],
         cwd=Path(__file__).parents[1],
         env={
             "HOME": str(tmp_path / "home"),
@@ -649,3 +649,148 @@ def test_shipped_python_scripts_parse_with_macos_system_python():
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def _codex_env(tmp_path: Path, state: Path, log: Path) -> dict[str, str]:
+    return {
+        "HOME": str(tmp_path / "home"),
+        "PATH": f"{tmp_path / 'fake bin'}:/usr/bin:/bin:/usr/sbin:/sbin",
+        "FAKE_CODEX_STATE": str(state),
+        "FAKE_CODEX_LOG": str(log),
+    }
+
+
+def _fake_codex_fixture(tmp_path: Path) -> tuple[Path, Path]:
+    fake_bin = tmp_path / "fake bin"
+    fake_bin.mkdir()
+    _write_fake_codex(fake_bin)
+    state = tmp_path / "mcp-state.json"
+    state.write_text(
+        json.dumps({"mode": "missing", "url": "http://localhost:8000"}), encoding="utf-8"
+    )
+    log = tmp_path / "mcp-argv.jsonl"
+    log.write_text("", encoding="utf-8")
+    return state, log
+
+
+def test_install_codex_home_flag_installs_every_home_and_registers_mcp_once(tmp_path):
+    state, log = _fake_codex_fixture(tmp_path)
+    home_a, home_b = tmp_path / "home a", tmp_path / "home b"
+    home_a.mkdir()
+    home_b.mkdir()
+    default_home = tmp_path / "home" / ".codex"
+
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            str(INSTALLER),
+            "--codex-home",
+            str(home_a),
+            "--codex-home",
+            str(home_b),
+            "--no-detect",
+        ],
+        cwd=Path(__file__).parents[1],
+        env=_codex_env(tmp_path, state, log),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    for codex_home in (default_home, home_a, home_b):
+        assert (codex_home / "hooks" / "rekall_hook.py").read_bytes() == ADAPTER.read_bytes()
+        assert (
+            codex_home / "skills" / "rekall-memory" / "SKILL.md"
+        ).read_bytes() == SKILL.read_bytes()
+        merged = json.loads((codex_home / "hooks.json").read_text(encoding="utf-8"))
+        assert len(merged["hooks"]) == 6
+        assert str(codex_home / "hooks" / "rekall_hook.py") in json.dumps(merged)
+    adds = [json.loads(line) for line in log.read_text().splitlines()]
+    assert adds == [["mcp", "add", "rekall", "--url", "http://localhost:8000"]]
+
+
+def test_install_codex_home_missing_dir_is_skipped_and_dedupes(tmp_path):
+    state, log = _fake_codex_fixture(tmp_path)
+    missing = tmp_path / "absent"
+    default_home = tmp_path / "home" / ".codex"
+    default_home.mkdir(parents=True)
+
+    result = subprocess.run(
+        [
+            "/bin/bash",
+            str(INSTALLER),
+            "--codex-home",
+            str(missing),
+            "--codex-home",
+            str(default_home) + "/",
+            "--no-detect",
+        ],
+        cwd=Path(__file__).parents[1],
+        env=_codex_env(tmp_path, state, log),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert f"skipping Codex home {missing}" in result.stdout
+    assert not missing.exists()
+    assert result.stdout.count("Rekall Codex integration installed") == 1
+
+
+def test_multi_home_failure_rolls_back_every_home_and_removes_mcp_once(tmp_path):
+    state, log = _fake_codex_fixture(tmp_path)
+    default_home = tmp_path / "home" / ".codex"
+    (default_home / "hooks").mkdir(parents=True)
+    original_hooks = {"foreign": {"keep": True}}
+    (default_home / "hooks.json").write_text(json.dumps(original_hooks), encoding="utf-8")
+    (default_home / "hooks" / "rekall_hook.py").write_text("old adapter", encoding="utf-8")
+    bad_home = tmp_path / "bad home"
+    bad_home.mkdir()
+    (bad_home / "hooks.json").write_text("{not json", encoding="utf-8")
+
+    result = subprocess.run(
+        ["/bin/bash", str(INSTALLER), "--codex-home", str(bad_home), "--no-detect"],
+        cwd=Path(__file__).parents[1],
+        env=_codex_env(tmp_path, state, log),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert json.loads((default_home / "hooks.json").read_text()) == original_hooks
+    assert (default_home / "hooks" / "rekall_hook.py").read_text() == "old adapter"
+    assert not (default_home / "skills" / "rekall-memory" / "SKILL.md").exists()
+    assert (bad_home / "hooks.json").read_text() == "{not json"
+    calls = [json.loads(line) for line in log.read_text().splitlines()]
+    assert calls == [
+        ["mcp", "add", "rekall", "--url", "http://localhost:8000"],
+        ["mcp", "remove", "rekall"],
+    ]
+
+
+def test_detected_codex_homes_must_be_absolute(tmp_path):
+    state, log = _fake_codex_fixture(tmp_path)
+    good = tmp_path / "good"
+    good.mkdir()
+    fake_ps = tmp_path / "fake bin" / "ps"
+    fake_ps.write_text(
+        "#!/bin/sh\n"
+        'echo "/usr/bin/codex CODEX_HOME=relative-detected-home"\n'
+        f'echo "/usr/bin/codex CODEX_HOME={good}"\n',
+        encoding="utf-8",
+    )
+    fake_ps.chmod(0o755)
+    repo = Path(__file__).parents[1]
+
+    result = subprocess.run(
+        ["/bin/bash", str(INSTALLER)],
+        cwd=repo,
+        env=_codex_env(tmp_path, state, log),
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert (good / "hooks" / "rekall_hook.py").exists()
+    assert not (repo / "relative-detected-home").exists()
+    assert "ignoring detected Codex home relative-detected-home" in result.stdout

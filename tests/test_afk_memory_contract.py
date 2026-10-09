@@ -1,6 +1,7 @@
 """Contract tests for the idempotent AFK memory operation endpoint."""
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import date, timedelta
 from hashlib import sha256
 from threading import Barrier, BrokenBarrierError, Lock
 from unittest.mock import MagicMock, patch
@@ -8,6 +9,10 @@ from unittest.mock import MagicMock, patch
 import pytest
 import yaml
 from starlette.testclient import TestClient
+
+# Ordinary saves land under today's file; pin the AFK date to the same day.
+TODAY = date.today().isoformat()
+TOMORROW = (date.today() + timedelta(days=1)).isoformat()
 
 
 @pytest.fixture
@@ -34,7 +39,7 @@ def afk_manager(tmp_path):
 def _save(manager, **overrides):
     request = {
         "operation_id": "attack:receipt-1",
-        "operation_date": "2026-08-24",
+        "operation_date": TODAY,
         "content": "token=supersecret",
         "tag": "attack",
         "proposed": "Keep signed evidence",
@@ -45,7 +50,7 @@ def _save(manager, **overrides):
     return manager.save_afk_operation(**request)
 
 
-def _entries(manager, project="afk-project", date="2026-08-24"):
+def _entries(manager, project="afk-project", date=TODAY):
     with (manager.memory_dir / project / f"{date}.yaml").open() as source:
         document = yaml.safe_load(source)
     return [entry for value in document.values() if isinstance(value, list) for entry in value]
@@ -55,13 +60,12 @@ def test_afk_save_sanitizes_then_signs_and_uses_contract_id(afk_manager):
     result = _save(afk_manager)
 
     expected_hash = sha256(b"afk-project\x00attack:receipt-1").hexdigest()
-    assert result["memory_id"] == f"2026-08-24_note_{expected_hash}"
+    assert result["memory_id"] == f"{TODAY}_note_{expected_hash}"
     assert result["canonical_content"] == "[REDACTED]"
     assert result["sanitized"] is True
     assert result["envelope"]["canonical_content"] == "[REDACTED]"
     assert (
-        "supersecret"
-        not in (afk_manager.memory_dir / "afk-project" / "2026-08-24.yaml").read_text()
+        "supersecret" not in (afk_manager.memory_dir / "afk-project" / f"{TODAY}.yaml").read_text()
     )
     assert _entries(afk_manager)[0]["afk_operation"]["response"] == result
 
@@ -94,7 +98,7 @@ def test_afk_signs_scrubbed_tag_and_proposed_with_normalized_conflicts(afk_manag
     assert retry == first
     assert first["envelope"]["tag"] == "[REDACTED]"
     assert first["envelope"]["proposed"] == "[REDACTED][REDACTED] evidence"
-    stored = (afk_manager.memory_dir / "afk-project" / "2026-08-24.yaml").read_text()
+    stored = (afk_manager.memory_dir / "afk-project" / f"{TODAY}.yaml").read_text()
     assert "first-secret" not in stored
     assert "second-secret" not in stored
 
@@ -103,7 +107,7 @@ def test_distinct_operations_keep_same_content_and_isolate_project_and_date(afk_
     first = _save(afk_manager)
     second = _save(afk_manager, operation_id="attack:receipt-2")
     other_project = _save(afk_manager, project="other-project")
-    other_date = _save(afk_manager, operation_date="2026-08-25")
+    other_date = _save(afk_manager, operation_date=TOMORROW)
 
     assert (
         len(
@@ -117,14 +121,11 @@ def test_distinct_operations_keep_same_content_and_isolate_project_and_date(afk_
         == 4
     )
     assert len(_entries(afk_manager)) == 2
-    assert afk_manager.get_afk_operation("attack:receipt-1", "afk-project", "2026-08-24") == first
+    assert afk_manager.get_afk_operation("attack:receipt-1", "afk-project", TODAY) == first
     assert (
-        afk_manager.get_afk_operation("attack:receipt-1", "other-project", "2026-08-24")
-        == other_project
+        afk_manager.get_afk_operation("attack:receipt-1", "other-project", TODAY) == other_project
     )
-    assert (
-        afk_manager.get_afk_operation("attack:receipt-1", "afk-project", "2026-08-25") == other_date
-    )
+    assert afk_manager.get_afk_operation("attack:receipt-1", "afk-project", TOMORROW) == other_date
 
 
 def test_retry_repairs_vector_after_crash_following_yaml_durability(afk_manager):
@@ -135,7 +136,7 @@ def test_retry_repairs_vector_after_crash_following_yaml_durability(afk_manager)
     assert len(_entries(afk_manager)) == 1
 
     recovered = _save(afk_manager)
-    assert recovered["memory_id"].startswith("2026-08-24_note_")
+    assert recovered["memory_id"].startswith(f"{TODAY}_note_")
     assert len(_entries(afk_manager)) == 1
     assert afk_manager.store.save.call_count == 2
 
@@ -193,7 +194,7 @@ def test_stock_delete_removes_afk_memory(afk_manager):
     afk_manager.store.client.delete = MagicMock()
 
     assert afk_manager.delete(result["memory_id"]) is True
-    assert not (afk_manager.memory_dir / "afk-project" / "2026-08-24.yaml").exists()
+    assert not (afk_manager.memory_dir / "afk-project" / f"{TODAY}.yaml").exists()
 
 
 def test_afk_and_ordinary_concurrent_writers_do_not_lose_accepted_records(afk_manager):

@@ -1,6 +1,6 @@
 """close_loop MCP tool: explicit closure, project-guarded (spec 2026-07-08)."""
 
-from datetime import date
+from datetime import date, timedelta
 from unittest.mock import MagicMock
 
 import pytest
@@ -142,7 +142,7 @@ def test_unresolved_todo_stays_in_open_loops():
             "memory_id": "m1",
             "content": "DNS flapping still unresolved — TODO: escalate to netops",
             "type": "note",
-            "date": "2026-07-08",
+            "date": (date.today() - timedelta(days=1)).isoformat(),
         }
     ]
     manager.knowledge_graph.get_importance.return_value = 0.5

@@ -8,6 +8,8 @@
 #        bash claude/setup/install.sh --skills-only       (only install slash commands)
 #        bash claude/setup/install.sh --hooks-only        (only install hooks + settings)
 #        bash claude/setup/install.sh --install-startup-capsule
+#        bash claude/setup/install.sh --profile <dir>     (also patch another config dir; repeatable)
+#        bash claude/setup/install.sh --no-detect         (skip scanning running claude processes)
 
 set -euo pipefail
 
@@ -16,20 +18,27 @@ SKIP_BACKEND=0
 SKILLS_ONLY=0
 HOOKS_ONLY=0
 INSTALL_STARTUP_CAPSULE=0
-BACKUP=""  # set by the settings.json patch path; referenced unconditionally in the final report
+BACKUPS=()  # settings.json backups, listed in the final report
 LIVE_BACKUP_DIR=""
-for arg in "$@"; do
-    case "$arg" in
+EXTRA_PROFILES=()
+DETECT=1
+while [[ $# -gt 0 ]]; do
+    case "$1" in
         --skip-backend) SKIP_BACKEND=1 ;;
         --skills-only)  SKILLS_ONLY=1; SKIP_BACKEND=1 ;;
         --hooks-only)   HOOKS_ONLY=1; SKIP_BACKEND=1 ;;
         --install-startup-capsule) INSTALL_STARTUP_CAPSULE=1 ;;
+        --no-detect) DETECT=0 ;;
+        --profile)
+            [[ $# -ge 2 ]] || { echo "--profile needs a directory" >&2; exit 2; }
+            EXTRA_PROFILES+=("$2"); shift ;;
         --help|-h)
-            sed -n '2,10p' "$0" | sed 's/^# \{0,1\}//'
+            sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
             exit 0
             ;;
-        *) echo "unknown arg: $arg (see --help)" >&2; exit 2 ;;
+        *) echo "unknown arg: $1 (see --help)" >&2; exit 2 ;;
     esac
+    shift
 done
 
 # ---------------------------------------------------------------- locate repo
@@ -79,6 +88,72 @@ command -v jq         >/dev/null 2>&1 && ok "jq"       || fail "jq is required (
 command -v curl       >/dev/null 2>&1 && ok "curl"     || fail "curl is required"
 command -v python3    >/dev/null 2>&1 && ok "python3"  || fail "python3 is required"
 [[ -d "$HOME/.claude" ]] && ok "~/.claude/ exists"     || mkdir -p "$HOME/.claude"
+
+# ---------------------------------------------------------------- profiles
+# Config dirs to wire. Hook files live only in ~/.claude/hooks; every profile's
+# settings.json points at them.
+expand_dir() {
+    local p="$1"
+    case "$p" in
+        "~") p="$HOME" ;;
+        "~/"*) p="$HOME/${p#"~/"}" ;;
+        /*) ;;
+        *) p="$PWD/$p" ;;
+    esac
+    while [[ "$p" != "/" && "$p" == */ ]]; do p="${p%/}"; done
+    printf '%s' "$p"
+}
+
+detect_profiles() {
+    ps -E -ww -A -o command= 2>/dev/null \
+        | awk '{ for (i = 1; i <= 2 && i <= NF; i++) { n = split($i, a, "/"); if (a[n] == "claude") { print; break } } }' \
+        | grep -o 'CLAUDE_CONFIG_DIR=[^ ]*' \
+        | sed 's/^CLAUDE_CONFIG_DIR=//' \
+        | sort -u || true
+}
+
+PROFILES=()
+DETECTED_PROFILES=()
+add_profile() {
+    local dir existing
+    dir="$(expand_dir "$1")"
+    for existing in ${PROFILES[@]+"${PROFILES[@]}"}; do
+        [[ "$existing" == "$dir" ]] && return 0
+    done
+    if [[ ! -d "$dir" ]]; then
+        warn "skipping profile $dir (not a directory)"
+        return 0
+    fi
+    PROFILES+=("$dir")
+}
+
+step "Resolving Claude config profiles"
+add_profile "$HOME/.claude"
+[[ -n "${CLAUDE_CONFIG_DIR:-}" ]] && add_profile "$CLAUDE_CONFIG_DIR"
+for extra in ${EXTRA_PROFILES[@]+"${EXTRA_PROFILES[@]}"}; do
+    add_profile "$extra"
+done
+if [[ "$DETECT" == "1" ]]; then
+    while IFS= read -r detected; do
+        [[ -n "$detected" ]] || continue
+        case "$detected" in
+            /*|"~"*) ;;
+            *) warn "ignoring detected profile $detected (not an absolute path)"; continue ;;
+        esac
+        before=${#PROFILES[@]}
+        resolved="$(expand_dir "$detected")"
+        if [[ -d "$resolved" && ! -f "$resolved/settings.json" ]]; then
+            warn "skipping detected profile $resolved (no settings.json)"
+            continue
+        fi
+        ok "detected running profile: $detected"
+        add_profile "$detected"
+        [[ ${#PROFILES[@]} -gt $before ]] && DETECTED_PROFILES+=("$resolved")
+    done < <(detect_profiles)
+fi
+for profile in "${PROFILES[@]}"; do
+    ok "profile: $profile"
+done
 
 # ---------------------------------------------------------------- backend
 if [[ "$SKIP_BACKEND" == "0" ]]; then
@@ -138,6 +213,8 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     HOOKS=(rekall-restore.sh rekall-observe.sh rekall-session-end.sh memory-prune.sh rekall-reflex.sh rekall-provenance.sh)
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         HOOKS+=(session-start-memory.sh)
+    elif [[ -f "$HOME/.claude/hooks/session-start-memory.sh" ]]; then
+        HOOKS+=(session-start-memory.sh)  # refresh only; wiring stays opt-in
     fi
 
     for hook in "${HOOKS[@]}"; do
@@ -153,24 +230,7 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
         fi
     done
 
-    # ----- settings.json patch -----
-    step "Wiring ~/.claude/settings.json"
-
-    SETTINGS="$HOME/.claude/settings.json"
-    if [[ ! -f "$SETTINGS" ]]; then
-        echo '{}' > "$SETTINGS"
-        ok "created empty settings.json"
-    fi
-
-    # Validate it's parseable JSON before touching
-    jq empty "$SETTINGS" 2>/dev/null || fail "$SETTINGS is not valid JSON. Fix it manually."
-
-    # Backup
-    backup_live_file "$SETTINGS"
-    BACKUP="$SETTINGS.bak-$(date +%Y%m%d-%H%M%S)"
-    cp "$SETTINGS" "$BACKUP"
-    ok "backed up to $(basename "$BACKUP")"
-
+    # ----- settings.json patch (once per profile) -----
     # Merge Rekall's supported lifecycle hooks and retire exact basenames from
     # superseded experimental hooks. Foreign hooks and top-level settings are
     # preserved; session-start-memory.sh (context injector) remains opt-in.
@@ -184,6 +244,26 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         START_CMD="$HOME/.claude/hooks/session-start-memory.sh"
     fi
+
+    # Returns non-zero (with a message) instead of exiting so detected
+    # profiles can be skipped; set -e is inert inside `if`, so every step is chained.
+    patch_profile() {
+    local profile="$1" SETTINGS BACKUP
+    step "Wiring $profile/settings.json"
+
+    SETTINGS="$profile/settings.json"
+    if [[ ! -f "$SETTINGS" ]]; then
+        { echo '{}' > "$SETTINGS"; } 2>/dev/null || { warn "cannot create $SETTINGS"; return 1; }
+        ok "created empty settings.json"
+    fi
+
+    jq empty "$SETTINGS" 2>/dev/null || { warn "$SETTINGS is not valid JSON. Fix it manually."; return 1; }
+
+    if [[ "$profile" == "$HOME/.claude" ]]; then backup_live_file "$SETTINGS" || return 1; fi
+    BACKUP="$SETTINGS.bak-$(date +%Y%m%d-%H%M%S)"
+    cp "$SETTINGS" "$BACKUP" 2>/dev/null || { warn "cannot back up $SETTINGS"; return 1; }
+    BACKUPS+=("$BACKUP")
+    ok "backed up to $(basename "$BACKUP")"
 
     /usr/bin/python3 - "$SETTINGS" "$REST_CMD" "$OBS_CMD" "$SESSION_END_CMD" "$PRUNE_CMD" "$REFLEX_CMD" "$PROV_CMD" "$START_CMD" <<'PY'
 import json
@@ -319,6 +399,23 @@ if repaired:
 if not removed and not added and not repaired:
     print("  ✓ already wired (no changes)")
 PY
+    }
+
+    is_detected_profile() {
+        local d
+        for d in ${DETECTED_PROFILES[@]+"${DETECTED_PROFILES[@]}"}; do
+            [[ "$d" == "$1" ]] && return 0
+        done
+        return 1
+    }
+
+    for profile in "${PROFILES[@]}"; do
+        if is_detected_profile "$profile"; then
+            patch_profile "$profile" || warn "skipping detected profile $profile"
+        else
+            patch_profile "$profile" || fail "could not wire $profile/settings.json"
+        fi
+    done
 fi
 
 # ---------------------------------------------------------------- skills
@@ -367,6 +464,21 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     if [[ "$INSTALL_STARTUP_CAPSULE" == "1" ]]; then
         [[ -f "$HOME/.claude/hooks/session-start-memory.sh" ]] && ok "session-start-memory.sh in place" || warn "session-start-memory.sh missing"
     fi
+    for profile in "${PROFILES[@]}"; do
+        if [[ -f "$profile/settings.json" ]]; then
+            hooks_type=$(jq -r '(.hooks // {}) | type' "$profile/settings.json" 2>/dev/null || echo "unreadable")
+            if [[ "$hooks_type" != "object" ]]; then
+                warn "$profile: settings.json hooks is $hooks_type, expected an object"
+                continue
+            fi
+            wired=$(jq -r --arg p "$HOME/.claude/hooks/" '[(.hooks // {}) | to_entries[] | select(.value | type == "array") | select(any(.value[]; type == "object" and ((.hooks // []) | type == "array") and any(.hooks[]; type == "object" and ((.command // "") | type == "string") and ((.command // "") | startswith($p))))) | .key] | join(", ")' "$profile/settings.json" 2>/dev/null || true)
+            nonobj=$(jq -r '[(.hooks // {})[]? | arrays | .[] | select(type != "object")] | length' "$profile/settings.json" 2>/dev/null || echo 0)
+            ok "$profile wired events: ${wired:-none}"
+            if [[ "${nonobj:-0}" != "0" ]]; then
+                warn "$profile: $nonobj non-object hook entries ignored"
+            fi
+        fi
+    done
 fi
 
 echo
@@ -375,7 +487,9 @@ echo
 echo "Next steps:"
 echo "  • Restart your Claude Code session for the new hooks/skills to load."
 echo "  • Type /memory-stats in a new session to verify slash commands work."
-[[ -n "$BACKUP" ]] && echo "  • If something's off, restore your settings: cp '$BACKUP' '$HOME/.claude/settings.json'"
+for b in ${BACKUPS[@]+"${BACKUPS[@]}"}; do
+    echo "  • If something's off, restore: cp '$b' '${b%.bak-*}'"
+done
 [[ -n "$LIVE_BACKUP_DIR" ]] && echo "  • Live file backups: $LIVE_BACKUP_DIR"
 echo
 echo "Kill switches (env vars):"

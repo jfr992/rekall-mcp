@@ -7,7 +7,9 @@ SOURCE_ADAPTER="$BUNDLE_ROOT/hooks/rekall_hook.py"
 SOURCE_SKILL="$BUNDLE_ROOT/skills/rekall-memory/SKILL.md"
 MERGER="$SCRIPT_DIR/merge_hooks.py"
 
-CODEX_HOME_INPUT="${CODEX_HOME:-$HOME/.codex}"
+DEFAULT_HOME_INPUT="${CODEX_HOME:-$HOME/.codex}"
+EXTRA_HOMES=()
+DETECT=1
 MCP_URL="${REKALL_API_URL:-http://localhost:8000}"
 API_URL=""
 API_URL_EXPLICIT=0
@@ -18,12 +20,16 @@ usage() {
   cat <<'EOF'
 Usage: install.sh [--mcp-url URL] [--api-url URL] [--allow-remote-mcp]
                   [--bearer-token-env-var ENV_NAME]
+                  [--codex-home DIR]... [--no-detect]
 
 Installs Rekall's Codex hooks and MCP-first skill without changing native
 Codex memory. Use --api-url when the MCP transport has a path. Remote URLs
 require --allow-remote-mcp.
 When bearer authentication is enabled, only the environment-variable name is
 stored; the token must be present in Codex's launch environment.
+Hooks and the skill are installed into ${CODEX_HOME:-~/.codex}, every
+--codex-home DIR (repeatable, must exist), and any CODEX_HOME found on running
+codex processes (--no-detect skips that scan). The MCP server is registered once.
 EOF
 }
 
@@ -47,6 +53,15 @@ while [ "$#" -gt 0 ]; do
       ;;
     --allow-remote-mcp)
       ALLOW_REMOTE=1
+      shift
+      ;;
+    --codex-home)
+      [ "$#" -ge 2 ] || fail "--codex-home requires a value"
+      EXTRA_HOMES+=("$2")
+      shift 2
+      ;;
+    --no-detect)
+      DETECT=0
       shift
       ;;
     --bearer-token-env-var)
@@ -81,18 +96,35 @@ for source_file in "$SOURCE_ADAPTER" "$SOURCE_SKILL" "$MERGER"; do
   [ -f "$source_file" ] || fail "installation bundle is incomplete"
 done
 
-CODEX_HOME="$({
-  CODEX_HOME_INPUT="$CODEX_HOME_INPUT" python3 - <<'PY'
+resolve_home() {
+  HOME_INPUT="$1" python3 - <<'PY'
 import os
 import sys
 from pathlib import Path
 
-path = Path(os.environ["CODEX_HOME_INPUT"]).expanduser().resolve()
+path = Path(os.environ["HOME_INPUT"]).expanduser().resolve()
 if any(part.lower() == "memories" for part in path.parts):
     raise SystemExit(2)
 print(path)
 PY
-} 2>/dev/null)" || fail "CODEX_HOME cannot be a native memory path"
+}
+
+detect_homes() {
+  ps -E -ww -A -o command= 2>/dev/null \
+    | awk '{ for (i = 1; i <= 2 && i <= NF; i++) { n = split($i, a, "/"); if (a[n] == "codex") { print; break } } }' \
+    | grep -o 'CODEX_HOME=[^ ]*' \
+    | sed 's/^CODEX_HOME=//' \
+    | sort -u || true
+}
+
+HOMES=()
+add_home() {
+  resolved="$(resolve_home "$1" 2>/dev/null)" || return 1
+  for existing in ${HOMES[@]+"${HOMES[@]}"}; do
+    [ "$existing" = "$resolved" ] && return 0
+  done
+  HOMES+=("$resolved")
+}
 
 validate_url() {
   URL_INPUT="$1" URL_KIND="$2" ALLOW_REMOTE="$ALLOW_REMOTE" python3 - <<'PY'
@@ -149,10 +181,36 @@ fi
 API_URL="$(validate_url "$API_URL" api 2>/dev/null)" || \
   fail "API URL is invalid or requires --allow-remote-mcp"
 
+add_home "$DEFAULT_HOME_INPUT" || fail "CODEX_HOME cannot be a native memory path"
+for extra in ${EXTRA_HOMES[@]+"${EXTRA_HOMES[@]}"}; do
+  add_home "$extra" || fail "--codex-home cannot be a native memory path"
+done
+if [ "$DETECT" -eq 1 ]; then
+  while IFS= read -r detected; do
+    [ -n "$detected" ] || continue
+    case "$detected" in
+      /*|"~"*) ;;
+      *) printf 'ignoring detected Codex home %s (not an absolute path)\n' "$detected"; continue ;;
+    esac
+    printf 'Detected running Codex home: %s\n' "$detected"
+    add_home "$detected" || printf 'skipping Codex home %s (native memory path)\n' "$detected"
+  done < <(detect_homes)
+fi
+# Only the first (default) home may be created; the rest must already exist.
+VALID_HOMES=()
+for candidate in "${HOMES[@]}"; do
+  if [ "${#VALID_HOMES[@]}" -gt 0 ] && [ ! -d "$candidate" ]; then
+    printf 'skipping Codex home %s (not a directory)\n' "$candidate"
+    continue
+  fi
+  VALID_HOMES+=("$candidate")
+done
+
 WORK_DIR="$(mktemp -d "${TMPDIR:-/tmp}/rekall-codex-install.XXXXXX")"
-DEST_ADAPTER="$CODEX_HOME/hooks/rekall_hook.py"
-DEST_SKILL="$CODEX_HOME/skills/rekall-memory/SKILL.md"
-HOOKS_FILE="$CODEX_HOME/hooks.json"
+CODEX_HOME=""
+DEST_ADAPTER=""
+DEST_SKILL=""
+HOOKS_FILE=""
 BACKUP_DIR=""
 cleanup_work_dir() {
   python3 - "$WORK_DIR" <<'PY' >/dev/null 2>&1 || true
@@ -196,7 +254,9 @@ rollback_file() {
   fi
 }
 
-rollback_install() {
+COMPLETED_HOMES=()
+
+rollback_current_home() {
   rollback_file "$HOOKS_CHANGED" "$HOOKS_EXISTED" "$BACKUP_DIR/hooks.json" "$HOOKS_FILE"
   rollback_file \
     "$SKILL_CHANGED" "$SKILL_EXISTED" \
@@ -204,6 +264,30 @@ rollback_install() {
   rollback_file \
     "$ADAPTER_CHANGED" "$ADAPTER_EXISTED" \
     "$BACKUP_DIR/hooks/rekall_hook.py" "$DEST_ADAPTER"
+}
+
+record_completed_home() {
+  COMPLETED_HOMES+=("$CODEX_HOME|$BACKUP_DIR|$ADAPTER_CHANGED|$ADAPTER_EXISTED|$SKILL_CHANGED|$SKILL_EXISTED|$HOOKS_CHANGED|$HOOKS_EXISTED")
+}
+
+load_home_state() {
+  IFS='|' read -r CODEX_HOME BACKUP_DIR ADAPTER_CHANGED ADAPTER_EXISTED \
+    SKILL_CHANGED SKILL_EXISTED HOOKS_CHANGED HOOKS_EXISTED <<EOF_STATE
+$1
+EOF_STATE
+  DEST_ADAPTER="$CODEX_HOME/hooks/rekall_hook.py"
+  DEST_SKILL="$CODEX_HOME/skills/rekall-memory/SKILL.md"
+  HOOKS_FILE="$CODEX_HOME/hooks.json"
+}
+
+rollback_install() {
+  rollback_current_home
+  i=${#COMPLETED_HOMES[@]}
+  while [ "$i" -gt 0 ]; do
+    i=$((i - 1))
+    load_home_state "${COMPLETED_HOMES[$i]}"
+    rollback_current_home
+  done
   if [ "$MCP_ADDED" -eq 1 ]; then
     codex mcp remove rekall >/dev/null 2>&1 || true
   fi
@@ -261,17 +345,6 @@ else
   fi
 fi
 
-CANDIDATE_HOOKS="$WORK_DIR/hooks.json"
-if [ -f "$HOOKS_FILE" ]; then
-  cp -p "$HOOKS_FILE" "$CANDIDATE_HOOKS"
-else
-  printf '{}\n' >"$CANDIDATE_HOOKS"
-  chmod 600 "$CANDIDATE_HOOKS"
-fi
-python3 "$MERGER" --hooks-file "$CANDIDATE_HOOKS" --adapter "$DEST_ADAPTER" \
-  --api-url "$API_URL" --bearer-token-env-var "$BEARER_TOKEN_ENV_VAR" || \
-  fail "hooks.json is invalid"
-
 changed() {
   [ ! -f "$2" ] || ! cmp -s "$1" "$2"
 }
@@ -304,55 +377,80 @@ atomic_copy() {
   mv -f "$temporary" "$destination"
 }
 
-if changed "$SOURCE_ADAPTER" "$DEST_ADAPTER"; then
-  ADAPTER_CHANGED=1
-  [ ! -f "$DEST_ADAPTER" ] || ADAPTER_EXISTED=1
-  backup_file "$DEST_ADAPTER" "hooks/rekall_hook.py"
-fi
-if changed "$SOURCE_SKILL" "$DEST_SKILL"; then
-  SKILL_CHANGED=1
-  [ ! -f "$DEST_SKILL" ] || SKILL_EXISTED=1
-  backup_file "$DEST_SKILL" "skills/rekall-memory/SKILL.md"
-fi
-if changed "$CANDIDATE_HOOKS" "$HOOKS_FILE"; then
-  HOOKS_CHANGED=1
-  [ ! -f "$HOOKS_FILE" ] || HOOKS_EXISTED=1
-  backup_file "$HOOKS_FILE" "hooks.json"
-  hooks_mode=600
+install_home() {
+  CODEX_HOME="$1"
+  DEST_ADAPTER="$CODEX_HOME/hooks/rekall_hook.py"
+  DEST_SKILL="$CODEX_HOME/skills/rekall-memory/SKILL.md"
+  HOOKS_FILE="$CODEX_HOME/hooks.json"
+  BACKUP_DIR=""
+  ADAPTER_CHANGED=0
+  ADAPTER_EXISTED=0
+  SKILL_CHANGED=0
+  SKILL_EXISTED=0
+  HOOKS_CHANGED=0
+  HOOKS_EXISTED=0
+
+  CANDIDATE_HOOKS="$WORK_DIR/hooks.json"
   if [ -f "$HOOKS_FILE" ]; then
-    hooks_mode="$(file_mode "$HOOKS_FILE")"
-  fi
-fi
-
-if [ "$MCP_MISSING" -eq 1 ]; then
-  if [ -n "$BEARER_TOKEN_ENV_VAR" ]; then
-    codex mcp add rekall --url "$MCP_URL" \
-      --bearer-token-env-var "$BEARER_TOKEN_ENV_VAR" >/dev/null || \
-      fail "could not register the MCP server"
+    cp -p "$HOOKS_FILE" "$CANDIDATE_HOOKS"
   else
-    codex mcp add rekall --url "$MCP_URL" >/dev/null || \
-      fail "could not register the MCP server"
+    printf '{}\n' >"$CANDIDATE_HOOKS"
+    chmod 600 "$CANDIDATE_HOOKS"
   fi
-  MCP_ADDED=1
-fi
+  python3 "$MERGER" --hooks-file "$CANDIDATE_HOOKS" --adapter "$DEST_ADAPTER" \
+    --api-url "$API_URL" --bearer-token-env-var "$BEARER_TOKEN_ENV_VAR" || \
+    fail "hooks.json is invalid"
 
-if [ "$ADAPTER_CHANGED" -eq 1 ]; then
-  atomic_copy "$SOURCE_ADAPTER" "$DEST_ADAPTER" 700
-fi
-if [ "$SKILL_CHANGED" -eq 1 ]; then
-  atomic_copy "$SOURCE_SKILL" "$DEST_SKILL" 600
-fi
-if [ "$HOOKS_CHANGED" -eq 1 ]; then
-  atomic_copy "$CANDIDATE_HOOKS" "$HOOKS_FILE" "$hooks_mode"
-fi
+  if changed "$SOURCE_ADAPTER" "$DEST_ADAPTER"; then
+    ADAPTER_CHANGED=1
+    [ ! -f "$DEST_ADAPTER" ] || ADAPTER_EXISTED=1
+    backup_file "$DEST_ADAPTER" "hooks/rekall_hook.py"
+  fi
+  if changed "$SOURCE_SKILL" "$DEST_SKILL"; then
+    SKILL_CHANGED=1
+    [ ! -f "$DEST_SKILL" ] || SKILL_EXISTED=1
+    backup_file "$DEST_SKILL" "skills/rekall-memory/SKILL.md"
+  fi
+  if changed "$CANDIDATE_HOOKS" "$HOOKS_FILE"; then
+    HOOKS_CHANGED=1
+    [ ! -f "$HOOKS_FILE" ] || HOOKS_EXISTED=1
+    backup_file "$HOOKS_FILE" "hooks.json"
+    hooks_mode=600
+    if [ -f "$HOOKS_FILE" ]; then
+      hooks_mode="$(file_mode "$HOOKS_FILE")"
+    fi
+  fi
 
-MCP_VERIFY_JSON="$WORK_DIR/mcp-verify.json"
-if ! codex mcp get rekall --json >"$MCP_VERIFY_JSON" 2>/dev/null || \
-   ! mcp_config_matches "$MCP_VERIFY_JSON"; then
-  fail "MCP registration verification failed"
-fi
+  if [ "$MCP_MISSING" -eq 1 ]; then
+    if [ -n "$BEARER_TOKEN_ENV_VAR" ]; then
+      codex mcp add rekall --url "$MCP_URL" \
+        --bearer-token-env-var "$BEARER_TOKEN_ENV_VAR" >/dev/null || \
+        fail "could not register the MCP server"
+    else
+      codex mcp add rekall --url "$MCP_URL" >/dev/null || \
+        fail "could not register the MCP server"
+    fi
+    MCP_ADDED=1
+    MCP_MISSING=0
+  fi
 
-python3 - "$HOOKS_FILE" "$DEST_ADAPTER" "$DEST_SKILL" <<'PY' || fail "installation verification failed"
+  if [ "$ADAPTER_CHANGED" -eq 1 ]; then
+    atomic_copy "$SOURCE_ADAPTER" "$DEST_ADAPTER" 700
+  fi
+  if [ "$SKILL_CHANGED" -eq 1 ]; then
+    atomic_copy "$SOURCE_SKILL" "$DEST_SKILL" 600
+  fi
+  if [ "$HOOKS_CHANGED" -eq 1 ]; then
+    atomic_copy "$CANDIDATE_HOOKS" "$HOOKS_FILE" "$hooks_mode"
+  fi
+
+  MCP_VERIFY_JSON="$WORK_DIR/mcp-verify.json"
+  if ! codex mcp get rekall --json >"$MCP_VERIFY_JSON" 2>/dev/null || \
+     ! mcp_config_matches "$MCP_VERIFY_JSON"; then
+    fail "MCP registration verification failed"
+  fi
+
+  python3 - "$HOOKS_FILE" "$DEST_ADAPTER" "$DEST_SKILL" <<'PY' || fail "installation verification failed"
 import json
 import sys
 from pathlib import Path
@@ -364,6 +462,13 @@ if not expected.issubset(data.get("hooks", {})):
 if not Path(sys.argv[2]).is_file() or not Path(sys.argv[3]).is_file():
     raise SystemExit(2)
 PY
+  record_completed_home
+}
+
+for home in "${VALID_HOMES[@]}"; do
+  install_home "$home"
+  printf 'Installed into: %s\n' "$home"
+done
 
 INSTALL_SUCCEEDED=1
 

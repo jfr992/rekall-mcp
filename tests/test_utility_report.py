@@ -9,7 +9,16 @@ import json
 import pytest
 
 
-def _ss(session_id, project, recalled_ids, edits=0, test_passes=0, eid="ev0", referenced=None, delivered=None):
+def _ss(
+    session_id,
+    project,
+    recalled_ids,
+    edits=0,
+    test_passes=0,
+    eid="ev0",
+    referenced=None,
+    delivered=None,
+):
     payload = {
         "edits_after_recall": edits,
         "memory_ids": recalled_ids,
@@ -588,7 +597,14 @@ def test_citation_coverage_counts_over_collapsed_sessions(tmp_path):
     f.write_text(
         _ss("s1", "p", ["a", "b"], referenced=["a"], delivered={"explicit": ["a", "b"]})
         + "\n"
-        + _ss("s1", "p", ["a", "b"], referenced=["a", "b"], delivered={"explicit": ["a", "b"]}, eid="ev1")
+        + _ss(
+            "s1",
+            "p",
+            ["a", "b"],
+            referenced=["a", "b"],
+            delivered={"explicit": ["a", "b"]},
+            eid="ev1",
+        )
         + "\n"
         + _ss("s2", "p", ["c"], referenced=[], delivered={"capsule": ["c"]}, eid="ev2")
         + "\n"
@@ -625,7 +641,9 @@ def test_collapse_takes_latest_summary_that_has_referenced(tmp_path):
     f = tmp_path / "_events.jsonl"
     late_legacy = json.loads(_ss("s1", "p", ["a"], eid="e2"))
     late_legacy["payload"]["referenced"] = None
-    f.write_text(_ss("s1", "p", ["a"], referenced=["a"], eid="e1") + "\n" + json.dumps(late_legacy) + "\n")
+    f.write_text(
+        _ss("s1", "p", ["a"], referenced=["a"], eid="e1") + "\n" + json.dumps(late_legacy) + "\n"
+    )
     (collapsed,) = collapse_sessions(build_session_summaries(parse_events(f)))
     assert collapsed["referenced"] == ["a"]
 
@@ -697,7 +715,9 @@ def test_null_baseline_legacy_has_no_delta(tmp_path, capsys):
     )
 
     f = tmp_path / "_events.jsonl"
-    f.write_text(_ss("s1", "p", ["a", "b"], edits=1) + "\n" + _ss("s2", "p", ["a"], edits=1, eid="e2") + "\n")
+    f.write_text(
+        _ss("s1", "p", ["a", "b"], edits=1) + "\n" + _ss("s2", "p", ["a"], edits=1, eid="e2") + "\n"
+    )
     events = parse_events(f)
     summaries = collapse_sessions(build_session_summaries(events))
     assert compute_null_baseline(summaries, build_universe(events), random.Random(42)) == []
@@ -721,7 +741,10 @@ def test_null_baseline_not_above_real_when_references_align(tmp_path):
     )
 
     f = tmp_path / "_events.jsonl"
-    lines = [_ss("s1", "p", ["a"], edits=1, referenced=["a"], eid="e1"), _ss("s2", "p", ["a"], edits=1, referenced=["a"], eid="e2")]
+    lines = [
+        _ss("s1", "p", ["a"], edits=1, referenced=["a"], eid="e1"),
+        _ss("s2", "p", ["a"], edits=1, referenced=["a"], eid="e2"),
+    ]
     lines += [_ss(f"n{i}", "p", ["b"], referenced=[], eid=f"n{i}") for i in range(4)]
     f.write_text("\n".join(lines) + "\n")
     events = parse_events(f)

@@ -27,6 +27,12 @@ bash codex/setup/install.sh --bearer-token-env-var REKALL_API_TOKEN
 
 The installer passes `--bearer-token-env-var` to Codex and configures the REST hooks to read the same variable. The secret value is never written to Codex configuration, `hooks.json`, process arguments, or installer output. An existing unauthenticated `rekall` registration intentionally conflicts with an authenticated install; remove that registration with `codex mcp remove rekall`, rerun the installer, and then restart Codex. GUI-launched Codex must receive the variable from its launch environment rather than only from an interactive shell.
 
+Codex can run with more than one `CODEX_HOME`. The installer targets `${CODEX_HOME:-~/.codex}`, every `--codex-home <dir>` (repeatable; the directory must exist), and, best effort, any `CODEX_HOME` found on running `codex` processes (`--no-detect` skips that scan). Each home gets its own hooks, skill, and backup; the `rekall` MCP server is registered once. The run is transactional: if any home fails, every home changed in this run is restored from its backup, and the MCP registration is removed only if this run added it. Detected values must be absolute paths (relative ones are ignored), and a detected path containing spaces is truncated at the first space; pass such homes with `--codex-home` instead.
+
+```bash
+bash codex/setup/install.sh --codex-home ~/.codex-work
+```
+
 MCP transport and REST hook endpoints can differ. With a root MCP URL, the installer safely derives the REST base. If the MCP transport has a path such as `/mcp`, provide the REST base explicitly:
 
 ```bash

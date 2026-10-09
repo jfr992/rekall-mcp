@@ -43,9 +43,7 @@ async def test_save_memory_resolves_project_from_caller_cwd(tool_registry, git_r
     manager.save.return_value = "2026-10-09_note_abcd1234"
     tools = _bind(_provider(manager), tool_registry)
 
-    await tools["save_memory"](
-        content="x", cwd=str(git_repo), session_id="sess-1", agent="codex"
-    )
+    await tools["save_memory"](content="x", cwd=str(git_repo), session_id="sess-1", agent="codex")
 
     kw = manager.save.call_args.kwargs
     assert kw["project"] == "caller-repo"
