@@ -85,7 +85,7 @@ git add docs/superpowers/plans/2026-10-09-measurable-memory.md
 git commit -m "docs: record updatedInput spike result"
 ```
 
-Spike result: _pending_
+Spike result (2026-10-09): PASS, `memory_recalled` event carried `session_id: spike-updatedinput-1` after a `claude -p --settings` run with a PreToolUse hook on `mcp__memory__recall_memories`.
 
 ---
 
