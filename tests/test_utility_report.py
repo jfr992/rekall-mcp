@@ -662,7 +662,12 @@ def test_report_prints_unknown_for_unreferenced(tmp_path, capsys):
 
 
 def test_referenced_outcome_ratio_two_thirds(tmp_path):
-    from scripts.utility_report import build_session_summaries, collapse_sessions, compute_utility_map, parse_events
+    from scripts.utility_report import (
+        build_session_summaries,
+        collapse_sessions,
+        compute_utility_map,
+        parse_events,
+    )
 
     f = tmp_path / "_events.jsonl"
     f.write_text(

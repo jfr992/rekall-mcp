@@ -1,19 +1,3 @@
-# Migration Guide — unreleased (measurable memory)
-
-## What's new
-
-- **Ids on every bullet.** Recall and capsule bullets now end with `[memory_id]`.
-- **New hook.** `rekall-provenance.sh` (PreToolUse on `mcp__memory__.*|mcp__rekall__.*`)
-  is installed by default; re-run `bash claude/setup/install.sh`.
-- **Richer `session_summary`.** Events gained `client`, `delivered`, `referenced`,
-  and `coverage`. A missing `referenced` is stored as `null` (unknown), not `[]`.
-- **Utility report.** `scripts/utility_report.py` prints citation coverage and credits
-  only referenced memories; sessions without `referenced` are excluded from coverage.
-- **Reinforcement sees more.** Session-matched recalls now reach reinforcement; watch
-  semantic promotions for a week after upgrading.
-
----
-
 # Migration Guide — v1.14.0 → v1.15.0 (AFK-safe operations and authenticated clients)
 
 ## What's new
@@ -58,6 +42,18 @@ graph data, and native Codex memory remain compatible.
 To roll back the client wiring, restore the timestamped installer backup and
 restart Codex. Server rollback does not require rewriting existing memories,
 but callers must stop using the new AFK endpoints before returning to v1.14.0.
+
+## Unreleased: measurable memory
+
+- **Ids on every bullet.** Recall and capsule bullets now end with `[memory_id]`.
+- **New hook.** `rekall-provenance.sh` (PreToolUse on `mcp__memory__.*|mcp__rekall__.*`)
+  is installed by default; re-run `bash claude/setup/install.sh`.
+- **Richer `session_summary`.** Events gained `client`, `delivered`, `referenced`,
+  and `coverage`. A missing `referenced` is stored as `null` (unknown), not `[]`.
+- **Utility report.** `scripts/utility_report.py` prints citation coverage and credits
+  only referenced memories; sessions without `referenced` are excluded from coverage.
+- **Reinforcement sees more.** Session-matched recalls now reach reinforcement; watch
+  semantic promotions for a week after upgrading.
 
 ---
 
