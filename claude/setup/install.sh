@@ -113,6 +113,7 @@ detect_profiles() {
 }
 
 PROFILES=()
+DETECTED_PROFILES=()
 add_profile() {
     local dir existing
     dir="$(expand_dir "$1")"
@@ -135,8 +136,19 @@ done
 if [[ "$DETECT" == "1" ]]; then
     while IFS= read -r detected; do
         [[ -n "$detected" ]] || continue
+        case "$detected" in
+            /*|"~"*) ;;
+            *) warn "ignoring detected profile $detected (not an absolute path)"; continue ;;
+        esac
+        before=${#PROFILES[@]}
+        resolved="$(expand_dir "$detected")"
+        if [[ -d "$resolved" && ! -f "$resolved/settings.json" ]]; then
+            warn "skipping detected profile $resolved (no settings.json)"
+            continue
+        fi
         ok "detected running profile: $detected"
         add_profile "$detected"
+        [[ ${#PROFILES[@]} -gt $before ]] && DETECTED_PROFILES+=("$resolved")
     done < <(detect_profiles)
 fi
 for profile in "${PROFILES[@]}"; do
@@ -233,21 +245,23 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
         START_CMD="$HOME/.claude/hooks/session-start-memory.sh"
     fi
 
-    for profile in "${PROFILES[@]}"; do
+    # Returns non-zero (with a message) instead of exiting so detected
+    # profiles can be skipped; set -e is inert inside `if`, so every step is chained.
+    patch_profile() {
+    local profile="$1" SETTINGS BACKUP
     step "Wiring $profile/settings.json"
 
     SETTINGS="$profile/settings.json"
     if [[ ! -f "$SETTINGS" ]]; then
-        echo '{}' > "$SETTINGS"
+        { echo '{}' > "$SETTINGS"; } 2>/dev/null || { warn "cannot create $SETTINGS"; return 1; }
         ok "created empty settings.json"
     fi
 
-    # Validate it's parseable JSON before touching
-    jq empty "$SETTINGS" 2>/dev/null || fail "$SETTINGS is not valid JSON. Fix it manually."
+    jq empty "$SETTINGS" 2>/dev/null || { warn "$SETTINGS is not valid JSON. Fix it manually."; return 1; }
 
-    [[ "$profile" == "$HOME/.claude" ]] && backup_live_file "$SETTINGS"
+    if [[ "$profile" == "$HOME/.claude" ]]; then backup_live_file "$SETTINGS" || return 1; fi
     BACKUP="$SETTINGS.bak-$(date +%Y%m%d-%H%M%S)"
-    cp "$SETTINGS" "$BACKUP"
+    cp "$SETTINGS" "$BACKUP" 2>/dev/null || { warn "cannot back up $SETTINGS"; return 1; }
     BACKUPS+=("$BACKUP")
     ok "backed up to $(basename "$BACKUP")"
 
@@ -385,6 +399,22 @@ if repaired:
 if not removed and not added and not repaired:
     print("  ✓ already wired (no changes)")
 PY
+    }
+
+    is_detected_profile() {
+        local d
+        for d in ${DETECTED_PROFILES[@]+"${DETECTED_PROFILES[@]}"}; do
+            [[ "$d" == "$1" ]] && return 0
+        done
+        return 1
+    }
+
+    for profile in "${PROFILES[@]}"; do
+        if is_detected_profile "$profile"; then
+            patch_profile "$profile" || warn "skipping detected profile $profile"
+        else
+            patch_profile "$profile" || fail "could not wire $profile/settings.json"
+        fi
     done
 fi
 
@@ -436,8 +466,17 @@ if [[ "$SKILLS_ONLY" == "0" ]]; then
     fi
     for profile in "${PROFILES[@]}"; do
         if [[ -f "$profile/settings.json" ]]; then
-            wired=$(jq -r '[.hooks // {} | to_entries[] | select(any(.value[]?; any(.hooks[]?; (.command // "") | test("(rekall-|memory-prune|session-start-memory)"))))  | .key] | join(", ")' "$profile/settings.json" 2>/dev/null || true)
+            hooks_type=$(jq -r '(.hooks // {}) | type' "$profile/settings.json" 2>/dev/null || echo "unreadable")
+            if [[ "$hooks_type" != "object" ]]; then
+                warn "$profile: settings.json hooks is $hooks_type, expected an object"
+                continue
+            fi
+            wired=$(jq -r --arg p "$HOME/.claude/hooks/" '[(.hooks // {}) | to_entries[] | select(.value | type == "array") | select(any(.value[]; type == "object" and ((.hooks // []) | type == "array") and any(.hooks[]; type == "object" and ((.command // "") | type == "string") and ((.command // "") | startswith($p))))) | .key] | join(", ")' "$profile/settings.json" 2>/dev/null || true)
+            nonobj=$(jq -r '[(.hooks // {})[]? | arrays | .[] | select(type != "object")] | length' "$profile/settings.json" 2>/dev/null || echo 0)
             ok "$profile wired events: ${wired:-none}"
+            if [[ "${nonobj:-0}" != "0" ]]; then
+                warn "$profile: $nonobj non-object hook entries ignored"
+            fi
         fi
     done
 fi

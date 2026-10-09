@@ -188,6 +188,10 @@ done
 if [ "$DETECT" -eq 1 ]; then
   while IFS= read -r detected; do
     [ -n "$detected" ] || continue
+    case "$detected" in
+      /*|"~"*) ;;
+      *) printf 'ignoring detected Codex home %s (not an absolute path)\n' "$detected"; continue ;;
+    esac
     printf 'Detected running Codex home: %s\n' "$detected"
     add_home "$detected" || printf 'skipping Codex home %s (native memory path)\n' "$detected"
   done < <(detect_homes)
@@ -250,7 +254,9 @@ rollback_file() {
   fi
 }
 
-rollback_install() {
+COMPLETED_HOMES=()
+
+rollback_current_home() {
   rollback_file "$HOOKS_CHANGED" "$HOOKS_EXISTED" "$BACKUP_DIR/hooks.json" "$HOOKS_FILE"
   rollback_file \
     "$SKILL_CHANGED" "$SKILL_EXISTED" \
@@ -258,6 +264,30 @@ rollback_install() {
   rollback_file \
     "$ADAPTER_CHANGED" "$ADAPTER_EXISTED" \
     "$BACKUP_DIR/hooks/rekall_hook.py" "$DEST_ADAPTER"
+}
+
+record_completed_home() {
+  COMPLETED_HOMES+=("$CODEX_HOME|$BACKUP_DIR|$ADAPTER_CHANGED|$ADAPTER_EXISTED|$SKILL_CHANGED|$SKILL_EXISTED|$HOOKS_CHANGED|$HOOKS_EXISTED")
+}
+
+load_home_state() {
+  IFS='|' read -r CODEX_HOME BACKUP_DIR ADAPTER_CHANGED ADAPTER_EXISTED \
+    SKILL_CHANGED SKILL_EXISTED HOOKS_CHANGED HOOKS_EXISTED <<EOF_STATE
+$1
+EOF_STATE
+  DEST_ADAPTER="$CODEX_HOME/hooks/rekall_hook.py"
+  DEST_SKILL="$CODEX_HOME/skills/rekall-memory/SKILL.md"
+  HOOKS_FILE="$CODEX_HOME/hooks.json"
+}
+
+rollback_install() {
+  rollback_current_home
+  i=${#COMPLETED_HOMES[@]}
+  while [ "$i" -gt 0 ]; do
+    i=$((i - 1))
+    load_home_state "${COMPLETED_HOMES[$i]}"
+    rollback_current_home
+  done
   if [ "$MCP_ADDED" -eq 1 ]; then
     codex mcp remove rekall >/dev/null 2>&1 || true
   fi
@@ -432,6 +462,7 @@ if not expected.issubset(data.get("hooks", {})):
 if not Path(sys.argv[2]).is_file() or not Path(sys.argv[3]).is_file():
     raise SystemExit(2)
 PY
+  record_completed_home
 }
 
 for home in "${VALID_HOMES[@]}"; do

@@ -109,7 +109,10 @@ def _settings_commands(settings: dict, event: str) -> list[str]:
 
 
 def _run_install(
-    home: Path, *args: str, env_extra: dict[str, str] | None = None
+    home: Path,
+    *args: str,
+    env_extra: dict[str, str] | None = None,
+    detect_dirs: list[str] | None = None,
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
     if not shutil.which("jq"):
         pytest.skip("jq is required by claude/setup/install.sh")
@@ -124,8 +127,19 @@ def _run_install(
     env["FAKE_CURL_CALLS"] = str(calls)
     env.pop("CLAUDE_CONFIG_DIR", None)
     env.update(env_extra or {})
+    flags = ["--no-detect"]
+    if detect_dirs is not None:
+        flags = []
+        fake_ps = fakebin / "ps"
+        fake_ps.write_text(
+            "#!/bin/sh\nfor d in $FAKE_PS_DIRS; do "
+            'echo "/usr/local/bin/claude --flag CLAUDE_CONFIG_DIR=$d"; done\n',
+            encoding="utf-8",
+        )
+        fake_ps.chmod(0o755)
+        env["FAKE_PS_DIRS"] = " ".join(detect_dirs)
     result = subprocess.run(
-        ["bash", str(INSTALL), "--no-detect", *args],
+        ["bash", str(INSTALL), *flags, *args],
         text=True,
         capture_output=True,
         env=env,
@@ -591,3 +605,91 @@ def test_installer_refreshes_existing_startup_hook_without_wiring(tmp_path):
     assert not any(
         "session-start-memory.sh" in c for c in _settings_commands(settings, "SessionStart")
     )
+
+
+def test_detected_profile_with_settings_is_patched(tmp_path):
+    home = tmp_path / "home"
+    work = tmp_path / "work-profile"
+    work.mkdir()
+    (work / "settings.json").write_text("{}", encoding="utf-8")
+
+    result, _ = _run_install(home, "--hooks-only", detect_dirs=[str(work)])
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    settings = json.loads((work / "settings.json").read_text(encoding="utf-8"))
+    assert any(e.get("matcher") == PROV_MATCHER for e in settings["hooks"]["PreToolUse"])
+
+
+def test_detected_unwritable_profile_is_skipped_not_fatal(tmp_path):
+    if os.geteuid() == 0:
+        pytest.skip("root ignores directory permissions")
+    home = tmp_path / "home"
+    ro = tmp_path / "ro-profile"
+    ro.mkdir()
+    (ro / "settings.json").write_text("{}", encoding="utf-8")
+    ro.chmod(0o555)
+    (ro / "settings.json").chmod(0o444)
+    try:
+        result, _ = _run_install(home, "--hooks-only", detect_dirs=[str(ro)])
+    finally:
+        ro.chmod(0o755)
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert f"skipping detected profile {ro}" in result.stdout
+    assert (ro / "settings.json").read_text(encoding="utf-8") == "{}"
+    home_settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    assert "PreToolUse" in home_settings["hooks"]
+
+
+def test_detected_profile_without_settings_or_with_bad_json_is_skipped(tmp_path):
+    home = tmp_path / "home"
+    bare = tmp_path / "bare"
+    bad = tmp_path / "bad"
+    bare.mkdir()
+    bad.mkdir()
+    (bad / "settings.json").write_text("{not json", encoding="utf-8")
+
+    result, _ = _run_install(home, "--hooks-only", detect_dirs=[str(bare), str(bad)])
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not (bare / "settings.json").exists()
+    assert (bad / "settings.json").read_text(encoding="utf-8") == "{not json"
+    assert f"skipping detected profile {bare}" in result.stdout
+    assert f"skipping detected profile {bad}" in result.stdout
+
+
+def test_detected_relative_profile_is_dropped(tmp_path):
+    home = tmp_path / "home"
+    rel = REPO / "relative-detected-profile"
+
+    result, _ = _run_install(home, "--hooks-only", detect_dirs=["relative-detected-profile"])
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    assert not rel.exists()
+    assert "ignoring detected profile relative-detected-profile" in result.stdout
+
+
+def test_verify_ignores_foreign_rekall_named_paths_and_flags_non_object_entries(tmp_path):
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    (home / ".claude" / "settings.json").write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "Notification": [
+                        {"hooks": [{"type": "command", "command": "/x/rekall-mcp/hook.sh"}]}
+                    ],
+                    "Weird": ["not-an-object"],
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    result, _ = _run_install(home, "--hooks-only")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    line = next(ln for ln in result.stdout.splitlines() if "wired events" in ln)
+    assert "Notification" not in line
+    assert "UserPromptSubmit" in line
+    assert "non-object hook entr" in result.stdout

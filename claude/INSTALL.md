@@ -57,7 +57,7 @@ Flags:
 
 ### Multiple config profiles
 
-Claude Code profiles (`CLAUDE_CONFIG_DIR`) each have their own `settings.json`. The installer patches `~/.claude`, `$CLAUDE_CONFIG_DIR` if set, every `--profile` dir, and, best effort, any profile found on running `claude` processes (`--no-detect` disables that). Dirs that do not exist are skipped, not created.
+Claude Code profiles (`CLAUDE_CONFIG_DIR`) each have their own `settings.json`. The installer patches `~/.claude`, `$CLAUDE_CONFIG_DIR` if set, every `--profile` dir, and, best effort, any profile found on running `claude` processes (`--no-detect` disables that). Dirs that do not exist are skipped, not created. Detected profiles are best effort: relative paths are ignored, a path containing spaces is truncated at the first space (use `--profile` for those), and a detected dir that has no `settings.json`, holds invalid JSON, or is unwritable is skipped with a warning instead of failing the run. An explicit `--profile` that cannot be patched is fatal.
 
 ```bash
 bash claude/setup/install.sh --profile ~/.claude-work
