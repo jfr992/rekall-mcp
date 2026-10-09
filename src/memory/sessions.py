@@ -23,7 +23,9 @@ def _new_session(session_id: str, project: str) -> dict[str, Any]:
         "last_at": None,
         "injected": [],
         "recalls": [],
-        "totals": {"recalls": 0, "injected": 0, "tokens": 0},
+        "referenced": [],
+        "delivered": [],
+        "totals": {"recalls": 0, "injected": 0, "tokens": 0, "referenced": 0, "delivered": 0},
     }
 
 
@@ -98,6 +100,12 @@ def fold_sessions(events: list[MemoryEvent], limit: int = 50) -> list[dict[str, 
 
         if event.event_type == "session_summary":
             summary_ids.setdefault(session_id, set()).update(payload.get("memory_ids") or [])
+            delivered = payload.get("delivered") or {}
+            delivered_ids = {m for ids in delivered.values() if isinstance(ids, list) for m in ids}
+            session["delivered"] = sorted(delivered_ids or set(payload.get("memory_ids") or []))
+            # compare against the previous window end, before it advances below
+            if event.observed_at >= (window_end.get(session_id) or ""):
+                session["referenced"] = list(payload.get("referenced") or [])
             end = window_end.get(session_id)
             if end is None or event.observed_at > end:
                 window_end[session_id] = event.observed_at
@@ -116,11 +124,10 @@ def fold_sessions(events: list[MemoryEvent], limit: int = 50) -> list[dict[str, 
             continue
         payload = event.payload or {}
         session_id = payload.get("session_id")
-        target = (
-            sessions.get(session_id)
-            if session_id
-            else _join_target(event, sessions, summary_ids, window_end)
-        )
+        if session_id:
+            target = sessions.setdefault(session_id, _new_session(session_id, event.project))
+        else:
+            target = _join_target(event, sessions, summary_ids, window_end)
         if target is None:
             # Honest bucket: attribution failed, but the recall stays visible.
             bucket_id = f"unattributed:{event.project}"
@@ -130,6 +137,8 @@ def fold_sessions(events: list[MemoryEvent], limit: int = 50) -> list[dict[str, 
     for session in sessions.values():
         session["totals"]["injected"] = len(session["injected"])
         session["totals"]["recalls"] = len(session["recalls"])
+        session["totals"]["referenced"] = len(session["referenced"])
+        session["totals"]["delivered"] = len(session["delivered"])
         session["recalls"].sort(key=lambda r: r["observed_at"])
 
     ordered = sorted(sessions.values(), key=lambda s: s["last_at"] or "", reverse=True)
