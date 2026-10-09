@@ -1998,9 +1998,11 @@ class MemoryManager:
             by_type.setdefault(t, []).append(mem)
 
         def _line(m: dict) -> str:
+            mid = m.get("memory_id") or m.get("id") or ""
+            tag = f" [{mid}]" if mid else ""
             if m.get("_outdated"):
-                return "- [outdated — replaced by the newer entry above]"
-            return f"- {m['content']} ({m.get('date', 'unknown date')})"
+                return f"- [outdated — replaced by the newer entry above]{tag}"
+            return f"- {m['content']} ({m.get('date', 'unknown date')}){tag}"
 
         sections = []
 

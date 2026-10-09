@@ -419,3 +419,37 @@ def test_build_capsule_retains_entities_field(capsule_manager):
     capsule = build_project_capsule(manager, "test")
 
     assert "entities" in capsule, "entities field must survive in capsule dict"
+
+
+def test_render_project_capsule_prints_memory_id():
+    from memory.capsules import render_project_capsule
+
+    text = render_project_capsule(
+        {
+            "project": "p",
+            "standing_context": [
+                {"memory_id": "2026-10-09_decision_ab12cd34", "date": "2026-10-09", "content": "use uv"}
+            ],
+            "danger_zones": [],
+            "open_loops": [],
+        }
+    )
+    assert "- [2026-10-09] use uv [2026-10-09_decision_ab12cd34]" in text
+
+
+def test_render_project_capsule_truncation_keeps_last_id_whole():
+    from memory.capsules import _MAX_RENDER_CHARS, render_project_capsule
+
+    long = "x" * _MAX_RENDER_CHARS
+    text = render_project_capsule(
+        {
+            "project": "p",
+            "standing_context": [
+                {"memory_id": "2026-10-09_decision_ab12cd34", "date": "2026-10-09", "content": long}
+            ],
+            "danger_zones": [],
+            "open_loops": [],
+        }
+    )
+    assert len(text) <= _MAX_RENDER_CHARS
+    assert text.rstrip().endswith("[2026-10-09_decision_ab12cd34]")

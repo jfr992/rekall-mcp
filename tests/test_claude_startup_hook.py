@@ -26,7 +26,7 @@ if [[ "$url" == *"/api/memory/capsule"* ]]; then
   if [[ "${FAKE_CAPSULE_FAIL:-0}" == "1" ]]; then
     exit 22
   fi
-  printf '{"project":"rekall-mcp","danger_zones":[{"date":"2026-07-03","content":"Back up live files before touching Claude hooks."}]}'
+  printf '{"project":"rekall-mcp","danger_zones":[{"memory_id":"2026-07-03_learning_ab12cd34","date":"2026-07-03","content":"Back up live files before touching Claude hooks."}]}'
   exit 0
 fi
 
@@ -479,3 +479,8 @@ def test_session_start_hook_treats_empty_agent_id_as_main_session(tmp_path):
     assert result.returncode == 0
     assert "REKALL STARTUP" in result.stdout
     assert any("/api/memory/capsule" in c for c in calls)
+
+
+def test_session_start_hook_prints_memory_ids(tmp_path):
+    result, _ = _run_hook(tmp_path, {"cwd": "/workspaces/rekall-mcp", "session_id": "s1"})
+    assert "[2026-07-03_learning_ab12cd34]" in result.stdout

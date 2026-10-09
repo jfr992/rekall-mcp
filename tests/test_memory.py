@@ -942,3 +942,23 @@ class TestIntegration:
 
         # Cleanup
         real_memory_manager.clear_project("integration-test")
+
+
+def test_format_with_guidance_prints_memory_id():
+    from memory.manager import MemoryManager
+
+    mgr = MemoryManager.__new__(MemoryManager)
+    out = mgr._format_with_guidance(
+        [{"memory_id": "2026-10-09_fact_ab12cd34", "content": "port is 8000", "type": "fact", "date": "2026-10-09"}]
+    )
+    assert "- port is 8000 (2026-10-09) [2026-10-09_fact_ab12cd34]" in out
+
+
+def test_format_with_guidance_outdated_line_keeps_id():
+    from memory.manager import MemoryManager
+
+    mgr = MemoryManager.__new__(MemoryManager)
+    out = mgr._format_with_guidance(
+        [{"memory_id": "2026-10-09_fact_ab12cd34", "content": "old", "type": "fact", "date": "2026-10-09", "_outdated": True}]
+    )
+    assert "[2026-10-09_fact_ab12cd34]" in out
