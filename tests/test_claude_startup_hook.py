@@ -484,3 +484,19 @@ def test_session_start_hook_treats_empty_agent_id_as_main_session(tmp_path):
 def test_session_start_hook_prints_memory_ids(tmp_path):
     result, _ = _run_hook(tmp_path, {"cwd": "/workspaces/rekall-mcp", "session_id": "s1"})
     assert "[2026-07-03_learning_ab12cd34]" in result.stdout
+
+
+def test_installer_wires_provenance_hook(tmp_path):
+    home = tmp_path / "home"
+    (home / ".claude").mkdir(parents=True)
+    (home / ".claude" / "settings.json").write_text("{}", encoding="utf-8")
+
+    result, _ = _run_install(home, "--hooks-only")
+
+    assert result.returncode == 0, result.stderr + result.stdout
+    settings = json.loads((home / ".claude" / "settings.json").read_text(encoding="utf-8"))
+    entries = settings["hooks"]["PreToolUse"]
+    match = [e for e in entries if e.get("matcher") == "mcp__memory__.*|mcp__rekall__.*"]
+    assert match, entries
+    assert any("rekall-provenance.sh" in h["command"] for h in match[0]["hooks"])
+    assert (home / ".claude" / "hooks" / "rekall-provenance.sh").exists()
