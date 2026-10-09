@@ -240,16 +240,18 @@ def handle_pre_tool_use(
     return {"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": context}}
 
 
-def _bounded_lines(path: str) -> list[str]:
+def _bounded_lines(path: str) -> tuple[list[str], bool]:
     try:
         if not stat.S_ISREG(os.lstat(path).st_mode):
-            return []
+            return [], False
         with open(path, "rb") as stream:
             stream.seek(0, os.SEEK_END)
-            stream.seek(max(0, stream.tell() - _MAX_TRANSCRIPT_BYTES))
-            return stream.read(_MAX_TRANSCRIPT_BYTES).decode("utf-8", "replace").splitlines()
+            size = stream.tell()
+            stream.seek(max(0, size - _MAX_TRANSCRIPT_BYTES))
+            lines = stream.read(_MAX_TRANSCRIPT_BYTES).decode("utf-8", "replace").splitlines()
+            return lines, size > _MAX_TRANSCRIPT_BYTES
     except OSError:
-        return []
+        return [], False
 
 
 def _walk(value: object) -> Iterable[Mapping[str, object]]:
@@ -357,7 +359,9 @@ def _is_file_edit_name(name: str) -> bool:
     return parts[-1] in {"edit", "write", "apply_patch", "applypatch"}
 
 
-def summarize_session(payload: CodexHookInput, lines: Iterable[str]) -> SessionSummary | None:
+def summarize_session(
+    payload: CodexHookInput, lines: Iterable[str], *, truncated: bool = False
+) -> SessionSummary | None:
     recalled: list[str] = []
     edits = tests = 0
     after_recall = False
@@ -421,18 +425,18 @@ def summarize_session(payload: CodexHookInput, lines: Iterable[str]) -> SessionS
     if not isinstance(session, str) or not isinstance(cwd, str):
         return None
     project = sanitize_token(Path(cwd).name)
+    delivered = recalled[:32]
     return {
         "event_type": "session_summary",
         "session_id": session,
         "project": project,
-        "recalled_ids": recalled[:32],
+        "recalled_ids": delivered,
         "edits_after_recall": edits,
         "test_passes_after_recall": tests,
         "client": "codex",
-        "delivered": {"explicit": recalled[:32]},
-        "referenced": referenced[:32],
-        # truncated is always False: the adapter cannot tell whether the tail cut the transcript
-        "coverage": {"transcript_tail_bytes": _MAX_TRANSCRIPT_BYTES, "truncated": False},
+        "delivered": {"explicit": delivered},
+        "referenced": [memory_id for memory_id in referenced if memory_id in delivered],
+        "coverage": {"transcript_tail_bytes": _MAX_TRANSCRIPT_BYTES, "truncated": truncated},
     }
 
 
@@ -532,12 +536,12 @@ def dispatch(
     if event == "PostToolUse":
         return handle_post_tool_use(payload)
     if event == "SessionEnd":
-        lines = (
+        lines, truncated = (
             _bounded_lines(payload.get("transcript_path", ""))
             if payload.get("transcript_path")
-            else []
+            else ([], False)
         )
-        summary = summarize_session(payload, lines)
+        summary = summarize_session(payload, lines, truncated=truncated)
         if summary and summary["recalled_ids"]:
             request_json(
                 "POST",

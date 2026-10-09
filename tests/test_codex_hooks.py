@@ -625,4 +625,42 @@ def test_bounded_lines_rejects_symlink(hook_module, tmp_path):
     target.write_text('{"secret":"SENTINEL"}\n')
     link = tmp_path / "link"
     link.symlink_to(target)
-    assert hook_module._bounded_lines(str(link)) == []
+    assert hook_module._bounded_lines(str(link)) == ([], False)
+
+
+def test_bounded_lines_reports_truncation(hook_module, tmp_path, monkeypatch):
+    monkeypatch.setattr(hook_module, "_MAX_TRANSCRIPT_BYTES", 64)
+    big = tmp_path / "big.jsonl"
+    big.write_text("\n".join(json.dumps({"n": i}) for i in range(40)) + "\n")
+    small = tmp_path / "small.jsonl"
+    small.write_text('{"n":1}\n')
+    assert hook_module._bounded_lines(str(big))[1] is True
+    assert hook_module._bounded_lines(str(small)) == (['{"n":1}'], False)
+
+
+def test_summary_coverage_carries_truncated(hook_module):
+    lines = [
+        json.dumps({"type": "tool_call", "call_id": "c1", "tool_name": "recall_memories", "arguments": {}}),
+        json.dumps({"type": "tool_result", "call_id": "c1", "content": "- a [2026-10-09_fact_aaaa1111]"}),
+    ]
+    payload = {"session_id": "s", "cwd": "/r"}
+    assert hook_module.summarize_session(payload, lines, truncated=True)["coverage"]["truncated"] is True
+    assert hook_module.summarize_session(payload, lines)["coverage"]["truncated"] is False
+
+
+def test_referenced_is_subset_of_delivered_when_recalls_exceed_cap(hook_module):
+    ids = [f"2026-10-09_fact_{n:08x}" for n in range(40)]
+    lines = [
+        json.dumps({"type": "tool_call", "call_id": "c1", "tool_name": "recall_memories", "arguments": {}}),
+        json.dumps({"type": "tool_result", "call_id": "c1", "content": "\n".join(f"- x [{i}]" for i in ids)}),
+        json.dumps(
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": f"Using {ids[0]} and {ids[39]}."}],
+            }
+        ),
+    ]
+    summary = hook_module.summarize_session({"session_id": "s", "cwd": "/r"}, lines)
+    assert summary["referenced"] == [ids[0]]
+    assert set(summary["referenced"]) <= set(summary["delivered"]["explicit"])
