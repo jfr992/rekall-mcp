@@ -119,8 +119,9 @@ allowlist; nothing else in this design changes.
 }
 ```
 
-- Ingestion dedupes per `session_id`: a later summary replaces the earlier
-  one (resumed sessions, retries).
+- The event log stays append-only; dedupe happens at read time in
+  `fold_sessions` and `utility_report.collapse_sessions`: the latest summary
+  per `session_id` wins for `referenced` (resumed sessions, retries).
 - `fold_sessions` also creates a session from any `memory_recalled` event
   carrying a `session_id`.
 - `rekall-session-end.sh` and the Codex adapter compute `referenced` as ids
@@ -147,8 +148,10 @@ About 2,000 delivered tokens per helpful application frame-wide; capsule and
 reflex delivered about 63k tokens with no helpful hit. Echo is a weak proxy
 (2 of 4 helpful never echoed; 23 of 25 echoed not helpful).
 
-Consequence, in scope for A: **the startup capsule hook ships off by
-default.** `session-start-memory.sh` exits 0 unless `REKALL_CAPSULE=1`.
+Consequence, in scope for A: **the startup capsule stays off by default.**
+The installer already treats `session-start-memory.sh` as opt-in
+(`INSTALL_STARTUP_CAPSULE`, pinned by a test); the maintainer's machine has
+it installed and removes that SessionStart entry at rollout. No new env flag.
 Explicit recall unchanged. The following week with the capsule off, with the
 measurement contract live, is the controlled check that nothing was lost;
 if explicit recall usage or the helpful rate drops, the default flips back.
