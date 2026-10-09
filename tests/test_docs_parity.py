@@ -208,20 +208,31 @@ def test_v1_14_notes_document_supported_clients_and_upgrade_contract():
     assert "Claude Code" in migration
 
 
-def test_v1_16_notes_document_provenance_and_citation_coverage():
+def test_v1_17_notes_document_installer_profiles():
     migration = (REPO / "docs" / "MIGRATION.md").read_text()
     latest = migration.split("\n---\n", 1)[0]
 
-    assert "v1.15.0 → v1.16.0" in latest
-    assert "rekall-provenance.sh" in latest
-    assert "[memory_id]" in latest
-    assert "citation coverage" in latest
+    assert "v1.16.0 → v1.17.0" in latest
+    assert "--profile" in latest
+    assert "--codex-home" in latest
+    assert "CLAUDE.snippet.md" in latest
     assert "No data migration" in latest
+
+
+def test_v1_16_notes_document_provenance_and_citation_coverage():
+    migration = (REPO / "docs" / "MIGRATION.md").read_text()
+    v1_16 = migration.split("\n---\n", 2)[1]
+
+    assert "v1.15.0 → v1.16.0" in v1_16
+    assert "rekall-provenance.sh" in v1_16
+    assert "[memory_id]" in v1_16
+    assert "citation coverage" in v1_16
+    assert "No data migration" in v1_16
 
 
 def test_v1_15_notes_document_afk_auth_and_upgrade_contract():
     migration = (REPO / "docs" / "MIGRATION.md").read_text()
-    v1_15 = migration.split("\n---\n", 2)[1]
+    v1_15 = migration.split("\n---\n", 3)[2]
 
     assert "v1.14.0 → v1.15.0" in v1_15
     assert "AFK" in v1_15
@@ -234,7 +245,7 @@ def test_release_metadata_versions_stay_in_sync():
     project = tomllib.loads((REPO / "pyproject.toml").read_text())
     lock = tomllib.loads((REPO / "uv.lock").read_text())
     project_version = project["project"]["version"]
-    assert project_version == "1.16.0"
+    assert project_version == "1.17.0"
     root_packages = [
         package
         for package in lock["package"]
