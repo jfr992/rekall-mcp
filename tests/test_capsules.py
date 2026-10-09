@@ -419,3 +419,105 @@ def test_build_capsule_retains_entities_field(capsule_manager):
     capsule = build_project_capsule(manager, "test")
 
     assert "entities" in capsule, "entities field must survive in capsule dict"
+
+
+@pytest.mark.parametrize(
+    ("identifier", "resolution"),
+    [
+        ("PR #83", "#83 merged"),
+        ("BE-684", "BE-684 closed"),
+        ("1a2b3c4", "1a2b3c4 deployed"),
+        ("abcdef0", "ABCDEF0 released"),
+    ],
+)
+def test_newer_resolution_suppresses_stale_danger(capsule_manager, identifier, resolution):
+    from memory.capsules import build_project_capsule
+
+    manager = capsule_manager(
+        [
+            _mem(
+                "old",
+                "decision",
+                f"{identifier} held: billing broken; do not merge.",
+                date="2026-07-19",
+                timestamp="2026-07-19T09:00:00",
+                project="test",
+            ),
+            _mem(
+                "new",
+                "fact",
+                resolution,
+                date="2026-07-19",
+                timestamp="2026-07-19T12:00:00",
+                project="test",
+            ),
+        ]
+    )
+    capsule = build_project_capsule(manager, "test")
+
+    assert "old" not in {
+        item["memory_id"]
+        for key in ("danger_zones", "open_loops", "standing_context")
+        for item in capsule[key]
+    }
+
+
+@pytest.mark.parametrize(
+    "new_content,new_project,new_date",
+    [
+        ("#84 merged", "test", "2026-07-20"),
+        ("Helm deployed", "test", "2026-07-20"),
+        ("#83 merged", "other", "2026-07-20"),
+        ("#83 merged", "test", "2026-07-18"),
+        ("#83 merged", "test", "2026-07-19"),
+        ("#83 unmerged", "test", "2026-07-20"),
+        ("#83 awaiting review", "test", "2026-07-20"),
+    ],
+)
+def test_danger_resolution_requires_newer_same_project_identifier(
+    capsule_manager, new_content, new_project, new_date
+):
+    from memory.capsules import build_project_capsule
+
+    manager = capsule_manager(
+        [
+            _mem(
+                "old",
+                "decision",
+                "Helm PR #83 broken; do not merge.",
+                date="2026-07-19",
+                project="test",
+            ),
+            _mem("new", "fact", new_content, date=new_date, project=new_project),
+        ]
+    )
+    capsule = build_project_capsule(manager, "test")
+
+    assert [item["memory_id"] for item in capsule["danger_zones"]] == ["old"]
+
+
+def test_resolved_danger_stamp_is_not_injected(capsule_manager):
+    from memory.capsules import build_project_capsule
+
+    manager = capsule_manager(
+        [
+            _mem("old", "decision", "PR #83 broken. RESOLVED 2026-07-19: merged."),
+        ]
+    )
+    assert build_project_capsule(manager, "test")["danger_zones"] == []
+
+
+def test_same_day_resolution_needs_both_timestamps(capsule_manager):
+    from memory.capsules import build_project_capsule
+
+    manager = capsule_manager(
+        [
+            _mem("old", "decision", "PR #83 broken; do not merge.", date="2026-07-19"),
+            _mem(
+                "new", "fact", "PR #83 merged", date="2026-07-19", timestamp="2026-07-19T12:00:00"
+            ),
+        ]
+    )
+    assert [
+        item["memory_id"] for item in build_project_capsule(manager, "test")["danger_zones"]
+    ] == ["old"]

@@ -64,24 +64,6 @@ def build_resume_packet(
     recent = enriched[:limit]
     important = sorted(enriched, key=lambda x: (-x["importance"], x["date"]))[:limit]
 
-    unresolved: list[dict[str, Any]] = []
-    if graph_has_nodes:
-        for item in enriched:
-            memory_id = item["memory_id"]
-            if not memory_id:
-                continue
-            for edge in graph.get_edges(memory_id, direction="out"):
-                if edge.relation == "contradicts":
-                    unresolved.append(
-                        {
-                            "memory_id": memory_id,
-                            "conflicts_with": edge.target,
-                            "content": item["content"],
-                        }
-                    )
-            if len(unresolved) >= 6:
-                break
-
     promotion = apply_memory_promotion(graph, recent + important)
     promoted_memories = promotion["memories"]
 
@@ -89,7 +71,8 @@ def build_resume_packet(
     dedup_important = _dedupe_by_id(
         sorted(promoted_memories, key=lambda x: (-x["importance"], x["date"]))
     )[:limit]
-    dedup_unresolved = _dedupe_conflicts(unresolved)[:6]
+    # Contradicts edges lack a polarity check; retain the response field without injection.
+    unresolved: list[dict[str, Any]] = []
 
     next_steps = extract_next_steps(dedup_recent + dedup_important)
     handoff = format_handoff_summary(
@@ -103,7 +86,7 @@ def build_resume_packet(
         "scope": scope.to_metadata() if scope else None,
         "recent": dedup_recent,
         "important": dedup_important,
-        "unresolved": dedup_unresolved,
+        "unresolved": unresolved,
         "next_steps": next_steps,
         "handoff": handoff,
         "pressure": pressure,
@@ -114,7 +97,7 @@ def build_resume_packet(
             scope=scope,
             recent=dedup_recent,
             important=dedup_important,
-            unresolved=dedup_unresolved,
+            unresolved=unresolved,
         ),
     }
 
@@ -167,17 +150,5 @@ def _dedupe_by_id(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if not memory_id or memory_id in seen:
             continue
         seen.add(memory_id)
-        out.append(item)
-    return out
-
-
-def _dedupe_conflicts(items: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    seen = set()
-    out = []
-    for item in items:
-        key = tuple(sorted([item.get("memory_id", ""), item.get("conflicts_with", "")]))
-        if not all(key) or key in seen:
-            continue
-        seen.add(key)
         out.append(item)
     return out

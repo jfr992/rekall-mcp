@@ -633,7 +633,7 @@ class TestIntelligenceLayer:
         assert conflict_count == 1, f"Expected 1 conflict entry, got {conflict_count}"
 
     def test_get_proactive_context_summary_prioritizes_signals(self, memory_manager, mock_store):
-        """Proactive summary should include top signals and conflict section."""
+        """Unverified conflict edges and disputed flags must not affect context."""
         from memory.knowledge_graph import KnowledgeGraph
 
         graph = KnowledgeGraph(memory_manager.memory_dir / "_graph.json")
@@ -652,6 +652,7 @@ class TestIntelligenceLayer:
                 "project": "api",
                 "type": "decision",
                 "content": "Use strict authentication for all endpoints",
+                "disputed": True,
                 "date": now,
             },
             {
@@ -667,7 +668,8 @@ class TestIntelligenceLayer:
 
         assert "Proactive Context: api" in report
         assert "Top Signals" in report
-        assert "Conflicts to Review" in report
+        assert "Conflicts to Review" not in report
+        assert "conflicts with" not in report
         top_signals_section = report.split("Top Signals")[1]
         assert top_signals_section.index("high") < top_signals_section.index("old")
 

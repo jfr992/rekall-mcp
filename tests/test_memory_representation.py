@@ -1,3 +1,22 @@
+import pytest
+
+
+@pytest.mark.parametrize(
+    "content,expected",
+    [
+        ("PR #83 merged; #83 deployed", "#83"),
+        ("BE-684 shipped", "BE-684"),
+        ("Commit 1a2b3c4 fixed", "1a2b3c4"),
+        ("Commit 0123456 released", "0123456"),
+        ("Commit abcdefa closed", "abcdefa"),
+    ],
+)
+def test_extract_entities_includes_hard_identifiers(content, expected):
+    from memory.representation import extract_entities
+
+    assert extract_entities(content).count(expected) == 1
+
+
 def test_extract_entities_preserves_software_identifiers():
     from memory.representation import extract_entities
 
