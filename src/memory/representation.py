@@ -3,8 +3,13 @@ from __future__ import annotations
 import re
 from typing import Any
 
+_HARD_IDENTIFIER_RE = re.compile(r"(?<!\w)#\d+\b|\b[A-Z][A-Z0-9]*-\d+\b|\b[0-9a-fA-F]{7,40}\b")
 _ENTITY_RE = re.compile(
-    r"\b(?:[A-Z]+-\d+|[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+|[a-z0-9]+(?:-[a-z0-9]+)+|[A-Z]{2,}|(?=[a-z0-9]*\d)[a-z][a-z0-9]+|[A-Z][A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\b"
+    _HARD_IDENTIFIER_RE.pattern
+    + r"|\b(?:[A-Za-z][A-Za-z0-9]*_[A-Za-z0-9_]+|[a-z0-9]+(?:-[a-z0-9]+)+|[A-Z]{2,}|(?=[a-z0-9]*\d)[a-z][a-z0-9]+|[A-Z][A-Za-z0-9]+(?:-[A-Za-z0-9]+)*)\b"
+)
+RESOLVED_PATTERN = re.compile(
+    r"\b(?:merged|shipped|deployed|fixed|released|closed)\b", re.IGNORECASE
 )
 
 _STOP = {
@@ -38,6 +43,15 @@ def extract_entities(text: str, limit: int = 24) -> list[str]:
         if len(entities) >= limit:
             break
     return entities
+
+
+def hard_identifiers(content: str, entities: list[str] | None = None) -> set[str]:
+    # Re-extract for older payloads that predate PR/SHA entity support.
+    return {
+        entity.lower()
+        for entity in [*(entities or []), *extract_entities(content)]
+        if _HARD_IDENTIFIER_RE.fullmatch(entity)
+    }
 
 
 def build_embedding_text(content: str, metadata: dict[str, Any]) -> str:

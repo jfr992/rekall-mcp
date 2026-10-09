@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from memory.scope import ScopeDetector
+
 _CUES = {
     "destructive": {
         "terms": (
@@ -64,12 +66,15 @@ def build_reflex_packet(
     """Build a small recall packet for cues matched by command or prompt text.
 
     Selects up to MAX_CUES matched cues (destructive first, then _CUES
-    declaration order) and merges their queries into a single recall call —
-    one network round trip regardless of how many cue groups matched.
+    declaration order). Destructive cues recall across projects; all other
+    cues share one project-filtered recall call and require caller scope.
     """
     all_cues = detect_reflex_cues(text)
-    cues = all_cues[:MAX_CUES]
-    dropped_cues = all_cues[MAX_CUES:]
+    if not project and cwd:
+        project = ScopeDetector.detect(cwd=cwd).project
+    eligible = [cue for cue in all_cues if cue == "destructive" or project]
+    cues = eligible[:MAX_CUES]
+    dropped_cues = [cue for cue in all_cues if cue not in cues]
 
     if limit <= 0 or not cues:
         return {
@@ -80,27 +85,35 @@ def build_reflex_packet(
             "memories": [],
         }
 
-    merged_query = " ".join(_CUES[cue]["query"] for cue in cues)
+    recall_groups = []
+    if "destructive" in cues:
+        recall_groups.append((None, [_CUES["destructive"]["query"]]))
+    scoped_queries = [_CUES[cue]["query"] for cue in cues if cue != "destructive"]
+    if scoped_queries:
+        recall_groups.append((project, scoped_queries))
 
     memories = []
     seen: set[str] = set()
-    for memory in manager.recall(
-        query=merged_query,
-        project=project,
-        limit=limit,
-        score_threshold=0.5,
-        cwd=cwd,
-        source="reflex",
-        session_id=session_id,
-    ):
+    for recall_project, queries in recall_groups:
         if len(memories) >= limit:
             break
-        memory_id = memory.get("memory_id")
-        if memory_id and memory_id in seen:
-            continue
-        if memory_id:
-            seen.add(memory_id)
-        memories.append(memory)
+        for memory in manager.recall(
+            query=" ".join(queries),
+            project=recall_project,
+            limit=limit,
+            score_threshold=0.5,
+            cwd=cwd,
+            source="reflex",
+            session_id=session_id,
+        ):
+            if len(memories) >= limit:
+                break
+            memory_id = memory.get("memory_id")
+            if memory_id and memory_id in seen:
+                continue
+            if memory_id:
+                seen.add(memory_id)
+            memories.append(memory)
 
     return {
         "text": text,
