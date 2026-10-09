@@ -208,22 +208,33 @@ def test_v1_14_notes_document_supported_clients_and_upgrade_contract():
     assert "Claude Code" in migration
 
 
-def test_v1_15_notes_document_afk_auth_and_upgrade_contract():
+def test_v1_16_notes_document_provenance_and_citation_coverage():
     migration = (REPO / "docs" / "MIGRATION.md").read_text()
     latest = migration.split("\n---\n", 1)[0]
 
-    assert "v1.14.0 → v1.15.0" in latest
-    assert "AFK" in latest
-    assert "REKALL_API_TOKEN" in latest
-    assert "Codex" in latest
+    assert "v1.15.0 → v1.16.0" in latest
+    assert "rekall-provenance.sh" in latest
+    assert "[memory_id]" in latest
+    assert "citation coverage" in latest
     assert "No data migration" in latest
+
+
+def test_v1_15_notes_document_afk_auth_and_upgrade_contract():
+    migration = (REPO / "docs" / "MIGRATION.md").read_text()
+    v1_15 = migration.split("\n---\n", 2)[1]
+
+    assert "v1.14.0 → v1.15.0" in v1_15
+    assert "AFK" in v1_15
+    assert "REKALL_API_TOKEN" in v1_15
+    assert "Codex" in v1_15
+    assert "No data migration" in v1_15
 
 
 def test_release_metadata_versions_stay_in_sync():
     project = tomllib.loads((REPO / "pyproject.toml").read_text())
     lock = tomllib.loads((REPO / "uv.lock").read_text())
     project_version = project["project"]["version"]
-    assert project_version == "1.15.0"
+    assert project_version == "1.16.0"
     root_packages = [
         package
         for package in lock["package"]

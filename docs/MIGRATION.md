@@ -1,3 +1,50 @@
+# Migration Guide — v1.15.0 → v1.16.0 (measurable memory)
+
+## What's new
+
+- **Ids on every bullet.** Recall and capsule bullets now end with `[memory_id]`,
+  so a later reference can be matched back to the memory it came from.
+- **Caller provenance on every MCP call.** `observe`, `save_memory` and
+  `recall_memories` accept `cwd`, `session_id` and `agent`; the new default hook
+  `rekall-provenance.sh` (PreToolUse on `mcp__memory__.*|mcp__rekall__.*`) fills
+  them in when the model omits them. Saves land in the caller's project, never
+  the backend's working directory.
+- **No capsule inside subagents.** `session-start-memory.sh` exits when the hook
+  payload carries `agent_id`.
+- **Richer `session_summary`.** Events gained `client`, `delivered` (ids by
+  surface), `referenced` (ids the agent cited after delivery) and `coverage`.
+  A missing `referenced` is stored as `null` (unknown), not `[]`. The sessions
+  view folds any tagged recall into its session and totals `delivered` and
+  `referenced`. The Codex adapter reports the same contract.
+- **Honest utility report.** `scripts/utility_report.py` credits a memory only
+  when it was referenced, marks the rest `unknown`, applies the same rule to the
+  null baseline, and prints **citation coverage**. It is telemetry, not proof a
+  memory helped.
+- **Stale danger zones suppressed.** The project capsule drops a danger-zone
+  item when a newer same-project memory sharing a hard identifier resolves it;
+  saves add a provisional `supersedes` edge for such successors. Non-destructive
+  reflex cues are scoped to the caller's project. `contradicts` edges are no
+  longer injected into resume or proactive context.
+
+## Upgrading from v1.15.0
+
+**No data migration is required.** Existing YAML, Qdrant vectors, knowledge
+graph data, and native Codex memory remain compatible.
+
+1. Upgrade the server with `uvx rekall-mcp@1.16.0`, or pull the checkout and
+   run `docker compose up -d --build mcp ui`.
+2. Re-run `bash claude/setup/install.sh` to install the updated
+   `rekall-session-end.sh`, `session-start-memory.sh` and the new
+   `rekall-provenance.sh`, and to wire its PreToolUse entry.
+3. Reinforcement now sees session-matched recalls; watch semantic promotions for
+   a week after upgrading.
+
+Rollback: restore the timestamped installer backup for the hooks and settings;
+the server can return to v1.15.0 without rewriting memories. Summaries written
+by v1.16.0 carry extra keys that v1.15.0 ignores.
+
+---
+
 # Migration Guide — v1.14.0 → v1.15.0 (AFK-safe operations and authenticated clients)
 
 ## What's new
@@ -42,18 +89,6 @@ graph data, and native Codex memory remain compatible.
 To roll back the client wiring, restore the timestamped installer backup and
 restart Codex. Server rollback does not require rewriting existing memories,
 but callers must stop using the new AFK endpoints before returning to v1.14.0.
-
-## Unreleased: measurable memory
-
-- **Ids on every bullet.** Recall and capsule bullets now end with `[memory_id]`.
-- **New hook.** `rekall-provenance.sh` (PreToolUse on `mcp__memory__.*|mcp__rekall__.*`)
-  is installed by default; re-run `bash claude/setup/install.sh`.
-- **Richer `session_summary`.** Events gained `client`, `delivered`, `referenced`,
-  and `coverage`. A missing `referenced` is stored as `null` (unknown), not `[]`.
-- **Utility report.** `scripts/utility_report.py` prints citation coverage and credits
-  only referenced memories; sessions without `referenced` are excluded from coverage.
-- **Reinforcement sees more.** Session-matched recalls now reach reinforcement; watch
-  semantic promotions for a week after upgrading.
 
 ---
 
