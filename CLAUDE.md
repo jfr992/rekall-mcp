@@ -100,11 +100,12 @@ A memory record has:
 
 ## Hook discipline (claude/hooks/)
 
-Five default hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/hooks/` with matching `~/.claude/settings.json` entries. `session-start-memory.sh` is a sixth, explicit opt-in because it injects startup context.
+Six default hooks ship in `claude/hooks/`. They're inert until installed at `~/.claude/hooks/` with matching `~/.claude/settings.json` entries. `session-start-memory.sh` is a sixth, explicit opt-in because it injects startup context.
 
 - **`rekall-restore.sh`** (UserPromptSubmit) — fetch-don't-inject. Status line only (~92 bytes/session). **Don't add context dumps here.** If you want context, the agent calls `recall_memories()` on demand.
 - **`rekall-observe.sh`** (Stop) — Haiku judge with cheap signal gate. **Never add a hook that fires Haiku per turn without a gate.** Current gate fires on (a) new commits since last fire, (b) durability keyword in last user message, or (c) 5+ turns AND zero saves today. The nested judge must stay isolated with `--safe-mode --effort low --tools "" --no-session-persistence`; otherwise it inherits every plugin, MCP server, and global effort default.
 - **`rekall-session-end.sh`** (SessionEnd) — bounded, LLM-free recall-utility correlation. Reads at most `REKALL_TRANSCRIPT_TAIL_BYTES` (default 1 MiB), emits IDs and counts only, uses a one-second request timeout, and fails open. It owns `session_summary`; never move transcript scanning back into Stop.
+- **`rekall-provenance.sh`** (PreToolUse, `mcp__memory__.*|mcp__rekall__.*`) — fills `cwd`, `session_id`, and `agent` on `recall_memories`, `observe`, and `save_memory` (per-tool allowlist) through `updatedInput`, only when the caller left them absent. It never sets `permissionDecision`, every failure path exits 0, and `REKALL_AUTOSAVE=0` disables it.
 - **`memory-prune.sh`** (SessionStart) — daily gated superseded-memory housekeeping. It is destructive only behind server-side date, count, and backup gates.
 - **`rekall-reflex.sh`** (PreToolUse, Bash) — the sanctioned exception to "no proactive injection" below. Pattern: local per-group cue gate (word-boundary match, no network on a miss) → once-per-session debounce per matched cue, including zero-hit responses → bounded fetch (0.1s connect / 1s total) to `/api/memory/reflex` → ≤800-codepoint untrusted-framed packet injected via `additionalContext`. URL precedence is `REKALL_API_URL`, then legacy `REKALL_URL`, then localhost. Never exits 2, never sets `permissionDecision` — it informs, it never gates. Kill switches: `REKALL_AUTOSAVE=0` (master) or `REKALL_REFLEX=0` (dedicated). Any new PreToolUse/PostToolUse hook that injects context must follow this same shape or justify the deviation.
 

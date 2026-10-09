@@ -44,6 +44,15 @@
             "command": "~/.claude/hooks/rekall-reflex.sh"
           }
         ]
+      },
+      {
+        "matcher": "mcp__memory__.*|mcp__rekall__.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "~/.claude/hooks/rekall-provenance.sh"
+          }
+        ]
       }
     ]
   }

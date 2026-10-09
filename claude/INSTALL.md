@@ -40,7 +40,7 @@ What it does (all idempotent):
 - Preflight: checks `docker`, `jq`, `curl`, `python3`
 - Starts Qdrant + backend if not already running
 - Copies the 6 default hooks (`rekall-restore.sh`, `rekall-observe.sh`, `rekall-session-end.sh`, `memory-prune.sh`, `rekall-reflex.sh`, `rekall-provenance.sh`) to `~/.claude/hooks/`
-- Backs up `~/.claude/settings.json` then merges `UserPromptSubmit`, `Stop`, `SessionEnd`, `SessionStart`, and `PreToolUse` (Bash) entries (deduped; repairs the reflex matcher and SessionEnd timeout in place)
+- Backs up `~/.claude/settings.json` then merges `UserPromptSubmit`, `Stop`, `SessionEnd`, `SessionStart`, and both `PreToolUse` entries (Bash for reflex, `mcp__memory__.*|mcp__rekall__.*` for provenance; deduped; repairs the reflex matcher and SessionEnd timeout in place)
 - Removes only exact obsolete Rekall-owned commands named `rekall-precompact.sh`, `rekall-postcompact.sh`, or `rekall-commit-nudge.sh`; foreign hooks and unrelated settings are preserved
 - Copies all 9 slash commands to `~/.claude/skills/`
 - Verifies backend health + reports memory count
@@ -162,7 +162,7 @@ It prints a thin JSON packet with `hookSpecificOutput.hookEventName = "SessionSt
 
 ## Settings example
 
-See `claude/settings.example.json` for a copy-pastable JSON snippet wiring the default hooks. `Stop`, `SessionEnd`, `UserPromptSubmit`, and the opt-in `SessionStart` hook don't need a matcher; `rekall-reflex.sh` requires `"matcher": "Bash"` under `PreToolUse`.
+See `claude/settings.example.json` for a copy-pastable JSON snippet wiring the default hooks. `Stop`, `SessionEnd`, `UserPromptSubmit`, and the opt-in `SessionStart` hook don't need a matcher; both PreToolUse hooks need a matcher: `rekall-reflex.sh` uses `"Bash"` and `rekall-provenance.sh` uses `"mcp__memory__.*|mcp__rekall__.*"`.
 
 ## Uninstall
 

@@ -13,8 +13,8 @@ Runs the bundled installer at `claude/setup/install.sh`. Safe to re-run; it back
 
 1. Preflight: checks `docker`, `jq`, `curl`, `python3`
 2. Starts Qdrant + backend (skip with `--skip-backend`)
-3. Copies the five default hooks — `rekall-restore.sh`, `rekall-observe.sh`, `rekall-session-end.sh`, `rekall-reflex.sh`, and `memory-prune.sh` — to `~/.claude/hooks/`
-4. Backs up + patches `~/.claude/settings.json` with `UserPromptSubmit`, `Stop`, `SessionEnd`, `PreToolUse` (Bash matcher), and `SessionStart` entries. The merge is idempotent, repairs reflex matcher/SessionEnd timeout drift, removes only exact obsolete Rekall hook basenames, and preserves foreign hooks.
+3. Copies the six default hooks — `rekall-restore.sh`, `rekall-observe.sh`, `rekall-session-end.sh`, `rekall-reflex.sh`, `rekall-provenance.sh`, and `memory-prune.sh` — to `~/.claude/hooks/`
+4. Backs up + patches `~/.claude/settings.json` with `UserPromptSubmit`, `Stop`, `SessionEnd`, `PreToolUse` (Bash and Rekall-MCP matchers), and `SessionStart` entries. The merge is idempotent, repairs reflex matcher/SessionEnd timeout drift, removes only exact obsolete Rekall hook basenames, and preserves foreign hooks.
 5. Copies all 9 slash commands to `~/.claude/skills/`
 6. Verifies backend health + reports memory count
 
