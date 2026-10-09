@@ -1506,3 +1506,5 @@ git commit -m "docs: record final test counts for measurable memory plan"
 ```
 
 Rollout after merge (not tasks, operator steps): `claude/setup/install.sh` to pick up the two changed hooks and the new one; remove the `session-start-memory.sh` SessionStart entry from `~/.claude/settings.json` on the maintainer's machine (capsule is opt-in at install; the labeled eval found 0 helpful in 40 capsule deliveries); run the utility report after a week and read "Citation coverage" alongside the labeled eval, never alone.
+
+Final suite (2026-10-09): 1418 passed, 4 failed (known date rot: 3 in `test_afk_memory_contract.py`, 1 in `test_close_loop.py`, identical on `main`), 5 skipped. `git diff --check` clean. Ruff: 2 branch-introduced test-file nits (E741, I001) fixed in the final review wave.
