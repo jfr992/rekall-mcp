@@ -483,7 +483,7 @@ class OptimizedMemoryTools(BaseToolProvider):
         ]
 
     def _get_current_scope(self, project: str | None = None, **scope_kwargs):
-        """Caller-supplied cwd/agent/session win; never fall back to the backend cwd silently."""
+        """Caller-supplied cwd/agent/session win over the backend defaults."""
         return ScopeDetector.detect(project=project, **_provided(**scope_kwargs))
 
     def register(self, mcp: FastMCP) -> list[str]:

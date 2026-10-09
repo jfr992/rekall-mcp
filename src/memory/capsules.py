@@ -172,4 +172,12 @@ def render_project_capsule(capsule: dict[str, Any]) -> str:
             used += len(line) + 1
         lines.append("")
 
-    return "\n".join(lines).strip() + "\n"
+    text = "\n".join(lines).strip() + "\n"
+    if len(text) > _MAX_RENDER_CHARS:
+        kept = text.splitlines()
+        while kept and len("\n".join(kept)) + 1 > _MAX_RENDER_CHARS:
+            kept.pop()
+        while kept and (not kept[-1].strip() or kept[-1].startswith("## ")):
+            kept.pop()
+        text = "\n".join(kept) + "\n"
+    return text

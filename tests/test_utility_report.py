@@ -597,6 +597,49 @@ def test_citation_coverage_counts_over_collapsed_sessions(tmp_path):
     assert cov == {"delivered": 3, "referenced": 2, "coverage": pytest.approx(2 / 3)}
 
 
+def test_citation_coverage_excludes_sessions_without_referenced(tmp_path):
+    from scripts.utility_report import (
+        build_session_summaries,
+        collapse_sessions,
+        compute_citation_coverage,
+        parse_events,
+    )
+
+    f = tmp_path / "_events.jsonl"
+    legacy = json.loads(_ss("legacy", "p", ["x", "y"], eid="e0"))
+    legacy["payload"]["referenced"] = None
+    legacy["payload"]["delivered"] = None
+    f.write_text(
+        json.dumps(legacy)
+        + "\n"
+        + _ss("v2", "p", ["a", "b"], referenced=["a"], delivered={"explicit": ["a", "b"]}, eid="e1")
+        + "\n"
+    )
+    cov = compute_citation_coverage(collapse_sessions(build_session_summaries(parse_events(f))))
+    assert cov == {"delivered": 2, "referenced": 1, "coverage": pytest.approx(0.5)}
+
+
+def test_collapse_takes_latest_summary_that_has_referenced(tmp_path):
+    from scripts.utility_report import build_session_summaries, collapse_sessions, parse_events
+
+    f = tmp_path / "_events.jsonl"
+    late_legacy = json.loads(_ss("s1", "p", ["a"], eid="e2"))
+    late_legacy["payload"]["referenced"] = None
+    f.write_text(_ss("s1", "p", ["a"], referenced=["a"], eid="e1") + "\n" + json.dumps(late_legacy) + "\n")
+    (collapsed,) = collapse_sessions(build_session_summaries(parse_events(f)))
+    assert collapsed["referenced"] == ["a"]
+
+
+def test_unknown_utility_rows_sort_last(tmp_path, capsys):
+    from scripts.utility_report import main
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(_ss("s1", "p", ["a", "b"], edits=0, referenced=["b"]) + "\n")
+    main(["--events-file", str(f)])
+    out = capsys.readouterr().out
+    assert out.index("  b ") < out.index("  a ")
+
+
 def test_report_prints_citation_coverage_not_used(tmp_path, capsys):
     from scripts.utility_report import main
 

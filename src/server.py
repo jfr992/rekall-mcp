@@ -791,11 +791,13 @@ async def api_record_events(request):
             return value
 
         try:
-            referenced = _ids(body.get("referenced", []), "referenced")
-            delivered_raw = body.get("delivered", {})
-            if not isinstance(delivered_raw, dict):
-                raise ValueError("delivered must be an object")
-            delivered = {k: _ids(v, f"delivered.{k}") for k, v in delivered_raw.items()}
+            referenced = _ids(body["referenced"], "referenced") if "referenced" in body else None
+            delivered = None
+            if "delivered" in body:
+                delivered_raw = body["delivered"]
+                if not isinstance(delivered_raw, dict):
+                    raise ValueError("delivered must be an object")
+                delivered = {k: _ids(v, f"delivered.{k}") for k, v in delivered_raw.items()}
         except ValueError as exc:
             return _bad_request(str(exc))
         client_name = body.get("client")

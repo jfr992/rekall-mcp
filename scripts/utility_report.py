@@ -64,7 +64,7 @@ def build_session_summaries(events: list[dict]) -> list[dict]:
                 "recalled_ids": recalled,
                 "edits_after_recall": int(payload.get("edits_after_recall", 0)),
                 "test_passes_after_recall": int(payload.get("test_passes_after_recall", 0)),
-                "referenced": list(payload.get("referenced") or []) if "referenced" in payload else None,
+                "referenced": list(payload["referenced"]) if payload.get("referenced") is not None else None,
                 "delivered": payload.get("delivered") or {},
             }
         )
@@ -105,7 +105,7 @@ def collapse_sessions(summaries: list[dict]) -> list[dict]:
                 "recalled_ids": sorted(all_ids),
                 "edits_after_recall": max(s["edits_after_recall"] for s in group),
                 "test_passes_after_recall": max(s["test_passes_after_recall"] for s in group),
-                "referenced": group[-1].get("referenced"),  # last summary wins for v2 fields
+                "referenced": next((s["referenced"] for s in reversed(group) if s.get("referenced") is not None), None),
                 "delivered_ids": sorted(delivered_ids) if delivered_ids else sorted(all_ids),
             }
         )
@@ -137,8 +137,9 @@ def compute_utility_map(summaries: list[dict]) -> dict[str, float | None]:
 
 def compute_citation_coverage(summaries: list[dict]) -> dict:
     """Delivered vs referenced over collapsed sessions. Telemetry, not utility."""
-    delivered = sum(len(ss["delivered_ids"]) for ss in summaries)
-    referenced = sum(len(set(ss.get("referenced") or []) & set(ss["delivered_ids"])) for ss in summaries)
+    measured = [ss for ss in summaries if ss.get("referenced") is not None]
+    delivered = sum(len(ss["delivered_ids"]) for ss in measured)
+    referenced = sum(len(set(ss["referenced"]) & set(ss["delivered_ids"])) for ss in measured)
     return {"delivered": delivered, "referenced": referenced, "coverage": (referenced / delivered) if delivered else 0.0}
 
 
@@ -254,7 +255,7 @@ def print_report(
     print("Recall Utility — heuristic co-occurrence (denominator: distinct sessions with recall)")
     if utility_map:
         print(f"  {'memory_id':<45} {'utility':>7}")
-        for mid, u in sorted(utility_map.items(), key=lambda kv: -1.0 if kv[1] is None else -kv[1]):
+        for mid, u in sorted(utility_map.items(), key=lambda kv: (kv[1] is None, -(kv[1] or 0.0))):
             print(f"  {mid:<45} {'unknown' if u is None else f'{u:.3f}':>7}")
     else:
         print("  (no session_summary data)")

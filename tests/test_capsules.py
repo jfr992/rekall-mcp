@@ -179,6 +179,24 @@ def test_render_project_capsule_is_thin():
     assert len(text) < 2000
 
 
+def test_render_project_capsule_stays_within_budget_and_keeps_ids(monkeypatch):
+    import memory.capsules as capsules
+    from memory.capsules import render_project_capsule
+
+    monkeypatch.setattr(capsules, "_MAX_RENDER_CHARS", 60)
+
+    def item(n):
+        return [{"content": "x" * 1700, "date": "2026-07-01", "memory_id": f"2026-07-01_fact_{n:08x}"}]
+
+    text = render_project_capsule(
+        {"project": "p", "standing_context": item(1), "danger_zones": item(2), "open_loops": item(3)}
+    )
+
+    assert len(text) <= 60
+    bullets = [line for line in text.splitlines() if line.startswith("- ")]
+    assert all(line.endswith("]") for line in bullets)
+
+
 # ---------------------------------------------------------------------------
 # New tests — routing contract
 # ---------------------------------------------------------------------------

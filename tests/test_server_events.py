@@ -144,8 +144,8 @@ def test_post_events_old_client_shape_still_accepted(client):
     assert r.status_code == 200
     p = manager.record_event.call_args.kwargs["payload"]
     assert p["client"] is None
-    assert p["delivered"] == {}
-    assert p["referenced"] == []
+    assert p["delivered"] is None
+    assert p["referenced"] is None
     assert p["coverage"] is None
 
 
