@@ -67,7 +67,7 @@ The MCP server alone gives Claude memory *tools*; the hooks make memory *automat
 bash claude/setup/install.sh
 ```
 
-Idempotent, backs up `~/.claude/settings.json` first. It wires six hooks and nine slash commands:
+Idempotent, backs up `~/.claude/settings.json` first. Using more than one Claude Code config dir? Add `--profile <dir>` (repeatable); `--no-detect` skips scanning running `claude` processes for `CLAUDE_CONFIG_DIR`. Profiles share the hook files in `~/.claude/hooks/`. To teach the agent how to use memory, paste [`claude/CLAUDE.snippet.md`](claude/CLAUDE.snippet.md) into your global `CLAUDE.md`. It wires six hooks and nine slash commands:
 
 | Hook | Event | What it does | Kill switch |
 |---|---|---|---|

@@ -248,3 +248,19 @@ def test_release_metadata_versions_stay_in_sync():
     target_match = re.match(r"# Migration Guide — v[^ ]+ → v([^ ]+)", migration)
     assert target_match is not None
     assert target_match.group(1) == project_version
+
+
+def test_claude_snippet_is_generic_and_linked_from_readme():
+    snippet = (REPO / "claude" / "CLAUDE.snippet.md").read_text()
+    assert "/Users/" not in snippet
+    for term in ("recall_memories", "REKALL_AUTOSAVE=0", "MEMORY.md"):
+        assert term in snippet
+    assert "claude/CLAUDE.snippet.md" in README
+
+
+def test_installer_profile_flags_are_documented():
+    claude_install = (REPO / "claude" / "INSTALL.md").read_text()
+    codex_install = (REPO / "codex" / "INSTALL.md").read_text()
+    for term in ("--profile", "--no-detect"):
+        assert term in claude_install and term in README
+    assert "--codex-home" in codex_install and "--no-detect" in codex_install

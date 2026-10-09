@@ -52,6 +52,20 @@ Flags:
 - `--skills-only` — only copy slash commands
 - `--hooks-only` — only install hooks + patch settings.json
 - `--install-startup-capsule` — opt in to the `SessionStart` capsule hook and settings entry
+- `--profile <dir>` — also patch another Claude Code config dir (repeatable)
+- `--no-detect` — skip scanning running `claude` processes for `CLAUDE_CONFIG_DIR`
+
+### Multiple config profiles
+
+Claude Code profiles (`CLAUDE_CONFIG_DIR`) each have their own `settings.json`. The installer patches `~/.claude`, `$CLAUDE_CONFIG_DIR` if set, every `--profile` dir, and, best effort, any profile found on running `claude` processes (`--no-detect` disables that). Dirs that do not exist are skipped, not created.
+
+```bash
+bash claude/setup/install.sh --profile ~/.claude-work
+```
+
+Profiles share the hook files: scripts live only in `~/.claude/hooks/`, and every profile's `settings.json` points there. Each patched `settings.json` is backed up with a `.bak-<timestamp>` suffix, and re-running changes nothing. If `~/.claude/hooks/session-start-memory.sh` already exists, it is refreshed (with a backup) even without `--install-startup-capsule`; wiring it stays opt-in.
+
+Paste `claude/CLAUDE.snippet.md` into your global `CLAUDE.md` to tell the agent how to use memory.
 
 The `SessionStart` capsule hook is **not installed by default**. It injects a small `additionalContext` packet at session start, so it is explicit opt-in:
 
