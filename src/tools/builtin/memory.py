@@ -42,6 +42,11 @@ _IN_LABELS: dict[str, str] = {
 }
 
 
+def _provided(**kwargs: Any) -> dict[str, Any]:
+    """Drop unset fields so narrower scope helpers never see them."""
+    return {k: v for k, v in kwargs.items() if v is not None}
+
+
 def _render_memory_detail(result: dict[str, Any]) -> str:
     """Render a get_memory_detail v2 result as compact structured text.
 
@@ -477,16 +482,24 @@ class OptimizedMemoryTools(BaseToolProvider):
             ),
         ]
 
-    def _get_current_scope(self, project: str | None = None):
-        """Detect full scope, not just cwd basename."""
-        return ScopeDetector.detect(project=project)
+    def _get_current_scope(self, project: str | None = None, **scope_kwargs):
+        """Caller-supplied cwd/agent/session win; never fall back to the backend cwd silently."""
+        return ScopeDetector.detect(project=project, **_provided(**scope_kwargs))
 
     def register(self, mcp: FastMCP) -> list[str]:
         """Register optimized memory tools."""
         registered = []
 
         @mcp.tool(structured_output=False)
-        async def observe(summary: str, type: str = "auto", context: str | None = None) -> str:
+        async def observe(
+            summary: str,
+            type: str = "auto",
+            context: str | None = None,
+            project: str | None = None,
+            cwd: str | None = None,
+            session_id: str | None = None,
+            agent: str | None = None,
+        ) -> str:
             """Record what was just accomplished for future reference.
 
             **AUTOMATIC USAGE (call after operations):**
@@ -514,8 +527,14 @@ class OptimizedMemoryTools(BaseToolProvider):
                 summary: What was accomplished (1-2 sentences)
                 type: Memory type or "auto" for automatic classification
                 context: Optional: Why this matters or what prompted it
+                project: Your project name; pass it when cwd is unavailable
+                cwd: Your working directory, so the memory lands in the right project
+                session_id: Your session id, for attribution
+                agent: Your agent name (claude-code, codex)
             """
-            scope = self._get_current_scope()
+            scope = self._get_current_scope(
+                project, **_provided(cwd=cwd, agent=agent, session_id=session_id)
+            )
 
             if type == "auto":
                 type = _classify_smart(summary, self.manager.embedder)
@@ -526,6 +545,8 @@ class OptimizedMemoryTools(BaseToolProvider):
                 project=scope.project,
                 scope=scope,
                 context=context,
+                cwd=cwd,
+                session_id=session_id,
                 capture_origin="observe_judge",
                 source_tool="mcp",
             )
@@ -547,6 +568,7 @@ class OptimizedMemoryTools(BaseToolProvider):
             task_hint: str | None = None,
             cwd: str | None = None,
             session_id: str | None = None,
+            agent: str | None = None,
         ) -> str:
             """Use this whenever the question references prior decisions, current values or
             settings, past learnings, or what was chosen/changed — before answering from
@@ -574,6 +596,7 @@ class OptimizedMemoryTools(BaseToolProvider):
                 cwd: Pass your current working directory so the recall is
                     attributed to your project.
                 session_id: Pass the session id if known.
+                agent: Your agent name (claude-code, codex)
             """
             return self.manager.recall_formatted(
                 query=query,
@@ -584,6 +607,7 @@ class OptimizedMemoryTools(BaseToolProvider):
                 task_hint=task_hint,
                 cwd=cwd,
                 session_id=session_id,
+                agent=agent,
             )
 
         registered.append("recall_memories")
@@ -661,6 +685,9 @@ class OptimizedMemoryTools(BaseToolProvider):
             memory_type: str = "note",
             project: str | None = None,
             context: str | None = None,
+            cwd: str | None = None,
+            session_id: str | None = None,
+            agent: str | None = None,
         ) -> str:
             """Save a memory explicitly (manual mode).
 
@@ -674,14 +701,21 @@ class OptimizedMemoryTools(BaseToolProvider):
                 memory_type: Type (decision, learning, preference, requirement, fact, note)
                 project: Optional project to associate with
                 context: Optional: why this matters, appended to content as "Context: ..."
+                cwd: Your working directory, so the memory lands in the right project
+                session_id: Your session id, for attribution
+                agent: Your agent name (claude-code, codex)
             """
-            scope = self._get_current_scope(project=project)
+            scope = self._get_current_scope(
+                project, **_provided(cwd=cwd, agent=agent, session_id=session_id)
+            )
             full_content = content if not context else f"{content}\n\nContext: {context}"
             memory_id = self.manager.save(
                 content=full_content,
                 type=memory_type,
                 project=scope.project,
                 scope=scope,
+                cwd=cwd,
+                session_id=session_id,
                 capture_origin="save_memory_tool",
                 source_tool="mcp",
             )
