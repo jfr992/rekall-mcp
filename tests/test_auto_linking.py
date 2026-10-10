@@ -147,8 +147,9 @@ def test_cross_project_no_links(tmp_path):
     assert result.edges_created == 0
 
 
-def test_new_memory_contradicts_existing_memory(tmp_path):
+def test_new_memory_contradicts_existing_memory(tmp_path, monkeypatch):
     """A negated statement should create a contradicts relation."""
+    monkeypatch.setattr("memory.linker._llm_refine", lambda **kw: ("contradicts", True))
     kg = KnowledgeGraph(tmp_path / "_graph.json")
     kg.add_node("old_decision", memory_type="decision")
 
@@ -228,7 +229,8 @@ def test_classify_related_to_default():
     )
 
 
-def test_classify_contradicts():
+def test_classify_contradicts(monkeypatch):
+    monkeypatch.setattr("memory.linker._llm_refine", lambda **kw: ("contradicts", True))
     assert (
         _classify_relation(
             new_type="decision",
@@ -318,8 +320,9 @@ def test_similar_learnings_about_same_tool_not_contradictions():
     )
 
 
-def test_real_contradiction_still_detected():
+def test_real_contradiction_still_detected(monkeypatch):
     """Genuinely opposing statements should still be caught."""
+    monkeypatch.setattr("memory.linker._llm_refine", lambda **kw: ("contradicts", True))
     assert (
         _classify_relation(
             new_type="learning",
