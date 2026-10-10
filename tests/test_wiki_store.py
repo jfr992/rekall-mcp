@@ -195,3 +195,58 @@ def test_cache_roundtrip_and_corrupt_file_reads_empty(tmp_path):
     assert store.read_cache("worthiness") == {}
     store.write_cache("worthiness", {"a": {"verdict": "skip"}})
     assert store.read_cache("worthiness") == {"a": {"verdict": "skip"}}
+
+
+CITED = "2026-09-19_requirement_9b9a3e83"
+OTHER = "2026-09-20_fact_deadbeef"
+
+
+def test_approve_refuses_inline_citation_missing_from_sources(store):
+    body = BODY.replace("## When {#when}\nx", f"## When {{#when}}\nx [source: {OTHER}]")
+    store.write_draft(Page(frontmatter=dict(FM), body=body))
+    with pytest.raises(ValueError, match=OTHER):
+        store.approve("demo/process/rotate-key")
+
+
+def test_approve_refuses_sources_that_do_not_exist(store):
+    store.write_draft(Page(frontmatter=dict(FM, sources=[CITED, OTHER]), body=BODY))
+    with pytest.raises(ValueError, match=OTHER):
+        store.approve("demo/process/rotate-key", exists=lambda ids: {CITED})
+
+
+def test_approve_with_existing_sources_succeeds(store):
+    store.write_draft(Page(frontmatter=dict(FM), body=BODY))
+    live = store.approve("demo/process/rotate-key", exists=lambda ids: set(ids))
+    assert live.status == "live"
+
+
+def test_approve_refuses_process_page_with_zero_parsed_steps(store):
+    body = BODY.replace("1. Do it. [source: 2026-09-19_requirement_9b9a3e83]", "Do it carefully.")
+    store.write_draft(Page(frontmatter=dict(FM), body=body))
+    with pytest.raises(ValueError, match="source"):
+        store.approve("demo/process/rotate-key")
+
+
+def test_write_draft_redacts_secrets_in_body_and_string_frontmatter(store):
+    secret = "api_key=sk-abc123def456"
+    store.write_draft(
+        Page(frontmatter=dict(FM, title=f"Rotate {secret}"), body=BODY.replace("x", secret, 1))
+    )
+    draft = store.read("demo/process/rotate-key", status="draft")
+    assert "sk-abc123" not in draft.body and "[REDACTED]" in draft.body
+    assert "sk-abc123" not in draft.frontmatter["title"]
+    assert draft.frontmatter["page_id"] == "demo/process/rotate-key"
+    with pytest.raises(ValueError, match="redact"):
+        store.approve("demo/process/rotate-key")
+
+
+def test_update_draft_is_atomic_and_missing_draft_raises(store):
+    store.write_draft(Page(frontmatter=dict(FM), body=BODY))
+    store.update_draft(
+        "demo/process/rotate-key", lambda d: Page(dict(d.frontmatter, title="New"), d.body)
+    )
+    assert store.read("demo/process/rotate-key", status="draft").frontmatter["title"] == "New"
+    store.approve("demo/process/rotate-key")
+    with pytest.raises(ValueError, match="no draft"):
+        store.update_draft("demo/process/rotate-key", lambda d: d)
+    assert store.read("demo/process/rotate-key", status="draft") is None

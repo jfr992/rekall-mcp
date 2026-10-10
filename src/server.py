@@ -1594,7 +1594,7 @@ async def api_memory_publish_status(request):
 
 
 # ---- wiki (phase 1) -------------------------------------------------------
-from memory.wiki.compile import classify_candidates, draft_page  # noqa: E402
+from memory.wiki.compile import classify_candidates, draft_page, page_id_for  # noqa: E402
 from memory.wiki.compile import make_llm as make_wiki_llm  # noqa: E402
 from memory.wiki.pages import (  # noqa: E402
     FULL_BUDGET,
@@ -1614,6 +1614,10 @@ from memory.wiki.validity import compute_validity  # noqa: E402
 
 def _wiki_validity_fn(manager):
     return lambda page: compute_validity(page, store=manager.store, graph=manager.knowledge_graph)
+
+
+def _existing_memory_ids(manager, ids: list[str]) -> set[str]:
+    return {m["memory_id"] for m in manager.store.get_many(ids)}
 
 
 def _wiki_page_id(request) -> str | None:
@@ -1800,7 +1804,8 @@ async def api_wiki_approve(request):
     if page_id is None:
         return _bad_request("invalid page_id")
     try:
-        page = _get_memory_manager().wiki.approve(page_id)
+        manager = _get_memory_manager()
+        page = manager.wiki.approve(page_id, exists=lambda ids: _existing_memory_ids(manager, ids))
         return _ok({"page": page.frontmatter})
     except ValueError as e:
         return _wiki_refusal(e)
@@ -1831,18 +1836,17 @@ async def api_wiki_edit_draft(request):
         return _bad_request("invalid page_id")
     try:
         body = await request.json()
-        manager = _get_memory_manager()
-        draft = manager.wiki.read(page_id, "draft")
-        if draft is None:
-            return _wiki_refusal(ValueError("no draft for page_id"))
         edits = (body or {}).get("frontmatter") or {}
         allowed = {k: edits[k] for k in _WIKI_EDITABLE_FM if k in edits}
-        fm = dict(draft.frontmatter, **allowed, page_id=page_id, human_edited=True)
-        page = Page(frontmatter=fm, body=str((body or {}).get("body", draft.body)))
-        manager.wiki.write_draft(page)
+
+        def mutate(draft: Page) -> Page:
+            fm = dict(draft.frontmatter, **allowed, page_id=page_id, human_edited=True)
+            return Page(frontmatter=fm, body=str((body or {}).get("body", draft.body)))
+
+        page = _get_memory_manager().wiki.update_draft(page_id, mutate)
         return _ok({"page": page.frontmatter})
     except ValueError as e:
-        return _bad_request(str(e))
+        return _wiki_refusal(e)
     except Exception as e:
         return _server_error(str(e))
 
@@ -1889,10 +1893,13 @@ async def api_wiki_draft(request):
         if not memories:
             return _bad_request("no memories found")
         project = _safe_project(body.get("project")) or memories[0].get("project") or "general"
+        page_type = str(body.get("page_type") or "reference")
+        if not PAGE_ID_RE.match(page_id_for(project, page_type, str(body.get("title") or "page"))):
+            return _bad_request("invalid page_id for project/page_type")
         page = await asyncio.to_thread(
             draft_page,
             memories,
-            page_type=str(body.get("page_type") or "reference"),
+            page_type=page_type,
             project=project,
             title=body.get("title"),
             llm=llm,

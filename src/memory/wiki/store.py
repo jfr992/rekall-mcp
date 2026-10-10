@@ -6,12 +6,14 @@ import json
 import logging
 import os
 import threading
+from collections.abc import Callable
 from datetime import date
 from pathlib import Path
 
 from memory.wiki.pages import (
     PAGE_ID_RE,
     Page,
+    cited_ids,
     emit_page,
     has_redaction,
     parse_page,
@@ -31,6 +33,19 @@ steps end with `[source: <memory_id>]`.
 
 def _oneline(text: object) -> str:
     return " ".join(str(text).split())
+
+
+_UNSANITIZED_FM = frozenset({"page_id", "type", "status", "project"})
+
+
+def _sanitized(page: Page) -> Page:
+    from memory.manager import Sanitizer
+
+    fm = {
+        k: Sanitizer.sanitize(v) if isinstance(v, str) and k not in _UNSANITIZED_FM else v
+        for k, v in page.frontmatter.items()
+    }
+    return Page(frontmatter=fm, body=Sanitizer.sanitize(page.body))
 
 
 def _write_atomic(path: Path, text: str) -> None:
@@ -68,15 +83,25 @@ class WikiStore:
             return None
         return parse_page(path.read_text(encoding="utf-8"))
 
-    def write_draft(self, page: Page) -> Path:
-        fm = dict(page.frontmatter, status="draft")
+    def _write_draft_locked(self, page: Page) -> Path:
+        clean = _sanitized(page)
+        fm = dict(clean.frontmatter, status="draft")
         if not fm.get("page_id"):
             raise ValueError("page has no page_id")
         path = self.path_for(fm["page_id"], "draft")
-        with self._lock:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            _write_atomic(path, emit_page(Page(frontmatter=fm, body=page.body)))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        _write_atomic(path, emit_page(Page(frontmatter=fm, body=clean.body)))
         return path
+
+    def write_draft(self, page: Page) -> Path:
+        with self._lock:
+            return self._write_draft_locked(page)
+
+    def update_draft(self, page_id: str, mutate: Callable[[Page], Page]) -> Page:
+        with self._lock:
+            page = mutate(self._locked_draft(page_id))
+            self._write_draft_locked(page)
+            return page
 
     def list_pages(self, status: str = "live") -> list[Page]:
         base = self.root / ("live" if status == "live" else "drafts")
@@ -96,13 +121,27 @@ class WikiStore:
             raise ValueError("draft page_id mismatch")
         return draft
 
-    def approve(self, page_id: str, *, verified_by: str = "human") -> Page:
+    def approve(
+        self,
+        page_id: str,
+        *,
+        verified_by: str = "human",
+        exists: Callable[[list[str]], set[str]] | None = None,
+    ) -> Page:
         with self._lock:
             draft = self._locked_draft(page_id)
             if has_redaction(draft.body) or has_redaction(json.dumps(draft.frontmatter)):
                 raise ValueError("page contains redacted text")
             if unsourced_steps(draft):
                 raise ValueError("process page has steps without a source")
+            uncited = [i for i in cited_ids(draft.body) if i not in draft.sources]
+            if uncited:
+                raise ValueError(f"cited ids missing from sources: {', '.join(uncited)}")
+            if exists is not None and draft.sources:
+                found = exists(draft.sources)
+                missing = [i for i in draft.sources if i not in found]
+                if missing:
+                    raise ValueError(f"sources not found in memory: {', '.join(missing)}")
             live_path = self.path_for(page_id, "live")
             existing = self.read(page_id, "live")
             revision = 1

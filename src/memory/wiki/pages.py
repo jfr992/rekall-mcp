@@ -133,11 +133,18 @@ def step_sources(section_markdown: str) -> list[list[str]]:
     ]
 
 
+def cited_ids(text: str) -> list[str]:
+    return list(
+        dict.fromkeys(mid for tag in _SOURCE_RE.findall(text) for mid in MEMORY_ID_RE.findall(tag))
+    )
+
+
 def unsourced_steps(page: Page) -> int:
     if page.type != "process":
         return 0
     sections = {s[0]: s[2] for s in split_sections(page.body)}
-    return sum(1 for sources in step_sources(sections.get("steps", "")) if not sources)
+    steps = step_sources(sections.get("steps", ""))
+    return sum(1 for sources in steps if not sources) or (0 if steps else 1)
 
 
 def token_estimate(text: str) -> int:

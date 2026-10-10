@@ -56,7 +56,9 @@ def _fake_llm(monkeypatch, body=PROCESS_BODY, title="Rotate the gateway key"):
 def test_candidates_and_draft_are_unconfigured_without_llm(client, monkeypatch):
     tc, _ = client
     monkeypatch.setattr("server.make_wiki_llm", lambda: None)
-    assert tc.post("/api/wiki/candidates", json={"project": "demo"}).json()["status"] == "unconfigured"
+    assert (
+        tc.post("/api/wiki/candidates", json={"project": "demo"}).json()["status"] == "unconfigured"
+    )
     assert (
         tc.post(
             "/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"}
@@ -226,3 +228,54 @@ def test_candidates_partial_failure_keeps_and_caches_earlier_verdicts(client, mo
         "2026-01-01_fact_a1",
         "2026-01-01_fact_a3",
     }
+
+
+def test_approve_refuses_sources_missing_from_memory_store(client, monkeypatch):
+    tc, manager = client
+    _fake_llm(monkeypatch)
+    tc.post("/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"})
+    manager.store.get_many.side_effect = lambda ids, **kw: []
+    r = tc.post("/api/wiki/drafts/demo/process/rotate-the-gateway-key/approve")
+    assert r.status_code == 400 and "2026-01-01_fact_a1" in r.json()["error"]
+
+
+def test_draft_page_id_uses_project_slug_and_invalid_id_is_400_before_model(client, monkeypatch):
+    tc, manager = client
+    _fake_llm(monkeypatch)
+    r = tc.post(
+        "/api/wiki/draft",
+        json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process", "project": "MyRepo"},
+    )
+    page = r.json()["page"]
+    assert r.status_code == 200 and page["page_id"] == "myrepo/process/rotate-the-gateway-key"
+    assert page["project"] == "MyRepo"
+
+    calls = []
+    monkeypatch.setattr("server.make_wiki_llm", lambda: lambda p: calls.append(p) or "")
+    bad = tc.post(
+        "/api/wiki/draft",
+        json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "bogus", "project": "MyRepo"},
+    )
+    assert bad.status_code == 400 and calls == []
+
+
+def test_put_after_approve_is_404_not_a_resurrected_draft(client, monkeypatch):
+    tc, _ = client
+    _fake_llm(monkeypatch)
+    tc.post("/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"})
+    url = "/api/wiki/drafts/demo/process/rotate-the-gateway-key"
+    assert tc.post(f"{url}/approve").status_code == 200
+    assert tc.put(url, json={"body": PROCESS_BODY}).status_code == 404
+    assert tc.get("/api/wiki/drafts").json()["drafts"] == []
+
+
+def test_put_redacts_secret_and_approve_then_refuses(client, monkeypatch):
+    tc, _ = client
+    _fake_llm(monkeypatch)
+    tc.post("/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"})
+    url = "/api/wiki/drafts/demo/process/rotate-the-gateway-key"
+    tc.put(url, json={"body": PROCESS_BODY.replace("admin", "api_key=sk-abc123def456")})
+    body = tc.get(url).json()["body"]
+    assert "sk-abc123" not in body and "[REDACTED]" in body
+    r = tc.post(f"{url}/approve")
+    assert r.status_code == 400 and "redact" in r.json()["error"].lower()

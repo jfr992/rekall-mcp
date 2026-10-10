@@ -43,6 +43,10 @@ _SIDEBAR = {"process": 10, "policy": 20, "reference": 30, "entity": 40}
 _TITLE_RE = re.compile(r"^TITLE:\s*(.+)$", re.M)
 
 
+def page_id_for(project: str, page_type: str, title: str) -> str:
+    return f"{slugify(project)}/{page_type}/{slugify(title)}"
+
+
 def make_llm() -> Callable[[str], str] | None:
     cfg = llm_config()
     if cfg is None:
@@ -145,7 +149,7 @@ def draft_page(
         "description": final_title,
         "sidebar_position": _SIDEBAR[page_type],
         "tags": [page_type],
-        "page_id": f"{project}/{page_type}/{slugify(final_title)}",
+        "page_id": page_id_for(project, page_type, final_title),
         "type": page_type,
         "project": project,
         "scope": scope,
