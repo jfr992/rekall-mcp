@@ -342,16 +342,25 @@ def _llm_complete(prompt: str, *, model: str, base_url: str, token: str) -> str:
     return resp.json()["content"][0]["text"]
 
 
+def llm_config() -> tuple[str, str, str] | None:
+    """(model, base_url, token) for the Anthropic-compatible endpoint, or None when unconfigured."""
+    model = os.getenv("REKALL_PUBLISH_MODEL") or os.getenv("ANTHROPIC_MODEL")
+    base_url = os.getenv("ANTHROPIC_BASE_URL")
+    token = os.getenv("ANTHROPIC_AUTH_TOKEN") or os.getenv("ANTHROPIC_API_KEY")
+    if not (model and base_url and token):
+        return None
+    return model, base_url, token
+
+
 def _build_synth():
     """Return (synth_fn, mode). synth_fn distills a cluster into (title, brief)
     via an Anthropic-compatible endpoint (honors ANTHROPIC_BASE_URL/AUTH_TOKEN,
     including the litellm proxy). Returns (None, 'raw') when unconfigured.
     """
-    model = os.getenv("REKALL_PUBLISH_MODEL") or os.getenv("ANTHROPIC_MODEL")
-    base_url = os.getenv("ANTHROPIC_BASE_URL")
-    token = os.getenv("ANTHROPIC_AUTH_TOKEN") or os.getenv("ANTHROPIC_API_KEY")
-    if not (model and base_url and token):
+    cfg = llm_config()
+    if cfg is None:
         return None, "raw"
+    model, base_url, token = cfg
 
     def synth(cluster):
         notes = "\n".join(f"- {m.get('content', '').strip()}" for m in cluster)
