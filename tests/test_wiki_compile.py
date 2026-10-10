@@ -1,6 +1,11 @@
 """Worthiness classification and page drafting with a fake LLM (spec: Worthiness, Pipeline)."""
 
+import hashlib
 import json
+
+
+def _sha(content):
+    return hashlib.sha1(content[:4000].encode()).hexdigest()
 
 
 def _mem(mid, content, **extra):
@@ -47,6 +52,7 @@ def test_classify_uses_cache_and_tolerates_bad_json():
             "page_type": "reference",
             "scope": {},
             "reasons": [],
+            "content_sha": _sha("x"),
         }
     }
     out = classify_candidates(
@@ -125,3 +131,68 @@ def test_make_llm_is_none_when_unconfigured(monkeypatch):
     ):
         monkeypatch.delenv(k, raising=False)
     assert make_llm() is None
+
+
+def test_classify_gates_override_a_cached_worthy_verdict():
+    from memory.wiki.compile import classify_candidates
+
+    worthy = {
+        "verdict": "worthy",
+        "question": "q",
+        "page_type": "policy",
+        "scope": {},
+        "reasons": [],
+    }
+    cache = {
+        "2026-01-01_fact_a1": {**worthy, "content_sha": _sha("x")},
+        "2026-01-02_fact_b2": {**worthy, "content_sha": _sha("[REDACTED]")},
+    }
+    calls = []
+    out = classify_candidates(
+        [_mem("2026-01-01_fact_a1", "x", disputed=True), _mem("2026-01-02_fact_b2", "[REDACTED]")],
+        llm=lambda p: calls.append(p) or "",
+        cache=cache,
+    )
+    assert out == [] and calls == []
+    assert cache["2026-01-01_fact_a1"]["verdict"] == "skip" and cache["2026-01-01_fact_a1"][
+        "reasons"
+    ] == ["disputed"]
+    assert cache["2026-01-02_fact_b2"]["verdict"] == "skip"
+
+
+def test_classify_reclassifies_on_stale_sha_only():
+    from memory.wiki.compile import classify_candidates
+
+    fresh = json.dumps(
+        {"verdict": "worthy", "question": "q", "page_type": "policy", "scope": {}, "reasons": []}
+    )
+    calls = []
+
+    def llm(prompt):
+        calls.append(prompt)
+        return fresh
+
+    stale = {"verdict": "skip", "reasons": ["old"], "content_sha": "deadbeef"}
+    cache = {"2026-01-01_fact_a1": stale}
+    out = classify_candidates([_mem("2026-01-01_fact_a1", "edited")], llm=llm, cache=cache)
+    assert len(out) == 1 and len(calls) == 1
+    assert cache["2026-01-01_fact_a1"]["content_sha"] == _sha("edited")
+    classify_candidates([_mem("2026-01-01_fact_a1", "edited")], llm=llm, cache=cache)
+    assert len(calls) == 1
+
+
+def test_classify_sanitizes_model_fields():
+    from memory.wiki.compile import classify_candidates
+
+    raw = json.dumps(
+        {
+            "verdict": "worthy",
+            "question": 5,
+            "page_type": "policy",
+            "scope": "prod",
+            "reasons": "because",
+        }
+    )
+    cache = {}
+    out = classify_candidates([_mem("2026-01-01_fact_a1", "x")], llm=lambda p: raw, cache=cache)
+    assert out[0]["scope"] == {} and out[0]["reasons"] == [] and out[0]["question"] is None

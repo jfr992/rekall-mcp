@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from collections.abc import Callable
@@ -58,6 +59,27 @@ def _parse_json(text: str) -> dict | None:
     return data if isinstance(data, dict) else None
 
 
+def _classify(content: str, llm: Callable[[str], str], sha: str) -> dict:
+    data = _parse_json(llm(RUBRIC_PROMPT.format(content=content[:4000])))
+    if (
+        data is None
+        or data.get("verdict") not in ("worthy", "skip")
+        or data.get("page_type") not in (*_SECTION_TEMPLATES, None)
+    ):
+        return {"verdict": "skip", "reasons": ["unparseable classifier output"], "content_sha": sha}
+    reasons = data.get("reasons")
+    question = data.get("question")
+    return {
+        **data,
+        "question": question if isinstance(question, str) else None,
+        "scope": data["scope"] if isinstance(data.get("scope"), dict) else {},
+        "reasons": reasons
+        if isinstance(reasons, list) and all(isinstance(r, str) for r in reasons)
+        else [],
+        "content_sha": sha,
+    }
+
+
 def classify_candidates(
     memories: list[dict], *, llm: Callable[[str], str], cache: dict
 ) -> list[dict]:
@@ -67,20 +89,13 @@ def classify_candidates(
         content = str(m.get("content") or "")
         if not mid:
             continue
-        if mid not in cache:
-            if m.get("disputed"):
-                cache[mid] = {"verdict": "skip", "reasons": ["disputed"]}
-            elif has_redaction(content):
-                cache[mid] = {"verdict": "skip", "reasons": ["redacted content"]}
-            else:
-                data = _parse_json(llm(RUBRIC_PROMPT.format(content=content[:4000])))
-                if (
-                    data is None
-                    or data.get("verdict") not in ("worthy", "skip")
-                    or data.get("page_type") not in (*_SECTION_TEMPLATES, None)
-                ):
-                    data = {"verdict": "skip", "reasons": ["unparseable classifier output"]}
-                cache[mid] = data
+        sha = hashlib.sha1(content[:4000].encode()).hexdigest()
+        if m.get("disputed"):
+            cache[mid] = {"verdict": "skip", "reasons": ["disputed"], "content_sha": sha}
+        elif has_redaction(content):
+            cache[mid] = {"verdict": "skip", "reasons": ["redacted content"], "content_sha": sha}
+        elif cache.get(mid, {}).get("content_sha") != sha:
+            cache[mid] = _classify(content, llm, sha)
         entry = cache[mid]
         if entry.get("verdict") == "worthy":
             worthy.append(
@@ -110,7 +125,7 @@ def draft_page(
     notes = "\n".join(
         f"- [{m['memory_id']}] {str(m.get('content') or '').strip()}" for m in memories
     )
-    # str.replace, not format: templates carry literal {#id} braces and memories may too
+    # str.replace, not format: templates carry literal {#id} braces; {memories} goes last so memory text is never re-substituted
     text = llm(
         DRAFT_PROMPTS[page_type].replace("{page_type}", page_type).replace("{memories}", notes)
     )
