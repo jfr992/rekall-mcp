@@ -1786,6 +1786,7 @@ async def api_wiki_get_draft(request):
         return _ok(
             {
                 **_wiki_header(draft, validity),
+                "description": draft.frontmatter.get("description"),
                 "sections": [s[0] for s in split_sections(draft.body)],
                 "section_id": None,
                 "body": draft.body,

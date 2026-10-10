@@ -568,6 +568,7 @@ export const WikiPageSchema = z.object({
   over_budget: z.boolean(),
 });
 export const WikiDraftDetailSchema = WikiPageSchema.extend({
+  description: z.string().nullable().optional(),
   needs: z.array(z.string()),
   unsourced_steps: z.number(),
   has_redaction: z.boolean(),

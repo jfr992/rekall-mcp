@@ -156,7 +156,13 @@ export function WikiPageView({ page, onOpenSource, onOpenSection, full = false, 
           {page.body}
         </ReactMarkdown>
       </div>
-      {page.over_budget ? <MonoLabel>truncated to budget (~{page.token_estimate} tokens)</MonoLabel> : null}
+      {page.over_budget ? (
+        <MonoLabel>
+          {page.type === "process"
+            ? `over budget, shown in full (~${page.token_estimate} tokens)`
+            : `truncated to budget (~${page.token_estimate} tokens)`}
+        </MonoLabel>
+      ) : null}
     </article>
   );
 }

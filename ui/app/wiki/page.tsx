@@ -15,6 +15,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { apiErrorMessage } from "@/lib/api/client";
 import {
   useApproveDraft,
+  useEditDraft,
   useRejectDraft,
   useWikiDraft,
   useWikiDrafts,
@@ -33,6 +34,7 @@ export default function WikiPage() {
   const drafts = useWikiDrafts();
   const approve = useApproveDraft();
   const reject = useRejectDraft();
+  const edit = useEditDraft();
   const [tab, setTab] = useState<Tab>("search");
   const [selected, setSelected] = useState<string | null>(null);
   const [section, setSection] = useState<string | undefined>();
@@ -83,6 +85,8 @@ export default function WikiPage() {
       }
     );
   };
+  const doSave = (v: Parameters<typeof edit.mutate>[0]) =>
+    edit.mutate(v, { onSuccess: () => toast.success("Draft saved"), onError });
   const onError = (e: unknown) => toast.error(apiErrorMessage(e));
 
   return (
@@ -108,7 +112,14 @@ export default function WikiPage() {
             ) : draft.isError || !draft.data ? (
               <Empty title="Could not load draft" hint={draft.error ? apiErrorMessage(draft.error) : undefined} />
             ) : (
-              <WikiDraftView draft={draft.data} onApprove={doApprove} onReject={doReject} onOpenSource={setInspecting} />
+              <WikiDraftView
+                draft={draft.data}
+                onApprove={doApprove}
+                onReject={doReject}
+                onOpenSource={setInspecting}
+                onSave={doSave}
+                saving={edit.isPending}
+              />
             )
           ) : !selected ? (
             <Empty title="Select a page" />

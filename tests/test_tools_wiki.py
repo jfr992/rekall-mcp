@@ -170,5 +170,9 @@ async def test_wiki_read_accepts_wiki_link_with_fragment(tools):
     linked = await registered["wiki_read"](page_id="wiki:demo/process/rotate-key#verify")
     plain = await registered["wiki_read"](page_id="demo/process/rotate-key", section="verify")
     assert linked == plain and "not found" not in linked
-    explicit = await registered["wiki_read"](page_id="wiki:demo/process/rotate-key#verify", section="steps")
-    assert explicit == await registered["wiki_read"](page_id="demo/process/rotate-key", section="steps")
+    explicit = await registered["wiki_read"](
+        page_id="wiki:demo/process/rotate-key#verify", section="steps"
+    )
+    assert explicit == await registered["wiki_read"](
+        page_id="demo/process/rotate-key", section="steps"
+    )

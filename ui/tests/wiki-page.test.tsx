@@ -58,8 +58,14 @@ describe("WikiPageView interactions", () => {
   });
 
   test("shows the over-budget notice", () => {
-    render(<WikiPageView page={{ ...base, over_budget: true }} />);
+    render(<WikiPageView page={{ ...base, type: "policy", over_budget: true }} />);
     expect(screen.getByText(/truncated to budget/i)).toBeInTheDocument();
+  });
+
+  test("over-budget process pages are shown in full, not truncated", () => {
+    render(<WikiPageView page={{ ...base, type: "process", over_budget: true }} />);
+    expect(screen.getByText(/over budget, shown in full/i)).toBeInTheDocument();
+    expect(screen.queryByText(/truncated/i)).not.toBeInTheDocument();
   });
 
   test("TOC entries open sections and the toggle requests the full page", () => {

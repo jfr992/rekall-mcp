@@ -189,7 +189,7 @@ def test_get_draft_returns_full_body_with_flags_and_404(client, monkeypatch):
     assert r.status_code == 200 and d["status"] == "draft" and d["page_id"] == pid
     assert d["body"] == PROCESS_BODY and d["section_id"] is None and d["over_budget"] is False
     assert d["needs"] == [] and d["unsourced_steps"] == 0 and d["has_redaction"] is False
-    assert "validity" in d and d["sections"][0] == "when"
+    assert "validity" in d and d["sections"][0] == "when" and d["description"]
     assert tc.get("/api/wiki/drafts/demo/process/nope").status_code == 404
     assert tc.get("/api/wiki/drafts/bad id").status_code == 400
     # POST routes sharing the prefix still resolve to approve/reject, not the GET route

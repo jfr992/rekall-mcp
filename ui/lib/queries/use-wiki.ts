@@ -10,6 +10,7 @@ import {
   getWikiPage,
   rejectDraft,
   searchWiki,
+  type DraftEdit,
 } from "@/lib/api/wiki";
 
 export function useWikiIndex(project: string) {
@@ -64,7 +65,9 @@ export const useApproveDraft = () => useWikiMutation((pageId: string) => approve
 export const useRejectDraft = () =>
   useWikiMutation((v: { pageId: string; reason: string }) => rejectDraft(v.pageId, v.reason));
 export const useEditDraft = () =>
-  useWikiMutation((v: { pageId: string; body: string }) => editDraft(v.pageId, v.body));
+  useWikiMutation((v: { pageId: string } & DraftEdit) =>
+    editDraft(v.pageId, { body: v.body, title: v.title, description: v.description })
+  );
 export const useCreateDraft = () =>
   useWikiMutation((v: { memoryIds: string[]; pageType: string; title?: string }) =>
     createDraft(v.memoryIds, v.pageType, v.title)

@@ -42,10 +42,12 @@ export function rejectDraft(pageId: string, reason: string) {
     (d) => d as { status: string }
   );
 }
-export function editDraft(pageId: string, body: string) {
+export type DraftEdit = { body: string; title: string; description: string };
+export function editDraft(pageId: string, edit: DraftEdit) {
+  const { body, title, description } = edit;
   return fetchJson(
     `/api/wiki/drafts/${pageId}`,
-    { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ body }) },
+    { method: "PUT", headers: JSON_HEADERS, body: JSON.stringify({ body, frontmatter: { title, description } }) },
     (d) => d as { page: Record<string, unknown> }
   );
 }
