@@ -567,6 +567,11 @@ export const WikiPageSchema = z.object({
   token_estimate: z.number(),
   over_budget: z.boolean(),
 });
+export const WikiDraftDetailSchema = WikiPageSchema.extend({
+  needs: z.array(z.string()),
+  unsourced_steps: z.number(),
+  has_redaction: z.boolean(),
+});
 export const WikiDraftSchema = z.object({
   page_id: z.string(),
   title: z.string().nullable(),
@@ -592,5 +597,6 @@ export const WikiCandidatesSchema = z.union([
 export type WikiIndexEntry = z.infer<typeof WikiIndexEntrySchema>;
 export type WikiPage = z.infer<typeof WikiPageSchema>;
 export type WikiDraft = z.infer<typeof WikiDraftSchema>;
+export type WikiDraftDetail = z.infer<typeof WikiDraftDetailSchema>;
 export type WikiHit = z.infer<typeof WikiHitSchema>;
 export type WikiCandidate = z.infer<typeof WikiCandidateSchema>;

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { MonoLabel } from "@/components/ui/mono-label";
 import { apiErrorMessage } from "@/lib/api/client";
 import { useCreateDraft, useWikiCandidates } from "@/lib/queries/use-wiki";
@@ -19,12 +20,19 @@ export function WikiCandidates({ project }: { project: string }) {
       return next;
     });
 
+  const chosen = candidates.filter((c) => picked.has(c.memory_id));
+  const mixedTypes = new Set(chosen.map((c) => c.page_type)).size > 1;
+
   const draftSelected = () => {
-    const chosen = candidates.filter((c) => picked.has(c.memory_id));
-    if (!chosen.length) return;
+    if (!chosen.length || mixedTypes) return;
     create.mutate(
       { memoryIds: chosen.map((c) => c.memory_id), pageType: chosen[0].page_type },
-      { onSuccess: () => setPicked(new Set()) }
+      {
+        onSuccess: (res) => {
+          setPicked(new Set());
+          if (res.status !== "unconfigured") toast.success("Draft created - see the Drafts tab");
+        },
+      }
     );
   };
 
@@ -64,9 +72,12 @@ export function WikiCandidates({ project }: { project: string }) {
         ))}
       </ul>
       {candidates.length ? (
-        <button type="button" className={btn} disabled={!picked.size || create.isPending} onClick={draftSelected}>
+        <button type="button" className={btn} disabled={!chosen.length || mixedTypes || create.isPending} onClick={draftSelected}>
           Draft selected
         </button>
+      ) : null}
+      {mixedTypes ? (
+        <p className="text-xs text-amber-400">Select candidates of the same page type to draft them together.</p>
       ) : null}
     </div>
   );

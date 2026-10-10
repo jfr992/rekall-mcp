@@ -4,6 +4,7 @@ import {
   createDraft,
   editDraft,
   getWikiCandidates,
+  getWikiDraft,
   getWikiDrafts,
   getWikiIndex,
   getWikiPage,
@@ -37,6 +38,14 @@ export function useWikiPage(pageId: string | null, section?: string, full?: bool
 
 export function useWikiDrafts() {
   return useQuery({ queryKey: ["wiki", "drafts"], queryFn: getWikiDrafts });
+}
+
+export function useWikiDraft(pageId: string | null) {
+  return useQuery({
+    queryKey: ["wiki", "draft", pageId],
+    queryFn: () => getWikiDraft(pageId as string),
+    enabled: !!pageId,
+  });
 }
 
 export function useWikiCandidates(project: string) {

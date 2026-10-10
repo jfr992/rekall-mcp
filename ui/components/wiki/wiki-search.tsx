@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MonoLabel } from "@/components/ui/mono-label";
 import { ValidityBadges } from "./validity-badge";
 import { useWikiSearch } from "@/lib/queries/use-wiki";
@@ -7,7 +7,12 @@ type Props = { project: string; onOpen: (pageId: string, sectionId: string | nul
 
 export function WikiSearch({ project, onOpen }: Props) {
   const [q, setQ] = useState("");
-  const { data, isError } = useWikiSearch(q, project);
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(q), 250);
+    return () => clearTimeout(t);
+  }, [q]);
+  const { data, isError } = useWikiSearch(debounced, project);
   return (
     <div className="flex flex-col gap-3">
       <input

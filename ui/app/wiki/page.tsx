@@ -1,12 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { WikiSidebar } from "@/components/wiki/wiki-sidebar";
 import { WikiPageView } from "@/components/wiki/wiki-page";
 import { WikiSearch } from "@/components/wiki/wiki-search";
+import { WikiDraftView } from "@/components/wiki/wiki-draft-view";
 import { WikiDraftsList } from "@/components/wiki/wiki-drafts";
 import { WikiCandidates } from "@/components/wiki/wiki-candidates";
+import { MemoryInspector } from "@/components/memory-inspector/memory-inspector";
 import { SerifHeading } from "@/components/ui/serif-heading";
 import { Empty } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,10 +16,12 @@ import { apiErrorMessage } from "@/lib/api/client";
 import {
   useApproveDraft,
   useRejectDraft,
+  useWikiDraft,
   useWikiDrafts,
   useWikiIndex,
   useWikiPage,
 } from "@/lib/queries/use-wiki";
+import { useMemoryDetail } from "@/lib/queries/use-memory-detail";
 import { useProjectStore } from "@/lib/project-store";
 import { scopedTitle } from "@/lib/scoped-title";
 
@@ -32,11 +36,52 @@ export default function WikiPage() {
   const [tab, setTab] = useState<Tab>("search");
   const [selected, setSelected] = useState<string | null>(null);
   const [section, setSection] = useState<string | undefined>();
-  const page = useWikiPage(selected, section);
+  const [full, setFull] = useState(false);
+  const [draftId, setDraftId] = useState<string | null>(null);
+  const [inspecting, setInspecting] = useState<string | null>(null);
+  const page = useWikiPage(selected, section, full);
+  const draft = useWikiDraft(draftId);
+  const memoryDetail = useMemoryDetail(inspecting);
+
+  useEffect(() => {
+    setSelected(null);
+    setSection(undefined);
+    setFull(false);
+    setDraftId(null);
+  }, [project]);
 
   const open = (pageId: string, sectionId?: string | null) => {
+    setDraftId(null);
     setSelected(pageId);
     setSection(sectionId ?? undefined);
+    setFull(false);
+  };
+  const openDraft = (pageId: string) => {
+    setSelected(null);
+    setDraftId(pageId);
+  };
+  const doApprove = (id: string) =>
+    approve.mutate(id, {
+      onSuccess: () => {
+        toast.success("Approved");
+        setDraftId(null);
+        open(id);
+      },
+      onError,
+    });
+  const doReject = (id: string) => {
+    const reason = window.prompt("Reason for rejecting this draft?");
+    if (reason === null) return;
+    reject.mutate(
+      { pageId: id, reason },
+      {
+        onSuccess: () => {
+          toast.success("Rejected");
+          setDraftId(null);
+        },
+        onError,
+      }
+    );
   };
   const onError = (e: unknown) => toast.error(apiErrorMessage(e));
 
@@ -57,14 +102,31 @@ export default function WikiPage() {
         </aside>
 
         <main className="min-h-0 overflow-y-auto">
-          {!selected ? (
+          {draftId ? (
+            draft.isLoading ? (
+              <Skeleton className="h-64 w-full" />
+            ) : draft.isError || !draft.data ? (
+              <Empty title="Could not load draft" hint={draft.error ? apiErrorMessage(draft.error) : undefined} />
+            ) : (
+              <WikiDraftView draft={draft.data} onApprove={doApprove} onReject={doReject} onOpenSource={setInspecting} />
+            )
+          ) : !selected ? (
             <Empty title="Select a page" />
           ) : page.isLoading ? (
             <Skeleton className="h-64 w-full" />
           ) : page.isError || !page.data ? (
             <Empty title="Could not load page" hint={page.error ? apiErrorMessage(page.error) : undefined} />
           ) : (
-            <WikiPageView page={page.data} />
+            <WikiPageView
+              page={page.data}
+              onOpenSource={setInspecting}
+              onOpenSection={(sec) => {
+                setFull(false);
+                setSection(sec);
+              }}
+              full={full}
+              onToggleFull={() => setFull((f) => !f)}
+            />
           )}
         </main>
 
@@ -97,19 +159,24 @@ export default function WikiPage() {
           ) : tab === "drafts" ? (
             <WikiDraftsList
               drafts={drafts.data?.drafts ?? []}
-              onApprove={(id) => approve.mutate(id, { onSuccess: () => toast.success("Approved"), onError })}
-              onReject={(id) => {
-                const reason = window.prompt("Reason for rejecting this draft?");
-                if (reason === null) return;
-                reject.mutate({ pageId: id, reason }, { onSuccess: () => toast.success("Rejected"), onError });
-              }}
-              onOpen={open}
+              onApprove={doApprove}
+              onReject={doReject}
+              onOpen={openDraft}
             />
           ) : (
             <WikiCandidates project={project} />
           )}
         </aside>
       </div>
+
+      <MemoryInspector
+        open={inspecting !== null}
+        detail={memoryDetail.data}
+        isLoading={memoryDetail.isLoading}
+        currentProject={project}
+        onClose={() => setInspecting(null)}
+        onSelectMemory={setInspecting}
+      />
     </div>
   );
 }

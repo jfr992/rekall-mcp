@@ -4,6 +4,7 @@ import {
   WikiSearchSchema,
   WikiPageSchema,
   WikiDraftsSchema,
+  WikiDraftDetailSchema,
   WikiCandidatesSchema,
 } from "@/lib/schemas";
 
@@ -27,6 +28,9 @@ export function getWikiPage(pageId: string, opts: { section?: string; full?: boo
 }
 export function getWikiDrafts() {
   return fetchJson(`/api/wiki/drafts`, undefined, (d) => WikiDraftsSchema.parse(d));
+}
+export function getWikiDraft(pageId: string) {
+  return fetchJson(`/api/wiki/drafts/${pageId}`, undefined, (d) => WikiDraftDetailSchema.parse(d));
 }
 export function approveDraft(pageId: string) {
   return fetchJson(`/api/wiki/drafts/${pageId}/approve`, { method: "POST" }, (d) => d as { page: Record<string, unknown> });
