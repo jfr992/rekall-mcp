@@ -128,7 +128,7 @@ def test_failed_persistence_emits_no_promoted_event(mocked_manager):
 def test_backfill_emits_one_summary_event_never_per_memory(mocked_manager):
     manager, store = mocked_manager
     today = datetime.now().strftime("%Y-%m-%d")
-    store.scroll.return_value = [
+    store.scroll_all.return_value = [
         # note, no tier yet -> working (promoted from nothing counts as changed)
         {"memory_id": "m1", "type": "note", "date": today, "salience": 0.1},
         # decision, high salience -> semantic; started working -> promoted

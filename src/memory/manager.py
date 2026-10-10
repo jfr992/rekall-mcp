@@ -1218,9 +1218,10 @@ class MemoryManager:
         skipped: list[str] = []
         errors: list[dict[str, str]] = []
         tier_changes = {"promoted": 0, "demoted": 0, "unchanged": 0}
+        changed: list[dict[str, str]] = []
         tier_order = ["working", "episodic", "semantic", "identity"]
 
-        points = self.store.scroll(filters=filters, limit=batch_size)
+        points = self.store.scroll_all(filters=filters, batch_size=batch_size)
         graph_has_nodes = self.knowledge_graph.stats()["nodes"] > 0
 
         for point in points:
@@ -1254,6 +1255,8 @@ class MemoryManager:
             result = classify(signals)
 
             updated_by_tier[result.tier] += 1
+            if existing_tier != result.tier:
+                changed.append({"memory_id": memory_id, "from": existing_tier, "to": result.tier})
             if existing_tier == result.tier:
                 tier_changes["unchanged"] += 1
             elif existing_tier in tier_order and tier_order.index(existing_tier) > tier_order.index(
@@ -1281,7 +1284,7 @@ class MemoryManager:
 
         if not dry_run:
             # ONE summary event — a per-memory flood would drown the event tail
-            # (the backfill route processes 500 records per request).
+            # (the backfill route rewrites every memory in scope).
             self.record_event(
                 event_type="lifecycle_backfilled",
                 project=project or "general",
@@ -1296,6 +1299,8 @@ class MemoryManager:
             "skipped": skipped,
             "errors": errors,
             "total": sum(updated_by_tier.values()),
+            "tier_changes": tier_changes,
+            "changed": changed,
         }
 
     def _save_to_file(

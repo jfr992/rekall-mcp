@@ -337,6 +337,10 @@ export const BackfillReportSchema = z.object({
   skipped: z.array(z.string()),
   errors: z.array(z.object({ memory_id: z.string(), error: z.string() })),
   total: z.number(),
+  tier_changes: z.record(z.string(), z.number()).optional(),
+  changed: z
+    .array(z.object({ memory_id: z.string(), from: z.string().nullable(), to: z.string() }))
+    .optional(),
 });
 
 // ----- Resume --------------------------------------------------------------
