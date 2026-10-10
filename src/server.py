@@ -1847,14 +1847,15 @@ async def api_wiki_edit_draft(request):
         return _server_error(str(e))
 
 
-@mcp.custom_route("/api/wiki/candidates", methods=["GET"])
+@mcp.custom_route("/api/wiki/candidates", methods=["POST"])
 async def api_wiki_candidates(request):
     try:
         llm = make_wiki_llm()
         if llm is None:
             return _ok({"status": "unconfigured"})
-        project = _safe_project(request.query_params.get("project"))
-        limit = _read_int(request.query_params, "limit", 200, lo=1, hi=2000)
+        body = await request.json()
+        project = _safe_project((body or {}).get("project"))
+        limit = _read_int(body or {}, "limit", 200, lo=1, hi=2000)
         manager = _get_memory_manager()
 
         def work():
@@ -1862,9 +1863,10 @@ async def api_wiki_candidates(request):
             points = manager.store.scroll(
                 filters={"project": project} if project else None, limit=limit
             )
-            found = classify_candidates(points, llm=llm, cache=cache)
-            manager.wiki.write_cache("worthiness", cache)
-            return found
+            try:
+                return classify_candidates(points, llm=llm, cache=cache)
+            finally:
+                manager.wiki.write_cache("worthiness", cache)
 
         candidates = await asyncio.to_thread(work)
         return _ok({"candidates": candidates})

@@ -8,7 +8,7 @@ const btn =
   "cursor-pointer rounded-[7px] border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--fg-dim)] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-40";
 
 export function WikiCandidates({ project }: { project: string }) {
-  const { data, refetch, isFetching, error } = useWikiCandidates(project);
+  const { data, mutate: classify, isPending, error } = useWikiCandidates();
   const create = useCreateDraft();
   const [picked, setPicked] = useState<Set<string>>(new Set());
 
@@ -38,8 +38,8 @@ export function WikiCandidates({ project }: { project: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <button type="button" className={btn} disabled={isFetching} onClick={() => refetch()}>
-        {isFetching ? "Classifying…" : "Classify candidates"}
+      <button type="button" className={btn} disabled={isPending} onClick={() => classify(project)}>
+        {isPending ? "Classifying…" : "Classify candidates"}
       </button>
       {error ? <p className="text-sm text-red-400">{apiErrorMessage(error)}</p> : null}
       {data && "status" in data ? (

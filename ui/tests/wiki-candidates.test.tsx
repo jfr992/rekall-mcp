@@ -2,11 +2,11 @@ import { describe, test, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
 
 const mutate = vi.fn();
-const refetch = vi.fn();
+const classify = vi.fn();
 let candidatesData: unknown;
 
 vi.mock("@/lib/queries/use-wiki", () => ({
-  useWikiCandidates: () => ({ data: candidatesData, refetch, isFetching: false, error: null }),
+  useWikiCandidates: () => ({ data: candidatesData, mutate: classify, isPending: false, error: null }),
   useCreateDraft: () => ({ mutate, isPending: false, data: undefined, error: null }),
 }));
 
@@ -18,16 +18,16 @@ const cand = (id: string, page_type: string) => ({
 
 beforeEach(() => {
   mutate.mockClear();
-  refetch.mockClear();
+  classify.mockClear();
 });
 
 describe("WikiCandidates", () => {
-  test("classify button triggers refetch; unconfigured is explained", () => {
+  test("classify button triggers the classify mutation with the project; unconfigured is explained", () => {
     candidatesData = { status: "unconfigured" };
     render(<WikiCandidates project="demo" />);
     expect(screen.getByText(/not configured/i)).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /classify candidates/i }));
-    expect(refetch).toHaveBeenCalled();
+    expect(classify).toHaveBeenCalledWith("demo");
   });
 
   test("drafts the selected candidates", () => {

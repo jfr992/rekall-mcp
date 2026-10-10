@@ -56,7 +56,7 @@ def _fake_llm(monkeypatch, body=PROCESS_BODY, title="Rotate the gateway key"):
 def test_candidates_and_draft_are_unconfigured_without_llm(client, monkeypatch):
     tc, _ = client
     monkeypatch.setattr("server.make_wiki_llm", lambda: None)
-    assert tc.get("/api/wiki/candidates?project=demo").json()["status"] == "unconfigured"
+    assert tc.post("/api/wiki/candidates", json={"project": "demo"}).json()["status"] == "unconfigured"
     assert (
         tc.post(
             "/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"}
@@ -68,7 +68,7 @@ def test_candidates_and_draft_are_unconfigured_without_llm(client, monkeypatch):
 def test_lifecycle_candidates_draft_approve_search_read_and_stale(client, monkeypatch):
     tc, manager = client
     _fake_llm(monkeypatch)
-    cands = tc.get("/api/wiki/candidates?project=demo").json()["candidates"]
+    cands = tc.post("/api/wiki/candidates", json={"project": "demo"}).json()["candidates"]
     assert cands[0]["memory_id"] == "2026-01-01_fact_a1" and cands[0]["page_type"] == "process"
     r = tc.post(
         "/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"}
@@ -150,7 +150,7 @@ def test_model_calls_run_off_the_event_loop_thread(client, monkeypatch):
 
     loop_thread = []
     monkeypatch.setattr("server.make_wiki_llm", factory)
-    tc.get("/api/wiki/candidates?project=demo")
+    tc.post("/api/wiki/candidates", json={"project": "demo"})
     tc.post("/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"})
     assert len(seen) == 2 and loop_thread[0] not in seen
 
@@ -193,3 +193,36 @@ def test_get_draft_returns_full_body_with_flags_and_404(client, monkeypatch):
     # POST routes sharing the prefix still resolve to approve/reject, not the GET route
     assert tc.post(f"/api/wiki/drafts/{pid}/approve").status_code == 200
     assert tc.get(f"/api/wiki/drafts/{pid}").status_code == 404
+
+
+def test_candidates_get_is_405_post_only(client, monkeypatch):
+    tc, _ = client
+    _fake_llm(monkeypatch)
+    assert tc.get("/api/wiki/candidates?project=demo").status_code == 405
+
+
+def test_candidates_partial_failure_keeps_and_caches_earlier_verdicts(client, monkeypatch):
+    tc, manager = client
+    manager.store.scroll.return_value = [
+        {"memory_id": f"2026-01-01_fact_a{i}", "content": f"rule {i}", "project": "demo"}
+        for i in (1, 2, 3)
+    ]
+    calls = []
+
+    def llm(prompt):
+        calls.append(prompt)
+        if len(calls) == 2:
+            raise RuntimeError("model down")
+        return json.dumps({"verdict": "worthy", "page_type": "policy", "reasons": []})
+
+    monkeypatch.setattr("server.make_wiki_llm", lambda: llm)
+    r = tc.post("/api/wiki/candidates", json={"project": "demo"})
+    assert r.status_code == 200
+    assert [c["memory_id"] for c in r.json()["candidates"]] == [
+        "2026-01-01_fact_a1",
+        "2026-01-01_fact_a3",
+    ]
+    assert set(manager.wiki.read_cache("worthiness")) == {
+        "2026-01-01_fact_a1",
+        "2026-01-01_fact_a3",
+    }

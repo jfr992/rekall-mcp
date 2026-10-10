@@ -48,13 +48,8 @@ export function useWikiDraft(pageId: string | null) {
   });
 }
 
-export function useWikiCandidates(project: string) {
-  return useQuery({
-    queryKey: ["wiki", "candidates", project],
-    queryFn: () => getWikiCandidates(project),
-    enabled: false,
-    staleTime: Infinity,
-  });
+export function useWikiCandidates() {
+  return useMutation({ mutationFn: (project: string) => getWikiCandidates(project) });
 }
 
 function useWikiMutation<V, R>(fn: (v: V) => Promise<R>) {

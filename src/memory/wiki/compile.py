@@ -4,11 +4,14 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import re
 from collections.abc import Callable
 
 from memory.publish import _llm_complete, llm_config
 from memory.wiki.pages import Page, has_redaction, missing_sections, slugify
+
+logger = logging.getLogger(__name__)
 
 RUBRIC_PROMPT = """You decide whether ONE saved memory is worth compiling into a team wiki page.
 Worthy only if ALL hold: (1) it answers a concrete future question someone would ask; write that question;
@@ -95,7 +98,11 @@ def classify_candidates(
         elif has_redaction(content):
             cache[mid] = {"verdict": "skip", "reasons": ["redacted content"], "content_sha": sha}
         elif cache.get(mid, {}).get("content_sha") != sha:
-            cache[mid] = _classify(content, llm, sha)
+            try:
+                cache[mid] = _classify(content, llm, sha)
+            except Exception as e:
+                logger.warning("wiki classify failed for %s, skipping: %s", mid, e)
+                continue
         entry = cache[mid]
         if entry.get("verdict") == "worthy":
             worthy.append(

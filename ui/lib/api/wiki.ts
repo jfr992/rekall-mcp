@@ -50,9 +50,11 @@ export function editDraft(pageId: string, body: string) {
   );
 }
 export function getWikiCandidates(project: string) {
-  const qs = new URLSearchParams();
-  if (project) qs.set("project", project);
-  return fetchJson(`/api/wiki/candidates?${qs}`, undefined, (d) => WikiCandidatesSchema.parse(d));
+  return fetchJson(
+    `/api/wiki/candidates`,
+    { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(project ? { project } : {}) },
+    (d) => WikiCandidatesSchema.parse(d)
+  );
 }
 export function createDraft(memoryIds: string[], pageType: string, title?: string) {
   return fetchJson(

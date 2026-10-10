@@ -22,7 +22,7 @@ vi.mock("@/lib/queries/use-wiki", () => {
     useWikiDrafts: () => q(WikiDraftsSchema.parse(draftsFixture)),
     useWikiDraft: (id: string | null) => (id ? q(WikiDraftDetailSchema.parse(draftFixture)) : q(undefined)),
     useWikiSearch: () => q(undefined),
-    useWikiCandidates: () => ({ ...q(undefined), refetch: vi.fn(), isFetching: false, error: null }),
+    useWikiCandidates: () => ({ data: undefined, mutate: vi.fn(), isPending: false, error: null }),
     useApproveDraft: m, useRejectDraft: m, useCreateDraft: () => ({ ...m(), data: undefined, error: null }),
   };
 });
