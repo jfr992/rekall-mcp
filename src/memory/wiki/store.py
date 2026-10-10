@@ -1,0 +1,163 @@
+"""File-backed wiki store: drafts, live pages, history, index, log."""
+
+from __future__ import annotations
+
+import json
+import threading
+from datetime import date
+from pathlib import Path
+
+from memory.wiki.pages import (
+    PAGE_ID_RE,
+    Page,
+    emit_page,
+    has_redaction,
+    parse_page,
+    unsourced_steps,
+)
+
+SCHEMA_TEXT = """# Rekall wiki schema
+
+Pages are Docusaurus-compatible markdown with Rekall frontmatter.
+Types: process, policy, reference, entity. Every H2 carries a stable `{#id}`.
+Live pages change only through approve. `[REDACTED]` never ships. Process
+steps end with `[source: <memory_id>]`.
+"""
+
+
+class WikiStore:
+    def __init__(self, root: Path | str) -> None:
+        self.root = Path(root)
+        self._lock = threading.Lock()
+        for sub in ("live", "drafts", "_history", "_cache"):
+            (self.root / sub).mkdir(parents=True, exist_ok=True)
+        schema = self.root / "SCHEMA.md"
+        if not schema.exists():
+            schema.write_text(SCHEMA_TEXT, encoding="utf-8")
+        for name in ("index.md", "log.md"):
+            path = self.root / name
+            if not path.exists():
+                path.write_text("", encoding="utf-8")
+
+    def path_for(self, page_id: str, status: str = "live") -> Path:
+        if not PAGE_ID_RE.match(page_id):
+            raise ValueError("invalid page_id")
+        base = self.root / ("live" if status == "live" else "drafts")
+        path = (base / f"{page_id}.md").resolve()
+        if base.resolve() not in path.parents:
+            raise ValueError("page_id escapes wiki root")
+        return path
+
+    def read(self, page_id: str, status: str = "live") -> Page | None:
+        path = self.path_for(page_id, status)
+        if not path.exists():
+            return None
+        return parse_page(path.read_text(encoding="utf-8"))
+
+    def write_draft(self, page: Page) -> Path:
+        fm = dict(page.frontmatter, status="draft")
+        path = self.path_for(fm["page_id"], "draft")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(emit_page(Page(frontmatter=fm, body=page.body)), encoding="utf-8")
+        return path
+
+    def list_pages(self, status: str = "live") -> list[Page]:
+        base = self.root / ("live" if status == "live" else "drafts")
+        pages = []
+        for path in sorted(base.rglob("*.md")):
+            try:
+                pages.append(parse_page(path.read_text(encoding="utf-8")))
+            except ValueError:
+                continue  # a broken file never hides the rest of the wiki
+        return pages
+
+    def approve(self, page_id: str, *, verified_by: str = "human") -> Page:
+        draft = self.read(page_id, "draft")
+        if draft is None:
+            raise ValueError("no draft for page_id")
+        if has_redaction(draft.body) or has_redaction(json.dumps(draft.frontmatter)):
+            raise ValueError("page contains redacted text")
+        if unsourced_steps(draft):
+            raise ValueError("process page has steps without a source")
+        with self._lock:
+            live_path = self.path_for(page_id, "live")
+            existing = self.read(page_id, "live")
+            revision = 1
+            if existing is not None:
+                revision = int(existing.frontmatter.get("revision") or 0) + 1
+                hist = self.root / "_history" / page_id
+                hist.mkdir(parents=True, exist_ok=True)
+                (hist / f"{existing.frontmatter.get('revision', 0)}.md").write_text(
+                    emit_page(existing), encoding="utf-8"
+                )
+            today = date.today().isoformat()
+            fm = dict(
+                draft.frontmatter,
+                status="live",
+                revision=revision,
+                updated=today,
+                last_verified=today,
+            )
+            fm.setdefault("human_edited", False)
+            live = Page(frontmatter=fm, body=draft.body)
+            live_path.parent.mkdir(parents=True, exist_ok=True)
+            live_path.write_text(emit_page(live), encoding="utf-8")
+            self.path_for(page_id, "draft").unlink(missing_ok=True)
+            self._rebuild_index_locked()
+            self._append_log_locked("approve", str(fm.get("title") or page_id))
+        return live
+
+    def reject(self, page_id: str, reason: str) -> None:
+        draft = self.read(page_id, "draft")
+        if draft is None:
+            raise ValueError("no draft for page_id")
+        with self._lock:
+            self.path_for(page_id, "draft").unlink(missing_ok=True)
+            self._append_log_locked(
+                "reject", f"{draft.frontmatter.get('title') or page_id} — {reason}"
+            )
+
+    def rebuild_index(self) -> None:
+        with self._lock:
+            self._rebuild_index_locked()
+
+    def _rebuild_index_locked(self) -> None:
+        lines = ["# Wiki index", ""]
+        current = None
+        for page in sorted(self.list_pages("live"), key=lambda p: (p.project, p.type, p.page_id)):
+            group = f"## {page.project} / {page.type}"
+            if group != current:
+                lines += [group, ""]
+                current = group
+            meta = {
+                "page_id": page.page_id,
+                "title": page.frontmatter.get("title"),
+                "type": page.type,
+                "project": page.project,
+                "scope": page.frontmatter.get("scope"),
+                "status": page.status,
+                "last_verified": page.frontmatter.get("last_verified"),
+                "summary": page.frontmatter.get("description") or "",
+            }
+            lines.append(
+                f"- [{meta['title']}](live/{page.page_id}.md) — {meta['summary']} <!-- {json.dumps(meta)} -->"
+            )
+        (self.root / "index.md").write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+
+    def index_entries(self) -> list[dict]:
+        out = []
+        for line in (self.root / "index.md").read_text(encoding="utf-8").splitlines():
+            if "<!-- " in line and line.startswith("- "):
+                try:
+                    out.append(json.loads(line.split("<!-- ", 1)[1].rsplit(" -->", 1)[0]))
+                except ValueError:
+                    continue
+        return out
+
+    def append_log(self, kind: str, title: str) -> None:
+        with self._lock:
+            self._append_log_locked(kind, title)
+
+    def _append_log_locked(self, kind: str, title: str) -> None:
+        with (self.root / "log.md").open("a", encoding="utf-8") as fh:
+            fh.write(f"## [{date.today().isoformat()}] {kind} | {title}\n")
