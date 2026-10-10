@@ -2149,4 +2149,7 @@ git add docs/superpowers/plans/2026-10-09-rekall-wiki-phase1.md
 git commit -m "docs: record wiki phase 1 final test counts"
 ```
 
+Final (2026-10-09): unit pytest 1460 passed / 4 skipped; integration 106 passed / 1 skipped; embedded lane 1567 passed / 3 skipped; wheel gate 1 passed; compose defaults 4 passed; ui 49 files / 281 tests passed; ruff clean; mypy advisory 171 (main 170; +1 yaml-stub, same class as existing yaml importers); eslint advisory (no flat config on main).
+
+
 Rollout after merge (operator steps): rebuild `mcp` and `ui` containers; run both installers (provenance allowlist changed); in the cockpit `/wiki` → Candidates → classify → pick 5–10 → Draft → review → Approve; then check `wiki_lookup` from a fresh session and `scripts/utility_report.py` for the `wiki` surface line.
