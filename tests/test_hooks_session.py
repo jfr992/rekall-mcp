@@ -477,7 +477,12 @@ def test_session_end_reports_delivered_by_surface_and_referenced(tmp_path):
     r, body = _run_session_end(tmp_path, _transcript_lines())
     assert r.returncode == 0
     assert body["client"] == "claude-code"
-    assert body["delivered"] == {"explicit": [MID_A, MID_B], "capsule": [MID_C], "reflex": []}
+    assert body["delivered"] == {
+        "explicit": [MID_A, MID_B],
+        "capsule": [MID_C],
+        "reflex": [],
+        "wiki": [],
+    }
     assert body["referenced"] == [MID_A]
     assert body["recalled_ids"] == sorted([MID_A, MID_B, MID_C])
     assert body["coverage"] == {"transcript_tail_bytes": 1048576, "truncated": False}
@@ -564,3 +569,48 @@ def test_session_end_survives_non_dict_hook_stdout(tmp_path):
     r, body = _run_session_end(tmp_path, lines)
     assert r.returncode == 0
     assert body["delivered"]["capsule"] == [MID_C]
+
+
+PAGE = "demo/process/rotate-key"
+
+
+def test_session_end_counts_wiki_deliveries_and_page_references(tmp_path):
+    lookup_use = {
+        "type": "assistant",
+        "message": {
+            "content": [
+                {
+                    "type": "tool_use",
+                    "id": "w1",
+                    "name": "mcp__memory__wiki_lookup",
+                    "input": {"query": "rotate"},
+                }
+            ]
+        },
+    }
+    lookup_result = {
+        "type": "user",
+        "message": {
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "w1",
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": f"- [Rotate](wiki:{PAGE}#steps) rev 1 · ok · verified 2026-10-09\n  export key",
+                        }
+                    ],
+                }
+            ]
+        },
+    }
+    cites = {
+        "type": "assistant",
+        "message": {"content": [{"type": "text", "text": f"Following {PAGE} step 1."}]},
+    }
+    r, body = _run_session_end(tmp_path, [lookup_use, lookup_result, cites])
+    assert r.returncode == 0
+    assert body["delivered"]["wiki"] == [PAGE] and body["delivered"]["explicit"] == []
+    assert body["referenced"] == [PAGE]
+    assert body["recalled_ids"] == []

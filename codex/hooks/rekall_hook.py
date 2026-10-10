@@ -298,6 +298,9 @@ def _command_from(value: object) -> str:
 
 
 _MEMORY_ID_RE = re.compile(r"\d{4}-\d{2}-\d{2}_[a-z]+_[0-9a-f]+")
+_PAGE_ID_RE = re.compile(
+    r"[a-z0-9][a-z0-9._-]*/(?:process|policy|reference|entity)/[a-z0-9][a-z0-9-]*"
+)
 
 
 def _walk_strings(value: object) -> Iterable[str]:
@@ -322,6 +325,15 @@ def _extract_memory_ids(value: object) -> list[str]:
         for matched_id in _MEMORY_ID_RE.findall(text):
             if matched_id not in found:
                 found.append(matched_id)
+    return found
+
+
+def _extract_page_ids(value: object) -> list[str]:
+    found: list[str] = []
+    for text in _walk_strings(_decode_json(value)):
+        for page_id in _PAGE_ID_RE.findall(text):
+            if page_id not in found:
+                found.append(page_id)
     return found
 
 
@@ -366,12 +378,13 @@ def summarize_session(
     edits = tests = 0
     after_recall = False
     referenced: list[str] = []
-    pending: dict[str, Literal["recall", "edit", "test"]] = {}
+    delivered_wiki: list[str] = []
+    pending: dict[str, Literal["recall", "wiki", "edit", "test"]] = {}
 
     def note_references(source: object) -> None:
-        for memory_id in _extract_memory_ids(source):
-            if memory_id in recalled and memory_id not in referenced:
-                referenced.append(memory_id)
+        for ref in _extract_memory_ids(source) + _extract_page_ids(source):
+            if (ref in recalled or ref in delivered_wiki) and ref not in referenced:
+                referenced.append(ref)
 
     for line in lines:
         try:
@@ -383,7 +396,7 @@ def summarize_session(
             continue
         event_type = str(body.get("type", "")).lower()
         text = _assistant_text(body)
-        if text and recalled:
+        if text and (recalled or delivered_wiki):
             note_references(text)
         call_id = body.get("call_id")
         if not isinstance(call_id, str):
@@ -391,11 +404,15 @@ def summarize_session(
         if event_type in {"function_call", "custom_tool_call", "tool_call"}:
             name = str(body.get("tool_name", body.get("name", ""))).lower()
             value = _call_input(body)
-            if recalled:
+            if recalled or delivered_wiki:
                 note_references(value)
             command = _command_from(value)
             if name == "recall_memories" or name.endswith("__recall_memories"):
                 pending[call_id] = "recall"
+            elif name in ("wiki_lookup", "wiki_read") or name.endswith(
+                ("__wiki_lookup", "__wiki_read")
+            ):
+                pending[call_id] = "wiki"
             elif after_recall and _is_file_edit_name(name):
                 pending[call_id] = "edit"
             elif after_recall and (
@@ -414,11 +431,15 @@ def summarize_session(
                 if memory_id not in recalled:
                     recalled.append(memory_id)
             after_recall = bool(recalled)
+        elif category == "wiki":
+            for page_id in _extract_page_ids(output):
+                if page_id not in delivered_wiki:
+                    delivered_wiki.append(page_id)
         elif category == "edit" and _edit_succeeded(output):
             edits += 1
         elif category == "test" and _test_succeeded(output):
             tests += 1
-    if not recalled:
+    if not recalled and not delivered_wiki:
         return None
     session = payload.get("session_id")
     cwd = payload.get("cwd")
@@ -426,6 +447,7 @@ def summarize_session(
         return None
     project = sanitize_token(Path(cwd).name)
     delivered = recalled[:32]
+    wiki = delivered_wiki[:32]
     return {
         "event_type": "session_summary",
         "session_id": session,
@@ -434,8 +456,8 @@ def summarize_session(
         "edits_after_recall": edits,
         "test_passes_after_recall": tests,
         "client": "codex",
-        "delivered": {"explicit": delivered},
-        "referenced": [memory_id for memory_id in referenced if memory_id in delivered],
+        "delivered": {"explicit": delivered, "wiki": wiki},
+        "referenced": [ref for ref in referenced if ref in delivered or ref in wiki],
         "coverage": {"transcript_tail_bytes": _MAX_TRANSCRIPT_BYTES, "truncated": truncated},
     }
 
