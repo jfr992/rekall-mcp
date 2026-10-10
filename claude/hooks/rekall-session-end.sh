@@ -192,6 +192,8 @@ for index, entry in enumerate(entries):
             text = block.get("text", "")
             found = memory_id.findall(text) + page_id.findall(text)
         elif block.get("type") == "tool_use":
+            if block.get("id") in wiki_tool_ids:
+                continue  # wiki_read(page_id=X) after a lookup is navigation, not a citation
             args = json.dumps(block.get("input", {}))
             found = memory_id.findall(args) + page_id.findall(args)
         else:

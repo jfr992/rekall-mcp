@@ -91,7 +91,8 @@ async def test_wiki_read_section_and_withdrawn_warning_first(tools):
 @pytest.mark.asyncio
 async def test_wiki_read_unknown_page(tools):
     registered, _ = tools
-    assert "not found" in await registered["wiki_read"](page_id="demo/process/nope")
+    out = await registered["wiki_read"](page_id="demo/process/nope")
+    assert "not found" in out and "demo/process/nope" not in out
 
 
 def _write_page(manager, page_id, ptype, body, **extra):

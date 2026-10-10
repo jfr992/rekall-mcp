@@ -715,3 +715,25 @@ def test_summarize_session_counts_wiki_pages(hook_module):
     ]
     summary = hook_module.summarize_session({"session_id": "s", "cwd": "/repo"}, lines)
     assert summary["delivered"]["wiki"] == [page] and summary["referenced"] == [page]
+
+
+def test_summarize_session_wiki_read_arguments_are_not_a_reference(hook_module):
+    page = "demo/process/rotate-key"
+    lines = [
+        json.dumps(
+            {"type": "tool_call", "call_id": "w", "tool_name": "wiki_lookup", "arguments": {}}
+        ),
+        json.dumps(
+            {"type": "tool_result", "call_id": "w", "content": f"- [Rotate](wiki:{page}#steps)"}
+        ),
+        json.dumps(
+            {
+                "type": "tool_call",
+                "call_id": "r",
+                "tool_name": "wiki_read",
+                "arguments": {"page_id": page},
+            }
+        ),
+    ]
+    summary = hook_module.summarize_session({"session_id": "s", "cwd": "/repo"}, lines)
+    assert summary["delivered"]["wiki"] == [page] and summary["referenced"] == []

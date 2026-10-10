@@ -614,3 +614,32 @@ def test_session_end_counts_wiki_deliveries_and_page_references(tmp_path):
     assert body["delivered"]["wiki"] == [PAGE] and body["delivered"]["explicit"] == []
     assert body["referenced"] == [PAGE]
     assert body["recalled_ids"] == []
+
+
+def test_session_end_wiki_read_arguments_are_not_a_reference(tmp_path):
+    def use(tid, name, args):
+        return {
+            "type": "assistant",
+            "message": {"content": [{"type": "tool_use", "id": tid, "name": name, "input": args}]},
+        }
+
+    lookup_result = {
+        "type": "user",
+        "message": {
+            "content": [
+                {
+                    "type": "tool_result",
+                    "tool_use_id": "w1",
+                    "content": [{"type": "text", "text": f"- [Rotate](wiki:{PAGE}#steps) rev 1"}],
+                }
+            ]
+        },
+    }
+    entries = [
+        use("w1", "mcp__memory__wiki_lookup", {"query": "rotate"}),
+        lookup_result,
+        use("w2", "mcp__memory__wiki_read", {"page_id": PAGE}),
+    ]
+    r, body = _run_session_end(tmp_path, entries)
+    assert r.returncode == 0
+    assert body["delivered"]["wiki"] == [PAGE] and body["referenced"] == []

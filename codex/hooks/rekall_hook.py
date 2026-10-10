@@ -404,14 +404,15 @@ def summarize_session(
         if event_type in {"function_call", "custom_tool_call", "tool_call"}:
             name = str(body.get("tool_name", body.get("name", ""))).lower()
             value = _call_input(body)
-            if recalled or delivered_wiki:
-                note_references(value)
+            is_wiki = name in ("wiki_lookup", "wiki_read") or name.endswith(
+                ("__wiki_lookup", "__wiki_read")
+            )
+            if (recalled or delivered_wiki) and not is_wiki:
+                note_references(value)  # wiki_read(page_id=X) is navigation, not a citation
             command = _command_from(value)
             if name == "recall_memories" or name.endswith("__recall_memories"):
                 pending[call_id] = "recall"
-            elif name in ("wiki_lookup", "wiki_read") or name.endswith(
-                ("__wiki_lookup", "__wiki_read")
-            ):
+            elif is_wiki:
                 pending[call_id] = "wiki"
             elif after_recall and _is_file_edit_name(name):
                 pending[call_id] = "edit"

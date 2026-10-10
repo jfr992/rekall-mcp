@@ -706,7 +706,7 @@ class OptimizedMemoryTools(BaseToolProvider):
             m = self.manager
             page = m.wiki.read(page_id, "live")
             if page is None:
-                return f"Wiki page not found: {page_id}"
+                return "Wiki page not found."
             validity = compute_validity(page, store=m.store, graph=m.knowledge_graph)
             sections = split_sections(page.body)
             wanted = section or (
