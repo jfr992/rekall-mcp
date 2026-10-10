@@ -486,6 +486,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/wiki/search` | GET | BM25 lookup over live sections, ≤3 hits, ≤600 tokens (`q=`, `project=`, `limit=`) |
 | `/api/wiki/page/{page_id}` | GET | One section (default) or `full=1`; process pages never truncated |
 | `/api/wiki/drafts` | GET | Pending drafts with `needs`, unsourced steps, redaction flags |
+| `/api/wiki/drafts/{page_id}` | GET | One draft, full untrimmed body (`status: draft`) plus the same flags; 404 if none |
 | `/api/wiki/drafts/{page_id}` | PUT, POST `/approve`, POST `/reject` | Edit, approve (history + live + index + log), reject with reason |
 | `/api/wiki/candidates` | GET | Worthiness classifier over a project's memories (`unconfigured` without a model) |
 | `/api/wiki/draft` | POST | Draft a page from `memory_ids` and `page_type` (`unconfigured` without a model) |

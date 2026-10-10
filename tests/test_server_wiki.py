@@ -175,3 +175,21 @@ def test_unknown_draft_is_404_on_approve_reject_put(client):
     assert tc.post(f"{url}/approve").status_code == 404
     assert tc.post(f"{url}/reject", json={"reason": "x"}).status_code == 404
     assert tc.put(url, json={"body": "x"}).status_code == 404
+
+
+def test_get_draft_returns_full_body_with_flags_and_404(client, monkeypatch):
+    tc, _ = client
+    _fake_llm(monkeypatch)
+    tc.post("/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"})
+    pid = "demo/process/rotate-the-gateway-key"
+    r = tc.get(f"/api/wiki/drafts/{pid}")
+    d = r.json()
+    assert r.status_code == 200 and d["status"] == "draft" and d["page_id"] == pid
+    assert d["body"] == PROCESS_BODY and d["section_id"] is None and d["over_budget"] is False
+    assert d["needs"] == [] and d["unsourced_steps"] == 0 and d["has_redaction"] is False
+    assert "validity" in d and d["sections"][0] == "when"
+    assert tc.get("/api/wiki/drafts/demo/process/nope").status_code == 404
+    assert tc.get("/api/wiki/drafts/bad id").status_code == 400
+    # POST routes sharing the prefix still resolve to approve/reject, not the GET route
+    assert tc.post(f"/api/wiki/drafts/{pid}/approve").status_code == 200
+    assert tc.get(f"/api/wiki/drafts/{pid}").status_code == 404

@@ -1646,6 +1646,14 @@ def _wiki_refusal(e: ValueError):
     return _bad_request(str(e))
 
 
+def _wiki_draft_flags(p: Page) -> dict:
+    return {
+        "needs": list(p.frontmatter.get("needs") or missing_sections(p)),
+        "unsourced_steps": unsourced_steps(p),
+        "has_redaction": has_redaction(p.body),
+    }
+
+
 _WIKI_EDITABLE_FM = ("title", "description", "scope", "tags", "sidebar_position", "confidence")
 
 
@@ -1751,13 +1759,37 @@ async def api_wiki_drafts(request):
                 "title": p.frontmatter.get("title"),
                 "type": p.type,
                 "project": p.project,
-                "needs": list(p.frontmatter.get("needs") or missing_sections(p)),
-                "unsourced_steps": unsourced_steps(p),
-                "has_redaction": has_redaction(p.body),
+                **_wiki_draft_flags(p),
             }
             for p in manager.wiki.list_pages("draft")
         ]
         return _ok({"drafts": drafts})
+    except Exception as e:
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/wiki/drafts/{page_id:path}", methods=["GET"])
+async def api_wiki_get_draft(request):
+    page_id = _wiki_page_id(request)
+    if page_id is None:
+        return _bad_request("invalid page_id")
+    try:
+        manager = _get_memory_manager()
+        draft = manager.wiki.read(page_id, "draft")
+        if draft is None:
+            return _wiki_refusal(ValueError("no draft for page_id"))
+        validity = _wiki_validity_fn(manager)(draft)
+        return _ok(
+            {
+                **_wiki_header(draft, validity),
+                "sections": [s[0] for s in split_sections(draft.body)],
+                "section_id": None,
+                "body": draft.body,
+                "token_estimate": token_estimate(draft.body),
+                "over_budget": False,
+                **_wiki_draft_flags(draft),
+            }
+        )
     except Exception as e:
         return _server_error(str(e))
 
