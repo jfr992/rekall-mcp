@@ -138,6 +138,8 @@ def classify_candidates(
     cache: dict,
     max_consecutive_failures: int = 3,
     progress: Callable[[int, int], None] | None = None,
+    flush: Callable[[], None] | None = None,
+    flush_every: int = 10,
 ) -> list[dict]:
     failures = 0
     total = len(memories)
@@ -162,6 +164,8 @@ def classify_candidates(
                         ) from e
         if progress:
             progress(done, total)
+        if flush and done % flush_every == 0:
+            flush()
     return worthy_from_cache(memories, cache)
 
 

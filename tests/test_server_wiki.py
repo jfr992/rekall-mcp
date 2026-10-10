@@ -364,3 +364,61 @@ def test_search_limit_is_clamped_to_three(client, monkeypatch):
     tc.get("/api/wiki/search?q=x&limit=50")
     tc.get("/api/wiki/search?q=x&limit=0")
     assert seen == [3, 1]
+
+
+def test_candidates_job_flushes_every_ten_and_survives_a_crash(client, monkeypatch):
+    tc, manager = client
+    manager.store.scroll.return_value = [
+        {"memory_id": f"2026-01-01_fact_a{i:02d}", "content": f"rule {i}", "project": "demo"}
+        for i in range(15)
+    ]
+    n = []
+
+    def llm(prompt):
+        n.append(1)
+        if len(n) > 12:
+            raise KeyboardInterrupt  # not an Exception: simulates the worker dying
+        return json.dumps({"verdict": "skip", "reasons": []})
+
+    monkeypatch.setattr("server.make_wiki_llm", lambda: llm)
+    monkeypatch.setattr(
+        manager.wiki, "write_cache", lambda *a, **k: pytest.fail("job must merge, not overwrite")
+    )
+    tc.post("/api/wiki/candidates", json={"project": "demo"})
+    for _ in range(200):
+        if len(n) > 12:
+            break
+        time.sleep(0.02)
+    time.sleep(0.1)
+    assert len(manager.wiki.read_cache("worthiness")) >= 10
+
+
+def test_candidates_job_does_not_drop_a_concurrent_jobs_verdicts(client, monkeypatch):
+    tc, manager = client
+    _fake_llm(monkeypatch)
+    manager.wiki.merge_cache("worthiness", {"other": {"verdict": "skip", "content_sha": "x"}})
+    _classify(tc)
+    assert "other" in manager.wiki.read_cache("worthiness")
+
+
+def test_candidates_job_read_cache_failure_sets_error(client, monkeypatch):
+    tc, manager = client
+    _fake_llm(monkeypatch)
+
+    real, calls = manager.wiki.read_cache, []
+
+    def boom(name):
+        calls.append(1)
+        if len(calls) == 1:
+            raise OSError("disk gone")
+        return real(name)
+
+    monkeypatch.setattr(manager.wiki, "read_cache", boom)
+    r = tc.post("/api/wiki/candidates", json={"project": "demo"}).json()
+    assert r["status"] == "started"
+    for _ in range(200):
+        status = tc.get("/api/wiki/candidates?project=demo")
+        if status.status_code == 200 and status.json()["status"] != "running":
+            break
+        time.sleep(0.02)
+    assert status.json()["status"] == "error" and "disk gone" in status.json()["error"]

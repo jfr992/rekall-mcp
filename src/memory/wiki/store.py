@@ -200,6 +200,17 @@ class WikiStore:
             path.parent.mkdir(parents=True, exist_ok=True)
             _write_atomic(path, json.dumps(data))
 
+    def merge_cache(self, name: str, entries: dict) -> None:
+        path = self._cache_path(name)
+        with self._lock:
+            try:
+                current = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                current = {}
+            merged = {**(current if isinstance(current, dict) else {}), **entries}
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _write_atomic(path, json.dumps(merged))
+
     def rebuild_index(self) -> None:
         with self._lock:
             self._rebuild_index_locked()

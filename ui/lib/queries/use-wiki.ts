@@ -50,11 +50,15 @@ export function useWikiDraft(pageId: string | null) {
   });
 }
 
+export function candidatesRefetchInterval(status?: string): number | false {
+  return status === "running" ? 2000 : false;
+}
+
 export function useWikiCandidates(project: string) {
   return useQuery({
     queryKey: ["wiki", "candidates", project],
     queryFn: () => getWikiCandidates(project),
-    refetchInterval: (query) => (query.state.data?.status === "running" ? 2000 : false),
+    refetchInterval: (query) => candidatesRefetchInterval(query.state.data?.status),
   });
 }
 

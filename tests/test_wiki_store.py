@@ -250,3 +250,13 @@ def test_update_draft_is_atomic_and_missing_draft_raises(store):
     with pytest.raises(ValueError, match="no draft"):
         store.update_draft("demo/process/rotate-key", lambda d: d)
     assert store.read("demo/process/rotate-key", status="draft") is None
+
+
+def test_merge_cache_keeps_entries_from_both_writers_in_either_order(tmp_path):
+    from memory.wiki.store import WikiStore
+
+    for first, second in ((("a", 1), ("b", 2)), (("b", 2), ("a", 1))):
+        store = WikiStore(tmp_path / f"{first[0]}{second[0]}")
+        store.merge_cache("worthiness", {first[0]: {"n": first[1]}})
+        store.merge_cache("worthiness", {second[0]: {"n": second[1]}})
+        assert store.read_cache("worthiness") == {"a": {"n": 1}, "b": {"n": 2}}

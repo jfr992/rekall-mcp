@@ -1882,20 +1882,29 @@ async def api_wiki_candidates(request):
             job["done"], job["total"] = done, total
 
         def _run():
-            cache = manager.wiki.read_cache("worthiness")
+            cache: dict = {}
+            before: dict = {}
+
+            def _flush():
+                fresh = {k: v for k, v in cache.items() if before.get(k) is not v}
+                if fresh:
+                    manager.wiki.merge_cache("worthiness", fresh)
+
             try:
+                cache.update(manager.wiki.read_cache("worthiness"))
+                before.update(cache)
                 points = manager.store.scroll(
                     filters={"project": project} if project else None, limit=limit
                 )
                 job["total"] = len(points)
-                classify_candidates(points, llm=llm, cache=cache, progress=_progress)
+                classify_candidates(points, llm=llm, cache=cache, progress=_progress, flush=_flush)
                 job["status"] = "done"
             except Exception as e:  # noqa: BLE001
                 logger.error(f"Wiki classify job failed for {key}: {e}")
                 job["status"] = "error"
                 job["error"] = str(e)
             finally:
-                manager.wiki.write_cache("worthiness", cache)
+                _flush()
 
         threading.Thread(target=_run, daemon=True).start()
         return _ok({"status": "started"})
@@ -1907,7 +1916,7 @@ async def api_wiki_candidates(request):
 async def api_wiki_candidates_status(request):
     try:
         project = _safe_project(request.query_params.get("project"))
-        job = _WIKI_CLASSIFY_JOBS.get(project or "__all__")
+        snap = dict(_WIKI_CLASSIFY_JOBS.get(project or "__all__") or {})
         manager = _get_memory_manager()
 
         def work():
@@ -1916,15 +1925,15 @@ async def api_wiki_candidates_status(request):
             )
             return worthy_from_cache(points, manager.wiki.read_cache("worthiness"))
 
-        status = job["status"] if job else "idle"
+        status = snap.get("status", "idle")
         if status == "idle" and make_wiki_llm() is None:
             status = "unconfigured"
         return _ok(
             {
-                **{k: v for k, v in (job or {}).items() if k != "status"},
+                **{k: v for k, v in snap.items() if k != "status"},
                 "status": status,
-                "done": (job or {}).get("done", 0),
-                "total": (job or {}).get("total", 0),
+                "done": snap.get("done", 0),
+                "total": snap.get("total", 0),
                 "candidates": await asyncio.to_thread(work),
             }
         )
