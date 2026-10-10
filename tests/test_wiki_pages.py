@@ -98,3 +98,49 @@ def test_parse_rejects_missing_frontmatter_and_bad_page_id():
         parse_page("no frontmatter here")
     with pytest.raises(ValueError):
         parse_page("---\ntitle: t\npage_id: ../escape\ntype: policy\n---\nbody")
+
+
+def test_split_sections_ignores_headings_inside_code_fences():
+    from memory.wiki.pages import split_sections
+
+    out = split_sections("## Steps\n```sh\n## comment\n```\n- a")
+    assert [s[0] for s in out] == ["steps"]
+    assert "## comment" in out[0][2]
+    assert out[0][2].endswith("- a")
+
+
+def test_step_sources_top_level_items_and_multi_source_tags():
+    from memory.wiki.pages import Page, step_sources, unsourced_steps
+
+    text = (
+        "Run in order:\n1. a\n   [source: 2026-01-01_fact_aaaa1111]\n"
+        "2. b [source: 2026-01-01_fact_bbbb2222]\n   - nested\n"
+        "3. c [source: 2026-01-01_fact_cccc3333, 2026-01-01_fact_dddd4444]"
+    )
+    assert step_sources(text) == [
+        ["2026-01-01_fact_aaaa1111"],
+        ["2026-01-01_fact_bbbb2222"],
+        ["2026-01-01_fact_cccc3333", "2026-01-01_fact_dddd4444"],
+    ]
+    page = Page(
+        frontmatter={"page_id": "p/process/x", "type": "process", "title": "x"},
+        body="## Steps {#steps}\n" + text,
+    )
+    assert unsourced_steps(page) == 0
+
+
+def test_parse_empty_frontmatter_reports_missing_page_id():
+    from memory.wiki.pages import parse_page
+
+    with pytest.raises(ValueError, match="missing page_id"):
+        parse_page("---\n---\nbody")
+
+
+def test_parse_keeps_horizontal_rule_in_body_and_handles_crlf():
+    from memory.wiki.pages import parse_page
+
+    text = "---\ntitle: t\npage_id: p/policy/x\ntype: policy\n---\nbefore\n\n---\n\nafter\n"
+    assert "---" in parse_page(text).body
+    crlf = parse_page(text.replace("\n", "\r\n"))
+    assert crlf.page_id == "p/policy/x"
+    assert "\r" not in crlf.body

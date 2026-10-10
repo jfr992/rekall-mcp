@@ -11,9 +11,10 @@ PAGE_ID_RE = re.compile(
     r"^[a-z0-9][a-z0-9._-]*/(process|policy|reference|entity)/[a-z0-9][a-z0-9-]*$"
 )
 MEMORY_ID_RE = re.compile(r"\d{4}-\d{2}-\d{2}_[a-z]+_[0-9a-f]+")
-_H2_RE = re.compile(r"^## (.+?)(?:\s*\{#([a-z0-9-]+)\})?\s*$", re.M)
+_H2_RE = re.compile(r"^## (.+?)(?:\s*\{#([a-z0-9-]+)\})?\s*$")
 _SOURCE_RE = re.compile(r"\[source:\s*([^\]]+)\]")
-_STEP_RE = re.compile(r"^\s*(?:\d+\.|[-*])\s+", re.M)
+_STEP_START_RE = re.compile(r"^(?:\d+\.|[-*])\s")
+_FRONTMATTER_RE = re.compile(r"---\n(?:(.*?)\n)?---[ \t]*(?:\n|$)", re.S)
 _REQUIRED = {
     "process": [
         "when",
@@ -63,12 +64,13 @@ def slugify(text: str) -> str:
 
 
 def parse_page(text: str) -> Page:
+    text = text.replace("\r\n", "\n")
     if not text.startswith("---\n"):
         raise ValueError("page has no frontmatter")
-    end = text.find("\n---", 4)
-    if end < 0:
+    match = _FRONTMATTER_RE.match(text)
+    if not match:
         raise ValueError("unterminated frontmatter")
-    fm = yaml.safe_load(text[4:end]) or {}
+    fm = yaml.safe_load(match.group(1) or "") or {}
     if not isinstance(fm, dict):
         raise ValueError("frontmatter must be a mapping")
     for key in ("page_id", "type", "title"):
@@ -78,7 +80,7 @@ def parse_page(text: str) -> Page:
         raise ValueError("invalid page_id")
     if fm["type"] not in _REQUIRED:
         raise ValueError("invalid type")
-    body = text[end + 4 :].lstrip("\n")
+    body = text[match.end() :].lstrip("\n")
     return Page(frontmatter=fm, body=body)
 
 
@@ -90,15 +92,19 @@ def emit_page(page: Page) -> str:
 
 
 def split_sections(body: str) -> list[tuple[str, str, str]]:
-    matches = list(_H2_RE.finditer(body))
-    out = []
-    for i, m in enumerate(matches):
-        start = m.end()
-        end = matches[i + 1].start() if i + 1 < len(matches) else len(body)
-        heading = m.group(1).strip()
-        section_id = m.group(2) or slugify(heading)
-        out.append((section_id, heading, body[start:end].strip()))
-    return out
+    sections: list[tuple[str, str, list[str]]] = []
+    fence = None
+    for line in body.split("\n"):
+        marker = line[:3]
+        if marker in ("```", "~~~"):
+            fence = None if fence == marker else (fence or marker)
+        heading = None if fence else _H2_RE.match(line)
+        if heading:
+            heading_text = heading.group(1).strip()
+            sections.append((heading.group(2) or slugify(heading_text), heading_text, []))
+        elif sections:
+            sections[-1][2].append(line)
+    return [(sid, heading, "\n".join(lines).strip()) for sid, heading, lines in sections]
 
 
 def required_sections(page_type: str) -> list[str]:
@@ -115,8 +121,16 @@ def has_redaction(text: str) -> bool:
 
 
 def step_sources(section_markdown: str) -> list[list[str]]:
-    steps = [s for s in _STEP_RE.split(section_markdown) if s.strip()]
-    return [[sid.strip() for sid in _SOURCE_RE.findall(step)] for step in steps]
+    items: list[list[str]] = []
+    for line in section_markdown.split("\n"):
+        if _STEP_START_RE.match(line):
+            items.append([line])
+        elif items:
+            items[-1].append(line)
+    return [
+        [mid for tag in _SOURCE_RE.findall("\n".join(item)) for mid in MEMORY_ID_RE.findall(tag)]
+        for item in items
+    ]
 
 
 def unsourced_steps(page: Page) -> int:
