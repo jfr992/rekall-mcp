@@ -521,3 +521,76 @@ export const PublishResponseSchema = z
       .passthrough(),
   });
 export type PublishResponse = z.infer<typeof PublishResponseSchema>;
+
+export const WikiIndexEntrySchema = z.object({
+  page_id: z.string(),
+  title: z.string().nullable(),
+  type: z.string(),
+  project: z.string(),
+  scope: z.record(z.any()).nullable().optional(),
+  status: z.string(),
+  last_verified: z.string().nullable().optional(),
+  summary: z.string().optional().default(""),
+  validity: z.enum(["ok", "stale", "withdrawn"]).optional().default("ok"),
+});
+export const WikiIndexSchema = z.object({ entries: z.array(WikiIndexEntrySchema) });
+export const WikiHitSchema = z.object({
+  page_id: z.string(),
+  revision: z.number().nullable().optional(),
+  section_id: z.string().nullable(),
+  title: z.string().nullable(),
+  excerpt: z.string(),
+  scope: z.record(z.any()).nullable().optional(),
+  status: z.string(),
+  last_verified: z.string().nullable().optional(),
+  validity: z.enum(["ok", "stale", "withdrawn"]),
+  validity_reasons: z.array(z.string()),
+  sources: z.array(z.string()),
+  score: z.number(),
+});
+export const WikiSearchSchema = z.object({ hits: z.array(WikiHitSchema) });
+export const WikiPageSchema = z.object({
+  page_id: z.string(),
+  revision: z.number().nullable().optional(),
+  title: z.string().nullable(),
+  type: z.string(),
+  project: z.string(),
+  scope: z.record(z.any()).nullable().optional(),
+  status: z.string(),
+  last_verified: z.string().nullable().optional(),
+  validity: z.enum(["ok", "stale", "withdrawn"]),
+  validity_reasons: z.array(z.string()),
+  sources: z.array(z.string()),
+  sections: z.array(z.string()),
+  section_id: z.string().nullable(),
+  body: z.string(),
+  token_estimate: z.number(),
+  over_budget: z.boolean(),
+});
+export const WikiDraftSchema = z.object({
+  page_id: z.string(),
+  title: z.string().nullable(),
+  type: z.string(),
+  project: z.string(),
+  needs: z.array(z.string()),
+  unsourced_steps: z.number(),
+  has_redaction: z.boolean(),
+});
+export const WikiDraftsSchema = z.object({ drafts: z.array(WikiDraftSchema) });
+export const WikiCandidateSchema = z.object({
+  memory_id: z.string(),
+  content: z.string(),
+  question: z.string().nullable().optional(),
+  page_type: z.string(),
+  scope: z.record(z.any()).nullable().optional(),
+  reasons: z.array(z.string()),
+});
+export const WikiCandidatesSchema = z.union([
+  z.object({ status: z.literal("unconfigured") }),
+  z.object({ candidates: z.array(WikiCandidateSchema) }),
+]);
+export type WikiIndexEntry = z.infer<typeof WikiIndexEntrySchema>;
+export type WikiPage = z.infer<typeof WikiPageSchema>;
+export type WikiDraft = z.infer<typeof WikiDraftSchema>;
+export type WikiHit = z.infer<typeof WikiHitSchema>;
+export type WikiCandidate = z.infer<typeof WikiCandidateSchema>;

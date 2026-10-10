@@ -1,0 +1,73 @@
+import { useState } from "react";
+import { MonoLabel } from "@/components/ui/mono-label";
+import { apiErrorMessage } from "@/lib/api/client";
+import { useCreateDraft, useWikiCandidates } from "@/lib/queries/use-wiki";
+
+const btn =
+  "cursor-pointer rounded-[7px] border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--fg-dim)] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-40";
+
+export function WikiCandidates({ project }: { project: string }) {
+  const { data, refetch, isFetching, error } = useWikiCandidates(project);
+  const create = useCreateDraft();
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+
+  const candidates = data && "candidates" in data ? data.candidates : [];
+  const toggle = (id: string) =>
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+
+  const draftSelected = () => {
+    const chosen = candidates.filter((c) => picked.has(c.memory_id));
+    if (!chosen.length) return;
+    create.mutate(
+      { memoryIds: chosen.map((c) => c.memory_id), pageType: chosen[0].page_type },
+      { onSuccess: () => setPicked(new Set()) }
+    );
+  };
+
+  return (
+    <div className="flex flex-col gap-3">
+      <button type="button" className={btn} disabled={isFetching} onClick={() => refetch()}>
+        {isFetching ? "Classifying…" : "Classify candidates"}
+      </button>
+      {error ? <p className="text-sm text-red-400">{apiErrorMessage(error)}</p> : null}
+      {data && "status" in data ? (
+        <p className="text-sm text-[var(--fg-dim)]">Wiki model is not configured on the backend.</p>
+      ) : null}
+      {create.data && create.data.status === "unconfigured" ? (
+        <p className="text-sm text-[var(--fg-dim)]">Wiki model is not configured on the backend.</p>
+      ) : null}
+      {create.error ? <p className="text-sm text-red-400">{apiErrorMessage(create.error)}</p> : null}
+      <ul className="space-y-2">
+        {candidates.map((c) => (
+          <li key={c.memory_id} className="rounded-[var(--radius-lg)] border border-[var(--border)] p-3">
+            <label className="flex cursor-pointer items-start gap-2">
+              <input
+                type="checkbox"
+                checked={picked.has(c.memory_id)}
+                onChange={() => toggle(c.memory_id)}
+                aria-label={`Select ${c.memory_id}`}
+                className="mt-1"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm text-[var(--fg)]">{c.question ?? c.content.slice(0, 80)}</span>
+                <MonoLabel className="block">{c.page_type}</MonoLabel>
+                {c.reasons.length ? (
+                  <span className="block text-xs text-[var(--fg-dim)]">{c.reasons.join("; ")}</span>
+                ) : null}
+              </span>
+            </label>
+          </li>
+        ))}
+      </ul>
+      {candidates.length ? (
+        <button type="button" className={btn} disabled={!picked.size || create.isPending} onClick={draftSelected}>
+          Draft selected
+        </button>
+      ) : null}
+    </div>
+  );
+}

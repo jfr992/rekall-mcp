@@ -12,6 +12,7 @@ import { useProjectStore } from "@/lib/project-store";
 const tabs = [
   { href: "/brain", label: "Cockpit", tag: "COCKPIT" },
   { href: "/kb", label: "Knowledge Base", tag: "KNOWLEDGE BASE" },
+  { href: "/wiki", label: "Wiki", tag: "WIKI" },
   { href: "/stream", label: "Stream", tag: "STREAM" },
   { href: "/sessions", label: "Sessions", tag: "SESSIONS" },
   { href: "/hygiene", label: "Hygiene", tag: "HYGIENE" },
