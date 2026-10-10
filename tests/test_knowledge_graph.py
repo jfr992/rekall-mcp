@@ -314,3 +314,12 @@ def test_stats_returns_relation_distribution(tmp_path):
         "led_to": 1,
         "depends_on": 1,
     }
+
+
+def test_count_contradicts_counts_distinct_partners_not_edges(tmp_path):
+    kg = KnowledgeGraph(graph_path=tmp_path / "_graph.json")
+    kg.add_edge("a", "b", "contradicts", weight=0.9)
+    kg.add_edge("b", "a", "contradicts", weight=0.9)
+    assert kg.count_contradicts("a") == 1
+    kg.add_edge("c", "a", "contradicts", weight=0.9)
+    assert kg.count_contradicts("a") == 2
