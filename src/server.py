@@ -2479,6 +2479,7 @@ async def api_memory_pressure(request):
                     "contradiction_count": len(conflict),
                     "disputed_count": pressure.get("disputed_count", 0),
                     "stale_candidates_count": len(stale_candidates),
+                    "prune_candidates_count": len(pressure.get("candidates", [])),
                     "stale_working": _slim(pressure.get("stale_working", [])),
                     "low_value": _slim(pressure.get("low_value", [])),
                     "conflict": _slim(conflict),

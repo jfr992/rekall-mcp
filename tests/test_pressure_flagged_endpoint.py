@@ -122,3 +122,33 @@ def test_pressure_flagged_stale_candidates_from_event_log(monkeypatch):
     flagged = r.json()["flagged"]
     assert [m["memory_id"] for m in flagged["stale_candidates"]] == ["s1"]
     assert flagged["stale_candidates_count"] == 1
+
+
+def test_pressure_prune_candidates_count_dedupes_low_and_stale(monkeypatch):
+    """A memory both low-value and stale counts once in prune_candidates_count."""
+    from unittest.mock import MagicMock
+
+    from starlette.testclient import TestClient
+
+    fake = MagicMock()
+    fake.store.scroll.return_value = [
+        {
+            "memory_id": "both",
+            "tier": "working",
+            "salience": 0.1,
+            "retention_days": 1,
+            "date": "2000-01-01",
+            "content": "low and stale",
+        },
+        {"memory_id": "ok1", "tier": "semantic", "salience": 0.9, "content": "fine"},
+    ]
+    fake.knowledge_graph.stats.return_value = {"nodes": 0, "edges": 0}
+    fake.event_log.tail.return_value = []
+    monkeypatch.setattr("memory.singleton._instance", fake)
+
+    from server import build_app
+
+    flagged = TestClient(build_app()).get("/api/memory/pressure").json()["flagged"]
+    assert flagged["low_value_count"] == 1
+    assert flagged["stale_working_count"] == 1
+    assert flagged["prune_candidates_count"] == 1

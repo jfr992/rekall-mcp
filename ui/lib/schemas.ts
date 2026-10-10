@@ -292,6 +292,7 @@ export const PressureResponseSchema = z.object({
     contradiction_count: z.number(),
     disputed_count: z.number().default(0),
     stale_candidates_count: z.number().default(0),
+    prune_candidates_count: z.number().optional(),
     stale_working: z.array(FlaggedMemorySchema).default([]),
     low_value: z.array(FlaggedMemorySchema).default([]),
     conflict: z.array(FlaggedMemorySchema).default([]),

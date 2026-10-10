@@ -6,7 +6,11 @@ type Props = {
   pressure: PressureResponse | undefined;
 };
 
-function sparklinePath(counts: number[], width: number, height: number): string {
+function sparklinePath(
+  counts: number[],
+  width: number,
+  height: number,
+): string {
   if (counts.length === 0) return "";
   const max = Math.max(...counts, 1);
   const step = counts.length > 1 ? width / (counts.length - 1) : 0;
@@ -49,7 +53,9 @@ export function StatCards({ insights, pressure }: Props) {
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr_1fr]">
       <div className="rounded-[11px] border border-[rgba(45,212,160,0.25)] bg-[radial-gradient(ellipse_90%_140%_at_20%_0%,rgba(45,212,160,0.14),rgba(13,17,32,0.6))] px-5 py-4">
-        <MonoLabel className="text-[9px] tracking-[0.16em]">Total memories</MonoLabel>
+        <MonoLabel className="text-[9px] tracking-[0.16em]">
+          Total memories
+        </MonoLabel>
         <div className="mt-1.5 flex items-baseline gap-2.5">
           <span className="font-serif text-[44px] leading-none text-[var(--fg)]">
             {insights.total}
@@ -62,7 +68,9 @@ export function StatCards({ insights, pressure }: Props) {
       </div>
 
       <div className="rounded-[11px] border border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-4">
-        <MonoLabel className="text-[9px] tracking-[0.16em]">Recalls · 7d</MonoLabel>
+        <MonoLabel className="text-[9px] tracking-[0.16em]">
+          Recalls · 7d
+        </MonoLabel>
         <div className="mt-1.5 font-serif text-4xl leading-[1.1] text-[var(--fg)]">
           {insights.recalls_7d}
         </div>
@@ -72,20 +80,25 @@ export function StatCards({ insights, pressure }: Props) {
         >
           avg. top match{" "}
           <span className="font-mono text-[var(--accent-bright)]">
-            {insights.avg_top_score_7d === null ? "—" : insights.avg_top_score_7d.toFixed(2)}
+            {insights.avg_top_score_7d === null
+              ? "—"
+              : insights.avg_top_score_7d.toFixed(2)}
           </span>
         </div>
       </div>
 
       <div className="rounded-[11px] border border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-4">
-        <MonoLabel className="text-[9px] tracking-[0.16em]">Recalls with hits</MonoLabel>
+        <MonoLabel className="text-[9px] tracking-[0.16em]">
+          Recalls with hits
+        </MonoLabel>
         <div className="mt-1.5 font-serif text-4xl leading-[1.1] text-[var(--accent-success)]">
           {insights.recalls_7d > 0
             ? `${Math.round((insights.recalls_with_hits_7d / insights.recalls_7d) * 100)}%`
             : "—"}
         </div>
         <div className="mt-2 text-[11px] text-[var(--fg-muted)]">
-          {insights.recalls_with_hits_7d} of {insights.recalls_7d} recalls with hits · 7d
+          {insights.recalls_with_hits_7d} of {insights.recalls_7d} recalls with
+          hits · 7d
         </div>
       </div>
 
@@ -94,20 +107,40 @@ export function StatCards({ insights, pressure }: Props) {
           Needs attention
         </MonoLabel>
         <div className="mt-1.5 font-serif text-4xl leading-[1.1] text-[var(--accent-danger)]">
-          {pressure
-            ? pressure.flagged.stale_working_count +
-              pressure.flagged.low_value_count +
-              pressure.flagged.contradiction_count +
-              pressure.flagged.disputed_count +
-              pressure.flagged.stale_candidates_count
-            : "—"}
+          {pressure ? attentionTotal(pressure.flagged) : "—"}
         </div>
         <div className="mt-2 font-mono text-[10.5px] text-[var(--fg-muted)]">
           {pressure
-            ? `stale ${pressure.flagged.stale_working_count} · low ${pressure.flagged.low_value_count} · conflict ${pressure.flagged.contradiction_count}`
+            ? attentionBreakdown(pressure.flagged)
             : "pressure unavailable"}
         </div>
       </div>
     </div>
   );
+}
+
+type Flagged = PressureResponse["flagged"];
+
+// Older servers omit prune_candidates_count; low + stale then double-counts overlap.
+function pruneCount(f: Flagged): number {
+  return f.prune_candidates_count ?? f.low_value_count + f.stale_working_count;
+}
+
+function attentionTotal(f: Flagged): number {
+  return (
+    pruneCount(f) +
+    f.contradiction_count +
+    f.disputed_count +
+    f.stale_candidates_count
+  );
+}
+
+function attentionBreakdown(f: Flagged): string {
+  return [
+    `prune ${pruneCount(f)}`,
+    f.contradiction_count > 0 ? `conflict ${f.contradiction_count}` : null,
+    f.disputed_count > 0 ? `disputed ${f.disputed_count}` : null,
+  ]
+    .filter(Boolean)
+    .join(" \u00b7 ");
 }
