@@ -17,6 +17,7 @@ tool="$(jq -r '.tool_name // empty' <<<"$payload" 2>/dev/null || true)"
 
 case "$tool" in
   mcp__memory__recall_memories|mcp__rekall__recall_memories) ;;
+  mcp__memory__wiki_lookup|mcp__rekall__wiki_lookup|mcp__memory__wiki_read|mcp__rekall__wiki_read) ;;
   mcp__memory__observe|mcp__rekall__observe) ;;
   mcp__memory__save_memory|mcp__rekall__save_memory) ;;
   *) exit 0 ;;

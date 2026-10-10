@@ -92,3 +92,10 @@ def test_malformed_stdin_exits_zero_silently():
     )
     assert r.returncode == 0
     assert r.stdout.strip() == ""
+
+
+def test_wiki_tools_get_provenance():
+    for tool in ("mcp__memory__wiki_lookup", "mcp__rekall__wiki_read"):
+        r = _run(_payload(tool, {"query": "x"}))
+        out = json.loads(r.stdout)["hookSpecificOutput"]["updatedInput"]
+        assert out["session_id"] == "sess-42" and out["agent"] == "claude-code"
