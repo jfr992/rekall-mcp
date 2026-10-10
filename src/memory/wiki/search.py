@@ -106,7 +106,16 @@ def search_index(
         if validity["validity"] == "withdrawn":
             continue
         excerpt = d["text"][:300]
-        cost = token_estimate(excerpt)
+        rendered = " ".join(
+            [
+                str(page.frontmatter.get("title") or ""),
+                f"wiki:{page.page_id}#{d['section_id']}",
+                validity["validity"],
+                *validity["reasons"],
+                excerpt,
+            ]
+        )
+        cost = token_estimate(rendered)
         if hits and used + cost > budget_tokens:
             break
         used += cost

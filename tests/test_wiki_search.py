@@ -15,7 +15,7 @@ def _live(store, pid, title, rule, page_type="policy"):
         "page_id": pid,
         "type": page_type,
         "project": pid.split("/")[0],
-        "sources": [],
+        "sources": ["2026-01-01_fact_abcdef12"] if page_type == "process" else [],
     }
     body = (
         POLICY.format(rule=rule)
@@ -102,3 +102,13 @@ def test_sentence_final_words_match(store):
     _live(store, "demo/policy/upgrade", "Upgrade note", "Plan to upgrade to v1.17.")
     assert search_index(store, "owner")[0]["page_id"] == "demo/policy/prod-go"
     assert search_index(store, "v1.17")[0]["page_id"] == "demo/policy/upgrade"
+
+
+def test_budget_counts_rendered_title_not_just_excerpt(tmp_path):
+    from memory.wiki.search import search_index
+
+    s = WikiStore(tmp_path / "wiki")
+    for n in ("a", "b", "c"):
+        _live(s, f"demo/policy/long-{n}", "Long title " * 40, f"alpha rule {n}")
+    assert len(search_index(s, "alpha", budget_tokens=150)) == 1
+    assert len(search_index(s, "alpha", budget_tokens=10_000)) == 3

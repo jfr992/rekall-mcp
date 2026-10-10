@@ -641,7 +641,7 @@ class OptimizedMemoryTools(BaseToolProvider):
                 m.wiki,
                 query,
                 project=project,
-                limit=max(1, min(limit, 10)),
+                limit=max(1, min(limit, 3)),
                 validity_fn=lambda p: compute_validity(p, store=m.store, graph=m.knowledge_graph),
             )
             if not hits:

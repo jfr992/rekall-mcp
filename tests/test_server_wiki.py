@@ -279,3 +279,12 @@ def test_put_redacts_secret_and_approve_then_refuses(client, monkeypatch):
     assert "sk-abc123" not in body and "[REDACTED]" in body
     r = tc.post(f"{url}/approve")
     assert r.status_code == 400 and "redact" in r.json()["error"].lower()
+
+
+def test_search_limit_is_clamped_to_three(client, monkeypatch):
+    tc, _ = client
+    seen = []
+    monkeypatch.setattr("server.search_index", lambda *a, **kw: seen.append(kw["limit"]) or [])
+    tc.get("/api/wiki/search?q=x&limit=50")
+    tc.get("/api/wiki/search?q=x&limit=0")
+    assert seen == [3, 1]

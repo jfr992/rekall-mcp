@@ -161,4 +161,4 @@ async def test_wiki_lookup_limit_is_clamped(tools, monkeypatch):
     monkeypatch.setattr(search, "search_index", lambda *a, **kw: seen.append(kw["limit"]) or [])
     await registered["wiki_lookup"](query="x", limit=50)
     await registered["wiki_lookup"](query="x", limit=0)
-    assert seen == [10, 1]
+    assert seen == [3, 1]

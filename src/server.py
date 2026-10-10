@@ -1684,7 +1684,7 @@ async def api_wiki_search(request):
     try:
         q = request.query_params.get("q", "")
         project = _safe_project(request.query_params.get("project"))
-        limit = _read_int(request.query_params, "limit", 3, lo=1, hi=10)
+        limit = _read_int(request.query_params, "limit", 3, lo=1, hi=3)
         manager = _get_memory_manager()
         hits = search_index(
             manager.wiki, q, project=project, limit=limit, validity_fn=_wiki_validity_fn(manager)
