@@ -35,6 +35,7 @@ Relabel existing unchecked edges (weight, created and auto are kept; `llm_refine
 2. Dry run: `uv run python scripts/migrate_unchecked_contradicts.py`
 3. Apply (writes `_graph.json.bak-<timestamp>` next to the graph first): `uv run python scripts/migrate_unchecked_contradicts.py --apply`
 4. `docker compose start mcp`
+5. Recompute tiers, since two or more `contradicts` links demote a memory one tier: Hygiene → Lifecycle backfill → Dry run, review, then Apply (or `POST /api/memory/lifecycle/backfill` with `{"dry_run": true}` first).
 
 Rollback: copy the printed backup over `_graph.json` while the server is stopped.
 
