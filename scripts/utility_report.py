@@ -64,7 +64,9 @@ def build_session_summaries(events: list[dict]) -> list[dict]:
                 "recalled_ids": recalled,
                 "edits_after_recall": int(payload.get("edits_after_recall", 0)),
                 "test_passes_after_recall": int(payload.get("test_passes_after_recall", 0)),
-                "referenced": list(payload["referenced"]) if payload.get("referenced") is not None else None,
+                "referenced": list(payload["referenced"])
+                if payload.get("referenced") is not None
+                else None,
                 "delivered": payload.get("delivered") or {},
             }
         )
@@ -95,9 +97,11 @@ def collapse_sessions(summaries: list[dict]) -> list[dict]:
         for s in group:
             all_ids.update(s["recalled_ids"])
         delivered_ids: set[str] = set()
+        by_surface: dict[str, set[str]] = {}
         for s in group:
-            for ids in (s.get("delivered") or {}).values():
+            for surface, ids in (s.get("delivered") or {}).items():
                 delivered_ids.update(ids)
+                by_surface.setdefault(surface, set()).update(ids)
         collapsed.append(
             {
                 "session_id": first["session_id"],
@@ -105,8 +109,12 @@ def collapse_sessions(summaries: list[dict]) -> list[dict]:
                 "recalled_ids": sorted(all_ids),
                 "edits_after_recall": max(s["edits_after_recall"] for s in group),
                 "test_passes_after_recall": max(s["test_passes_after_recall"] for s in group),
-                "referenced": next((s["referenced"] for s in reversed(group) if s.get("referenced") is not None), None),
+                "referenced": next(
+                    (s["referenced"] for s in reversed(group) if s.get("referenced") is not None),
+                    None,
+                ),
                 "delivered_ids": sorted(delivered_ids) if delivered_ids else sorted(all_ids),
+                "delivered": {surface: sorted(ids) for surface, ids in by_surface.items()},
             }
         )
     return collapsed
@@ -130,7 +138,9 @@ def compute_utility_map(summaries: list[dict]) -> dict[str, float | None]:
                     sessions_credited[mid].add(sid)
 
     return {
-        mid: (len(sessions_credited.get(mid, set())) / len(sess_set)) if mid in ever_referenced else None
+        mid: (len(sessions_credited.get(mid, set())) / len(sess_set))
+        if mid in ever_referenced
+        else None
         for mid, sess_set in sessions_recalled.items()
     }
 
@@ -140,7 +150,27 @@ def compute_citation_coverage(summaries: list[dict]) -> dict:
     measured = [ss for ss in summaries if ss.get("referenced") is not None]
     delivered = sum(len(ss["delivered_ids"]) for ss in measured)
     referenced = sum(len(set(ss["referenced"]) & set(ss["delivered_ids"])) for ss in measured)
-    return {"delivered": delivered, "referenced": referenced, "coverage": (referenced / delivered) if delivered else 0.0}
+    return {
+        "delivered": delivered,
+        "referenced": referenced,
+        "coverage": (referenced / delivered) if delivered else 0.0,
+    }
+
+
+def compute_citation_coverage_by_surface(summaries: list[dict]) -> dict[str, dict]:
+    """Delivered vs referenced per surface over collapsed sessions. Telemetry, not utility."""
+    out: dict[str, dict] = {}
+    for ss in summaries:
+        if ss.get("referenced") is None:
+            continue
+        referenced = set(ss["referenced"])
+        for surface, ids in (ss.get("delivered") or {}).items():
+            agg = out.setdefault(surface, {"delivered": 0, "referenced": 0})
+            agg["delivered"] += len(ids)
+            agg["referenced"] += len(referenced & set(ids))
+    for agg in out.values():
+        agg["coverage"] = (agg["referenced"] / agg["delivered"]) if agg["delivered"] else 0.0
+    return out
 
 
 def build_surfaced_counts(events: list[dict]) -> dict[str, int]:
@@ -245,6 +275,7 @@ def print_report(
     progress: str,
     feedback_tallies: dict[str, dict[str, int]] | None = None,
     citation_coverage: dict | None = None,
+    coverage_by_surface: dict[str, dict] | None = None,
 ) -> None:
     """Print the full report to stdout."""
     print(f"Exit criterion: {progress}")
@@ -262,6 +293,12 @@ def print_report(
     if citation_coverage is not None:
         c = citation_coverage
         print(f"Citation coverage: {c['referenced']}/{c['delivered']} ({c['coverage']:.0%})")
+        if coverage_by_surface:
+            parts = " · ".join(
+                f"{surface} {a['referenced']}/{a['delivered']} ({a['coverage']:.0%})"
+                for surface, a in sorted(coverage_by_surface.items())
+            )
+            print(f"Citation coverage by surface: {parts}")
     print()
 
     print("Labeled evidence — memory_feedback verdicts")
@@ -337,7 +374,13 @@ def main(argv=None) -> None:
     feedback_tallies = build_feedback_tallies(events)
 
     print_report(
-        utility_map, surfaced_counts, null_utilities, progress, feedback_tallies, compute_citation_coverage(summaries)
+        utility_map,
+        surfaced_counts,
+        null_utilities,
+        progress,
+        feedback_tallies,
+        compute_citation_coverage(summaries),
+        compute_citation_coverage_by_surface(summaries),
     )
 
 

@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
@@ -316,6 +317,25 @@ def _parse_synth(text: str) -> tuple[str, str]:
     return title, brief
 
 
+_HTTP_CLIENT = None
+_HTTP_LOCK = threading.Lock()
+
+
+def _http_client():
+    """One keep-alive client per process: new TCP connections are what flaky NATs drop."""
+    global _HTTP_CLIENT
+    import httpx
+
+    with _HTTP_LOCK:
+        if _HTTP_CLIENT is None:
+            _HTTP_CLIENT = httpx.Client(timeout=httpx.Timeout(60, connect=5))
+        return _HTTP_CLIENT
+
+
+def _http_post(url, headers=None, json=None, timeout=None):
+    return _http_client().post(url, headers=headers, json=json, timeout=timeout)
+
+
 def _llm_complete(prompt: str, *, model: str, base_url: str, token: str) -> str:
     """POST to an Anthropic-compatible /v1/messages endpoint (works against the
     litellm proxy). Uses httpx directly — no anthropic SDK dependency.
@@ -328,18 +348,35 @@ def _llm_complete(prompt: str, *, model: str, base_url: str, token: str) -> str:
     else:
         auth = {"x-api-key": token}
 
-    resp = httpx.post(
-        f"{base_url.rstrip('/')}/v1/messages",
-        headers={**auth, "anthropic-version": "2023-06-01"},
-        json={
-            "model": model,
-            "max_tokens": 400,
-            "messages": [{"role": "user", "content": prompt}],
-        },
-        timeout=60,
-    )
+    # Connect failures are retried: a lost SYN costs seconds, a fresh connection usually works.
+    for attempt in range(3):
+        try:
+            resp = _http_post(
+                f"{base_url.rstrip('/')}/v1/messages",
+                headers={**auth, "anthropic-version": "2023-06-01"},
+                json={
+                    "model": model,
+                    "max_tokens": 400,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                timeout=httpx.Timeout(60, connect=5),
+            )
+            break
+        except (httpx.ConnectTimeout, httpx.ConnectError):
+            if attempt == 2:
+                raise
     resp.raise_for_status()
     return resp.json()["content"][0]["text"]
+
+
+def llm_config() -> tuple[str, str, str] | None:
+    """(model, base_url, token) for the Anthropic-compatible endpoint, or None when unconfigured."""
+    model = os.getenv("REKALL_PUBLISH_MODEL") or os.getenv("ANTHROPIC_MODEL")
+    base_url = os.getenv("ANTHROPIC_BASE_URL")
+    token = os.getenv("ANTHROPIC_AUTH_TOKEN") or os.getenv("ANTHROPIC_API_KEY")
+    if not (model and base_url and token):
+        return None
+    return model, base_url, token
 
 
 def _build_synth():
@@ -347,11 +384,10 @@ def _build_synth():
     via an Anthropic-compatible endpoint (honors ANTHROPIC_BASE_URL/AUTH_TOKEN,
     including the litellm proxy). Returns (None, 'raw') when unconfigured.
     """
-    model = os.getenv("REKALL_PUBLISH_MODEL") or os.getenv("ANTHROPIC_MODEL")
-    base_url = os.getenv("ANTHROPIC_BASE_URL")
-    token = os.getenv("ANTHROPIC_AUTH_TOKEN") or os.getenv("ANTHROPIC_API_KEY")
-    if not (model and base_url and token):
+    cfg = llm_config()
+    if cfg is None:
         return None, "raw"
+    model, base_url, token = cfg
 
     def synth(cluster):
         notes = "\n".join(f"- {m.get('content', '').strip()}" for m in cluster)

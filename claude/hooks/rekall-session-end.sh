@@ -41,6 +41,7 @@ import sys
 transcript_path, project, session_id, raw_limit = sys.argv[1:]
 limit = int(raw_limit)
 memory_id = re.compile(r"\d{4}-\d{2}-\d{2}_[a-z]+_[0-9a-f]+")
+page_id = re.compile(r"[a-z0-9][a-z0-9._-]*/(?:process|policy|reference|entity)/[a-z0-9][a-z0-9-]*")
 
 
 def content_blocks(entry):
@@ -103,7 +104,12 @@ recall_tool_ids = {
     for tool_id, name in tool_names.items()
     if "recall" in name.lower() or "reflex" in name.lower()
 }
-delivered = {"explicit": [], "capsule": [], "reflex": []}
+wiki_tool_ids = {
+    tool_id
+    for tool_id, name in tool_names.items()
+    if "wiki_lookup" in name or "wiki_read" in name
+}
+delivered = {"explicit": [], "capsule": [], "reflex": [], "wiki": []}
 first_recall_index = None
 first_delivery_index = None
 
@@ -151,6 +157,11 @@ for index, entry in enumerate(entries):
                     first_recall_index = index
                 if first_delivery_index is None:
                     first_delivery_index = index
+        for block in content_blocks(entry):
+            if isinstance(block, dict) and block.get("type") == "tool_result" and block.get("tool_use_id", "") in wiki_tool_ids:
+                _add("wiki", page_id.findall(result_text(block)))
+                if first_delivery_index is None:
+                    first_delivery_index = index
     elif kind == "attachment":
         text = _attachment_text(entry)
         if "REKALL REFLEX" in text:
@@ -164,7 +175,8 @@ for index, entry in enumerate(entries):
         if first_delivery_index is None:
             first_delivery_index = index
 
-all_delivered = set(delivered["explicit"]) | set(delivered["capsule"]) | set(delivered["reflex"])
+memory_delivered = set(delivered["explicit"]) | set(delivered["capsule"]) | set(delivered["reflex"])
+all_delivered = memory_delivered | set(delivered["wiki"])
 if not all_delivered:
     raise SystemExit(0)
 
@@ -177,9 +189,13 @@ for index, entry in enumerate(entries):
         if not isinstance(block, dict):
             continue
         if block.get("type") == "text":
-            found = memory_id.findall(block.get("text", ""))
+            text = block.get("text", "")
+            found = memory_id.findall(text) + page_id.findall(text)
         elif block.get("type") == "tool_use":
-            found = memory_id.findall(json.dumps(block.get("input", {})))
+            if block.get("id") in wiki_tool_ids:
+                continue  # wiki_read(page_id=X) after a lookup is navigation, not a citation
+            args = json.dumps(block.get("input", {}))
+            found = memory_id.findall(args) + page_id.findall(args)
         else:
             continue
         for mid in found:
@@ -219,7 +235,7 @@ print(
             "session_id": session_id,
             "project": project,
             "client": "claude-code",
-            "recalled_ids": sorted(all_delivered),
+            "recalled_ids": sorted(memory_delivered),
             "delivered": delivered,
             "referenced": referenced,
             "coverage": {"transcript_tail_bytes": limit, "truncated": bool(start)},

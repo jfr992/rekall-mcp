@@ -376,6 +376,15 @@ class MemoryManager:
         return self._knowledge_graph
 
     @property
+    def wiki(self):
+        """Lazily built file store under the memory dir; tests may replace it."""
+        if getattr(self, "_wiki", None) is None:
+            from memory.wiki.store import WikiStore
+
+            self._wiki = WikiStore(self.memory_dir / "wiki")
+        return self._wiki
+
+    @property
     def event_log(self) -> EventLog:
         if self._event_log is None:
             self._event_log = EventLog(self.memory_dir / "_events.jsonl")

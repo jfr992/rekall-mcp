@@ -426,6 +426,8 @@ AI:  vector search finds the memory
 | `observe(summary)` | Auto-classify and save (accepts caller `cwd` for project scope) |
 | `recall_memories(query, task_hint?, session_id?)` | Graph-enhanced semantic search; `task_hint` (2+ words) surfaces memories matching your current task first |
 | `recall_across_projects(query, current_project)` | Cross-project transfer recall across current, related, and global memory |
+| `wiki_lookup(query, project?, limit?)` | How-to and policy lookup over compiled wiki pages: default 3 sections with `validity` (`stale` = unverified, `withdrawn` = do-not-follow); emits `wiki_delivered` |
+| `wiki_read(page_id, section?, full?)` | Read one wiki section (process pages default to `steps`) or the full page; a withdrawn page returns with a warning first |
 | `close_loop(memory_id, note?)` | Close an open loop: appends a RESOLVED stamp, drops it from the Open Loops capsule bucket |
 | `save_memory(content, type)` | Manual save with explicit type |
 | `memory_detail(memory_id)` | Single memory + neighbors + scope |
@@ -482,6 +484,15 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/by-entity` | GET | Entity backlinks: memories whose `entities` contain `?entity=` (case-insensitive; `?project=&limit=`) |
 | `/api/memory/detail/{id}` | GET | Full memory + v2 blocks: relationships (both in/out directions), provenance, lifecycle, storage, warnings; `neighbors` alias for backward compat |
 | `/api/memory/kb` | GET | Typed slices |
+| `/api/wiki/index` | GET | Wiki index entries with read-time validity (`project=` filter) |
+| `/api/wiki/search` | GET | BM25 lookup over live sections, ≤3 hits, ≤600 tokens (`q=`, `project=`, `limit=`) |
+| `/api/wiki/page/{page_id}` | GET | One section (default) or `full=1`; process pages never truncated |
+| `/api/wiki/drafts` | GET | Pending drafts with `needs`, unsourced steps, redaction flags |
+| `/api/wiki/drafts/{page_id}` | GET, PUT | GET: one draft, full untrimmed body (`status: draft`) plus the same flags, 404 if none. PUT: edit |
+| `/api/wiki/drafts/{page_id}/approve` | POST | Approve: writes history, live page, index, and log |
+| `/api/wiki/drafts/{page_id}/reject` | POST | Reject with a reason |
+| `/api/wiki/candidates` | GET, POST | POST: start the classification job (`started` / `running` / `unconfigured` without a model). GET: job status, progress and cached worthy candidates (no model calls) |
+| `/api/wiki/draft` | POST | Draft a page from `memory_ids` and `page_type` (`unconfigured` without a model) |
 | `/api/memory/pressure` | GET | Pressure metrics + flagged candidates |
 | `/api/memory/resume` | GET | Resume packet for continuity |
 | `/api/memory/prune/plan` | POST | Build prune plan (plan-id, 15-min TTL, 200-deletion cap) |

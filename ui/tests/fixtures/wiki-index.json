@@ -1,0 +1,4 @@
+{"entries": [
+  {"page_id": "demo/process/rotate-key", "title": "Rotate gateway key", "type": "process", "project": "demo", "scope": {"env": "all"}, "status": "live", "last_verified": "2026-10-09", "summary": "How to rotate", "validity": "ok"},
+  {"page_id": "demo/policy/prod-go", "title": "Prod go rule", "type": "policy", "project": "demo", "scope": null, "status": "live", "last_verified": "2026-06-01", "summary": "Explicit go", "validity": "stale"}
+]}

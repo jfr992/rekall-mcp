@@ -541,6 +541,10 @@ curl -X POST http://localhost:8000/api/memory/lifecycle/backfill \
 
 The backfill is idempotent and safe to re-run.
 
+## Wiki
+
+The wiki layer (`src/memory/wiki/`) compiles worthy memories into reviewed pages of four types (process, policy, reference, entity). Agents query it with `wiki_lookup` and `wiki_read`; validity (`ok`, `stale`, `withdrawn`) is computed at read time from the page's source memories; a stale process page is withdrawn. Drafts need human approval in the cockpit `/wiki` surface before they go live. Design and rationale: `docs/superpowers/specs/2026-10-09-rekall-wiki-design.md`.
+
 ## Client adapter plane
 
 Claude Code and Codex use separate thin lifecycle adapters. Both call the same client-neutral FastMCP/REST server; neither adapter owns the other harness’s native memory:

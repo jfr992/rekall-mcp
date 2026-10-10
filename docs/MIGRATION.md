@@ -1,3 +1,32 @@
+# Migration Guide — v1.17.0 → v1.18.0 (wiki phase 1)
+
+## What's new
+
+Rekall can now turn memories into a reviewed wiki: worthy memories are classified, drafted into process, policy, reference or entity pages, and go live only after a human approves them in the cockpit. Pages are checked against their source memories on every read; no model runs on reads.
+
+- **Routes.** `GET /api/wiki/index`, `/api/wiki/search`, `/api/wiki/page/{page_id}`, `/api/wiki/drafts`, `/api/wiki/drafts/{page_id}`; `PUT /api/wiki/drafts/{page_id}`, `POST .../approve` and `.../reject`; `POST /api/wiki/draft` (paid model call, so POST); `POST /api/wiki/candidates` starts a background classification job and `GET /api/wiki/candidates` returns its status plus cached worthy candidates (no model calls).
+- **Tools.** `wiki_lookup` and `wiki_read`. Results carry `validity`; `stale` is unverified, `withdrawn` is do-not-follow.
+- **Telemetry.** Each lookup records a `wiki_delivered` event. Session summaries gain `delivered.wiki`, and the utility report counts wiki deliveries and page references.
+- **Cockpit.** New `/wiki` surface: sidebar, page view, search, drafts, candidates.
+- **Model config.** Candidates and draft use the publish config: `REKALL_PUBLISH_MODEL` (or `ANTHROPIC_MODEL`) plus `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_KEY`. Unconfigured, both routes return `{"status":"unconfigured"}`.
+- **Approve gates.** Approval is refused for `[REDACTED]` content, unsourced or zero-step process pages, and inline citations that are missing from `sources` or from the store. Draft writes are sanitized.
+- **Model calls survive flaky networks.** The shared model client (publish synthesize and the wiki) reuses one keep-alive connection, uses a 5 s connect timeout and retries connect failures twice. Classification stops after 3 consecutive failures with `model unreachable` instead of timing out on every memory.
+- **Cockpit errors are no longer masked.** Non-JSON error responses used to surface as `body stream already read`; the server's message now shows.
+- **UI builds offline.** Fonts are vendored, so `docker compose build ui` needs no network for them.
+
+## Upgrading from v1.17.0
+
+**No data migration is required.** Wiki files live under `<MEMORY_STORAGE_PATH>/wiki/` and are created on first use; existing memories are untouched.
+
+1. Upgrade the server with `uvx rekall-mcp@1.18.0`, or pull the checkout and run `docker compose up -d --build mcp ui`.
+2. Re-run `bash claude/setup/install.sh` (add `--profile <dir>` per extra profile): the provenance hook now also covers `wiki_lookup` and `wiki_read`.
+3. Re-run `bash codex/setup/install.sh`: the Codex skill gains wiki guidance and the session summary counts wiki deliveries.
+4. Optional: set `REKALL_PUBLISH_MODEL` and the Anthropic variables above to enable candidates and drafting.
+
+Rollback: install v1.17.0 and restore the installer backups. `<MEMORY_STORAGE_PATH>/wiki/` can stay or be deleted; nothing else reads it.
+
+---
+
 # Migration Guide — v1.16.0 → v1.17.0 (installers for every profile)
 
 ## What's new

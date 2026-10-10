@@ -753,3 +753,29 @@ def test_null_baseline_not_above_real_when_references_align(tmp_path):
     null = compute_null_baseline(summaries, build_universe(events), random.Random(42))
     assert real and null
     assert mean(null) <= mean(real)
+
+
+def test_citation_coverage_by_surface(tmp_path):
+    from scripts.utility_report import (
+        build_session_summaries,
+        collapse_sessions,
+        compute_citation_coverage_by_surface,
+        parse_events,
+    )
+
+    f = tmp_path / "_events.jsonl"
+    f.write_text(
+        _ss(
+            "s1",
+            "p",
+            ["a"],
+            referenced=["a", "demo/process/x"],
+            delivered={"explicit": ["a"], "wiki": ["demo/process/x", "demo/policy/y"]},
+        )
+        + "\n"
+    )
+    by = compute_citation_coverage_by_surface(
+        collapse_sessions(build_session_summaries(parse_events(f)))
+    )
+    assert by["explicit"] == {"delivered": 1, "referenced": 1, "coverage": 1.0}
+    assert by["wiki"] == {"delivered": 2, "referenced": 1, "coverage": 0.5}

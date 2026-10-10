@@ -1,24 +1,29 @@
 import type { Metadata } from "next";
-import { Newsreader, Space_Grotesk, JetBrains_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import { Providers } from "@/components/providers";
 import { CockpitShell } from "@/components/shell/cockpit-shell";
 import "./globals.css";
 
-const newsreader = Newsreader({
-  subsets: ["latin"],
-  style: ["normal", "italic"],
+// ponytail: vendored latin subsets so builds need no network; add subsets here if non-latin text appears.
+const newsreader = localFont({
+  src: [
+    { path: "./fonts/newsreader.woff2", weight: "200 800", style: "normal" },
+    { path: "./fonts/newsreader-italic.woff2", weight: "200 800", style: "italic" },
+  ],
   display: "swap",
   variable: "--font-serif",
 });
 
-const spaceGrotesk = Space_Grotesk({
-  subsets: ["latin"],
+const spaceGrotesk = localFont({
+  src: "./fonts/space-grotesk.woff2",
+  weight: "300 700",
   display: "swap",
   variable: "--font-sans",
 });
 
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ["latin"],
+const jetbrainsMono = localFont({
+  src: "./fonts/jetbrains-mono.woff2",
+  weight: "100 800",
   display: "swap",
   variable: "--font-mono",
 });

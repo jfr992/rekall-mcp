@@ -167,7 +167,7 @@ def test_session_summary_recall_edits_tests(hook_module):
         "edits_after_recall": 1,
         "test_passes_after_recall": 1,
         "client": "codex",
-        "delivered": {"explicit": ["m1", "m2"]},
+        "delivered": {"explicit": ["m1", "m2"], "wiki": []},
         "referenced": [],
         "coverage": {
             "transcript_tail_bytes": hook_module._MAX_TRANSCRIPT_BYTES,
@@ -203,7 +203,7 @@ def test_summarize_session_reports_delivered_and_referenced(hook_module):
     ]
     summary = hook_module.summarize_session({"session_id": "s1", "cwd": "/tmp/proj"}, lines)
     assert summary["client"] == "codex"
-    assert summary["delivered"] == {"explicit": [mid_a, mid_b]}
+    assert summary["delivered"] == {"explicit": [mid_a, mid_b], "wiki": []}
     assert summary["referenced"] == [mid_a]
     assert summary["recalled_ids"] == [mid_a, mid_b]
     assert summary["coverage"]["truncated"] is False
@@ -451,7 +451,7 @@ def test_session_summary_correlates_call_outputs(hook_module):
         "edits_after_recall": 1,
         "test_passes_after_recall": 1,
         "client": "codex",
-        "delivered": {"explicit": ["2026-08-23_learning_abc12345"]},
+        "delivered": {"explicit": ["2026-08-23_learning_abc12345"], "wiki": []},
         "referenced": [],
         "coverage": {
             "transcript_tail_bytes": hook_module._MAX_TRANSCRIPT_BYTES,
@@ -685,3 +685,55 @@ def test_referenced_is_subset_of_delivered_when_recalls_exceed_cap(hook_module):
     summary = hook_module.summarize_session({"session_id": "s", "cwd": "/r"}, lines)
     assert summary["referenced"] == [ids[0]]
     assert set(summary["referenced"]) <= set(summary["delivered"]["explicit"])
+
+
+def test_summarize_session_counts_wiki_pages(hook_module):
+    page = "demo/process/rotate-key"
+    lines = [
+        json.dumps(
+            {
+                "type": "tool_call",
+                "call_id": "w",
+                "tool_name": "wiki_lookup",
+                "arguments": {"query": "rotate"},
+            }
+        ),
+        json.dumps(
+            {
+                "type": "tool_result",
+                "call_id": "w",
+                "content": f"- [Rotate](wiki:{page}#steps) rev 1 · ok",
+            }
+        ),
+        json.dumps(
+            {
+                "type": "message",
+                "role": "assistant",
+                "content": [{"type": "output_text", "text": f"Per {page}, export the key."}],
+            }
+        ),
+    ]
+    summary = hook_module.summarize_session({"session_id": "s", "cwd": "/repo"}, lines)
+    assert summary["delivered"]["wiki"] == [page] and summary["referenced"] == [page]
+
+
+def test_summarize_session_wiki_read_arguments_are_not_a_reference(hook_module):
+    page = "demo/process/rotate-key"
+    lines = [
+        json.dumps(
+            {"type": "tool_call", "call_id": "w", "tool_name": "wiki_lookup", "arguments": {}}
+        ),
+        json.dumps(
+            {"type": "tool_result", "call_id": "w", "content": f"- [Rotate](wiki:{page}#steps)"}
+        ),
+        json.dumps(
+            {
+                "type": "tool_call",
+                "call_id": "r",
+                "tool_name": "wiki_read",
+                "arguments": {"page_id": page},
+            }
+        ),
+    ]
+    summary = hook_module.summarize_session({"session_id": "s", "cwd": "/repo"}, lines)
+    assert summary["delivered"]["wiki"] == [page] and summary["referenced"] == []
