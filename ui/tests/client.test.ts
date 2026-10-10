@@ -68,7 +68,7 @@ describe("fetchJson error bodies", () => {
       "fetch",
       vi.fn().mockResolvedValue(new Response("Bad Gateway", { status: 502 }))
     );
-    const err = await fetchJson("/api/x").catch((e) => e);
+    const err = (await fetchJson("/api/x").catch((e) => e)) as ApiError;
     expect(err).toBeInstanceOf(ApiError);
     expect(err.status).toBe(502);
     expect(err.body).toBe("Bad Gateway");
@@ -79,7 +79,7 @@ describe("fetchJson error bodies", () => {
       "fetch",
       vi.fn().mockResolvedValue(new Response('{"error":"nope"}', { status: 400 }))
     );
-    const err = await fetchJson("/api/x").catch((e) => e);
+    const err = (await fetchJson("/api/x").catch((e) => e)) as ApiError;
     expect(err.body).toEqual({ error: "nope" });
   });
 });
