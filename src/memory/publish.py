@@ -10,6 +10,7 @@ import hashlib
 import json
 import os
 import re
+import threading
 from collections.abc import Callable
 from pathlib import Path
 
@@ -316,6 +317,25 @@ def _parse_synth(text: str) -> tuple[str, str]:
     return title, brief
 
 
+_HTTP_CLIENT = None
+_HTTP_LOCK = threading.Lock()
+
+
+def _http_client():
+    """One keep-alive client per process: new TCP connections are what flaky NATs drop."""
+    global _HTTP_CLIENT
+    import httpx
+
+    with _HTTP_LOCK:
+        if _HTTP_CLIENT is None:
+            _HTTP_CLIENT = httpx.Client(timeout=httpx.Timeout(60, connect=5))
+        return _HTTP_CLIENT
+
+
+def _http_post(url, headers=None, json=None, timeout=None):
+    return _http_client().post(url, headers=headers, json=json, timeout=timeout)
+
+
 def _llm_complete(prompt: str, *, model: str, base_url: str, token: str) -> str:
     """POST to an Anthropic-compatible /v1/messages endpoint (works against the
     litellm proxy). Uses httpx directly — no anthropic SDK dependency.
@@ -331,7 +351,7 @@ def _llm_complete(prompt: str, *, model: str, base_url: str, token: str) -> str:
     # Connect failures are retried: a lost SYN costs seconds, a fresh connection usually works.
     for attempt in range(3):
         try:
-            resp = httpx.post(
+            resp = _http_post(
                 f"{base_url.rstrip('/')}/v1/messages",
                 headers={**auth, "anthropic-version": "2023-06-01"},
                 json={

@@ -61,7 +61,7 @@ def test_llm_complete_uses_bearer_for_oauth_tokens(monkeypatch):
             request=httpx.Request("POST", url),
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr("memory.publish._http_post", fake_post)
     _llm_complete("hi", model="m", base_url="https://api.anthropic.com", token="sk-ant-oat01-xyz")
     assert seen["Authorization"] == "Bearer sk-ant-oat01-xyz"
     assert seen["anthropic-beta"] == "oauth-2025-04-20"
@@ -83,7 +83,7 @@ def test_llm_complete_uses_x_api_key_for_api_keys(monkeypatch):
             request=httpx.Request("POST", url),
         )
 
-    monkeypatch.setattr(httpx, "post", fake_post)
+    monkeypatch.setattr("memory.publish._http_post", fake_post)
     _llm_complete("hi", model="m", base_url="https://api.anthropic.com", token="sk-ant-api03-xyz")
     assert seen["x-api-key"] == "sk-ant-api03-xyz"
     assert "Authorization" not in seen
@@ -113,7 +113,7 @@ def test_llm_complete_retries_connect_failures_with_short_connect_timeout(monkey
     from memory.publish import _llm_complete
 
     fake, calls = _flaky_post([httpx.ConnectTimeout("syn lost"), httpx.ConnectError("reset")])
-    monkeypatch.setattr(httpx, "post", fake)
+    monkeypatch.setattr("memory.publish._http_post", fake)
     assert _llm_complete("hi", model="m", base_url="https://x", token="k") == "ok"
     assert len(calls) == 3
     assert calls[0].connect == 5
@@ -126,7 +126,7 @@ def test_llm_complete_gives_up_after_three_connect_failures(monkeypatch):
     from memory.publish import _llm_complete
 
     fake, calls = _flaky_post([httpx.ConnectTimeout("x") for _ in range(5)])
-    monkeypatch.setattr(httpx, "post", fake)
+    monkeypatch.setattr("memory.publish._http_post", fake)
     with pytest.raises(httpx.ConnectTimeout):
         _llm_complete("hi", model="m", base_url="https://x", token="k")
     assert len(calls) == 3
@@ -139,7 +139,15 @@ def test_llm_complete_does_not_retry_read_timeouts(monkeypatch):
     from memory.publish import _llm_complete
 
     fake, calls = _flaky_post([httpx.ReadTimeout("slow model")])
-    monkeypatch.setattr(httpx, "post", fake)
+    monkeypatch.setattr("memory.publish._http_post", fake)
     with pytest.raises(httpx.ReadTimeout):
         _llm_complete("hi", model="m", base_url="https://x", token="k")
     assert len(calls) == 1
+
+
+def test_http_post_reuses_one_keepalive_client():
+    from memory import publish
+
+    publish._HTTP_CLIENT = None
+    first = publish._http_client()
+    assert publish._http_client() is first
