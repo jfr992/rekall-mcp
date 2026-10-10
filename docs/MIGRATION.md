@@ -1,3 +1,26 @@
+# Migration Guide — v1.18.0 → v1.18.1 (honest conflict counts)
+
+## What's new
+
+- **`contradicts` needs a model verdict.** The linker's negation heuristic labelled same-topic memories `contradicts` with no model check (123 of 182 links in the measured corpus, every sampled pair false). A negation hit now only nominates a pair; without the model's verdict the edge is `related_to`.
+- **Conflicts are counted per memory.** `count_contradicts` counted edges, and pairs stored both ways counted twice, so a single disagreement could demote a memory one tier on its own.
+- **Lifecycle backfill covers every memory.** It processed only the first 500 points; it now pages through all of them and reports `tier_changes` and the `changed` ids, so a dry run shows exactly what will move.
+- **Prune candidates are counted once.** The cockpit "Needs attention" card, the Hygiene load score and "N candidates for prune" no longer add a memory that is both low-value and stale twice (new `flagged.prune_candidates_count`).
+
+## Upgrading from v1.18.0
+
+**Run the graph migration once, from a repo checkout** (the script is not in the PyPI package). Upgrade the server (`uvx rekall-mcp@1.18.1`, or `docker compose up -d --build mcp ui`), then:
+
+1. `docker compose stop mcp` (a running server holds the graph in memory and would overwrite the file).
+2. Dry run: `uv run python scripts/migrate_unchecked_contradicts.py`
+3. Apply (writes `_graph.json.bak-<timestamp>` next to the graph first): `uv run python scripts/migrate_unchecked_contradicts.py --apply`
+4. `docker compose start mcp`
+5. Recompute tiers, since two or more `contradicts` links demote a memory one tier: Hygiene → Lifecycle backfill → Dry run, review, then Apply (or `POST /api/memory/lifecycle/backfill` with `{"dry_run": true}` first).
+
+Rollback: copy the printed backup over `_graph.json` while the server is stopped.
+
+---
+
 # Migration Guide — v1.17.0 → v1.18.0 (wiki phase 1)
 
 ## What's new

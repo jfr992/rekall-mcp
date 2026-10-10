@@ -2419,6 +2419,11 @@ async def api_memory_projects(_request):
         return _server_error(str(e))
 
 
+def _pressure_load_score(pressure: dict, *, total: int) -> float:
+    """Share of memories that are prune candidates; a memory both low-value and stale counts once."""
+    return round(len(pressure.get("candidates", [])) / max(total, 1), 4)
+
+
 @mcp.custom_route("/api/memory/pressure", methods=["GET"])
 async def api_memory_pressure(request):
     """REST API: Structured memory pressure snapshot."""
@@ -2435,10 +2440,7 @@ async def api_memory_pressure(request):
         pressure = identify_pressure(memories)
 
         total = max(len(memories), 1)
-        load_score = round(
-            (pressure.get("low_value_count", 0) + pressure.get("stale_working_count", 0)) / total,
-            4,
-        )
+        load_score = _pressure_load_score(pressure, total=total)
 
         graph_has_nodes = manager.knowledge_graph.stats()["nodes"] > 0
         conflict: list[dict] = []
@@ -2479,6 +2481,7 @@ async def api_memory_pressure(request):
                     "contradiction_count": len(conflict),
                     "disputed_count": pressure.get("disputed_count", 0),
                     "stale_candidates_count": len(stale_candidates),
+                    "prune_candidates_count": len(pressure.get("candidates", [])),
                     "stale_working": _slim(pressure.get("stale_working", [])),
                     "low_value": _slim(pressure.get("low_value", [])),
                     "conflict": _slim(conflict),

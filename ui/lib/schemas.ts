@@ -292,6 +292,7 @@ export const PressureResponseSchema = z.object({
     contradiction_count: z.number(),
     disputed_count: z.number().default(0),
     stale_candidates_count: z.number().default(0),
+    prune_candidates_count: z.number().optional(),
     stale_working: z.array(FlaggedMemorySchema).default([]),
     low_value: z.array(FlaggedMemorySchema).default([]),
     conflict: z.array(FlaggedMemorySchema).default([]),
@@ -336,6 +337,10 @@ export const BackfillReportSchema = z.object({
   skipped: z.array(z.string()),
   errors: z.array(z.object({ memory_id: z.string(), error: z.string() })),
   total: z.number(),
+  tier_changes: z.record(z.string(), z.number()).optional(),
+  changed: z
+    .array(z.object({ memory_id: z.string(), from: z.string().nullable(), to: z.string() }))
+    .optional(),
 });
 
 // ----- Resume --------------------------------------------------------------

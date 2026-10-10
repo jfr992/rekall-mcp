@@ -8,6 +8,7 @@
     "contradiction_count": 1,
     "disputed_count": 1,
     "stale_candidates_count": 1,
+    "prune_candidates_count": 12,
     "stale_working": [],
     "low_value": [],
     "conflict": [

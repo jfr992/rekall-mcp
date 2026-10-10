@@ -41,14 +41,18 @@ def _mock_embedder() -> MagicMock:
     return embedder
 
 
-def test_negation_contradicts_deterministic(tmp_path, monkeypatch):
-    """sim=0.65 + asymmetric negation near a shared concept → deterministic
-    contradicts, no key needed."""
-    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+_NEGATION_PAIR = {
+    "memory_id": "old_decision",
+    "type": "decision",
+    "content": "Use PostgreSQL for primary storage",
+    "score": 0.65,
+    "entities": ["PostgreSQL"],
+}
 
+
+def _link_negation_pair(tmp_path):
     kg = KnowledgeGraph(tmp_path / "_graph.json")
     kg.add_node("old_decision", memory_type="decision")
-
     result = auto_link(
         graph=kg,
         memory_id="new_decision",
@@ -56,22 +60,41 @@ def test_negation_contradicts_deterministic(tmp_path, monkeypatch):
         memory_type="decision",
         project="api",
         embedder=_mock_embedder(),
-        store=_mock_store(
-            [
-                {
-                    "memory_id": "old_decision",
-                    "type": "decision",
-                    "content": "Use PostgreSQL for primary storage",
-                    "score": 0.65,
-                    "entities": ["PostgreSQL"],
-                },
-            ]
-        ),
+        store=_mock_store([_NEGATION_PAIR]),
     )
+    return kg, result
+
+
+def test_negation_hit_without_llm_is_related_to(tmp_path, monkeypatch):
+    """A negation hit only nominates; with no key there is no verdict."""
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+    kg, result = _link_negation_pair(tmp_path)
+
+    assert result.relations.get("contradicts", 0) == 0
+    assert result.relations.get("related_to") == 1
+    assert kg._graph.edges["new_decision", "old_decision"]["llm_refined"] is False
+
+
+def test_negation_hit_llm_contradicts_is_refined(tmp_path, monkeypatch):
+    monkeypatch.setattr("memory.linker._llm_refine", lambda **kw: ("contradicts", True))
+
+    kg, result = _link_negation_pair(tmp_path)
 
     assert result.relations.get("contradicts") == 1
-    edges = kg.get_edges("new_decision", direction="out")
-    assert any(edge.target == "old_decision" and edge.relation == "contradicts" for edge in edges)
+    assert kg._graph.edges["new_decision", "old_decision"]["llm_refined"] is True
+
+
+def test_negation_hit_exhausted_budget_is_related_to(tmp_path, monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    mock_anthropic = MagicMock()
+    monkeypatch.setitem(sys.modules, "anthropic", mock_anthropic)
+    monkeypatch.setattr("memory.linker._MAX_LLM_REFINEMENTS_PER_SAVE", 0)
+
+    kg, result = _link_negation_pair(tmp_path)
+
+    assert result.relations.get("contradicts", 0) == 0
+    mock_anthropic.Anthropic.assert_not_called()
 
 
 def test_entity_band_no_overlap_stays_related_to(tmp_path):

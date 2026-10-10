@@ -519,8 +519,9 @@ class TestSkillContext:
 class TestIntelligenceLayer:
     """Test conflict detection and proactive summary tooling."""
 
-    def test_save_creates_contradiction_edge(self, memory_manager, mock_store):
-        """Saving a contradiction should create a `contradicts` edge."""
+    def test_save_creates_contradiction_edge(self, memory_manager, mock_store, monkeypatch):
+        """Saving a negation pair the model confirms creates a `contradicts` edge."""
+        monkeypatch.setattr("memory.linker._llm_refine", lambda **kw: ("contradicts", True))
         from memory.knowledge_graph import KnowledgeGraph
 
         memory_manager._knowledge_graph = KnowledgeGraph(memory_manager.memory_dir / "_graph.json")

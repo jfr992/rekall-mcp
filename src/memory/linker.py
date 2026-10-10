@@ -289,7 +289,13 @@ def _classify_relation(
     ``llm_refined=False``.
     """
     if _is_contradiction(new_content=new_content, cand_content=cand_content, similarity=similarity):
-        return "contradicts", False
+        # A negation hit only nominates; contradicts needs the model's verdict.
+        return _llm_refine(
+            new_content=new_content,
+            cand_content=cand_content,
+            deterministic="related_to",
+            budget=llm_budget,
+        )
 
     if similarity > _SUPERSEDES_SIMILARITY_THRESHOLD and new_type == cand_type:
         return "supersedes", False
@@ -297,8 +303,7 @@ def _classify_relation(
     # Entity band: same type, mid-range similarity, shared entities — a
     # potential conflict, but too weak as deterministic evidence (the keyless
     # repr-v2 rebuild with a contradicts default flagged 47% of the corpus).
-    # Deterministic default is related_to; contradicts needs a negation hit
-    # (handled above, >= 0.60) or an LLM verdict.
+    # Deterministic default is related_to; contradicts needs an LLM verdict.
     if (
         new_type == cand_type
         and _CONTRADICTION_SIMILARITY_THRESHOLD <= similarity < _SUPERSEDES_SIMILARITY_THRESHOLD

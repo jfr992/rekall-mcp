@@ -42,6 +42,7 @@ def manager_with_legacy_memories(tmp_path):
             return list(legacy_memories)
 
         store.scroll.side_effect = scroll_side_effect
+        store.scroll_all.side_effect = scroll_side_effect
 
         store_class.return_value = store
         embedder_class.return_value = embedder
@@ -84,8 +85,8 @@ def test_backfill_respects_project_filter(manager_with_legacy_memories):
     mgr.backfill_lifecycle(dry_run=True, project="test-project")
 
     # scroll was called with the project filter
-    mgr._store.scroll.assert_called()
-    args, kwargs = mgr._store.scroll.call_args
+    mgr._store.scroll_all.assert_called()
+    args, kwargs = mgr._store.scroll_all.call_args
     filters = kwargs.get("filters") or (args[0] if args else None)
     assert filters == {"project": "test-project"}
 
@@ -101,3 +102,20 @@ def test_backfill_report_has_required_fields(manager_with_legacy_memories):
     assert "total" in report
     assert report["dry_run"] is True
     assert report["total"] == 3
+
+
+def test_backfill_reads_every_memory_not_one_batch(manager_with_legacy_memories):
+    mgr, _ = manager_with_legacy_memories
+    mgr.backfill_lifecycle(dry_run=True)
+    mgr._store.scroll_all.assert_called()
+    mgr._store.scroll.assert_not_called()
+
+
+def test_backfill_reports_tier_changes_with_ids(manager_with_legacy_memories):
+    mgr, legacy = manager_with_legacy_memories
+    legacy[1]["tier"] = "working"  # decision with salience 0.8 -> semantic: a promotion
+    legacy[0]["tier"] = "working"  # note stays working
+    report = mgr.backfill_lifecycle(dry_run=True)
+    assert report["tier_changes"]["promoted"] >= 1
+    assert {"memory_id": "m2", "from": "working", "to": "semantic"} in report["changed"]
+    assert all(c["memory_id"] != "m1" for c in report["changed"])
