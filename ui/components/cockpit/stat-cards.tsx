@@ -1,5 +1,8 @@
+import { pruneCount } from "@/lib/pressure";
 import { MonoLabel } from "@/components/ui/mono-label";
 import type { InsightsResponse, PressureResponse } from "@/lib/schemas";
+
+type Flagged = PressureResponse["flagged"];
 
 type Props = {
   insights: InsightsResponse;
@@ -119,12 +122,6 @@ export function StatCards({ insights, pressure }: Props) {
   );
 }
 
-type Flagged = PressureResponse["flagged"];
-
-// Older servers omit prune_candidates_count; low + stale then double-counts overlap.
-function pruneCount(f: Flagged): number {
-  return f.prune_candidates_count ?? f.low_value_count + f.stale_working_count;
-}
 
 function attentionTotal(f: Flagged): number {
   return (

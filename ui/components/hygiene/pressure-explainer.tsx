@@ -1,3 +1,4 @@
+import { pruneCount } from "@/lib/pressure";
 import type { PressureResponse } from "@/lib/schemas";
 
 export function PressureExplainer({ data }: { data: PressureResponse }) {
@@ -9,8 +10,7 @@ export function PressureExplainer({ data }: { data: PressureResponse }) {
       : score < 0.5
       ? "var(--accent-warning)"
       : "var(--accent-danger)";
-  const candidateCount =
-    data.flagged.stale_working_count + data.flagged.low_value_count;
+  const candidateCount = pruneCount(data.flagged);
   return (
     <p className="text-sm text-[var(--fg-muted)]">
       This project is <span style={{ color: stateColor }}>{state}</span>.

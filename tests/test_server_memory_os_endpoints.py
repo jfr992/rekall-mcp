@@ -147,3 +147,19 @@ def test_resume_endpoint_returns_truncated_field(client):
     assert "recent" in body
     assert "important" in body
     assert "truncated" in body
+
+
+def test_pressure_load_score_counts_overlap_once():
+    from memory.pressure import identify_pressure
+    from server import _pressure_load_score
+
+    memory = {
+        "memory_id": "m",
+        "tier": "working",
+        "salience": 0.1,
+        "retention_days": 1,
+        "date": "2020-01-01",
+    }
+    pressure = identify_pressure([memory])
+    assert pressure["low_value_count"] == 1 and pressure["stale_working_count"] == 1
+    assert _pressure_load_score(pressure, total=1) == 1.0
