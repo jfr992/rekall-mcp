@@ -328,16 +328,23 @@ def _llm_complete(prompt: str, *, model: str, base_url: str, token: str) -> str:
     else:
         auth = {"x-api-key": token}
 
-    resp = httpx.post(
-        f"{base_url.rstrip('/')}/v1/messages",
-        headers={**auth, "anthropic-version": "2023-06-01"},
-        json={
-            "model": model,
-            "max_tokens": 400,
-            "messages": [{"role": "user", "content": prompt}],
-        },
-        timeout=60,
-    )
+    # Connect failures are retried: a lost SYN costs seconds, a fresh connection usually works.
+    for attempt in range(3):
+        try:
+            resp = httpx.post(
+                f"{base_url.rstrip('/')}/v1/messages",
+                headers={**auth, "anthropic-version": "2023-06-01"},
+                json={
+                    "model": model,
+                    "max_tokens": 400,
+                    "messages": [{"role": "user", "content": prompt}],
+                },
+                timeout=httpx.Timeout(60, connect=5),
+            )
+            break
+        except (httpx.ConnectTimeout, httpx.ConnectError):
+            if attempt == 2:
+                raise
     resp.raise_for_status()
     return resp.json()["content"][0]["text"]
 

@@ -87,3 +87,59 @@ def test_llm_complete_uses_x_api_key_for_api_keys(monkeypatch):
     _llm_complete("hi", model="m", base_url="https://api.anthropic.com", token="sk-ant-api03-xyz")
     assert seen["x-api-key"] == "sk-ant-api03-xyz"
     assert "Authorization" not in seen
+
+
+def _flaky_post(failures: list[Exception]):
+    import httpx
+
+    calls = []
+
+    def fake_post(url, headers=None, json=None, timeout=None):
+        calls.append(timeout)
+        if failures:
+            raise failures.pop(0)
+        return httpx.Response(
+            200,
+            json={"content": [{"type": "text", "text": "ok"}]},
+            request=httpx.Request("POST", url),
+        )
+
+    return fake_post, calls
+
+
+def test_llm_complete_retries_connect_failures_with_short_connect_timeout(monkeypatch):
+    import httpx
+
+    from memory.publish import _llm_complete
+
+    fake, calls = _flaky_post([httpx.ConnectTimeout("syn lost"), httpx.ConnectError("reset")])
+    monkeypatch.setattr(httpx, "post", fake)
+    assert _llm_complete("hi", model="m", base_url="https://x", token="k") == "ok"
+    assert len(calls) == 3
+    assert calls[0].connect == 5
+
+
+def test_llm_complete_gives_up_after_three_connect_failures(monkeypatch):
+    import httpx
+    import pytest
+
+    from memory.publish import _llm_complete
+
+    fake, calls = _flaky_post([httpx.ConnectTimeout("x") for _ in range(5)])
+    monkeypatch.setattr(httpx, "post", fake)
+    with pytest.raises(httpx.ConnectTimeout):
+        _llm_complete("hi", model="m", base_url="https://x", token="k")
+    assert len(calls) == 3
+
+
+def test_llm_complete_does_not_retry_read_timeouts(monkeypatch):
+    import httpx
+    import pytest
+
+    from memory.publish import _llm_complete
+
+    fake, calls = _flaky_post([httpx.ReadTimeout("slow model")])
+    monkeypatch.setattr(httpx, "post", fake)
+    with pytest.raises(httpx.ReadTimeout):
+        _llm_complete("hi", model="m", base_url="https://x", token="k")
+    assert len(calls) == 1
