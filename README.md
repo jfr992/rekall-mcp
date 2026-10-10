@@ -482,6 +482,13 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/by-entity` | GET | Entity backlinks: memories whose `entities` contain `?entity=` (case-insensitive; `?project=&limit=`) |
 | `/api/memory/detail/{id}` | GET | Full memory + v2 blocks: relationships (both in/out directions), provenance, lifecycle, storage, warnings; `neighbors` alias for backward compat |
 | `/api/memory/kb` | GET | Typed slices |
+| `/api/wiki/index` | GET | Wiki index entries with read-time validity (`project=` filter) |
+| `/api/wiki/search` | GET | BM25 lookup over live sections, ≤3 hits, ≤600 tokens (`q=`, `project=`, `limit=`) |
+| `/api/wiki/page/{page_id}` | GET | One section (default) or `full=1`; process pages never truncated |
+| `/api/wiki/drafts` | GET | Pending drafts with `needs`, unsourced steps, redaction flags |
+| `/api/wiki/drafts/{page_id}` | PUT, POST `/approve`, POST `/reject` | Edit, approve (history + live + index + log), reject with reason |
+| `/api/wiki/candidates` | GET | Worthiness classifier over a project's memories (`unconfigured` without a model) |
+| `/api/wiki/draft` | POST | Draft a page from `memory_ids` and `page_type` (`unconfigured` without a model) |
 | `/api/memory/pressure` | GET | Pressure metrics + flagged candidates |
 | `/api/memory/resume` | GET | Resume packet for continuity |
 | `/api/memory/prune/plan` | POST | Build prune plan (plan-id, 15-min TTL, 200-deletion cap) |

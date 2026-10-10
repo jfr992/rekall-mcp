@@ -15,6 +15,7 @@ Usage:
 """
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -1591,6 +1592,272 @@ async def api_memory_publish_status(request):
     if not job:
         return _ok({"status": "idle"})
     return _ok(job)
+
+
+# ---- wiki (phase 1) -------------------------------------------------------
+from memory.wiki.compile import classify_candidates, draft_page  # noqa: E402
+from memory.wiki.compile import make_llm as make_wiki_llm  # noqa: E402
+from memory.wiki.pages import (  # noqa: E402
+    PAGE_ID_RE,
+    Page,
+    has_redaction,
+    missing_sections,
+    split_sections,
+    token_estimate,
+    unsourced_steps,
+)
+from memory.wiki.search import search_index  # noqa: E402
+from memory.wiki.validity import compute_validity  # noqa: E402
+
+_WIKI_SECTION_BUDGET, _WIKI_FULL_BUDGET = 1500, 3000
+
+
+def _wiki_validity_fn(manager):
+    return lambda page: compute_validity(page, store=manager.store, graph=manager.knowledge_graph)
+
+
+def _wiki_page_id(request) -> str | None:
+    page_id = request.path_params.get("page_id", "")
+    return page_id if PAGE_ID_RE.match(page_id) else None
+
+
+def _wiki_header(page: Page, validity: dict) -> dict:
+    fm = page.frontmatter
+    return {
+        "page_id": page.page_id,
+        "revision": fm.get("revision"),
+        "title": fm.get("title"),
+        "type": page.type,
+        "project": page.project,
+        "scope": fm.get("scope"),
+        "status": page.status,
+        "last_verified": fm.get("last_verified"),
+        "validity": validity["validity"],
+        "validity_reasons": validity["reasons"],
+        "sources": page.sources,
+    }
+
+
+def _trim(text: str, budget: int) -> tuple[str, bool]:
+    if token_estimate(text) <= budget:
+        return text, False
+    cut = text[: budget * 4]
+    boundary = cut.rfind("\n\n")
+    return (cut[:boundary] if boundary > 0 else cut), True
+
+
+@mcp.custom_route("/api/wiki/index", methods=["GET"])
+async def api_wiki_index(request):
+    try:
+        project = _safe_project(request.query_params.get("project"))
+        manager = _get_memory_manager()
+        vf = _wiki_validity_fn(manager)
+        entries = []
+        for entry in manager.wiki.index_entries():
+            if project and entry.get("project") != project:
+                continue
+            page = manager.wiki.read(entry["page_id"], "live")
+            entry["validity"] = vf(page)["validity"] if page else "stale"
+            entries.append(entry)
+        return _ok({"entries": entries})
+    except Exception as e:
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/wiki/search", methods=["GET"])
+async def api_wiki_search(request):
+    try:
+        q = request.query_params.get("q", "")
+        project = _safe_project(request.query_params.get("project"))
+        limit = _read_int(request.query_params, "limit", 3, lo=1, hi=10)
+        manager = _get_memory_manager()
+        hits = search_index(
+            manager.wiki, q, project=project, limit=limit, validity_fn=_wiki_validity_fn(manager)
+        )
+        return _ok({"hits": hits})
+    except Exception as e:
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/wiki/page/{page_id:path}", methods=["GET"])
+async def api_wiki_page(request):
+    from starlette.responses import JSONResponse
+
+    page_id = _wiki_page_id(request)
+    if page_id is None:
+        return _bad_request("invalid page_id")
+    try:
+        manager = _get_memory_manager()
+        page = manager.wiki.read(page_id, "live")
+        if page is None:
+            return JSONResponse({"error": "not found"}, status_code=404)
+        validity = _wiki_validity_fn(manager)(page)
+        sections = split_sections(page.body)
+        ids = [s[0] for s in sections]
+        full = request.query_params.get("full", "").lower() in ("1", "true")
+        wanted = request.query_params.get("section") or (
+            "steps" if page.type == "process" else (ids[0] if ids else None)
+        )
+        if full:
+            body, over = (
+                _trim(page.body, _WIKI_FULL_BUDGET)
+                if page.type != "process"
+                else (page.body, token_estimate(page.body) > _WIKI_FULL_BUDGET)
+            )
+            section_id = None
+        else:
+            chosen = next(
+                (s for s in sections if s[0] == wanted), sections[0] if sections else ("", "", "")
+            )
+            section_id = chosen[0] or None
+            text = f"## {chosen[1]}\n{chosen[2]}" if chosen[1] else page.body
+            body, over = (
+                _trim(text, _WIKI_SECTION_BUDGET)
+                if page.type != "process"
+                else (text, token_estimate(text) > _WIKI_SECTION_BUDGET)
+            )
+        header = _wiki_header(page, validity)
+        if validity["validity"] == "withdrawn":
+            body = (
+                "> WARNING: this procedure is withdrawn: "
+                + "; ".join(validity["reasons"])
+                + "\n\n"
+                + body
+            )
+        return _ok(
+            {
+                **header,
+                "sections": ids,
+                "section_id": section_id,
+                "body": body,
+                "token_estimate": token_estimate(body),
+                "over_budget": over,
+            }
+        )
+    except Exception as e:
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/wiki/drafts", methods=["GET"])
+async def api_wiki_drafts(request):
+    try:
+        manager = _get_memory_manager()
+        drafts = [
+            {
+                "page_id": p.page_id,
+                "title": p.frontmatter.get("title"),
+                "type": p.type,
+                "project": p.project,
+                "needs": list(p.frontmatter.get("needs") or missing_sections(p)),
+                "unsourced_steps": unsourced_steps(p),
+                "has_redaction": has_redaction(p.body),
+            }
+            for p in manager.wiki.list_pages("draft")
+        ]
+        return _ok({"drafts": drafts})
+    except Exception as e:
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/wiki/drafts/{page_id:path}/approve", methods=["POST"])
+async def api_wiki_approve(request):
+    page_id = _wiki_page_id(request)
+    if page_id is None:
+        return _bad_request("invalid page_id")
+    try:
+        page = _get_memory_manager().wiki.approve(page_id)
+        return _ok({"page": page.frontmatter})
+    except ValueError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/wiki/drafts/{page_id:path}/reject", methods=["POST"])
+async def api_wiki_reject(request):
+    page_id = _wiki_page_id(request)
+    if page_id is None:
+        return _bad_request("invalid page_id")
+    try:
+        body = await request.json()
+        reason = str((body or {}).get("reason") or "").strip() or "no reason given"
+        _get_memory_manager().wiki.reject(page_id, reason)
+        return _ok({"status": "rejected"})
+    except ValueError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/wiki/drafts/{page_id:path}", methods=["PUT"])
+async def api_wiki_edit_draft(request):
+    page_id = _wiki_page_id(request)
+    if page_id is None:
+        return _bad_request("invalid page_id")
+    try:
+        body = await request.json()
+        manager = _get_memory_manager()
+        draft = manager.wiki.read(page_id, "draft")
+        if draft is None:
+            return _bad_request("no draft for page_id")
+        fm = dict(draft.frontmatter, **((body or {}).get("frontmatter") or {}), human_edited=True)
+        page = Page(frontmatter=fm, body=str((body or {}).get("body", draft.body)))
+        manager.wiki.write_draft(page)
+        return _ok({"page": page.frontmatter})
+    except Exception as e:
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/wiki/candidates", methods=["GET"])
+async def api_wiki_candidates(request):
+    try:
+        llm = make_wiki_llm()
+        if llm is None:
+            return _ok({"status": "unconfigured"})
+        project = _safe_project(request.query_params.get("project"))
+        limit = _read_int(request.query_params, "limit", 200, lo=1, hi=2000)
+        manager = _get_memory_manager()
+        cache_path = manager.wiki.root / "_cache" / "worthiness.json"
+        cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
+        points = manager.store.scroll(
+            filters={"project": project} if project else None, limit=limit
+        )
+        candidates = classify_candidates(points, llm=llm, cache=cache)
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_path.write_text(json.dumps(cache, indent=0))
+        return _ok({"candidates": candidates})
+    except Exception as e:
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/wiki/draft", methods=["POST"])
+async def api_wiki_draft(request):
+    try:
+        llm = make_wiki_llm()
+        if llm is None:
+            return _ok({"status": "unconfigured"})
+        body = await request.json()
+        ids = body.get("memory_ids") or []
+        if not isinstance(ids, list) or not ids:
+            return _bad_request("memory_ids must be a non-empty list")
+        manager = _get_memory_manager()
+        memories = manager.store.get_many(ids)
+        if not memories:
+            return _bad_request("no memories found")
+        project = _safe_project(body.get("project")) or memories[0].get("project") or "general"
+        page = draft_page(
+            memories,
+            page_type=str(body.get("page_type") or "reference"),
+            project=project,
+            title=body.get("title"),
+            llm=llm,
+        )
+        manager.wiki.write_draft(page)
+        return _ok({"page": page.frontmatter, "needs": list(page.frontmatter.get("needs") or [])})
+    except ValueError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        return _server_error(str(e))
 
 
 @mcp.custom_route("/api/memory/graph/rebuild", methods=["POST"])
