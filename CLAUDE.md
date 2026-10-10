@@ -29,7 +29,7 @@ docker compose start qdrant
 src/server.py                MCP server + REST endpoints
 src/tools/builtin/memory.py  MCP tool definitions
 src/memory/<feature>.py      Domain modules (one file per concern)
-src/memory/wiki/            Page model, store, validity, search, compile (phase 1)
+src/memory/wiki/             Page model, store, validity, search, compile (phase 1)
 src/memory/renderers/        Export-format renderers (okf.py); add one file per format
 src/core/                    Embedder, vector_store, telemetry, utils
 ui/                          Next.js cockpit (port 3333)

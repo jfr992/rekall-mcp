@@ -58,7 +58,7 @@ def _documents(store: WikiStore, project: str | None) -> list[dict]:
 def _bm25(query: list[str], docs: list[dict]) -> list[float]:
     n = len(docs)
     avg = (sum(len(d["tokens"]) for d in docs) / n) if n else 0.0
-    df = Counter()
+    df: Counter[str] = Counter()
     for d in docs:
         for t in set(d["tokens"]):
             df[t] += 1
@@ -98,7 +98,8 @@ def search_index(
         pid = d["page"].page_id
         if s > 0 and (pid not in best or s > best[pid][0]):
             best[pid] = (s, d)
-    hits, used = [], 0
+    hits: list[dict] = []
+    used = 0
     for s, d in sorted(best.values(), key=lambda x: -x[0]):
         page = d["page"]
         validity = validity_fn(page) if validity_fn else {"validity": "ok", "reasons": []}

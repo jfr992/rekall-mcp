@@ -426,7 +426,7 @@ AI:  vector search finds the memory
 | `observe(summary)` | Auto-classify and save (accepts caller `cwd` for project scope) |
 | `recall_memories(query, task_hint?, session_id?)` | Graph-enhanced semantic search; `task_hint` (2+ words) surfaces memories matching your current task first |
 | `recall_across_projects(query, current_project)` | Cross-project transfer recall across current, related, and global memory |
-| `wiki_lookup(query, project?, limit?)` | How-to and policy lookup over compiled wiki pages: up to 3 sections with `validity` (`stale` = unverified, `withdrawn` = do-not-follow); emits `wiki_delivered` |
+| `wiki_lookup(query, project?, limit?)` | How-to and policy lookup over compiled wiki pages: default 3 sections with `validity` (`stale` = unverified, `withdrawn` = do-not-follow); emits `wiki_delivered` |
 | `wiki_read(page_id, section?, full?)` | Read one wiki section (process pages default to `steps`) or the full page; a withdrawn page returns with a warning first |
 | `close_loop(memory_id, note?)` | Close an open loop: appends a RESOLVED stamp, drops it from the Open Loops capsule bucket |
 | `save_memory(content, type)` | Manual save with explicit type |

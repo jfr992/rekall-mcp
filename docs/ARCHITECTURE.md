@@ -543,7 +543,7 @@ The backfill is idempotent and safe to re-run.
 
 ## Wiki
 
-The wiki layer (`src/memory/wiki/`) compiles worthy memories into reviewed pages of four types (process, policy, reference, entity). Agents query it with `wiki_lookup` and `wiki_read`; validity (`fresh`, `stale`, `withdrawn`) is computed at read time from the page's source memories. Drafts need human approval in the cockpit `/wiki` surface before they go live. Design and rationale: `docs/superpowers/specs/2026-10-09-rekall-wiki-design.md`.
+The wiki layer (`src/memory/wiki/`) compiles worthy memories into reviewed pages of four types (process, policy, reference, entity). Agents query it with `wiki_lookup` and `wiki_read`; validity (`ok`, `stale`, `withdrawn`) is computed at read time from the page's source memories; a stale process page is withdrawn. Drafts need human approval in the cockpit `/wiki` surface before they go live. Design and rationale: `docs/superpowers/specs/2026-10-09-rekall-wiki-design.md`.
 
 ## Client adapter plane
 
