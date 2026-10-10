@@ -7,7 +7,7 @@ type Props = {
   onApprove: (pageId: string) => void;
   onReject: (pageId: string) => void;
   onOpenSource?: (memoryId: string) => void;
-  onSave?: (edit: { pageId: string; body: string; title: string; description: string }) => void;
+  onSave?: (edit: { pageId: string; body: string; title: string; description: string }) => Promise<boolean>;
   saving?: boolean;
 };
 
@@ -28,9 +28,8 @@ export function WikiDraftView({ draft, onApprove, onReject, onOpenSource, onSave
     setDescription(draft.description ?? "");
     setEditing(true);
   };
-  const save = () => {
-    onSave?.({ pageId: draft.page_id, body, title, description });
-    setEditing(false);
+  const save = async () => {
+    if (await onSave?.({ pageId: draft.page_id, body, title, description })) setEditing(false);
   };
   const blocked = draft.has_redaction || draft.unsourced_steps > 0;
   return (

@@ -86,7 +86,10 @@ export default function WikiPage() {
     );
   };
   const doSave = (v: Parameters<typeof edit.mutate>[0]) =>
-    edit.mutate(v, { onSuccess: () => toast.success("Draft saved"), onError });
+    edit.mutateAsync(v).then(
+      () => (toast.success("Draft saved"), true),
+      (e: unknown) => (onError(e), false),
+    );
   const onError = (e: unknown) => toast.error(apiErrorMessage(e));
 
   return (

@@ -1,5 +1,5 @@
 import { describe, test, expect, vi } from "vitest";
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { WikiDraftView } from "@/components/wiki/wiki-draft-view";
 import { WikiDraftDetailSchema } from "@/lib/schemas";
 import fixture from "./fixtures/wiki-draft.json";
@@ -45,5 +45,23 @@ describe("WikiDraftView", () => {
       title: "New title",
       description: "How to add trailers",
     });
+  });
+
+  test("a failed save keeps the editor open with the typed text", async () => {
+    const onSave = vi.fn().mockResolvedValue(false);
+    render(<WikiDraftView draft={draft} onApprove={() => {}} onReject={() => {}} onSave={onSave} />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    fireEvent.change(screen.getByLabelText(/^body$/i), { target: { value: "typed by hand" } });
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(onSave).toHaveBeenCalled());
+    expect(screen.getByLabelText(/^body$/i)).toHaveValue("typed by hand");
+  });
+
+  test("a successful save closes the editor", async () => {
+    const onSave = vi.fn().mockResolvedValue(true);
+    render(<WikiDraftView draft={draft} onApprove={() => {}} onReject={() => {}} onSave={onSave} />);
+    fireEvent.click(screen.getByRole("button", { name: /^edit$/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+    await waitFor(() => expect(screen.queryByLabelText(/^body$/i)).not.toBeInTheDocument());
   });
 });
