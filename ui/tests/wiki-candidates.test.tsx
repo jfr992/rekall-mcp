@@ -145,4 +145,23 @@ describe("WikiCandidates", () => {
     fireEvent.click(screen.getByRole("button", { name: /clear filters/i }));
     expect(screen.getByLabelText("Select a")).toBeInTheDocument();
   });
+
+  test("picks hidden by a filter change are not counted or drafted", () => {
+    mixed();
+    fireEvent.click(screen.getByLabelText("Select a"));
+    fireEvent.click(screen.getByLabelText("Select c"));
+    fireEvent.change(screen.getByPlaceholderText(/filter/i), { target: { value: "rotate" } });
+    expect(screen.getByText("1 selected · +1 hidden")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /^draft as process/i }));
+    expect(mutate.mock.calls[0][0]).toEqual({ memoryIds: ["a"], pageType: "process" });
+  });
+
+  test("clear filters also resets hide used, and the empty state says why", () => {
+    candidatesData = { status: "done", candidates: [cand("u", "process", { used_in: ["demo/process/p1"] })] };
+    render(<WikiCandidates project="demo" onOpenSource={onOpenSource} />);
+    expect(screen.getByText(/1 hidden as already used/i)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /clear filters/i }));
+    expect(screen.getByLabelText("Select u")).toBeInTheDocument();
+    expect(screen.getByLabelText(/hide used/i)).not.toBeChecked();
+  });
 });

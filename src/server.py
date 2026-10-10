@@ -1927,7 +1927,9 @@ async def api_wiki_candidates_status(request):
             for status in ("draft", "live"):
                 for page in manager.wiki.list_pages(status):
                     for source in page.sources:
-                        used_in.setdefault(source, []).append(page.page_id)
+                        pages = used_in.setdefault(source, [])
+                        if page.page_id not in pages:
+                            pages.append(page.page_id)
             return worthy_from_cache(points, manager.wiki.read_cache("worthiness"), used_in)
 
         status = snap.get("status", "idle")

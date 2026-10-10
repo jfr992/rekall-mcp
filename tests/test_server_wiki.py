@@ -456,3 +456,16 @@ def test_candidates_carry_project_date_used_in_and_sort_newest_first(client, mon
     tc.post("/api/wiki/drafts/demo/process/rotate-the-gateway-key/approve")
     cands = tc.get("/api/wiki/candidates?project=demo").json()["candidates"]
     assert cands[1]["used_in"] == ["demo/process/rotate-the-gateway-key"]
+
+
+def test_candidates_used_in_dedupes_a_page_with_draft_and_live_versions(client, monkeypatch):
+    tc, manager = client
+    _fake_llm(monkeypatch)
+    _classify(tc)
+    tc.post("/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"})
+    pid = "demo/process/rotate-the-gateway-key"
+    tc.post(f"/api/wiki/drafts/{pid}/approve")
+    manager.wiki.write_draft(manager.wiki.read(pid))
+    assert manager.wiki.read(pid, "draft") is not None
+    cands = tc.get("/api/wiki/candidates?project=demo").json()["candidates"]
+    assert cands[0]["used_in"] == [pid]

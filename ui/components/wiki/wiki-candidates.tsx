@@ -38,6 +38,7 @@ export function WikiCandidates({
   const clearFilters = () => {
     setText("");
     setTypeFilter(null);
+    setHideUsed(false);
   };
   const selectAllVisible = () => setPicked((prev) => new Set([...prev, ...visible.map((c) => c.memory_id)]));
   const running = isPending || data?.status === "running";
@@ -48,7 +49,9 @@ export function WikiCandidates({
       return next;
     });
 
-  const chosen = candidates.filter((c) => picked.has(c.memory_id));
+  const chosen = visible.filter((c) => picked.has(c.memory_id));
+  const hiddenPicks = picked.size - chosen.length;
+  const usedHidden = hideUsed ? candidates.filter((c) => c.used_in.length).length : 0;
   const mixedTypes = new Set(chosen.map((c) => c.page_type)).size > 1;
 
   const draftSelected = () => {
@@ -120,7 +123,9 @@ export function WikiCandidates({
       ) : null}
       {candidates.length && !visible.length ? (
         <div className="flex flex-col items-start gap-2">
-          <p className="text-sm text-[var(--fg-dim)]">No candidates match</p>
+          <p className="text-sm text-[var(--fg-dim)]">
+            No candidates match{usedHidden ? ` (${usedHidden} hidden as already used)` : ""}
+          </p>
           <button type="button" className={btn} onClick={clearFilters}>
             Clear filters
           </button>
@@ -163,19 +168,19 @@ export function WikiCandidates({
           </li>
         ))}
       </ul>
-      {chosen.length ? (
+      {picked.size ? (
         <div className="sticky bottom-0 flex flex-col gap-1 border-t border-[var(--border)] bg-[var(--bg-base)] py-2">
           {mixedTypes ? (
             <p className="text-xs text-amber-400">Select candidates of the same page type to draft them together.</p>
           ) : null}
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-[var(--fg-dim)]">{chosen.length} selected</span>
+            <span className="text-xs text-[var(--fg-dim)]">{chosen.length} selected{hiddenPicks ? ` · +${hiddenPicks} hidden` : ""}</span>
             <span className="flex gap-2">
               <button type="button" className={btn} onClick={() => setPicked(new Set())}>
                 Clear
               </button>
-              <button type="button" className={btn} disabled={mixedTypes || create.isPending} onClick={draftSelected}>
-                Draft as {mixedTypes ? "…" : chosen[0].page_type}
+              <button type="button" className={btn} disabled={!chosen.length || mixedTypes || create.isPending} onClick={draftSelected}>
+                Draft as {mixedTypes || !chosen.length ? "…" : chosen[0].page_type}
               </button>
             </span>
           </div>
