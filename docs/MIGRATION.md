@@ -33,6 +33,16 @@ version string.
 
 Rollback: restore the timestamped installer backups; nothing else changed.
 
+## Unreleased: wiki phase 1
+
+Additive; no data migration. Existing memories are untouched.
+
+- **Routes.** `GET /api/wiki/index`, `/api/wiki/search`, `/api/wiki/page/{page_id}`, `/api/wiki/drafts`, `/api/wiki/drafts/{page_id}`, `/api/wiki/candidates`; `PUT /api/wiki/drafts/{page_id}`, `POST .../approve` and `.../reject`; `POST /api/wiki/draft`.
+- **Tools.** `wiki_lookup` and `wiki_read`. Results carry `validity`; `stale` is unverified, `withdrawn` is do-not-follow.
+- **Telemetry.** Each lookup records a `wiki_delivered` event. Session summaries gain `delivered.wiki`, and the utility report counts wiki deliveries and page references.
+- **Cockpit.** New `/wiki` surface: sidebar, page view, search, drafts, candidates.
+- **Model config.** Candidates and draft use the publish config: `REKALL_PUBLISH_MODEL` (or `ANTHROPIC_MODEL`) plus `ANTHROPIC_BASE_URL` and `ANTHROPIC_AUTH_TOKEN`/`ANTHROPIC_API_KEY`. Unconfigured, both routes return `{"status":"unconfigured"}`.
+
 ---
 
 # Migration Guide — v1.15.0 → v1.16.0 (measurable memory)

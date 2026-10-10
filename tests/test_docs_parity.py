@@ -219,6 +219,16 @@ def test_v1_17_notes_document_installer_profiles():
     assert "No data migration" in latest
 
 
+def test_wiki_guidance_is_documented():
+    snippet = (REPO / "claude" / "CLAUDE.snippet.md").read_text()
+    skill = (REPO / "codex" / "skills" / "rekall-memory" / "SKILL.md").read_text()
+    latest = (REPO / "docs" / "MIGRATION.md").read_text().split("\n---\n", 1)[0]
+
+    assert "wiki_lookup" in snippet
+    assert "wiki_lookup" in skill
+    assert "wiki_delivered" in latest
+
+
 def test_v1_16_notes_document_provenance_and_citation_coverage():
     migration = (REPO / "docs" / "MIGRATION.md").read_text()
     v1_16 = migration.split("\n---\n", 2)[1]

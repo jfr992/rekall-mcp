@@ -29,6 +29,7 @@ docker compose start qdrant
 src/server.py                MCP server + REST endpoints
 src/tools/builtin/memory.py  MCP tool definitions
 src/memory/<feature>.py      Domain modules (one file per concern)
+src/memory/wiki/            Page model, store, validity, search, compile (phase 1)
 src/memory/renderers/        Export-format renderers (okf.py); add one file per format
 src/core/                    Embedder, vector_store, telemetry, utils
 ui/                          Next.js cockpit (port 3333)
@@ -56,6 +57,10 @@ The whole pattern lives end-to-end in `/api/memory/kb` (added in v1.5.0) — cop
 ## Adding a new MCP tool
 
 `src/tools/builtin/memory.py` exposes tools via the `@mcp.tool()` decorator. The tool name (the function's name) is what the user/agent invokes; the docstring becomes the tool description Claude sees. Keep descriptions short and trigger-shaped — start with "Use when ..." rather than "This function ...".
+
+## Adding a wiki page type
+
+Page types live in `PAGE_ID_RE` and `_REQUIRED` (required sections) in `src/memory/wiki/pages.py`; the matching drafting template and prompt are `_SECTION_TEMPLATES` / `DRAFT_PROMPTS` in `src/memory/wiki/compile.py`.
 
 ## Adding a new cockpit surface
 
