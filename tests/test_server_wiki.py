@@ -422,3 +422,37 @@ def test_candidates_job_read_cache_failure_sets_error(client, monkeypatch):
             break
         time.sleep(0.02)
     assert status.json()["status"] == "error" and "disk gone" in status.json()["error"]
+
+
+def test_candidates_carry_project_date_used_in_and_sort_newest_first(client, monkeypatch):
+    tc, manager = client
+    _fake_llm(monkeypatch)
+    manager.store.scroll.return_value = [
+        {
+            "memory_id": "2026-01-01_fact_a1",
+            "content": "never deploy without go",
+            "project": "demo",
+            "date": "2026-01-01",
+        },
+        {
+            "memory_id": "2026-03-05_fact_b2",
+            "content": "rotate keys monthly",
+            "project": "demo",
+            "date": "2026-03-05",
+        },
+    ]
+    _classify(tc)
+    assert (
+        tc.post(
+            "/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"}
+        ).status_code
+        == 200
+    )
+    cands = tc.get("/api/wiki/candidates?project=demo").json()["candidates"]
+    assert [c["memory_id"] for c in cands] == ["2026-03-05_fact_b2", "2026-01-01_fact_a1"]
+    assert cands[0]["project"] == "demo" and cands[0]["date"] == "2026-03-05"
+    assert cands[0]["used_in"] == []
+    assert cands[1]["used_in"] == ["demo/process/rotate-the-gateway-key"]
+    tc.post("/api/wiki/drafts/demo/process/rotate-the-gateway-key/approve")
+    cands = tc.get("/api/wiki/candidates?project=demo").json()["candidates"]
+    assert cands[1]["used_in"] == ["demo/process/rotate-the-gateway-key"]

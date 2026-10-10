@@ -103,7 +103,7 @@ def _sha(content: str) -> str:
     return hashlib.sha1(content[:4000].encode()).hexdigest()
 
 
-def _candidate(mid: str, content: str, entry: dict) -> dict:
+def _candidate(m: dict, mid: str, content: str, entry: dict, used_in: list[str]) -> dict:
     return {
         "memory_id": mid,
         "content": content,
@@ -111,10 +111,16 @@ def _candidate(mid: str, content: str, entry: dict) -> dict:
         "page_type": entry.get("page_type") or "reference",
         "scope": entry.get("scope") or {},
         "reasons": entry.get("reasons") or [],
+        "project": m.get("project") or "",
+        "date": str(m.get("date") or ""),
+        "used_in": used_in,
     }
 
 
-def worthy_from_cache(memories: list[dict], cache: dict) -> list[dict]:
+def worthy_from_cache(
+    memories: list[dict], cache: dict, used_in: dict[str, list[str]] | None = None
+) -> list[dict]:
+    used_in = used_in or {}
     worthy = []
     for m in memories:
         mid = m.get("memory_id")
@@ -127,7 +133,8 @@ def worthy_from_cache(memories: list[dict], cache: dict) -> list[dict]:
             and entry.get("content_sha") == _sha(content)
             and _gate(m, "") is None
         ):
-            worthy.append(_candidate(mid, content, entry))
+            worthy.append(_candidate(m, mid, content, entry, used_in.get(mid, [])))
+    worthy.sort(key=lambda c: c["date"], reverse=True)
     return worthy
 
 
