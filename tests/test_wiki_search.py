@@ -67,8 +67,8 @@ def test_limit_and_budget_are_enforced(store):
     from memory.wiki.search import search_index
 
     assert len(search_index(store, "rule", limit=1)) == 1
-    hits = search_index(store, "rule gateway commits", budget_tokens=20)
-    assert sum(len(h["excerpt"]) // 4 for h in hits) <= 20
+    assert len(search_index(store, "explicit expires co-author", budget_tokens=15)) == 1
+    assert len(search_index(store, "explicit expires co-author", budget_tokens=10_000)) == 3
 
 
 def test_withdrawn_pages_are_dropped(store):
@@ -94,3 +94,11 @@ def test_project_filter(store):
     from memory.wiki.search import search_index
 
     assert search_index(store, "rule", project="other") == []
+
+
+def test_sentence_final_words_match(store):
+    from memory.wiki.search import search_index
+
+    _live(store, "demo/policy/upgrade", "Upgrade note", "Plan to upgrade to v1.17.")
+    assert search_index(store, "owner")[0]["page_id"] == "demo/policy/prod-go"
+    assert search_index(store, "v1.17")[0]["page_id"] == "demo/policy/upgrade"

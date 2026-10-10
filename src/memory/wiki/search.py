@@ -5,8 +5,9 @@ from __future__ import annotations
 import math
 import re
 from collections import Counter
+from collections.abc import Callable
 
-from memory.wiki.pages import split_sections, token_estimate
+from memory.wiki.pages import Page, split_sections, token_estimate
 from memory.wiki.store import WikiStore
 
 _TOKEN_RE = re.compile(r"[a-z0-9][a-z0-9_.-]{1,}")
@@ -32,7 +33,8 @@ _K1, _B = 1.5, 0.75
 
 
 def _tokens(text: str) -> list[str]:
-    return [t for t in _TOKEN_RE.findall(text.lower()) if t not in _STOP]
+    stripped = (t.strip("._-") for t in _TOKEN_RE.findall(text.lower()))
+    return [t for t in stripped if len(t) >= 2 and t not in _STOP]
 
 
 def _documents(store: WikiStore, project: str | None) -> list[dict]:
@@ -78,7 +80,13 @@ def _bm25(query: list[str], docs: list[dict]) -> list[float]:
 
 
 def search_index(
-    store: WikiStore, query: str, *, project=None, limit=3, budget_tokens=600, validity_fn=None
+    store: WikiStore,
+    query: str,
+    *,
+    project: str | None = None,
+    limit: int = 3,
+    budget_tokens: int = 600,
+    validity_fn: Callable[[Page], dict] | None = None,
 ) -> list[dict]:
     q = _tokens(query)
     if not q:
