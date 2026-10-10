@@ -92,3 +92,72 @@ async def test_wiki_read_section_and_withdrawn_warning_first(tools):
 async def test_wiki_read_unknown_page(tools):
     registered, _ = tools
     assert "not found" in await registered["wiki_read"](page_id="demo/process/nope")
+
+
+def _write_page(manager, page_id, ptype, body, **extra):
+    fm = {
+        "title": "T " + page_id,
+        "description": "d",
+        "page_id": page_id,
+        "type": ptype,
+        "project": "demo",
+        "sources": ["2026-01-01_fact_a1"],
+        **extra,
+    }
+    manager.wiki.write_draft(Page(frontmatter=fm, body=body))
+    manager.wiki.approve(page_id)
+
+
+@pytest.mark.asyncio
+async def test_wiki_read_trims_non_process_full_page(tools):
+    registered, manager = tools
+    paras = "\n\n".join(f"paragraph {i} " + "x" * 190 for i in range(100))
+    body = "## Facts {#facts}\n" + paras + "\n## Sources {#sources}\n[source: 2026-01-01_fact_a1]\n"
+    _write_page(manager, "demo/reference/big", "reference", body)
+    out = await registered["wiki_read"](page_id="demo/reference/big", full=True)
+    assert len(out) // 4 <= 3100 and len(body) // 4 > 4000 and "paragraph 0" in out
+
+
+@pytest.mark.asyncio
+async def test_wiki_read_never_truncates_process(tools):
+    registered, manager = tools
+    steps = "\n".join(
+        f"{i}. step-{i} " + "y" * 190 + " [source: 2026-01-01_fact_a1]" for i in range(1, 40)
+    )
+    body = BODY.replace("1. export key [source: 2026-01-01_fact_a1]", steps)
+    _write_page(manager, "demo/process/long", "process", body)
+    out = await registered["wiki_read"](page_id="demo/process/long")
+    assert all(f"step-{i} " in out for i in range(1, 40))
+    assert out.splitlines()[-1].startswith("> NOTE: over budget (") and out.endswith(
+        "read by section"
+    )
+
+
+@pytest.mark.asyncio
+async def test_wiki_read_full_and_named_section(tools):
+    registered, _ = tools
+    full = await registered["wiki_read"](page_id="demo/process/rotate-key", full=True)
+    assert "## When" in full and "## Rollback" in full
+    verify = await registered["wiki_read"](page_id="demo/process/rotate-key", section="verify")
+    assert "curl 200" in verify and "export key" not in verify
+
+
+@pytest.mark.asyncio
+async def test_wiki_lookup_attribution_never_uses_backend_cwd(tools):
+    registered, manager = tools
+    await registered["wiki_lookup"](query="rotate gateway key")
+    assert manager.record_event.call_args.kwargs["project"] == "general"
+    await registered["wiki_lookup"](query="rotate gateway key", project="demo")
+    assert manager.record_event.call_args.kwargs["project"] == "demo"
+
+
+@pytest.mark.asyncio
+async def test_wiki_lookup_limit_is_clamped(tools, monkeypatch):
+    import memory.wiki.search as search
+
+    registered, _ = tools
+    seen = []
+    monkeypatch.setattr(search, "search_index", lambda *a, **kw: seen.append(kw["limit"]) or [])
+    await registered["wiki_lookup"](query="x", limit=50)
+    await registered["wiki_lookup"](query="x", limit=0)
+    assert seen == [10, 1]

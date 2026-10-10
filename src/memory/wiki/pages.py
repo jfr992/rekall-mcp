@@ -142,3 +142,14 @@ def unsourced_steps(page: Page) -> int:
 
 def token_estimate(text: str) -> int:
     return len(text) // 4
+
+
+SECTION_BUDGET, FULL_BUDGET = 1500, 3000
+
+
+def trim_to_budget(text: str, budget: int) -> tuple[str, bool]:
+    if token_estimate(text) <= budget:
+        return text, False
+    cut = text[: budget * 4]
+    boundary = cut.rfind("\n\n")
+    return (cut[:boundary] if boundary > 0 else cut), True

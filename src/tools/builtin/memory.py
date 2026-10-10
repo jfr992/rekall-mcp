@@ -654,12 +654,10 @@ class OptimizedMemoryTools(BaseToolProvider):
                     f"{h['validity']}{reasons} · verified {h['last_verified']}\n  {h['excerpt']}"
                 )
             text = "\n".join(lines)
-            scope = self._get_current_scope(
-                project=project, cwd=cwd, agent=agent, session_id=session_id
-            )
+            attributed = project or (ScopeDetector.detect(cwd=cwd).project if cwd else "general")
             m.record_event(
                 event_type="wiki_delivered",
-                project=scope.project,
+                project=attributed,
                 agent=agent or "unknown",
                 source="mcp",
                 memory_ids=[],
@@ -696,7 +694,13 @@ class OptimizedMemoryTools(BaseToolProvider):
                 session_id: Your session id, for attribution
                 agent: Your agent name (claude-code, codex)
             """
-            from memory.wiki.pages import split_sections
+            from memory.wiki.pages import (
+                FULL_BUDGET,
+                SECTION_BUDGET,
+                split_sections,
+                token_estimate,
+                trim_to_budget,
+            )
             from memory.wiki.validity import compute_validity
 
             m = self.manager
@@ -709,10 +713,14 @@ class OptimizedMemoryTools(BaseToolProvider):
                 "steps" if page.type == "process" else (sections[0][0] if sections else None)
             )
             if full or not sections:
-                body, section_id = page.body, None
+                text, section_id, budget = page.body, None, FULL_BUDGET
             else:
                 chosen = next((s for s in sections if s[0] == wanted), sections[0])
-                body, section_id = f"## {chosen[1]}\n{chosen[2]}", chosen[0]
+                text, section_id, budget = f"## {chosen[1]}\n{chosen[2]}", chosen[0], SECTION_BUDGET
+            if page.type == "process":
+                body, over = text, token_estimate(text) > budget
+            else:
+                body, over = trim_to_budget(text, budget)
             header = (
                 f"# {page.frontmatter.get('title')} ({page.page_id} rev "
                 f"{page.frontmatter.get('revision')}) · {validity['validity']}"
@@ -724,13 +732,12 @@ class OptimizedMemoryTools(BaseToolProvider):
                     + "\n"
                     + body
                 )
+            if over and page.type == "process":
+                body += f"\n> NOTE: over budget ({token_estimate(text)} tokens); read by section"
             text = f"{header}\n{body}"
-            scope = self._get_current_scope(
-                project=page.project, cwd=cwd, agent=agent, session_id=session_id
-            )
             m.record_event(
                 event_type="wiki_delivered",
-                project=scope.project,
+                project=page.project,
                 agent=agent or "unknown",
                 source="mcp",
                 memory_ids=[],

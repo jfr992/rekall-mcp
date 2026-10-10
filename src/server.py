@@ -1597,18 +1597,19 @@ async def api_memory_publish_status(request):
 from memory.wiki.compile import classify_candidates, draft_page  # noqa: E402
 from memory.wiki.compile import make_llm as make_wiki_llm  # noqa: E402
 from memory.wiki.pages import (  # noqa: E402
+    FULL_BUDGET,
     PAGE_ID_RE,
+    SECTION_BUDGET,
     Page,
     has_redaction,
     missing_sections,
     split_sections,
     token_estimate,
+    trim_to_budget,
     unsourced_steps,
 )
 from memory.wiki.search import search_index  # noqa: E402
 from memory.wiki.validity import compute_validity  # noqa: E402
-
-_WIKI_SECTION_BUDGET, _WIKI_FULL_BUDGET = 1500, 3000
 
 
 def _wiki_validity_fn(manager):
@@ -1646,14 +1647,6 @@ def _wiki_refusal(e: ValueError):
 
 
 _WIKI_EDITABLE_FM = ("title", "description", "scope", "tags", "sidebar_position", "confidence")
-
-
-def _trim(text: str, budget: int) -> tuple[str, bool]:
-    if token_estimate(text) <= budget:
-        return text, False
-    cut = text[: budget * 4]
-    boundary = cut.rfind("\n\n")
-    return (cut[:boundary] if boundary > 0 else cut), True
 
 
 @mcp.custom_route("/api/wiki/index", methods=["GET"])
@@ -1710,9 +1703,9 @@ async def api_wiki_page(request):
         )
         if full:
             body, over = (
-                _trim(page.body, _WIKI_FULL_BUDGET)
+                trim_to_budget(page.body, FULL_BUDGET)
                 if page.type != "process"
-                else (page.body, token_estimate(page.body) > _WIKI_FULL_BUDGET)
+                else (page.body, token_estimate(page.body) > FULL_BUDGET)
             )
             section_id = None
         else:
@@ -1722,9 +1715,9 @@ async def api_wiki_page(request):
             section_id = chosen[0] or None
             text = f"## {chosen[1]}\n{chosen[2]}" if chosen[1] else page.body
             body, over = (
-                _trim(text, _WIKI_SECTION_BUDGET)
+                trim_to_budget(text, SECTION_BUDGET)
                 if page.type != "process"
-                else (text, token_estimate(text) > _WIKI_SECTION_BUDGET)
+                else (text, token_estimate(text) > SECTION_BUDGET)
             )
         header = _wiki_header(page, validity)
         if validity["validity"] == "withdrawn":
