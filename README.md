@@ -491,7 +491,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/wiki/drafts/{page_id}` | GET, PUT | GET: one draft, full untrimmed body (`status: draft`) plus the same flags, 404 if none. PUT: edit |
 | `/api/wiki/drafts/{page_id}/approve` | POST | Approve: writes history, live page, index, and log |
 | `/api/wiki/drafts/{page_id}/reject` | POST | Reject with a reason |
-| `/api/wiki/candidates` | POST | Worthiness classifier over a project's memories (`unconfigured` without a model) |
+| `/api/wiki/candidates` | GET, POST | POST: start the classification job (`started` / `running` / `unconfigured` without a model). GET: job status, progress and cached worthy candidates (no model calls) |
 | `/api/wiki/draft` | POST | Draft a page from `memory_ids` and `page_type` (`unconfigured` without a model) |
 | `/api/memory/pressure` | GET | Pressure metrics + flagged candidates |
 | `/api/memory/resume` | GET | Resume packet for continuity |

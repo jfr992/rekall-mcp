@@ -87,39 +87,82 @@ def _classify(content: str, llm: Callable[[str], str], sha: str) -> dict:
     }
 
 
-def classify_candidates(
-    memories: list[dict], *, llm: Callable[[str], str], cache: dict
-) -> list[dict]:
+class ModelUnreachable(RuntimeError):
+    pass
+
+
+def _gate(m: dict, sha: str) -> dict | None:
+    if m.get("disputed"):
+        return {"verdict": "skip", "reasons": ["disputed"], "content_sha": sha}
+    if has_redaction(str(m.get("content") or "")):
+        return {"verdict": "skip", "reasons": ["redacted content"], "content_sha": sha}
+    return None
+
+
+def _sha(content: str) -> str:
+    return hashlib.sha1(content[:4000].encode()).hexdigest()
+
+
+def _candidate(mid: str, content: str, entry: dict) -> dict:
+    return {
+        "memory_id": mid,
+        "content": content,
+        "question": entry.get("question"),
+        "page_type": entry.get("page_type") or "reference",
+        "scope": entry.get("scope") or {},
+        "reasons": entry.get("reasons") or [],
+    }
+
+
+def worthy_from_cache(memories: list[dict], cache: dict) -> list[dict]:
     worthy = []
     for m in memories:
         mid = m.get("memory_id")
         content = str(m.get("content") or "")
         if not mid:
             continue
-        sha = hashlib.sha1(content[:4000].encode()).hexdigest()
-        if m.get("disputed"):
-            cache[mid] = {"verdict": "skip", "reasons": ["disputed"], "content_sha": sha}
-        elif has_redaction(content):
-            cache[mid] = {"verdict": "skip", "reasons": ["redacted content"], "content_sha": sha}
-        elif cache.get(mid, {}).get("content_sha") != sha:
-            try:
-                cache[mid] = _classify(content, llm, sha)
-            except Exception as e:
-                logger.warning("wiki classify failed for %s, skipping: %s", mid, e)
-                continue
-        entry = cache[mid]
-        if entry.get("verdict") == "worthy":
-            worthy.append(
-                {
-                    "memory_id": mid,
-                    "content": content,
-                    "question": entry.get("question"),
-                    "page_type": entry.get("page_type") or "reference",
-                    "scope": entry.get("scope") or {},
-                    "reasons": entry.get("reasons") or [],
-                }
-            )
+        entry = cache.get(mid, {})
+        if (
+            entry.get("verdict") == "worthy"
+            and entry.get("content_sha") == _sha(content)
+            and _gate(m, "") is None
+        ):
+            worthy.append(_candidate(mid, content, entry))
     return worthy
+
+
+def classify_candidates(
+    memories: list[dict],
+    *,
+    llm: Callable[[str], str],
+    cache: dict,
+    max_consecutive_failures: int = 3,
+    progress: Callable[[int, int], None] | None = None,
+) -> list[dict]:
+    failures = 0
+    total = len(memories)
+    for done, m in enumerate(memories, 1):
+        mid = m.get("memory_id")
+        content = str(m.get("content") or "")
+        sha = _sha(content)
+        if mid:
+            gated = _gate(m, sha)
+            if gated:
+                cache[mid] = gated
+            elif cache.get(mid, {}).get("content_sha") != sha:
+                try:
+                    cache[mid] = _classify(content, llm, sha)
+                    failures = 0
+                except Exception as e:
+                    logger.warning("wiki classify failed for %s, skipping: %s", mid, e)
+                    failures += 1
+                    if failures >= max_consecutive_failures:
+                        raise ModelUnreachable(
+                            f"model unreachable: {failures} consecutive failures ({e})"
+                        ) from e
+        if progress:
+            progress(done, total)
+    return worthy_from_cache(memories, cache)
 
 
 def draft_page(

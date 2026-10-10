@@ -3,6 +3,8 @@
 import hashlib
 import json
 
+import pytest
+
 
 def _sha(content):
     return hashlib.sha1(content[:4000].encode()).hexdigest()
@@ -196,3 +198,79 @@ def test_classify_sanitizes_model_fields():
     cache = {}
     out = classify_candidates([_mem("2026-01-01_fact_a1", "x")], llm=lambda p: raw, cache=cache)
     assert out[0]["scope"] == {} and out[0]["reasons"] == [] and out[0]["question"] is None
+
+
+def _failing_llm(calls):
+    def llm(prompt):
+        calls.append(prompt)
+        raise RuntimeError("timed out")
+
+    return llm
+
+
+def test_classify_breaker_stops_after_consecutive_failures():
+    from memory.wiki.compile import ModelUnreachable, classify_candidates
+
+    calls = []
+    cache = {}
+    mems = [_mem(f"2026-01-01_fact_a{i}", f"rule {i}") for i in range(10)]
+    with pytest.raises(ModelUnreachable, match="model unreachable: 3 consecutive failures"):
+        classify_candidates(mems, llm=_failing_llm(calls), cache=cache)
+    assert len(calls) == 3
+
+
+def test_classify_success_resets_the_failure_count():
+    from memory.wiki.compile import classify_candidates
+
+    n = []
+    ok = json.dumps({"verdict": "skip", "reasons": []})
+
+    def llm(prompt):
+        n.append(1)
+        if len(n) in (1, 2, 4, 5):
+            raise RuntimeError("flap")
+        return ok
+
+    mems = [_mem(f"2026-01-01_fact_a{i}", f"rule {i}") for i in range(6)]
+    classify_candidates(mems, llm=llm, cache={})
+    assert len(n) == 6
+
+
+def test_classify_reports_progress_to_total():
+    from memory.wiki.compile import classify_candidates
+
+    seen = []
+    mems = [_mem(f"2026-01-01_fact_a{i}", f"rule {i}") for i in range(3)]
+    classify_candidates(
+        mems,
+        llm=lambda p: json.dumps({"verdict": "skip", "reasons": []}),
+        cache={},
+        progress=lambda d, t: seen.append((d, t)),
+    )
+    assert seen[-1] == (3, 3)
+
+
+def test_worthy_from_cache_makes_no_model_calls_and_applies_gates():
+    from memory.wiki.compile import worthy_from_cache
+
+    worthy = {
+        "verdict": "worthy",
+        "question": "q",
+        "page_type": "policy",
+        "scope": {},
+        "reasons": [],
+    }
+    cache = {
+        "2026-01-01_fact_a1": {**worthy, "content_sha": _sha("x")},
+        "2026-01-02_fact_b2": {**worthy, "content_sha": _sha("old")},
+        "2026-01-03_fact_c3": {**worthy, "content_sha": _sha("z")},
+    }
+    out = worthy_from_cache(
+        [
+            _mem("2026-01-01_fact_a1", "x"),
+            _mem("2026-01-02_fact_b2", "changed"),
+            _mem("2026-01-03_fact_c3", "z", disputed=True),
+        ],
+        cache,
+    )
+    assert [o["memory_id"] for o in out] == ["2026-01-01_fact_a1"]

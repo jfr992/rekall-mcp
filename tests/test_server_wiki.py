@@ -1,6 +1,8 @@
 """REST contract for the wiki routes plus the phase-1 lifecycle (spec: Read path, Pipeline)."""
 
 import json
+import threading
+import time
 from unittest.mock import MagicMock
 
 import pytest
@@ -29,7 +31,21 @@ def client(monkeypatch, tmp_path):
     ]
     manager.knowledge_graph.get_edges.return_value = []
     monkeypatch.setattr("memory.singleton._instance", manager)
+    server._WIKI_CLASSIFY_JOBS.clear()
     return TestClient(server.mcp.streamable_http_app()), manager
+
+
+def _classify(tc, project="demo"):
+    assert tc.post("/api/wiki/candidates", json={"project": project}).json()["status"] in (
+        "started",
+        "running",
+    )
+    for _ in range(200):
+        r = tc.get(f"/api/wiki/candidates?project={project}").json()
+        if r["status"] != "running":
+            return r
+        time.sleep(0.02)
+    raise AssertionError("classify job did not finish")
 
 
 def _fake_llm(monkeypatch, body=PROCESS_BODY, title="Rotate the gateway key"):
@@ -70,7 +86,7 @@ def test_candidates_and_draft_are_unconfigured_without_llm(client, monkeypatch):
 def test_lifecycle_candidates_draft_approve_search_read_and_stale(client, monkeypatch):
     tc, manager = client
     _fake_llm(monkeypatch)
-    cands = tc.post("/api/wiki/candidates", json={"project": "demo"}).json()["candidates"]
+    cands = _classify(tc)["candidates"]
     assert cands[0]["memory_id"] == "2026-01-01_fact_a1" and cands[0]["page_type"] == "process"
     r = tc.post(
         "/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"}
@@ -152,7 +168,7 @@ def test_model_calls_run_off_the_event_loop_thread(client, monkeypatch):
 
     loop_thread = []
     monkeypatch.setattr("server.make_wiki_llm", factory)
-    tc.post("/api/wiki/candidates", json={"project": "demo"})
+    _classify(tc)
     tc.post("/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"})
     assert len(seen) == 2 and loop_thread[0] not in seen
 
@@ -197,10 +213,70 @@ def test_get_draft_returns_full_body_with_flags_and_404(client, monkeypatch):
     assert tc.get(f"/api/wiki/drafts/{pid}").status_code == 404
 
 
-def test_candidates_get_is_405_post_only(client, monkeypatch):
+def test_candidates_get_never_calls_the_model_and_returns_cached_worthy(client, monkeypatch):
     tc, _ = client
     _fake_llm(monkeypatch)
-    assert tc.get("/api/wiki/candidates?project=demo").status_code == 405
+    _classify(tc)
+
+    def boom(prompt):
+        raise AssertionError("GET must not call the model")
+
+    monkeypatch.setattr("server.make_wiki_llm", lambda: boom)
+    r = tc.get("/api/wiki/candidates?project=demo").json()
+    assert r["status"] == "done"
+    assert [c["memory_id"] for c in r["candidates"]] == ["2026-01-01_fact_a1"]
+
+
+def test_candidates_get_idle_with_empty_cache(client, monkeypatch):
+    tc, _ = client
+    _fake_llm(monkeypatch)
+    r = tc.get("/api/wiki/candidates?project=demo").json()
+    assert r["status"] == "idle" and r["candidates"] == []
+
+
+def test_candidates_get_unconfigured_without_llm(client, monkeypatch):
+    tc, _ = client
+    monkeypatch.setattr("server.make_wiki_llm", lambda: None)
+    assert tc.get("/api/wiki/candidates?project=demo").json()["status"] == "unconfigured"
+
+
+def test_candidates_post_starts_then_reports_running(client, monkeypatch):
+    tc, _ = client
+    gate, entered = threading.Event(), threading.Event()
+
+    def llm(prompt):
+        entered.set()
+        gate.wait(5)
+        return json.dumps({"verdict": "skip", "reasons": []})
+
+    monkeypatch.setattr("server.make_wiki_llm", lambda: llm)
+    assert tc.post("/api/wiki/candidates", json={"project": "demo"}).json() == {"status": "started"}
+    assert entered.wait(5)
+    second = tc.post("/api/wiki/candidates", json={"project": "demo"}).json()
+    assert second["status"] == "running" and second["total"] == 1
+    assert tc.get("/api/wiki/candidates?project=demo").json()["status"] == "running"
+    gate.set()
+    for _ in range(200):
+        if tc.get("/api/wiki/candidates?project=demo").json()["status"] == "done":
+            break
+        time.sleep(0.02)
+    else:
+        raise AssertionError("job never finished")
+
+
+def test_candidates_job_error_carries_model_unreachable(client, monkeypatch):
+    tc, manager = client
+    manager.store.scroll.return_value = [
+        {"memory_id": f"2026-01-01_fact_a{i}", "content": f"rule {i}", "project": "demo"}
+        for i in range(5)
+    ]
+
+    def llm(prompt):
+        raise RuntimeError("timed out")
+
+    monkeypatch.setattr("server.make_wiki_llm", lambda: llm)
+    r = _classify(tc)
+    assert r["status"] == "error" and "model unreachable" in r["error"]
 
 
 def test_candidates_partial_failure_keeps_and_caches_earlier_verdicts(client, monkeypatch):
@@ -218,9 +294,9 @@ def test_candidates_partial_failure_keeps_and_caches_earlier_verdicts(client, mo
         return json.dumps({"verdict": "worthy", "page_type": "policy", "reasons": []})
 
     monkeypatch.setattr("server.make_wiki_llm", lambda: llm)
-    r = tc.post("/api/wiki/candidates", json={"project": "demo"})
-    assert r.status_code == 200
-    assert [c["memory_id"] for c in r.json()["candidates"]] == [
+    r = _classify(tc)
+    assert r["status"] == "done"
+    assert [c["memory_id"] for c in r["candidates"]] == [
         "2026-01-01_fact_a1",
         "2026-01-01_fact_a3",
     ]

@@ -1594,7 +1594,12 @@ async def api_memory_publish_status(request):
 
 
 # ---- wiki (phase 1) -------------------------------------------------------
-from memory.wiki.compile import classify_candidates, draft_page, page_id_for  # noqa: E402
+from memory.wiki.compile import (  # noqa: E402
+    classify_candidates,
+    draft_page,
+    page_id_for,
+    worthy_from_cache,
+)
 from memory.wiki.compile import make_llm as make_wiki_llm  # noqa: E402
 from memory.wiki.pages import (  # noqa: E402
     FULL_BUDGET,
@@ -1852,8 +1857,13 @@ async def api_wiki_edit_draft(request):
         return _server_error(str(e))
 
 
+_WIKI_CLASSIFY_JOBS: dict[str, dict] = {}
+
+
 @mcp.custom_route("/api/wiki/candidates", methods=["POST"])
 async def api_wiki_candidates(request):
+    import threading
+
     try:
         llm = make_wiki_llm()
         if llm is None:
@@ -1861,20 +1871,63 @@ async def api_wiki_candidates(request):
         body = await request.json()
         project = _safe_project((body or {}).get("project"))
         limit = _read_int(body or {}, "limit", 200, lo=1, hi=2000)
+        key = project or "__all__"
+        job = _WIKI_CLASSIFY_JOBS.get(key)
+        if job and job.get("status") == "running":
+            return _ok({"status": "running", "done": job["done"], "total": job["total"]})
         manager = _get_memory_manager()
+        _WIKI_CLASSIFY_JOBS[key] = job = {"status": "running", "done": 0, "total": 0}
 
-        def work():
+        def _progress(done, total):
+            job["done"], job["total"] = done, total
+
+        def _run():
             cache = manager.wiki.read_cache("worthiness")
-            points = manager.store.scroll(
-                filters={"project": project} if project else None, limit=limit
-            )
             try:
-                return classify_candidates(points, llm=llm, cache=cache)
+                points = manager.store.scroll(
+                    filters={"project": project} if project else None, limit=limit
+                )
+                job["total"] = len(points)
+                classify_candidates(points, llm=llm, cache=cache, progress=_progress)
+                job["status"] = "done"
+            except Exception as e:  # noqa: BLE001
+                logger.error(f"Wiki classify job failed for {key}: {e}")
+                job["status"] = "error"
+                job["error"] = str(e)
             finally:
                 manager.wiki.write_cache("worthiness", cache)
 
-        candidates = await asyncio.to_thread(work)
-        return _ok({"candidates": candidates})
+        threading.Thread(target=_run, daemon=True).start()
+        return _ok({"status": "started"})
+    except Exception as e:
+        return _server_error(str(e))
+
+
+@mcp.custom_route("/api/wiki/candidates", methods=["GET"])
+async def api_wiki_candidates_status(request):
+    try:
+        project = _safe_project(request.query_params.get("project"))
+        job = _WIKI_CLASSIFY_JOBS.get(project or "__all__")
+        manager = _get_memory_manager()
+
+        def work():
+            points = manager.store.scroll(
+                filters={"project": project} if project else None, limit=2000
+            )
+            return worthy_from_cache(points, manager.wiki.read_cache("worthiness"))
+
+        status = job["status"] if job else "idle"
+        if status == "idle" and make_wiki_llm() is None:
+            status = "unconfigured"
+        return _ok(
+            {
+                **{k: v for k, v in (job or {}).items() if k != "status"},
+                "status": status,
+                "done": (job or {}).get("done", 0),
+                "total": (job or {}).get("total", 0),
+                "candidates": await asyncio.to_thread(work),
+            }
+        )
     except Exception as e:
         return _server_error(str(e))
 
