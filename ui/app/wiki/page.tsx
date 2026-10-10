@@ -178,7 +178,7 @@ export default function WikiPage() {
               onOpen={openDraft}
             />
           ) : (
-            <WikiCandidates project={project} />
+            <WikiCandidates project={project} onOpenSource={setInspecting} />
           )}
         </aside>
       </div>

@@ -590,6 +590,9 @@ export const WikiCandidateSchema = z.object({
   page_type: z.string(),
   scope: z.record(z.any()).nullable().optional(),
   reasons: z.array(z.string()),
+  project: z.string().default(""),
+  date: z.string().default(""),
+  used_in: z.array(z.string()).default([]),
 });
 export const WikiCandidatesSchema = z.object({
   status: z.enum(["idle", "running", "done", "error", "unconfigured"]),
