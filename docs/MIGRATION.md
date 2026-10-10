@@ -9,7 +9,7 @@
 
 ## Upgrading from v1.18.0
 
-**Run the graph migration once.** Upgrade the server (`uvx rekall-mcp@1.18.1`, or `docker compose up -d --build mcp ui`), then:
+**Run the graph migration once, from a repo checkout** (the script is not in the PyPI package). Upgrade the server (`uvx rekall-mcp@1.18.1`, or `docker compose up -d --build mcp ui`), then:
 
 1. `docker compose stop mcp` (a running server holds the graph in memory and would overwrite the file).
 2. Dry run: `uv run python scripts/migrate_unchecked_contradicts.py`
