@@ -69,3 +69,21 @@ def test_stale_process_is_withdrawn():
 
     store, graph = _env([{"memory_id": SRC, "disputed": True}], {})
     assert compute_validity(_page("process"), store=store, graph=graph)["validity"] == "withdrawn"
+
+
+def test_page_without_sources_is_stale():
+    from memory.wiki.validity import compute_validity
+
+    store, graph = _env([], {})
+    out = compute_validity(_page(sources=()), store=store, graph=graph)
+    assert out == {"validity": "stale", "reasons": ["no sources"]}
+    out = compute_validity(_page("process", sources=()), store=store, graph=graph)
+    assert out == {"validity": "withdrawn", "reasons": ["no sources"]}
+
+
+def test_duplicate_sources_do_not_repeat_reasons():
+    from memory.wiki.validity import compute_validity
+
+    store, graph = _env([{"memory_id": SRC, "disputed": True}], {})
+    out = compute_validity(_page(sources=(SRC, SRC)), store=store, graph=graph)
+    assert out["reasons"] == [f"source {SRC} disputed"]

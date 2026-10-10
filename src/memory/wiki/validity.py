@@ -7,7 +7,9 @@ from memory.wiki.pages import Page
 
 def compute_validity(page: Page, *, store, graph) -> dict:
     reasons: list[str] = []
-    sources = page.sources
+    sources = list(dict.fromkeys(page.sources))
+    if not sources:
+        reasons.append("no sources")
     found = {p.get("memory_id"): p for p in (store.get_many(sources) if sources else [])}
     for mid in sources:
         point = found.get(mid)
