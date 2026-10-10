@@ -25,6 +25,19 @@ Rekall can now turn memories into a reviewed wiki: worthy memories are classifie
 
 Rollback: install v1.17.0 and restore the installer backups. `<MEMORY_STORAGE_PATH>/wiki/` can stay or be deleted; nothing else reads it.
 
+## Unreleased
+
+**False `contradicts` links.** The linker's negation heuristic used to label same-topic memories `contradicts` with no model check (234 false conflicts in the measured corpus), inflating the cockpit "Needs attention" card, the inspector banner and the Continuity "Unresolved" list. A negation hit now only nominates a pair: `contradicts` needs the model's verdict, otherwise the edge is `related_to`. The card also stops double-counting memories that are both low-value and stale (new `flagged.prune_candidates_count`).
+
+Relabel existing unchecked edges (weight, created and auto are kept; `llm_refined: true` edges stay):
+
+1. `docker compose stop mcp` (a running server holds the graph in memory and would overwrite the file).
+2. Dry run: `uv run python scripts/migrate_unchecked_contradicts.py`
+3. Apply (writes `_graph.json.bak-<timestamp>` next to the graph first): `uv run python scripts/migrate_unchecked_contradicts.py --apply`
+4. `docker compose start mcp`
+
+Rollback: copy the printed backup over `_graph.json` while the server is stopped.
+
 ---
 
 # Migration Guide — v1.16.0 → v1.17.0 (installers for every profile)
