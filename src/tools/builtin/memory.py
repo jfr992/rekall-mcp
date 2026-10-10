@@ -704,6 +704,8 @@ class OptimizedMemoryTools(BaseToolProvider):
             from memory.wiki.validity import compute_validity
 
             m = self.manager
+            page_id, _, fragment = page_id.removeprefix("wiki:").partition("#")
+            section = section or fragment or None
             page = m.wiki.read(page_id, "live")
             if page is None:
                 return "Wiki page not found."

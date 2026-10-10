@@ -162,3 +162,13 @@ async def test_wiki_lookup_limit_is_clamped(tools, monkeypatch):
     await registered["wiki_lookup"](query="x", limit=50)
     await registered["wiki_lookup"](query="x", limit=0)
     assert seen == [3, 1]
+
+
+@pytest.mark.asyncio
+async def test_wiki_read_accepts_wiki_link_with_fragment(tools):
+    registered, _ = tools
+    linked = await registered["wiki_read"](page_id="wiki:demo/process/rotate-key#verify")
+    plain = await registered["wiki_read"](page_id="demo/process/rotate-key", section="verify")
+    assert linked == plain and "not found" not in linked
+    explicit = await registered["wiki_read"](page_id="wiki:demo/process/rotate-key#verify", section="steps")
+    assert explicit == await registered["wiki_read"](page_id="demo/process/rotate-key", section="steps")
