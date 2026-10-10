@@ -2,17 +2,19 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { MonoLabel } from "@/components/ui/mono-label";
 import { apiErrorMessage } from "@/lib/api/client";
-import { useCreateDraft, useWikiCandidates } from "@/lib/queries/use-wiki";
+import { useClassifyCandidates, useCreateDraft, useWikiCandidates } from "@/lib/queries/use-wiki";
 
 const btn =
   "cursor-pointer rounded-[7px] border border-[var(--border)] px-2.5 py-1 text-xs text-[var(--fg-dim)] hover:text-[var(--fg)] disabled:cursor-not-allowed disabled:opacity-40";
 
 export function WikiCandidates({ project }: { project: string }) {
-  const { data, mutate: classify, isPending, error } = useWikiCandidates();
+  const { data, error } = useWikiCandidates(project);
+  const { mutate: classify, isPending, error: startError } = useClassifyCandidates();
   const create = useCreateDraft();
   const [picked, setPicked] = useState<Set<string>>(new Set());
 
-  const candidates = data && "candidates" in data ? data.candidates : [];
+  const candidates = data?.candidates ?? [];
+  const running = isPending || data?.status === "running";
   const toggle = (id: string) =>
     setPicked((prev) => {
       const next = new Set(prev);
@@ -38,11 +40,14 @@ export function WikiCandidates({ project }: { project: string }) {
 
   return (
     <div className="flex flex-col gap-3">
-      <button type="button" className={btn} disabled={isPending} onClick={() => classify(project)}>
-        {isPending ? "Classifying…" : "Classify candidates"}
+      <button type="button" className={btn} disabled={running} onClick={() => classify(project)}>
+        {running ? `Classifying ${data?.done ?? 0}/${data?.total ?? 0}…` : "Classify"}
       </button>
-      {error ? <p className="text-sm text-red-400">{apiErrorMessage(error)}</p> : null}
-      {data && "status" in data ? (
+      {error || startError ? (
+        <p className="text-sm text-red-400">{apiErrorMessage(error ?? startError)}</p>
+      ) : null}
+      {data?.status === "error" ? <p className="text-sm text-red-400">{data.error}</p> : null}
+      {data?.status === "unconfigured" ? (
         <p className="text-sm text-[var(--fg-dim)]">Wiki model is not configured on the backend.</p>
       ) : null}
       {create.data && create.data.status === "unconfigured" ? (

@@ -591,10 +591,16 @@ export const WikiCandidateSchema = z.object({
   scope: z.record(z.any()).nullable().optional(),
   reasons: z.array(z.string()),
 });
-export const WikiCandidatesSchema = z.union([
-  z.object({ status: z.literal("unconfigured") }),
-  z.object({ candidates: z.array(WikiCandidateSchema) }),
-]);
+export const WikiCandidatesSchema = z.object({
+  status: z.enum(["idle", "running", "done", "error", "unconfigured"]),
+  done: z.number().default(0),
+  total: z.number().default(0),
+  error: z.string().optional(),
+  candidates: z.array(WikiCandidateSchema).default([]),
+});
+export const WikiClassifyStartSchema = z.object({
+  status: z.enum(["started", "running", "unconfigured"]),
+});
 export type WikiIndexEntry = z.infer<typeof WikiIndexEntrySchema>;
 export type WikiPage = z.infer<typeof WikiPageSchema>;
 export type WikiDraft = z.infer<typeof WikiDraftSchema>;

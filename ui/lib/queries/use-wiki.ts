@@ -10,6 +10,7 @@ import {
   getWikiPage,
   rejectDraft,
   searchWiki,
+  startClassify,
   type DraftEdit,
 } from "@/lib/api/wiki";
 
@@ -49,8 +50,20 @@ export function useWikiDraft(pageId: string | null) {
   });
 }
 
-export function useWikiCandidates() {
-  return useMutation({ mutationFn: (project: string) => getWikiCandidates(project) });
+export function useWikiCandidates(project: string) {
+  return useQuery({
+    queryKey: ["wiki", "candidates", project],
+    queryFn: () => getWikiCandidates(project),
+    refetchInterval: (query) => (query.state.data?.status === "running" ? 2000 : false),
+  });
+}
+
+export function useClassifyCandidates() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (project: string) => startClassify(project),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["wiki", "candidates"] }),
+  });
 }
 
 function useWikiMutation<V, R>(fn: (v: V) => Promise<R>) {

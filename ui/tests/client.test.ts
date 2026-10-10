@@ -61,3 +61,25 @@ describe("apiErrorMessage", () => {
     expect(apiErrorMessage("weird")).toBe("Unexpected error");
   });
 });
+
+describe("fetchJson error bodies", () => {
+  it("keeps a non-JSON error body as text instead of re-reading the stream", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response("Bad Gateway", { status: 502 }))
+    );
+    const err = await fetchJson("/api/x").catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(502);
+    expect(err.body).toBe("Bad Gateway");
+  });
+
+  it("parses a JSON error body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(new Response('{"error":"nope"}', { status: 400 }))
+    );
+    const err = await fetchJson("/api/x").catch((e) => e);
+    expect(err.body).toEqual({ error: "nope" });
+  });
+});

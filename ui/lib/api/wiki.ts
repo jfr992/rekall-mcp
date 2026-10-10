@@ -6,6 +6,7 @@ import {
   WikiDraftsSchema,
   WikiDraftDetailSchema,
   WikiCandidatesSchema,
+  WikiClassifyStartSchema,
 } from "@/lib/schemas";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
@@ -52,10 +53,14 @@ export function editDraft(pageId: string, edit: DraftEdit) {
   );
 }
 export function getWikiCandidates(project: string) {
+  const qs = project ? `?project=${encodeURIComponent(project)}` : "";
+  return fetchJson(`/api/wiki/candidates${qs}`, undefined, (d) => WikiCandidatesSchema.parse(d));
+}
+export function startClassify(project: string) {
   return fetchJson(
     `/api/wiki/candidates`,
     { method: "POST", headers: JSON_HEADERS, body: JSON.stringify(project ? { project } : {}) },
-    (d) => WikiCandidatesSchema.parse(d)
+    (d) => WikiClassifyStartSchema.parse(d)
   );
 }
 export function createDraft(memoryIds: string[], pageType: string, title?: string) {
