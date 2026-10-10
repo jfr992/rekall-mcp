@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import threading
 from datetime import date
@@ -16,6 +17,8 @@ from memory.wiki.pages import (
     parse_page,
     unsourced_steps,
 )
+
+logger = logging.getLogger(__name__)
 
 SCHEMA_TEXT = """# Rekall wiki schema
 
@@ -134,6 +137,29 @@ class WikiStore:
             self._append_log_locked(
                 "reject", f"{draft.frontmatter.get('title') or page_id} — {reason}"
             )
+
+    def _cache_path(self, name: str) -> Path:
+        if not name.isidentifier():
+            raise ValueError("invalid cache name")
+        return self.root / "_cache" / f"{name}.json"
+
+    def read_cache(self, name: str) -> dict:
+        path = self._cache_path(name)
+        with self._lock:
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+            except FileNotFoundError:
+                return {}
+            except (OSError, ValueError) as e:
+                logger.warning("wiki cache %s unreadable, ignoring: %s", name, e)
+                return {}
+        return data if isinstance(data, dict) else {}
+
+    def write_cache(self, name: str, data: dict) -> None:
+        path = self._cache_path(name)
+        with self._lock:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            _write_atomic(path, json.dumps(data))
 
     def rebuild_index(self) -> None:
         with self._lock:

@@ -15,7 +15,6 @@ Usage:
 """
 
 import asyncio
-import json
 import logging
 import os
 import re
@@ -1638,6 +1637,17 @@ def _wiki_header(page: Page, validity: dict) -> dict:
     }
 
 
+def _wiki_refusal(e: ValueError):
+    from starlette.responses import JSONResponse
+
+    if "no draft for page_id" in str(e):
+        return JSONResponse({"error": str(e)}, status_code=404)
+    return _bad_request(str(e))
+
+
+_WIKI_EDITABLE_FM = ("title", "description", "scope", "tags", "sidebar_position", "confidence")
+
+
 def _trim(text: str, budget: int) -> tuple[str, bool]:
     if token_estimate(text) <= budget:
         return text, False
@@ -1768,7 +1778,7 @@ async def api_wiki_approve(request):
         page = _get_memory_manager().wiki.approve(page_id)
         return _ok({"page": page.frontmatter})
     except ValueError as e:
-        return _bad_request(str(e))
+        return _wiki_refusal(e)
     except Exception as e:
         return _server_error(str(e))
 
@@ -1784,7 +1794,7 @@ async def api_wiki_reject(request):
         _get_memory_manager().wiki.reject(page_id, reason)
         return _ok({"status": "rejected"})
     except ValueError as e:
-        return _bad_request(str(e))
+        return _wiki_refusal(e)
     except Exception as e:
         return _server_error(str(e))
 
@@ -1799,11 +1809,15 @@ async def api_wiki_edit_draft(request):
         manager = _get_memory_manager()
         draft = manager.wiki.read(page_id, "draft")
         if draft is None:
-            return _bad_request("no draft for page_id")
-        fm = dict(draft.frontmatter, **((body or {}).get("frontmatter") or {}), human_edited=True)
+            return _wiki_refusal(ValueError("no draft for page_id"))
+        edits = (body or {}).get("frontmatter") or {}
+        allowed = {k: edits[k] for k in _WIKI_EDITABLE_FM if k in edits}
+        fm = dict(draft.frontmatter, **allowed, page_id=page_id, human_edited=True)
         page = Page(frontmatter=fm, body=str((body or {}).get("body", draft.body)))
         manager.wiki.write_draft(page)
         return _ok({"page": page.frontmatter})
+    except ValueError as e:
+        return _bad_request(str(e))
     except Exception as e:
         return _server_error(str(e))
 
@@ -1817,14 +1831,17 @@ async def api_wiki_candidates(request):
         project = _safe_project(request.query_params.get("project"))
         limit = _read_int(request.query_params, "limit", 200, lo=1, hi=2000)
         manager = _get_memory_manager()
-        cache_path = manager.wiki.root / "_cache" / "worthiness.json"
-        cache = json.loads(cache_path.read_text()) if cache_path.exists() else {}
-        points = manager.store.scroll(
-            filters={"project": project} if project else None, limit=limit
-        )
-        candidates = classify_candidates(points, llm=llm, cache=cache)
-        cache_path.parent.mkdir(parents=True, exist_ok=True)
-        cache_path.write_text(json.dumps(cache, indent=0))
+
+        def work():
+            cache = manager.wiki.read_cache("worthiness")
+            points = manager.store.scroll(
+                filters={"project": project} if project else None, limit=limit
+            )
+            found = classify_candidates(points, llm=llm, cache=cache)
+            manager.wiki.write_cache("worthiness", cache)
+            return found
+
+        candidates = await asyncio.to_thread(work)
         return _ok({"candidates": candidates})
     except Exception as e:
         return _server_error(str(e))
@@ -1845,7 +1862,8 @@ async def api_wiki_draft(request):
         if not memories:
             return _bad_request("no memories found")
         project = _safe_project(body.get("project")) or memories[0].get("project") or "general"
-        page = draft_page(
+        page = await asyncio.to_thread(
+            draft_page,
             memories,
             page_type=str(body.get("page_type") or "reference"),
             project=project,

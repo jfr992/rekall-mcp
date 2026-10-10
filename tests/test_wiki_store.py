@@ -184,3 +184,14 @@ def test_approve_rejects_page_id_mismatch_and_draft_needs_page_id(store):
         store.approve("demo/process/other")
     with pytest.raises(ValueError, match="page_id"):
         store.write_draft(Page(frontmatter={"title": "x"}, body=""))
+
+
+def test_cache_roundtrip_and_corrupt_file_reads_empty(tmp_path):
+    from memory.wiki.store import WikiStore
+
+    store = WikiStore(tmp_path / "wiki")
+    assert store.read_cache("worthiness") == {}
+    (store.root / "_cache" / "worthiness.json").write_text("{not json")
+    assert store.read_cache("worthiness") == {}
+    store.write_cache("worthiness", {"a": {"verdict": "skip"}})
+    assert store.read_cache("worthiness") == {"a": {"verdict": "skip"}}

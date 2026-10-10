@@ -130,3 +130,48 @@ def test_page_404_and_bad_id(client):
     tc, _ = client
     assert tc.get("/api/wiki/page/demo/process/nope").status_code == 404
     assert tc.get("/api/wiki/page/../x").status_code in (400, 404)
+
+
+def test_model_calls_run_off_the_event_loop_thread(client, monkeypatch):
+    import threading
+
+    tc, _ = client
+    seen = []
+
+    def llm(prompt):
+        seen.append(threading.current_thread().name)
+        if "Answer with JSON" in prompt:
+            return json.dumps({"verdict": "worthy", "page_type": "process", "reasons": []})
+        return f"TITLE: Rotate the gateway key\n{PROCESS_BODY}"
+
+    def factory():
+        loop_thread.append(threading.current_thread().name)
+        return llm
+
+    loop_thread = []
+    monkeypatch.setattr("server.make_wiki_llm", factory)
+    tc.get("/api/wiki/candidates?project=demo")
+    tc.post("/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"})
+    assert len(seen) == 2 and loop_thread[0] not in seen
+
+
+def test_edit_draft_ignores_protected_frontmatter(client, monkeypatch):
+    tc, _ = client
+    _fake_llm(monkeypatch)
+    tc.post("/api/wiki/draft", json={"memory_ids": ["2026-01-01_fact_a1"], "page_type": "process"})
+    url = "/api/wiki/drafts/demo/process/rotate-the-gateway-key"
+    fm = {"page_id": "demo/policy/other", "status": "live", "type": "policy", "title": "New title"}
+    page = tc.put(url, json={"body": PROCESS_BODY, "frontmatter": fm}).json()["page"]
+    assert page["page_id"] == "demo/process/rotate-the-gateway-key"
+    assert page["status"] == "draft" and page["type"] == "process" and page["title"] == "New title"
+    assert [d["page_id"] for d in tc.get("/api/wiki/drafts").json()["drafts"]] == [
+        "demo/process/rotate-the-gateway-key"
+    ]
+
+
+def test_unknown_draft_is_404_on_approve_reject_put(client):
+    tc, _ = client
+    url = "/api/wiki/drafts/demo/process/nope"
+    assert tc.post(f"{url}/approve").status_code == 404
+    assert tc.post(f"{url}/reject", json={"reason": "x"}).status_code == 404
+    assert tc.put(url, json={"body": "x"}).status_code == 404
