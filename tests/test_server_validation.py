@@ -151,3 +151,13 @@ def test_manager_save_rejects_oversized_content():
     mgr = MemoryManager.__new__(MemoryManager)
     with pytest.raises(ValueError, match="exceeds"):
         MemoryManager.save(mgr, content="x" * 20_001, type="note")
+
+
+def test_save_normalizes_spaced_project(client, fake_manager):
+    r = client.post("/api/memory/save", json={"content": "x", "project": "La Gran Polla"})
+    assert r.status_code == 200
+    assert fake_manager.save.call_args.kwargs["project"] == "La-Gran-Polla"
+
+
+def test_scoped_read_still_rejects_spaced_project(client, fake_manager):
+    assert client.get("/api/memory/pressure?project=La Gran Polla").status_code == 400

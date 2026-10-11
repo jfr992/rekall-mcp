@@ -51,7 +51,7 @@ from memory.representation import (
     hard_identifiers,
 )
 from memory.resume import build_resume_packet
-from memory.scope import MemoryScope, ScopeDetector, strip_remote_creds
+from memory.scope import MemoryScope, ScopeDetector, normalize_project, strip_remote_creds
 from memory.skills import extract_skills, render_skill_context
 from memory.startup import build_agent_startup
 from memory.types import VALID_MEMORY_TYPES
@@ -496,6 +496,7 @@ class MemoryManager:
 
             if "/" in project_name or "\\" in project_name or ".." in project_name:
                 raise ValueError(f"Invalid project name: {project_name!r}")
+            project_name = normalize_project(project_name)
 
             payload = {
                 "content": content,

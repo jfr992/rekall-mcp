@@ -17,6 +17,14 @@ from typing import Any
 from core import rekall_env
 from memory.trust import DEFAULT_BOUNDARY, TrustResolver, load_trust_rules
 
+_PROJECT_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def normalize_project(name: str) -> str:
+    cleaned = _PROJECT_UNSAFE.sub("-", name.strip()).strip("-.")[:64]
+    return cleaned or "general"
+
+
 _CRED_RE = re.compile(r"(https?://)[^@/]+@")
 
 # Session artifacts, not projects: timestamp-shaped dirs (20260708-091227),
@@ -118,7 +126,7 @@ class ScopeDetector:
         repo_name = Path(repo_root).name if repo_root else current.name
         repo_remote = _strip_creds(raw_remote)
 
-        detected_project = project or repo_name or current.name or "general"
+        detected_project = normalize_project(project or repo_name or current.name or "general")
         # Explicit `project` is trusted verbatim; only inferred names are screened.
         if not project and _is_junk_project_name(detected_project):
             detected_project = "general"

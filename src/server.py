@@ -33,6 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from core import Telemetry
 from core.utils import utc_now
 from memory.insights import EVENT_WINDOW
+from memory.scope import normalize_project
 from memory.types import VALID_MEMORY_TYPES
 from tools import ToolConfig, ToolLoader, ToolRegistry
 
@@ -391,6 +392,7 @@ class AfkSaveRequest(BaseModel):
 
 
 _PROJECT_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_TRAVERSAL_RE = re.compile(r"[/\\]|\.\.")
 
 
 def _safe_project(value) -> str | None:
@@ -401,6 +403,12 @@ def _safe_project(value) -> str | None:
             "project must be 1-64 characters of letters, digits, dot, dash, underscore"
         )
     return value
+
+
+def _safe_write_project(value) -> str | None:
+    if isinstance(value, str) and value.strip() and not _TRAVERSAL_RE.search(value):
+        value = normalize_project(value)
+    return _safe_project(value)
 
 
 def _safe_type(value: str, *, allow_auto: bool = False) -> str:
@@ -578,7 +586,7 @@ async def api_save_memory(request):
         body = await _json_object(request)
         content = _safe_text(body.get("content"), "content")
         mem_type = _safe_type(body.get("type", "note"))
-        project = _safe_project(body.get("project"))
+        project = _safe_write_project(body.get("project"))
 
         manager = _get_memory_manager()
         async with _maintenance_barrier():
@@ -606,7 +614,7 @@ async def api_save_afk_memory_operation(request):
     try:
         body = AfkSaveRequest.model_validate_json(await request.body())
         fields = body.model_dump(mode="json")
-        fields["project"] = _safe_project(fields["project"])
+        fields["project"] = _safe_write_project(fields["project"])
         manager = _get_memory_manager()
         async with _maintenance_barrier():
             result = manager.save_afk_operation(**fields)
@@ -2661,7 +2669,7 @@ async def api_observe(request):
         mem_type = _safe_type(body.get("type", "auto"), allow_auto=True)
         context = _safe_text(body.get("context"), "context", required=False)
         caller_cwd = body.get("cwd") or body.get("workspace_root")
-        caller_project = _safe_project(body.get("project"))
+        caller_project = _safe_write_project(body.get("project"))
 
         manager = _get_memory_manager()
 
