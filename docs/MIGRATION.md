@@ -12,7 +12,7 @@
 **Run the graph migration once, from a repo checkout** (the script is not in the PyPI package). Upgrade the server (`uvx rekall-mcp@1.18.1`, or `docker compose up -d --build mcp ui`), then:
 
 1. `docker compose stop mcp` (a running server holds the graph in memory and would overwrite the file).
-2. Dry run: `uv run python scripts/migrate_unchecked_contradicts.py`
+2. Dry run: `uv run python scripts/migrate_unchecked_contradicts.py`. The script prints the `_graph.json` it targets (`MEMORY_STORAGE_PATH`, default `~/.claude/memory`) and the server it checks (`REKALL_API_URL`). Make sure the path is the directory your mcp container mounts before `--apply`.
 3. Apply (writes `_graph.json.bak-<timestamp>` next to the graph first): `uv run python scripts/migrate_unchecked_contradicts.py --apply`
 4. `docker compose start mcp`
 5. Recompute tiers, since two or more `contradicts` links demote a memory one tier: Hygiene → Lifecycle backfill → Dry run, review, then Apply (or `POST /api/memory/lifecycle/backfill` with `{"dry_run": true}` first).

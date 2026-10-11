@@ -63,3 +63,38 @@ def test_apply_refused_when_server_reachable(tmp_path, monkeypatch):
 
     assert main(["--apply"]) == 1
     assert (tmp_path / "_graph.json").read_text() == before
+
+
+def test_apply_with_nothing_to_relabel_is_a_noop(tmp_path, monkeypatch, capsys):
+    kg = KnowledgeGraph(tmp_path / "_graph.json")
+    for n in ("a", "b"):
+        kg.add_node(n)
+    kg.add_edge("a", "b", "contradicts", 0.8, llm_refined=True)
+    kg._dirty = True
+    kg.save()
+    monkeypatch.setenv("MEMORY_STORAGE_PATH", str(tmp_path))
+    graph = tmp_path / "_graph.json"
+    before, mtime = graph.read_bytes(), graph.stat().st_mtime_ns
+
+    assert main(["--apply", "--force"]) == 0
+
+    out = capsys.readouterr().out
+    assert "nothing to migrate" in out and "APPLIED" not in out
+    assert graph.read_bytes() == before and graph.stat().st_mtime_ns == mtime
+    assert list(tmp_path.glob("_graph.json.bak-*")) == []
+
+
+def test_prints_target_graph_and_server(tmp_path, monkeypatch, capsys):
+    _write_graph(tmp_path)
+    monkeypatch.setenv("MEMORY_STORAGE_PATH", str(tmp_path))
+    monkeypatch.delenv("REKALL_API_URL", raising=False)
+    main([])
+    out = capsys.readouterr().out
+    assert str(tmp_path / "_graph.json") in out
+    assert "http://localhost:8000" in out
+
+
+def test_missing_graph_fails_loudly(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("MEMORY_STORAGE_PATH", str(tmp_path / "nope"))
+    assert main([]) == 1
+    assert "not found" in capsys.readouterr().out.lower()
