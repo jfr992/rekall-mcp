@@ -486,6 +486,8 @@ class MemoryManager:
             memory.save("User prefers diagrams", type="preference")
             memory.save("Chose hybrid architecture", type="decision", project="my-app")
         """
+        if len(content) > 20_000:
+            raise ValueError("content exceeds 20000 characters")
         with self._telemetry.track("memory.save"):
             self._assert_reindex_complete()
             content = Sanitizer.sanitize(content)

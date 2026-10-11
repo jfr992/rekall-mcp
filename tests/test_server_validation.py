@@ -80,3 +80,74 @@ def test_observe_uses_manager_embedder_for_auto_classification(client, fake_mana
 
     assert r.status_code == 200
     assert captured["embedder"] is fake_manager.embedder
+
+
+def test_cleanup_rejects_string_dry_run(client, fake_manager):
+    r = client.post("/api/memory/cleanup", json={"dry_run": "false"})
+    assert r.status_code == 400
+    fake_manager.cleanup.assert_not_called()
+
+
+def test_cleanup_rejects_string_prune_superseded(client, fake_manager):
+    r = client.post("/api/memory/cleanup", json={"dry_run": True, "prune_superseded": "yes"})
+    assert r.status_code == 400
+    fake_manager.cleanup.assert_not_called()
+
+
+@pytest.mark.parametrize("raw", [b"[1]", b'"x"', b"null", b"{"])
+def test_post_routes_reject_non_object_bodies(client, fake_manager, monkeypatch, raw):
+    monkeypatch.setattr("server.make_wiki_llm", lambda: object())
+    for path in (
+        "/api/memory/save",
+        "/api/memory/observe",
+        "/api/memory/feedback",
+        "/api/memory/recall",
+        "/api/memory/cleanup",
+        "/api/memory/m1/pin",
+        "/api/memory/m1/dispute",
+        "/api/wiki/draft",
+        "/api/wiki/candidates",
+        "/api/memory/prune/superseded",
+    ):
+        r = client.post(path, content=raw, headers={"content-type": "application/json"})
+        assert r.status_code == 400, (path, raw, r.status_code)
+
+
+def test_save_rejects_oversized_content(client, fake_manager):
+    r = client.post("/api/memory/save", json={"content": "x" * 20_001})
+    assert r.status_code == 400
+    fake_manager.save.assert_not_called()
+
+
+def test_save_rejects_non_string_content(client, fake_manager):
+    r = client.post("/api/memory/save", json={"content": ["a"]})
+    assert r.status_code == 400
+    fake_manager.save.assert_not_called()
+
+
+def test_observe_rejects_oversized_summary(client, fake_manager):
+    r = client.post("/api/memory/observe", json={"summary": "x" * 20_001})
+    assert r.status_code == 400
+
+
+def test_feedback_rejects_non_string_session_id(client, fake_manager):
+    r = client.post(
+        "/api/memory/feedback",
+        json={"memory_id": "m1", "verdict": "useful", "session_id": {"a": 1}},
+    )
+    assert r.status_code == 400
+
+
+def test_wiki_draft_rejects_bad_memory_ids(client, fake_manager, monkeypatch):
+    monkeypatch.setattr("server.make_wiki_llm", lambda: object())
+    for ids in ([1], ["a"] * 51, "abc"):
+        r = client.post("/api/wiki/draft", json={"memory_ids": ids})
+        assert r.status_code == 400, ids
+
+
+def test_manager_save_rejects_oversized_content():
+    from memory.manager import MemoryManager
+
+    mgr = MemoryManager.__new__(MemoryManager)
+    with pytest.raises(ValueError, match="exceeds"):
+        MemoryManager.save(mgr, content="x" * 20_001, type="note")
