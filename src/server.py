@@ -1993,7 +1993,12 @@ async def api_wiki_draft(request):
             return _ok({"status": "unconfigured"})
         body = await _json_object(request)
         ids = body.get("memory_ids") or []
-        if not isinstance(ids, list) or not ids or len(ids) > 50 or not all(isinstance(i, str) for i in ids):
+        if (
+            not isinstance(ids, list)
+            or not ids
+            or len(ids) > 50
+            or not all(isinstance(i, str) for i in ids)
+        ):
             return _bad_request("memory_ids must be 1-50 strings")
         manager = _get_memory_manager()
         memories = manager.store.get_many(ids)
