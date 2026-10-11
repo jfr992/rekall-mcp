@@ -58,7 +58,7 @@ describe("useStream", () => {
       .find({ queryKey: ["stream", "byte-edge", 50, null, null] });
     const interval = query?.observers[0]?.options.refetchInterval as (q: unknown) => number | false;
     expect(interval({ state: { status: "success" } })).toBe(10_000);
-    expect(interval({ state: { status: "error" } })).toBe(false);
+    expect(interval({ state: { status: "error" } })).toBe(30_000);
   });
 
   test("plumbs after/before range into the fetch and the query key", async () => {

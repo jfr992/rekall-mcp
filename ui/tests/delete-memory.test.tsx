@@ -136,7 +136,7 @@ describe("guarded delete", () => {
         (c) => (c[0] as { queryKey: unknown[] }).queryKey[0]
       );
       expect(keys).toEqual(
-        expect.arrayContaining(["brain-graph", "kb", "pressure", "resume", "search", "insights", "projects", "stream"])
+        expect.arrayContaining(["brain-graph", "kb", "pressure", "resume", "search", "insights", "projects", "stream", "sessions", "session-detail"])
       );
     });
   });

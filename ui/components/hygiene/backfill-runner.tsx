@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,10 @@ export function BackfillRunner({ project }: { project?: string }) {
   const [dryRunChanged, setDryRunChanged] = useState<number | null>(null);
   const backfill = useBackfillMutation();
 
+  const currentProject = useRef(project);
+
   useEffect(() => {
+    currentProject.current = project;
     setDryRunChanged(null);
   }, [project]);
 
@@ -31,7 +34,7 @@ export function BackfillRunner({ project }: { project?: string }) {
       {
         onSuccess: (report) => {
           setLastReport(report);
-          if (dryRun) setDryRunChanged(report.changed?.length ?? 0);
+          if (dryRun && currentProject.current === project) setDryRunChanged(report.changed?.length ?? 0);
           toast.success(`${dryRun ? "Dry run" : "Backfill"} — ${summarize(report)} of ${report.total}`);
         },
         onError: (err) => toast.error(err.message),

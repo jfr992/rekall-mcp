@@ -70,20 +70,22 @@ export function useClassifyCandidates() {
   });
 }
 
-function useWikiMutation<V, R>(fn: (v: V) => Promise<R>) {
+function useWikiMutation<V, R>(fn: (v: V) => Promise<R>, { dropsDraft = false } = {}) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
     onSuccess: () => {
-      qc.removeQueries({ queryKey: ["wiki", "draft"] });
+      if (dropsDraft) qc.removeQueries({ queryKey: ["wiki", "draft"] });
       return qc.invalidateQueries({ queryKey: ["wiki"] });
     },
   });
 }
 
-export const useApproveDraft = () => useWikiMutation((pageId: string) => approveDraft(pageId));
+export const useApproveDraft = () => useWikiMutation((pageId: string) => approveDraft(pageId), { dropsDraft: true });
 export const useRejectDraft = () =>
-  useWikiMutation((v: { pageId: string; reason: string }) => rejectDraft(v.pageId, v.reason));
+  useWikiMutation((v: { pageId: string; reason: string }) => rejectDraft(v.pageId, v.reason), {
+    dropsDraft: true,
+  });
 export const useEditDraft = () =>
   useWikiMutation((v: { pageId: string } & DraftEdit) =>
     editDraft(v.pageId, { body: v.body, title: v.title, description: v.description })

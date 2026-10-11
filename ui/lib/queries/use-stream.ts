@@ -6,7 +6,7 @@ export function useStream(project: string, limit = 50, range: StreamRange = {}) 
   return useQuery({
     queryKey: ["stream", project, limit, range.after ?? null, range.before ?? null],
     queryFn: () => getStream(project, limit, range),
-    refetchInterval: (q) => (q.state.status === "error" ? false : 10_000),
+    refetchInterval: (q) => (q.state.status === "error" ? 30_000 : 10_000),
     staleTime: 5_000,
   });
 }

@@ -1,4 +1,5 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { invalidateMemoryCaches } from "@/lib/queries/invalidate";
 import {
   postFeedback,
   type FeedbackResponse,
@@ -8,6 +9,7 @@ import {
 // Extracted from app/sessions/page.tsx (inline postFeedback call) — behavior
 // covered by the green feedback cycles in sessions.test.tsx. No new behavior.
 export function useFeedbackMutation() {
+  const qc = useQueryClient();
   return useMutation<
     FeedbackResponse,
     Error,
@@ -15,5 +17,6 @@ export function useFeedbackMutation() {
   >({
     mutationFn: ({ memoryId, verdict, sessionId }) =>
       postFeedback(memoryId, verdict, sessionId),
+    onSuccess: () => invalidateMemoryCaches(qc),
   });
 }

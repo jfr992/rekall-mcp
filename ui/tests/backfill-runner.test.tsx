@@ -43,4 +43,22 @@ describe("BackfillRunner", () => {
     view.rerender(ui("b"));
     expect(screen.getByRole("button", { name: /apply/i })).toBeDisabled();
   });
+
+  test("a dry run that resolves after the project changed does not arm Apply", async () => {
+    let resolve!: (r: Response) => void;
+    vi.stubGlobal("fetch", vi.fn().mockReturnValue(new Promise<Response>((r) => (resolve = r))));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const ui = (p: string) => (
+      <QueryClientProvider client={client}>
+        <BackfillRunner project={p} />
+        <Toaster />
+      </QueryClientProvider>
+    );
+    const view = render(ui("a"));
+    fireEvent.click(screen.getByRole("button", { name: /dry run/i }));
+    view.rerender(ui("b"));
+    resolve(new Response(JSON.stringify(report)));
+    await screen.findAllByText(/2 promoted · 1 demoted/);
+    expect(screen.getByRole("button", { name: /apply/i })).toBeDisabled();
+  });
 });
