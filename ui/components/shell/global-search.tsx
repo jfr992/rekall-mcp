@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorMessage } from "@/lib/api/client";
 import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
@@ -153,6 +154,10 @@ export function GlobalSearch() {
               </li>
             ))}
           </ul>
+        ) : results.isError ? (
+          <p role="alert" className="mt-3 py-4 text-center text-sm text-[var(--accent-danger)]">
+            Search failed — {apiErrorMessage(results.error)}
+          </p>
         ) : query.trim() && results.isFetched ? (
           <p className="mt-3 py-4 text-center text-sm text-[var(--fg-muted)]">
             {mode === "exact" ? "No exact matches in top 50." : "No matches."}

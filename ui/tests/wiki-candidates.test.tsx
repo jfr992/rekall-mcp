@@ -5,11 +5,12 @@ const mutate = vi.fn();
 const classify = vi.fn();
 const onOpenSource = vi.fn();
 let candidatesData: unknown;
+let createData: unknown;
 
 vi.mock("@/lib/queries/use-wiki", () => ({
   useWikiCandidates: () => ({ data: candidatesData, error: null }),
   useClassifyCandidates: () => ({ mutate: classify, isPending: false, error: null }),
-  useCreateDraft: () => ({ mutate, isPending: false, data: undefined, error: null }),
+  useCreateDraft: () => ({ mutate, isPending: false, data: createData, error: null }),
 }));
 
 import { WikiCandidates } from "@/components/wiki/wiki-candidates";
@@ -163,5 +164,15 @@ describe("WikiCandidates", () => {
     fireEvent.click(screen.getByRole("button", { name: /clear filters/i }));
     expect(screen.getByLabelText("Select u")).toBeInTheDocument();
     expect(screen.getByLabelText(/hide used/i)).not.toBeChecked();
+  });
+});
+
+describe("WikiCandidates unconfigured notice", () => {
+  test("shown once when both candidates and create report unconfigured", () => {
+    candidatesData = { status: "unconfigured", candidates: [] };
+    createData = { status: "unconfigured" };
+    render(<WikiCandidates project="demo" onOpenSource={onOpenSource} />);
+    expect(screen.getAllByText(/not configured on the backend/i)).toHaveLength(1);
+    createData = undefined;
   });
 });

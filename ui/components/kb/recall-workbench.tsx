@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorMessage } from "@/lib/api/client";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Chip } from "@/components/ui/chip";
@@ -120,6 +121,8 @@ export function RecallWorkbench({ project }: Props) {
             title="Type to recall"
             hint={`Semantic search over ${project || "all"} memories — top ${RECALL_LIMIT} by score`}
           />
+        ) : results.isError ? (
+          <Empty title="Search failed" hint={apiErrorMessage(results.error)} />
         ) : results.isFetched ? (
           <Empty
             title="No matches"

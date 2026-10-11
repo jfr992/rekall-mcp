@@ -22,6 +22,7 @@ import { useStream } from "@/lib/queries/use-stream";
 import { useInsights } from "@/lib/queries/use-insights";
 import { usePressure } from "@/lib/queries/use-pressure";
 import StreamPage from "@/app/stream/page";
+import { ApiError } from "@/lib/api/client";
 import streamFixture from "./fixtures/stream.json";
 import insightsFixture from "./fixtures/insights.json";
 import pressureFixture from "./fixtures/pressure.json";
@@ -281,4 +282,23 @@ test("timeline scrolls inside a bounded panel, not the page", async () => {
   const scroller = await screen.findByTestId("stream-timeline-scroll");
   expect(scroller.className).toMatch(/overflow-y-auto/);
   expect(scroller.className).toMatch(/min-h-0|max-h|flex-1/);
+});
+
+describe("StreamPage — errors and bounds", () => {
+  test("jump-to-day input is bounded", () => {
+    mockAll();
+    render(<StreamPage />);
+    const input = screen.getByLabelText(/jump to day/i);
+    expect(input).toHaveAttribute("min", "2000-01-01");
+    expect(input).toHaveAttribute("max");
+  });
+
+  test("stream error shows the server message", () => {
+    vi.mocked(useStream).mockReturnValue({ data: undefined, isLoading: false, isError: true,
+      error: new ApiError(400, "Request failed: 400", { error: "invalid day: 20920-02-06" }) } as any);
+    vi.mocked(useInsights).mockReturnValue(loaded(insightsFixture));
+    vi.mocked(usePressure).mockReturnValue(loaded(pressureFixture));
+    render(<StreamPage />);
+    expect(screen.getByText(/invalid day/)).toBeInTheDocument();
+  });
 });

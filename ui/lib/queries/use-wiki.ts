@@ -74,7 +74,10 @@ function useWikiMutation<V, R>(fn: (v: V) => Promise<R>) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["wiki"] }),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: ["wiki", "draft"] });
+      return qc.invalidateQueries({ queryKey: ["wiki"] });
+    },
   });
 }
 

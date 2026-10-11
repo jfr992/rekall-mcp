@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { GlobalSearch } from "@/components/shell/global-search";
 import { CockpitShell } from "@/components/shell/cockpit-shell";
 import { useProjectStore } from "@/lib/project-store";
+import { ApiError } from "@/lib/api/client";
 import * as searchApi from "@/lib/api/search";
 import * as detailApi from "@/lib/api/detail";
 import recallFixture from "./fixtures/recall.json";
@@ -243,5 +244,16 @@ describe("GlobalSearch palette", () => {
     expect(
       screen.getByRole("button", { name: /search memories/i })
     ).toBeInTheDocument();
+  });
+});
+
+describe("GlobalSearch errors", () => {
+  test("a failed search says so instead of No matches", async () => {
+    vi.mocked(searchApi.postRecall).mockRejectedValue(new ApiError(500, "Request failed: 500", { error: "qdrant down" }));
+    renderSearch();
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    fireEvent.change(screen.getByPlaceholderText(/search memories/i), { target: { value: "x" } });
+    expect(await screen.findByText(/search failed — qdrant down/i)).toBeInTheDocument();
+    expect(screen.queryByText(/no matches/i)).not.toBeInTheDocument();
   });
 });

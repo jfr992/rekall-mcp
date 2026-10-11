@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { apiErrorMessage } from "@/lib/api/client";
 import { MonoLabel } from "@/components/ui/mono-label";
 import { ValidityBadges } from "./validity-badge";
 import { useWikiSearch } from "@/lib/queries/use-wiki";
@@ -12,7 +13,7 @@ export function WikiSearch({ project, onOpen }: Props) {
     const t = setTimeout(() => setDebounced(q), 250);
     return () => clearTimeout(t);
   }, [q]);
-  const { data, isError } = useWikiSearch(debounced, project);
+  const { data, isError, error } = useWikiSearch(debounced, project);
   return (
     <div className="flex flex-col gap-3">
       <input
@@ -23,7 +24,7 @@ export function WikiSearch({ project, onOpen }: Props) {
         placeholder="Search the wiki"
         className="w-full rounded-[7px] border border-[var(--border)] bg-transparent px-3 py-1.5 text-sm text-[var(--fg)]"
       />
-      {isError ? <p className="text-sm text-red-400">Search failed</p> : null}
+      {isError ? <p className="text-sm text-red-400">Search failed — {apiErrorMessage(error)}</p> : null}
       {data && data.hits.length === 0 ? <p className="text-sm text-[var(--fg-dim)]">No hits.</p> : null}
       <ul className="space-y-2">
         {data?.hits.map((h) => (
