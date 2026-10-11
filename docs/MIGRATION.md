@@ -4,13 +4,13 @@ v1.18.1 QA retest fixes: stricter API input validation, consistent UTC timestamp
 
 ## What changed
 
-- **POST bodies must be JSON objects** (400 otherwise). `/api/memory/cleanup` rejects non-boolean `dry_run` / `prune_superseded`.
+- **POST bodies must be JSON objects** (400 otherwise). `/api/memory/cleanup`, `/compact`, `/lifecycle/backfill` and `/prune/superseded` reject non-boolean `dry_run` (a `null`/`0`/`""` no longer runs destructively).
 - **Memory content is capped at 20,000 characters.** REST returns 400; MCP `save_memory` returns `Error: ...`.
 - **Timestamps carry `+00:00`.** Stored offset-less timestamps are read as UTC; rows written by a non-Docker server in local time may show offset by the UTC difference.
-- **Project names are normalized on write** (`La Gran Polla` → `La-Gran-Polla`). Reads stay strict.
+- **Project names are normalized on write** (`La Gran Polla` → `La-Gran-Polla`); leading dots are preserved (`.playwright-mcp` stays as is). Reads stay strict.
 - **`GET /api/memory/sessions` no longer emits `view_opened`** and returns `total`.
-- **Cockpit/KB searches send `source: "ui"`** and are no longer logged as recalls.
-- **Fixes:** prune plan no longer 500s on real graphs; "Wrong" feedback now disputes the memory; pressure `capacity` is 0 for an empty scope; wiki drafts list accepts `?project=`.
+- **Cockpit/KB searches send `source: "ui"`** and are no longer logged as recalls and no longer bump graph access counts.
+- **Fixes:** prune plan no longer 500s on real graphs; "Wrong" feedback now disputes the memory immediately (the reinforce pass runs on the feedback request, not at session end); pressure `capacity` is 0 for an empty scope; wiki drafts list accepts `?project=`.
 - **Continuity "Unresolved" lists model-verified conflicts.**
 - **`REKALL_UI_ORIGINS` is documented**; the migration script prints its targets and no-ops cleanly.
 - **Cockpit UX:** one needs-attention number, list headers use server totals, request errors replace empty states, 4xx is not retried, Dispute has Undo, success toasts, backfill shows changes and confirms Apply, Cmd-K Enter opens the top result, phone-width header, focus ring, 11px text floor.
