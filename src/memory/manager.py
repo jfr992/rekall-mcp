@@ -54,7 +54,7 @@ from memory.resume import build_resume_packet
 from memory.scope import MemoryScope, ScopeDetector, normalize_project, strip_remote_creds
 from memory.skills import extract_skills, render_skill_context
 from memory.startup import build_agent_startup
-from memory.types import VALID_MEMORY_TYPES
+from memory.types import MAX_MEMORY_CONTENT_CHARS, VALID_MEMORY_TYPES
 
 if TYPE_CHECKING:
     from memory.knowledge_graph import KnowledgeGraph
@@ -486,8 +486,8 @@ class MemoryManager:
             memory.save("User prefers diagrams", type="preference")
             memory.save("Chose hybrid architecture", type="decision", project="my-app")
         """
-        if len(content) > 20_000:
-            raise ValueError("content exceeds 20000 characters")
+        if len(content) > MAX_MEMORY_CONTENT_CHARS:
+            raise ValueError(f"content exceeds {MAX_MEMORY_CONTENT_CHARS} characters")
         with self._telemetry.track("memory.save"):
             self._assert_reindex_complete()
             content = Sanitizer.sanitize(content)
@@ -1757,7 +1757,8 @@ class MemoryManager:
                 for memory_id in seed_ids:
                     if not isinstance(memory_id, str):
                         continue
-                    graph.record_access(memory_id)
+                    if source != "ui":
+                        graph.record_access(memory_id)
                     neighbors = graph.get_neighbors(memory_id, hops=1)
                     expanded_ids.update(neighbors)
 

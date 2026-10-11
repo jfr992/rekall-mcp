@@ -21,8 +21,8 @@ _PROJECT_UNSAFE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 def normalize_project(name: str) -> str:
-    cleaned = _PROJECT_UNSAFE.sub("-", name.strip()).strip("-.")[:64]
-    return cleaned or "general"
+    cleaned = _PROJECT_UNSAFE.sub("-", name.strip()).strip("-")[:64]
+    return "general" if not cleaned.strip(".") else cleaned
 
 
 _CRED_RE = re.compile(r"(https?://)[^@/]+@")

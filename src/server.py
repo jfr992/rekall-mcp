@@ -34,7 +34,7 @@ from core import Telemetry
 from core.utils import utc_now
 from memory.insights import EVENT_WINDOW
 from memory.scope import normalize_project
-from memory.types import VALID_MEMORY_TYPES
+from memory.types import MAX_MEMORY_CONTENT_CHARS, VALID_MEMORY_TYPES
 from tools import ToolConfig, ToolLoader, ToolRegistry
 
 # Configure logging
@@ -465,9 +465,6 @@ def _body_int(body: dict, key: str, default: int, lo: int = 0, hi: int = 10000) 
     return max(lo, min(value, hi))
 
 
-MAX_MEMORY_CONTENT_CHARS = 20_000
-
-
 async def _json_object(request) -> dict:
     try:
         body = await request.json()
@@ -776,7 +773,7 @@ async def api_memory_reflex(request):
 
 
 def _run_reinforce_pass(manager) -> None:
-    """Fire the T2 reinforce processor after a session_summary lands.
+    """Fire the T2 reinforce processor after a session_summary or feedback lands.
 
     Best-effort: a failure here must never fail the ingestion response
     (PLAN.md Mechanism: consume session_summary server-side, non-blocking).
@@ -1140,8 +1137,9 @@ async def api_memory_stream(request):
 async def api_memory_feedback(request):
     """REST API: one-click recall feedback (useful|wrong|stale).
 
-    Labeled evidence only — nothing reads memory_feedback into ranking
-    (weights frozen until the 500-pair gate; grep-pinned in tests).
+    "wrong" disputes the memory, "useful" credits it, "stale" queues a
+    supersede review. The reinforce pass runs immediately so a verdict does
+    not wait for a later session to end. Ranking weights never read it.
     """
     from starlette.responses import JSONResponse
 
@@ -1169,6 +1167,8 @@ async def api_memory_feedback(request):
             session_id=session_id,
             payload={"verdict": verdict, "editor": "ui"},
         )
+        if os.getenv("REKALL_REINFORCE", "1") != "0":
+            _run_reinforce_pass(manager)
         return _ok({"recorded": True})
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -2200,7 +2200,7 @@ async def api_compact_memories(request):
     try:
         body = await _json_object(request)
         older_than_days = _body_int(body, "older_than_days", 30, lo=1, hi=36500)
-        dry_run = bool(body.get("dry_run", True))
+        dry_run = _body_bool(body, "dry_run", True)
         project = _safe_project(body.get("project"))
         llm_provider = body.get("llm_provider", "anthropic")
         if llm_provider not in {"anthropic", "openai"}:
@@ -2254,7 +2254,7 @@ async def api_lifecycle_backfill(request):
     """REST API: Backfill tier/durability on existing memories."""
     try:
         body = await _json_object(request)
-        dry_run = bool(body.get("dry_run", True))
+        dry_run = _body_bool(body, "dry_run", True)
         project = _safe_project(body.get("project"))
 
         manager = _get_memory_manager()
@@ -2375,7 +2375,7 @@ async def api_prune_superseded(request):
             return _ok({"deleted": [], "message": "no eligible candidates"})
 
         # Gate 3: dry_run preview
-        if body.get("dry_run", False):
+        if _body_bool(body, "dry_run"):
             return _ok(
                 {
                     "dry_run": True,
@@ -2684,6 +2684,8 @@ async def api_observe(request):
         content = summary
         if context:
             content = f"{summary}\n\nContext: {context}"
+        if len(content) > MAX_MEMORY_CONTENT_CHARS:
+            raise RequestValidationError(f"content exceeds {MAX_MEMORY_CONTENT_CHARS} characters")
 
         # Resolve scope from CALLER'S cwd, not the backend's. Without this,
         # every observation from every Claude session lands under the backend's

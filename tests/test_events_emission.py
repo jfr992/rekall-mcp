@@ -58,3 +58,19 @@ def test_ui_source_recall_emits_no_memory_recalled_event():
 
     MemoryManager.recall(mgr, "q")
     assert mgr.record_event.call_args.kwargs["event_type"] == "memory_recalled"
+
+
+def test_ui_source_recall_does_not_bump_graph_access():
+    from memory.manager import MemoryManager
+    from test_event_contract import HITS, _mgr
+
+    mgr = _mgr(HITS)
+    mgr._knowledge_graph.stats.return_value = {"nodes": 3, "edges": 2}
+    mgr._knowledge_graph.get_neighbors.return_value = set()
+    mgr._knowledge_graph.get_importance.return_value = 0.5
+
+    MemoryManager.recall(mgr, "q", source="ui")
+    mgr._knowledge_graph.record_access.assert_not_called()
+
+    MemoryManager.recall(mgr, "q")
+    mgr._knowledge_graph.record_access.assert_called()

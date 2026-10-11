@@ -1,7 +1,8 @@
-"""POST /api/memory/feedback — labeled recall evidence (U2 Task 2).
+"""POST /api/memory/feedback — one-click recall verdicts (U2 Task 2).
 
-Feedback events are EVIDENCE ONLY: nothing reads them into ranking
-(weights frozen until the 500-pair gate). The grep-pin test enforces it.
+The endpoint records a memory_feedback event and runs the reinforce pass:
+wrong disputes, useful credits, stale queues a supersede review. Ranking
+weights never read the event (grep-pinned below).
 """
 
 from unittest.mock import MagicMock
@@ -63,7 +64,7 @@ def test_post_feedback_bad_verdict_400(client):
 
 
 def test_grep_pin_nothing_in_manager_reads_memory_feedback():
-    """Ranking weights are frozen: feedback is evidence, never a scoring input."""
+    """Feedback acts through the reinforce pass only; manager ranking never reads it."""
     from pathlib import Path
 
     manager_src = (Path(__file__).parent.parent / "src" / "memory" / "manager.py").read_text()
@@ -91,3 +92,43 @@ def test_endpoint_event_round_trips_into_dispute_credit(tmp_path, monkeypatch):
 
     credit = credit_from_feedback(log.tail(1)[0])
     assert credit is not None and credit.disputed
+
+
+def test_feedback_runs_reinforce_pass_after_event(client, monkeypatch):
+    tc, manager = client
+    monkeypatch.setenv("REKALL_REINFORCE", "1")
+    order = []
+    manager.record_event.side_effect = lambda **kw: order.append("event")
+    monkeypatch.setattr("server._run_reinforce_pass", lambda m: order.append("reinforce"))
+
+    r = tc.post("/api/memory/feedback", json={"memory_id": "mem-1", "verdict": "wrong"})
+
+    assert r.status_code == 200
+    assert order == ["event", "reinforce"]
+
+
+def test_feedback_skips_reinforce_when_disabled(client, monkeypatch):
+    tc, _ = client
+    monkeypatch.setenv("REKALL_REINFORCE", "0")
+    called = []
+    monkeypatch.setattr("server._run_reinforce_pass", lambda m: called.append(1))
+
+    assert (
+        tc.post("/api/memory/feedback", json={"memory_id": "mem-1", "verdict": "wrong"}).status_code
+        == 200
+    )
+    assert called == []
+
+
+def test_feedback_reinforce_failure_still_200(client, monkeypatch):
+    tc, _ = client
+    monkeypatch.setenv("REKALL_REINFORCE", "1")
+
+    def boom(*a, **k):
+        raise RuntimeError("qdrant down")
+
+    monkeypatch.setattr("memory.reinforce.process_events", boom)
+
+    r = tc.post("/api/memory/feedback", json={"memory_id": "mem-1", "verdict": "wrong"})
+
+    assert r.status_code == 200

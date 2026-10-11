@@ -94,23 +94,58 @@ def test_cleanup_rejects_string_prune_superseded(client, fake_manager):
     fake_manager.cleanup.assert_not_called()
 
 
+_JSON_BODY_ROUTES = [
+    ("POST", "/api/memory/save"),
+    ("POST", "/api/memory/recall"),
+    ("POST", "/api/memory/recall/cross-project"),
+    ("POST", "/api/memory/reflex"),
+    ("POST", "/api/memory/events"),
+    ("POST", "/api/memory/review"),
+    ("POST", "/api/memory/feedback"),
+    ("POST", "/api/memory/m1/pin"),
+    ("POST", "/api/memory/m1/dispute"),
+    ("POST", "/api/memory/cleanup"),
+    ("POST", "/api/wiki/drafts/p1/reject"),
+    ("PUT", "/api/wiki/drafts/p1"),
+    ("POST", "/api/wiki/candidates"),
+    ("POST", "/api/wiki/draft"),
+    ("POST", "/api/memory/compact"),
+    ("POST", "/api/memory/lifecycle/backfill"),
+    ("POST", "/api/memory/prune/apply"),
+    ("POST", "/api/memory/prune/plan"),
+    ("POST", "/api/memory/prune/superseded"),
+    ("POST", "/api/memory/observe"),
+]
+
+
+def test_json_body_routes_cover_every_json_object_route():
+    import ast
+    import re
+    from pathlib import Path
+
+    src = (Path(__file__).parent.parent / "src" / "server.py").read_text()
+    found = set()
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.AsyncFunctionDef):
+            continue
+        if "_json_object(request)" not in (ast.get_source_segment(src, node) or ""):
+            continue
+        for dec in node.decorator_list:
+            text = ast.get_source_segment(src, dec) or ""
+            path = re.search(r'"(/api[^"]*)"', text).group(1)
+            method = re.search(r'methods=\["(\w+)"\]', text).group(1)
+            found.add(
+                (method, re.sub(r"\{memory_id\}", "m1", re.sub(r"\{page_id:path\}", "p1", path)))
+            )
+    assert found == set(_JSON_BODY_ROUTES)
+
+
 @pytest.mark.parametrize("raw", [b"[1]", b'"x"', b"null", b"{"])
 def test_post_routes_reject_non_object_bodies(client, fake_manager, monkeypatch, raw):
     monkeypatch.setattr("server.make_wiki_llm", lambda: object())
-    for path in (
-        "/api/memory/save",
-        "/api/memory/observe",
-        "/api/memory/feedback",
-        "/api/memory/recall",
-        "/api/memory/cleanup",
-        "/api/memory/m1/pin",
-        "/api/memory/m1/dispute",
-        "/api/wiki/draft",
-        "/api/wiki/candidates",
-        "/api/memory/prune/superseded",
-    ):
-        r = client.post(path, content=raw, headers={"content-type": "application/json"})
-        assert r.status_code == 400, (path, raw, r.status_code)
+    for method, path in _JSON_BODY_ROUTES:
+        r = client.request(method, path, content=raw, headers={"content-type": "application/json"})
+        assert r.status_code == 400, (method, path, raw, r.status_code)
 
 
 def test_save_rejects_oversized_content(client, fake_manager):
@@ -161,3 +196,21 @@ def test_save_normalizes_spaced_project(client, fake_manager):
 
 def test_scoped_read_still_rejects_spaced_project(client, fake_manager):
     assert client.get("/api/memory/pressure?project=La Gran Polla").status_code == 400
+
+
+def test_observe_rejects_joined_content_over_limit(client, fake_manager):
+    r = client.post(
+        "/api/memory/observe",
+        json={"summary": "a" * 15_000, "context": "b" * 15_000, "type": "note"},
+    )
+    assert r.status_code == 400
+    fake_manager.save.assert_not_called()
+
+
+@pytest.mark.parametrize("bad", [None, 0, "", "no"])
+@pytest.mark.parametrize("path", ["/api/memory/compact", "/api/memory/lifecycle/backfill"])
+def test_destructive_dry_run_must_be_boolean(client, fake_manager, path, bad):
+    r = client.post(path, json={"dry_run": bad})
+    assert r.status_code == 400, (path, bad)
+    fake_manager.backfill_lifecycle.assert_not_called()
+    fake_manager.store.scroll.assert_not_called()

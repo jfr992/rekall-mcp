@@ -14,6 +14,11 @@ _SAFE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
         ("  spaced  name ", "spaced-name"),
         ("rekall-mcp", "rekall-mcp"),
         ("a.b_c-d", "a.b_c-d"),
+        (".playwright-mcp", ".playwright-mcp"),
+        ("-.x-", ".x"),
+        ("...", "general"),
+        ("..", "general"),
+        ("-.-", "general"),
         ("", "general"),
         ("   ", "general"),
         ("x" * 80, "x" * 64),
@@ -25,6 +30,11 @@ def test_normalize_project(raw, expected):
 
 def test_normalize_unicode_matches_safe_pattern():
     assert _SAFE.match(normalize_project("ünïcode proj"))
+
+
+@pytest.mark.parametrize("raw", [".playwright-mcp", "...", "ünï .x", "x" * 80])
+def test_normalize_matches_safe_pattern(raw):
+    assert _SAFE.match(normalize_project(raw))
 
 
 def test_normalize_is_idempotent():
