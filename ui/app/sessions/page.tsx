@@ -106,6 +106,7 @@ export default function SessionsPage() {
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(300px,2fr)_3fr]">
           <SessionList
             sessions={data.sessions}
+            total={data.total}
             selectedId={selectedId}
             onSelect={setSelectedId}
             emptyMessage={

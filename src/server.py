@@ -1035,23 +1035,16 @@ async def api_list_sessions(request):
             sessions = [s for s in sessions if (s["last_at"] or "")[:10] >= after]
         if before is not None:
             sessions = [s for s in sessions if (s["last_at"] or "")[:10] <= before]
+        total = len(sessions)
         sessions = sessions[:limit]
-        # U2 phase metric: server-side hit counter for the transparency view.
-        _get_memory_manager().record_event(
-            event_type="view_opened",
-            project="general",
-            source="sessions_view",
-            payload={"view": "sessions"},
-        )
         rows = [
             {key: s[key] for key in ("session_id", "project", "started_at", "last_at", "totals")}
             for s in sessions
         ]
-        # Same honest marker the stream carries, from the snapshot the fold
-        # used — taken before the view_opened append above.
         return _ok(
             {
                 "sessions": rows,
+                "total": total,
                 "window": _SESSIONS_EVENT_WINDOW,
                 "event_window": {"events": len(snapshot.events), "oldest_at": snapshot.oldest_at},
             }

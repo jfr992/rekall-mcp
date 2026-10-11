@@ -241,6 +241,7 @@ export const SessionRowSchema = z.object({
 
 export const SessionsResponseSchema = z.object({
   sessions: z.array(SessionRowSchema),
+  total: z.number().optional(),
   window: z.number(),
   event_window: EventWindowSchema,
 });

@@ -402,18 +402,21 @@ def test_get_sessions_event_window_marker_survives_range_filter(monkeypatch, tmp
     assert body["event_window"] == {"events": 1, "oldest_at": "2026-07-01T09:00:00"}
 
 
-def test_sessions_list_get_emits_view_opened_counter(monkeypatch, tmp_path):
-    """The U2 phase metric: % of sessions where the view was opened."""
+def test_sessions_list_get_is_side_effect_free(monkeypatch, tmp_path):
     tc, manager = _rest_client(monkeypatch, tmp_path)
     manager.event_log.append(_summary("s1", "proj-a", ["m1"], "2026-07-14T09:10:00"))
+    before = (tmp_path / "_events.jsonl").read_text()
+    assert tc.get("/api/memory/sessions").status_code == 200
+    assert (tmp_path / "_events.jsonl").read_text() == before
+    manager.record_event.assert_not_called()
 
-    r = tc.get("/api/memory/sessions")
 
-    assert r.status_code == 200
-    manager.record_event.assert_called_once()
-    kw = manager.record_event.call_args.kwargs
-    assert kw["event_type"] == "view_opened"
-    assert kw["payload"]["view"] == "sessions"
+def test_sessions_list_reports_total_beyond_limit(monkeypatch, tmp_path):
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    manager.event_log.append(_summary("s1", "proj-a", ["m1"], "2026-07-14T09:10:00"))
+    manager.event_log.append(_summary("s2", "proj-a", ["m2"], "2026-07-14T10:10:00"))
+    body = tc.get("/api/memory/sessions", params={"limit": 1}).json()
+    assert body["total"] == 2 and len(body["sessions"]) == 1
 
 
 def _recall(session_id, project, memory_ids, observed_at):

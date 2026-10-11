@@ -6,6 +6,7 @@ import type { SessionRow } from "@/lib/schemas";
 
 type Props = {
   sessions: SessionRow[];
+  total?: number;
   selectedId: string | null;
   onSelect: (sessionId: string) => void;
   emptyMessage?: string;
@@ -13,6 +14,7 @@ type Props = {
 
 export function SessionList({
   sessions,
+  total,
   selectedId,
   onSelect,
   emptyMessage = "No sessions in the event window.",
@@ -21,7 +23,7 @@ export function SessionList({
     <section className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden rounded-[var(--radius-lg)] border border-[var(--border)] bg-[var(--bg-elevated)]">
       <header className="flex shrink-0 items-baseline justify-between gap-3 border-b border-[var(--border)] px-5 py-4">
         <h2 className="font-serif text-xl">Sessions</h2>
-        <MonoLabel>{sessions.length}</MonoLabel>
+        <MonoLabel>{total && total > sessions.length ? `${sessions.length} of ${total}` : sessions.length}</MonoLabel>
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {sessions.length === 0 ? (
