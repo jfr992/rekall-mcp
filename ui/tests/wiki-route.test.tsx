@@ -16,6 +16,7 @@ vi.mock("@/components/memory-inspector/memory-inspector", () => ({
 vi.mock("@/lib/queries/use-wiki", () => {
   const q = (data: unknown) => ({ data, isLoading: false, isError: false });
   const m = () => ({ mutate: vi.fn(), isPending: false });
+  const approveMutate = vi.fn();
   return {
     useWikiIndex: () => q(WikiIndexSchema.parse(indexFixture)),
     useWikiPage: (id: string | null) => (id ? q(WikiPageSchema.parse(pageFixture)) : q(undefined)),
@@ -23,11 +24,12 @@ vi.mock("@/lib/queries/use-wiki", () => {
     useWikiDraft: (id: string | null) => (id ? q(WikiDraftDetailSchema.parse(draftFixture)) : q(undefined)),
     useWikiSearch: () => q(undefined),
     useWikiCandidates: () => ({ data: undefined, mutate: vi.fn(), isPending: false, error: null }),
-    useApproveDraft: m, useRejectDraft: m, useEditDraft: m, useCreateDraft: () => ({ ...m(), data: undefined, error: null }),
+    useApproveDraft: () => ({ mutate: approveMutate, isPending: false }), __approveMutate: approveMutate, useRejectDraft: m, useEditDraft: m, useCreateDraft: () => ({ ...m(), data: undefined, error: null }),
   };
 });
 
 import { useMemoryDetail } from "@/lib/queries/use-memory-detail";
+import * as wikiQueries from "@/lib/queries/use-wiki";
 import WikiRoute from "@/app/wiki/page";
 
 beforeEach(() => vi.mocked(useMemoryDetail).mockClear());
@@ -47,5 +49,17 @@ describe("/wiki route", () => {
     fireEvent.click(screen.getByRole("button", { name: /open/i }));
     expect(screen.getByText(/always add a trailer/i)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /approve/i }).length).toBeGreaterThan(1);
+  });
+
+  test("approving a draft with missing sections asks first", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    const approveMutate = (wikiQueries as unknown as { __approveMutate: ReturnType<typeof vi.fn> }).__approveMutate;
+    approveMutate.mockClear();
+    render(<WikiRoute />);
+    fireEvent.click(screen.getByRole("button", { name: /^drafts/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /approve/i })[0]);
+    expect(confirm).toHaveBeenCalledWith(expect.stringMatching(/exceptions/));
+    expect(approveMutate).not.toHaveBeenCalled();
+    confirm.mockRestore();
   });
 });

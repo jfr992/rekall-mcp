@@ -37,7 +37,10 @@ export function PinMemoryDialog({ memoryId, content, pinned, onCancel, onDone }:
             pin.mutate(
               { memoryId, pinned: !pinned },
               {
-                onSuccess: onDone,
+                onSuccess: () => {
+                  toast.success(pinned ? "Identity pin removed" : "Promoted to identity");
+                  onDone();
+                },
                 onError: (err) => toast.error(`Pin failed — ${err.message}`),
               },
             )

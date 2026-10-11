@@ -79,4 +79,14 @@ describe("un-dispute", () => {
     expect(JSON.parse(init.body as string)).toEqual({ disputed: false });
     expect((init.headers as Record<string, string>)["X-Rekall-UI"]).toBe("1");
   });
+
+  test("a memory that is not disputed offers Dispute and posts disputed=true", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ memory_id: "2026-07-10_fact_0ddba11", disputed: true })));
+    vi.stubGlobal("fetch", fetchMock);
+    renderInspector({ detail: { ...disputedDetail, memory: { ...disputedDetail.memory, disputed: false } } });
+    fireEvent.click(screen.getByRole("button", { name: /^dispute$/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)).toEqual({ disputed: true });
+    expect(await screen.findByText(/marked disputed/i)).toBeInTheDocument();
+  });
 });

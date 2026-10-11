@@ -1,10 +1,15 @@
 // Migrated from NodeDrawer to MemoryInspector (T6 integration).
 // NodeDrawer is removed; these scenarios are now covered by MemoryInspector.
 import { describe, test, expect, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import {render as rtlRender, screen} from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import userEvent from "@testing-library/user-event";
 import { MemoryInspector } from "@/components/memory-inspector/memory-inspector";
 import type { DetailResponseV2 } from "@/lib/schemas";
+
+const render = (ui: ReactElement) =>
+  rtlRender(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
 
 const fakeDetail: DetailResponseV2 = {
   memory: {
