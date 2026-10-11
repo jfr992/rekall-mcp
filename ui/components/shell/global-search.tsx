@@ -22,6 +22,7 @@ export function GlobalSearch() {
   const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<SearchMode>("semantic");
+  const [pendingEnter, setPendingEnter] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const project = useProjectStore((s) => s.project);
@@ -51,6 +52,16 @@ export function GlobalSearch() {
       ? fetched.filter((m) => (m.content ?? "").toLowerCase().includes(needle))
       : fetched;
 
+  useEffect(() => {
+    if (!pendingEnter || input !== query) return;
+    if (results.isError) {
+      setPendingEnter(false);
+    } else if (results.isSuccess) {
+      setPendingEnter(false);
+      if (memories[0]) openMemory(memories[0].memory_id);
+    }
+  }, [pendingEnter, input, query, results.isSuccess, results.isError, memories]);
+
   // Highlight resets whenever the visible result set changes.
   useEffect(() => {
     setActiveIndex(0);
@@ -60,6 +71,7 @@ export function GlobalSearch() {
     setOpen(false);
     setInput("");
     setQuery("");
+    setPendingEnter(false);
     setActiveIndex(0);
   }
 
@@ -75,9 +87,14 @@ export function GlobalSearch() {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter") {
+    } else if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+      e.preventDefault();
       const m = memories[activeIndex];
-      if (m) openMemory(m.memory_id);
+      if (m && input === query) openMemory(m.memory_id);
+      else if (input.trim()) {
+        setQuery(input);
+        setPendingEnter(true);
+      }
     }
   }
 
@@ -105,7 +122,10 @@ export function GlobalSearch() {
             autoFocus
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setPendingEnter(false);
+            }}
             placeholder="Search memories…"
             onKeyDown={onInputKey}
             className="min-w-0 flex-1 border-none bg-transparent text-base text-[var(--fg)] outline-none placeholder:text-[var(--fg-dim)]"

@@ -257,3 +257,41 @@ describe("GlobalSearch errors", () => {
     expect(screen.queryByText(/no matches/i)).not.toBeInTheDocument();
   });
 });
+
+describe("GlobalSearch Enter", () => {
+  beforeEach(() => {
+    vi.resetAllMocks();
+    useProjectStore.setState({ project: "" });
+    vi.mocked(searchApi.postRecall).mockResolvedValue({ query: "", count: 0, memories: [] });
+  });
+
+  test("Enter pressed before the debounce settles opens the top result once it loads", async () => {
+    vi.mocked(searchApi.postRecall).mockResolvedValue(recallFixture as RecallResponse);
+    vi.mocked(detailApi.getMemoryDetail).mockResolvedValue(detailV2Fixture as any);
+    renderSearch();
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    const input = screen.getByPlaceholderText(/search memories/i);
+    fireEvent.change(input, { target: { value: "metallb" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(detailApi.getMemoryDetail).toHaveBeenCalled());
+  });
+
+  test("Enter before the debounce settles with zero results does nothing and does not open later", async () => {
+    renderSearch();
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    const input = screen.getByPlaceholderText(/search memories/i);
+    fireEvent.change(input, { target: { value: "nothing" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(await screen.findByText(/no matches/i)).toBeInTheDocument();
+    expect(detailApi.getMemoryDetail).not.toHaveBeenCalled();
+  });
+
+  test("Enter during IME composition does nothing", () => {
+    renderSearch();
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    const input = screen.getByPlaceholderText(/search memories/i);
+    fireEvent.change(input, { target: { value: "x" } });
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    expect(searchApi.postRecall).not.toHaveBeenCalled();
+  });
+});
