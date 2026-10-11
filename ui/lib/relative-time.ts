@@ -1,6 +1,8 @@
+import { parseServerTime } from "@/lib/time";
+
 export function relativeTime(iso: string | null, now = Date.now()): string {
   if (!iso) return "—";
-  const then = new Date(iso).getTime();
+  const then = parseServerTime(iso).getTime();
   if (Number.isNaN(then)) return "—";
   const s = Math.max(0, Math.round((now - then) / 1000));
   if (s < 60) return `${s}s ago`;

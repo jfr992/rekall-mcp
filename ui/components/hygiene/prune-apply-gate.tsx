@@ -28,14 +28,13 @@ export function PruneApplyGate({ planId, candidateCount, expired, loading, onReq
             {candidateCount} {candidateCount === 1 ? "memory" : "memories"} will be permanently deleted.
           </p>
           <p className="mt-1 text-xs text-[var(--fg-muted)]">
-            Type the full plan id below to confirm. This is deliberately paranoid — paste-only
-            muscle memory is not allowed.
+            Type or paste the full plan id below to confirm.
           </p>
         </div>
       </div>
 
       <label className="block">
-        <MonoLabel>type the plan id to confirm</MonoLabel>
+        <MonoLabel>type or paste the plan id to confirm</MonoLabel>
         <input
           type="text"
           value={typed}

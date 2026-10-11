@@ -12,3 +12,8 @@ describe("relativeTime", () => {
     expect(relativeTime("not-a-date", now)).toBe("—");
   });
 });
+
+test("offset-less server time is read as UTC", () => {
+  const now = new Date("2026-07-14T12:00:00Z").getTime();
+  expect(relativeTime("2026-07-14T11:59:30", now)).toBe("30s ago");
+});

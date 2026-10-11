@@ -4,6 +4,7 @@ import { MonoLabel } from "@/components/ui/mono-label";
 import { ShowMoreList } from "@/components/ui/show-more-list";
 import { recallOriginLabel } from "@/lib/recall-origin";
 import type { StreamRow } from "@/lib/schemas";
+import { parseServerTime } from "@/lib/time";
 
 const FEED_CAP = 8;
 
@@ -17,7 +18,7 @@ type Props = {
 };
 
 function hhmm(at: string): string {
-  const d = new Date(at);
+  const d = parseServerTime(at);
   if (Number.isNaN(d.getTime())) return "--:--";
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }

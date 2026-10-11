@@ -4,6 +4,7 @@ import { Empty } from "@/components/ui/empty";
 import { ShowMoreList } from "@/components/ui/show-more-list";
 import { recallOriginLabel } from "@/lib/recall-origin";
 import type { StreamRow } from "@/lib/schemas";
+import { parseServerTime } from "@/lib/time";
 
 type Props = {
   rows: StreamRow[];
@@ -20,7 +21,7 @@ function sameDay(a: Date, b: Date): boolean {
 }
 
 function dayLabel(at: string, now: number): string {
-  const d = new Date(at);
+  const d = parseServerTime(at);
   const monthDay = d
     .toLocaleDateString("en-US", { month: "short", day: "numeric" })
     .toUpperCase();
@@ -30,7 +31,7 @@ function dayLabel(at: string, now: number): string {
 }
 
 function timeLabel(at: string): string {
-  const d = new Date(at);
+  const d = parseServerTime(at);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 

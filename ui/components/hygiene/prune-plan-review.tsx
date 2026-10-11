@@ -6,6 +6,7 @@ import { MonoLabel } from "@/components/ui/mono-label";
 import { Badge } from "@/components/ui/badge";
 import { Empty } from "@/components/ui/empty";
 import type { PrunePlan } from "@/lib/schemas";
+import { parseServerTime } from "@/lib/time";
 
 type Props = {
   plan: PrunePlan;
@@ -20,7 +21,7 @@ function formatMs(ms: number): string {
 }
 
 export function PrunePlanReview({ plan, children }: Props) {
-  const expiresAt = new Date(plan.expires_at).getTime();
+  const expiresAt = parseServerTime(plan.expires_at).getTime();
   const [remaining, setRemaining] = useState<number>(expiresAt - Date.now());
 
   useEffect(() => {

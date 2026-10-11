@@ -9,6 +9,7 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./vitest.setup.ts"],
     globals: true,
+    env: { TZ: "UTC" },
     css: true,
     exclude: ["**/e2e/**", "**/node_modules/**"],
     // tdd-guard reads results from <repo>/.claude/tdd-guard/data — the
