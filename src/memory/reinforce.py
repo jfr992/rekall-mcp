@@ -68,6 +68,17 @@ def credit_from_recall(event: MemoryEvent) -> RecallCandidate | None:
     )
 
 
+def _feedback_memory_id(event: MemoryEvent) -> str | None:
+    payload = event.payload
+    memory_id = payload.get("memory_id")
+    if isinstance(memory_id, str) and memory_id:
+        return memory_id
+    ids = payload.get("memory_ids")
+    if isinstance(ids, list) and len(ids) == 1 and isinstance(ids[0], str):
+        return ids[0]
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class FeedbackCredit:
     memory_id: str
@@ -85,7 +96,7 @@ def credit_from_feedback(event: MemoryEvent) -> FeedbackCredit | None:
     useful -> +1.0 outcome credit. wrong -> -1.0 and disputed=True
     (suppression handled downstream). stale/unknown -> no counter credit.
     """
-    memory_id = event.payload.get("memory_id")
+    memory_id = _feedback_memory_id(event)
     verdict = event.payload.get("verdict")
     if not memory_id or verdict not in ("useful", "wrong"):
         return None
@@ -125,7 +136,7 @@ def supersedes_candidate_from_feedback(event: MemoryEvent) -> SupersedesCandidat
     instead of touching reinforcement_count (Zep lesson: staleness invalidates,
     it doesn't decay a score).
     """
-    memory_id = event.payload.get("memory_id")
+    memory_id = _feedback_memory_id(event)
     if not memory_id or event.payload.get("verdict") != "stale":
         return None
 

@@ -516,7 +516,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/review` | POST | Record a review verdict (`keep\|fix\|kill`; kill deletes then records, fix is 501 until U3) |
 | `/api/memory/sessions` | GET | Session transparency list folded from events (`?limit=`; `?project=` scopes to one project incl. its unattributed bucket, absent or `all` = every project; `after`/`before` are inclusive `YYYY-MM-DD` day bounds on each session's last activity; `window` = event-tail cap; `event_window.oldest_at` marks where the fold truncates; emits a `view_opened` counter) |
 | `/api/memory/sessions/{id}` | GET | Full session detail: injected memories + recall cards with scores; unattributed recalls under `unattributed:<project>` |
-| `/api/memory/feedback` | POST | One-click recall feedback (`useful\|wrong\|stale`) → `memory_feedback` event; labeled evidence only, never read into ranking |
+| `/api/memory/feedback` | POST | One-click recall feedback (`useful\|wrong\|stale`) → `memory_feedback` event; `wrong` disputes the memory (suppressed from recall), `useful` adds reinforcement credit, `stale` nominates it for supersede review |
 | `/api/memory/insights` | GET | Cockpit aggregates (`?project=`): totals, per-week counts, 7d recall/miss/promotion stats with honest denominators, tier counts; `event_window` = bounded event-tail truncation info |
 | `/api/memory/stream` | GET | Newest-first activity feed (`?project=&limit=&after=&before=`): `saved\|recalled\|promoted\|consolidated` rows merged from memory records + the bounded event tail; `after`/`before` are inclusive `YYYY-MM-DD` day bounds; `event_window.oldest_at` marks where recall/promotion rows truncate; working-tier saves carry `fades_in_hours` |
 

@@ -2485,8 +2485,8 @@ async def api_memory_pressure(request):
         memories = manager.store.scroll(filters=filters, limit=cap)
         pressure = identify_pressure(memories)
 
-        total = max(len(memories), 1)
-        load_score = _pressure_load_score(pressure, total=total)
+        count = len(memories)
+        load_score = _pressure_load_score(pressure, total=max(count, 1))
 
         graph_has_nodes = manager.knowledge_graph.stats()["nodes"] > 0
         conflict: list[dict] = []
@@ -2520,7 +2520,7 @@ async def api_memory_pressure(request):
             {
                 "project": project or "all",
                 "load_score": load_score,
-                "capacity": total,
+                "capacity": count,
                 "flagged": {
                     "stale_working_count": pressure.get("stale_working_count", 0),
                     "low_value_count": pressure.get("low_value_count", 0),

@@ -118,6 +118,21 @@ describe("Sessions surface", () => {
     });
   });
 
+  test("a recorded verdict shows a success toast", async () => {
+    vi.mocked(feedbackApi.postFeedback).mockResolvedValue({ recorded: true });
+    const user = userEvent.setup();
+    renderSessions();
+    await user.click(await screen.findByText(/sess-abc123/));
+    await screen.findByText(/vector corruption tripwire/i);
+
+    const [wrong] = screen.getAllByRole("button", {
+      name: /mark 2026-07-10_decision_a1b2c3 wrong/i,
+    });
+    await user.click(wrong);
+
+    expect(await screen.findByText(/marked 2026-07-10_decision_a1b2c3 wrong/i)).toBeInTheDocument();
+  });
+
   test("failed feedback POST reverts optimistic state and surfaces an error", async () => {
     let rejectPost!: (e: Error) => void;
     vi.mocked(feedbackApi.postFeedback).mockImplementation(

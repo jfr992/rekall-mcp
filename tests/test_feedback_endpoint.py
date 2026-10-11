@@ -68,3 +68,26 @@ def test_grep_pin_nothing_in_manager_reads_memory_feedback():
 
     manager_src = (Path(__file__).parent.parent / "src" / "memory" / "manager.py").read_text()
     assert "memory_feedback" not in manager_src
+
+
+def test_endpoint_event_round_trips_into_dispute_credit(tmp_path, monkeypatch):
+    from starlette.testclient import TestClient
+
+    import server
+    from memory.events import EventLog
+    from memory.manager import MemoryManager
+    from memory.reinforce import credit_from_feedback
+
+    mgr = MagicMock()
+    mgr.store.get_many.return_value = [{"memory_id": "m1", "project": "p"}]
+    log = EventLog(tmp_path / "_events.jsonl")
+    holder = type("Holder", (), {"event_log": log})()
+    mgr.record_event.side_effect = lambda **kw: MemoryManager.record_event(holder, **kw)
+    monkeypatch.setattr("memory.singleton._instance", mgr)
+
+    TestClient(server.mcp.streamable_http_app()).post(
+        "/api/memory/feedback", json={"memory_id": "m1", "verdict": "wrong"}
+    )
+
+    credit = credit_from_feedback(log.tail(1)[0])
+    assert credit is not None and credit.disputed

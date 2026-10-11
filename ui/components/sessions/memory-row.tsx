@@ -30,6 +30,7 @@ export function MemoryRow({ memoryId, sessionId, score, tokenEstimate, onExpand 
     feedback.mutate(
       { memoryId, verdict: next, sessionId },
       {
+        onSuccess: () => toast.success(`Marked ${memoryId} ${next}`),
         onError: (err) => {
           setVerdict(prev);
           toast.error(`Feedback failed: ${err.message}`);

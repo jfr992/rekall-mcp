@@ -100,10 +100,10 @@ def build_plan(manager, *, project: str, limit: int = MAX_DELETIONS_PER_APPLY) -
 
     def is_protected_neighbor(mid: str) -> bool:
         try:
-            neighbors = manager.knowledge_graph.get_neighbors(mid, hops=1) or set()
+            neighbors = manager.knowledge_graph.get_neighbors(mid, hops=1) or ()
         except Exception:
             return False
-        return bool(neighbors & identity_ids)
+        return not identity_ids.isdisjoint(neighbors)
 
     candidates: list[PruneCandidate] = []
     for m in memories:

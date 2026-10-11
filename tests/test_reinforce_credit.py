@@ -176,3 +176,30 @@ def test_credit_from_session_carries_the_summary_events_own_observed_at():
     credits = credit_from_session(summary, recalls)
 
     assert credits[0].observed_at == summary.observed_at
+
+
+def test_credit_from_feedback_reads_memory_ids_list():
+    from memory.reinforce import credit_from_feedback
+
+    event = MemoryEvent(
+        event_type="memory_feedback",
+        project="p",
+        agent="ui",
+        source="feedback_endpoint",
+        payload={"verdict": "wrong", "editor": "ui", "memory_ids": ["m1"], "session_id": "s"},
+    )
+    credit = credit_from_feedback(event)
+    assert credit is not None and credit.memory_id == "m1" and credit.disputed is True
+
+
+def test_stale_feedback_reads_memory_ids_list():
+    from memory.reinforce import supersedes_candidate_from_feedback
+
+    event = MemoryEvent(
+        event_type="memory_feedback",
+        project="p",
+        agent="ui",
+        source="feedback_endpoint",
+        payload={"verdict": "stale", "editor": "ui", "memory_ids": ["m1"]},
+    )
+    assert supersedes_candidate_from_feedback(event) is not None
