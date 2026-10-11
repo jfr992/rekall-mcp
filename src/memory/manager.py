@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from core import Embedder, Telemetry, VectorStore
-from core.utils import assert_test_isolation
+from core.utils import assert_test_isolation, parse_ts, utc_now, utc_now_iso
 from memory.events import EventLog, MemoryEvent
 from memory.lifecycle import summarize_lifecycle
 from memory.linker import auto_link
@@ -551,7 +551,7 @@ class MemoryManager:
                     project=project_name,
                     vector=vector,
                 )
-                timestamp = datetime.now().isoformat()
+                timestamp = utc_now_iso()
                 unique_string = f"{content}|{timestamp}"
                 content_hash = hashlib.sha256(unique_string.encode()).hexdigest()[:8]
                 memory_id = f"{date}_{type}_{content_hash}"
@@ -713,7 +713,7 @@ class MemoryManager:
             "sanitized": sanitized,
         }
         scope = ScopeDetector.detect(project=project)
-        timestamp = datetime.now().isoformat()
+        timestamp = utc_now_iso()
         payload: dict[str, Any] = {
             "memory_id": memory_id,
             "content": canonical_content,
@@ -1099,7 +1099,7 @@ class MemoryManager:
         if threshold <= 0:  # 0 disables the guard
             return None
         window_hours = _env_float("REKALL_LOOP_GUARD_WINDOW", 12.0)
-        cutoff = datetime.now() - timedelta(hours=window_hours)
+        cutoff = utc_now() - timedelta(hours=window_hours)
 
         try:
             events = self.event_log.tail(500)
@@ -1115,7 +1115,7 @@ class MemoryManager:
             if event.project != project:
                 continue
             try:
-                if datetime.fromisoformat(event.observed_at) < cutoff:
+                if parse_ts(event.observed_at) < cutoff:
                     continue
             except ValueError:
                 continue

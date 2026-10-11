@@ -78,3 +78,10 @@ def test_manager_records_memory_saved_event(tmp_path, monkeypatch):
     events = manager.event_log.tail(limit=1)
     assert events[0].event_type == "memory_saved"
     assert events[0].payload["memory_id"] == memory_id
+
+
+def test_event_observed_at_is_aware_utc():
+    from memory.events import MemoryEvent
+
+    event = MemoryEvent(event_type="x", project="p", agent="a", source="s", payload={})
+    assert event.observed_at.endswith("+00:00")

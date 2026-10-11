@@ -5,11 +5,11 @@ Kinds: saved (memory records), recalled/promoted (event tail), consolidated
 derived from retention_days + timestamp — display-only decay honesty.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from memory.events import EventLog, MemoryEvent
 
-NOW = datetime.now()
+NOW = datetime.now(UTC)
 
 
 def _at(days_ago: float) -> str:

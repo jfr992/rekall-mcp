@@ -21,6 +21,7 @@ from itertools import groupby
 from pathlib import Path
 from typing import Any
 
+from core.utils import parse_ts
 from memory.events import EventLog, MemoryEvent
 from memory.lifecycle import LifecycleSignals, classify, compute_retention_days
 
@@ -253,9 +254,7 @@ def apply_reinforcement(
     """
     cutoff = now.timestamp() - DAMPING_WINDOW_DAYS * 86400
     recent_count = sum(
-        1
-        for h in history
-        if h.kind != "wrong" and datetime.fromisoformat(h.ts).timestamp() >= cutoff
+        1 for h in history if h.kind != "wrong" and parse_ts(h.ts).timestamp() >= cutoff
     )
 
     if weight > 0:
@@ -451,7 +450,7 @@ def _history_to_payload(history: list[HistoryEntry]) -> list[dict[str, Any]]:
 def _age_days(memory: dict[str, Any], now: datetime) -> int:
     date_str = memory.get("date") or now.strftime("%Y-%m-%d")
     try:
-        mem_date = datetime.strptime(date_str, "%Y-%m-%d")
+        mem_date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=now.tzinfo)
         return max(0, (now - mem_date).days)
     except ValueError:
         return 0
@@ -481,9 +480,7 @@ def _apply_credit_to_memory(
         for credit in sorted(kind_credits, key=lambda c: c.observed_at or ""):
             kind = "wrong" if credit.disputed else ("outcome" if credit.outcome_grade else "bare")
             try:
-                credit_time = (
-                    datetime.fromisoformat(credit.observed_at) if credit.observed_at else now
-                )
+                credit_time = parse_ts(credit.observed_at) if credit.observed_at else now
             except ValueError:
                 credit_time = now
             result = apply_reinforcement(

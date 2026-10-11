@@ -21,6 +21,8 @@ from datetime import datetime, timedelta
 from typing import Any
 from uuid import uuid4
 
+from core.utils import utc_now
+
 MAX_DELETIONS_PER_APPLY = 200
 PLAN_TTL = timedelta(minutes=15)
 
@@ -80,7 +82,9 @@ _PLAN_STORE: dict[str, PrunePlan] = {}
 
 def _age_days(date_str: str, *, now: datetime) -> int:
     try:
-        return max(0, (now - datetime.strptime(date_str, "%Y-%m-%d")).days)
+        return max(
+            0, (now - datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=now.tzinfo)).days
+        )
     except Exception:
         return 0
 
@@ -88,7 +92,7 @@ def _age_days(date_str: str, *, now: datetime) -> int:
 def build_plan(manager, *, project: str, limit: int = MAX_DELETIONS_PER_APPLY) -> PrunePlan:
     """Build a prune plan for `project`, storing it in `_PLAN_STORE`."""
     memories = manager.store.scroll(filters={"project": project}, limit=max(limit * 5, 200))
-    now = datetime.now()
+    now = utc_now()
 
     # Collect ids of identity-tier memories for neighborhood protection.
     identity_ids: set[str] = set()
@@ -170,7 +174,7 @@ def apply_plan(manager, *, plan_id: str, confirm_plan_id: str) -> dict[str, Any]
         raise PlanNotFound(f"Plan not found: {plan_id}")
     if plan_id != confirm_plan_id:
         raise PlanIdMismatch("confirm_plan_id does not match plan_id")
-    if datetime.now() > plan.expires_at:
+    if utc_now() > plan.expires_at:
         _PLAN_STORE.pop(plan_id, None)
         raise PlanExpired(f"Plan expired at {plan.expires_at.isoformat()}")
 

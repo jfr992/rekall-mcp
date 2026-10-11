@@ -250,14 +250,7 @@ def test_apply_with_expired_plan_rejects(monkeypatch):
 
     import memory.prune as prune_mod
 
-    real_dt = prune_mod.datetime
-
-    class FakeDT(real_dt):
-        @classmethod
-        def now(cls):
-            return plan.expires_at + timedelta(seconds=1)
-
-    monkeypatch.setattr(prune_mod, "datetime", FakeDT)
+    monkeypatch.setattr(prune_mod, "utc_now", lambda: plan.expires_at + timedelta(seconds=1))
 
     with pytest.raises(PlanExpired):
         apply_plan(mgr, plan_id=plan.plan_id, confirm_plan_id=plan.plan_id)
@@ -431,3 +424,10 @@ def test_build_plan_handles_list_neighbors_like_real_graph():
     plan = build_plan(mgr, project="p")
 
     assert {c.memory_id for c in plan.candidates} == {"w_far"}
+
+
+def test_plan_timestamps_carry_utc_offset():
+    mgr = _fake_manager([])
+    d = build_plan(mgr, project="p").to_dict()
+    assert d["generated_at"].endswith("+00:00")
+    assert d["expires_at"].endswith("+00:00")

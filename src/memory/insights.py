@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from core.utils import parse_ts, utc_now
 from memory.events import EventLog, MemoryEvent
 
 EVENT_WINDOW = 5000
@@ -55,7 +56,7 @@ def event_snapshot(log: EventLog, window: int = EVENT_WINDOW) -> EventSnapshot:
 
 def _within(observed_at: str, cutoff: datetime) -> bool:
     try:
-        return datetime.fromisoformat(observed_at) >= cutoff
+        return parse_ts(observed_at) >= cutoff
     except ValueError:
         return False
 
@@ -85,7 +86,7 @@ def build_insights(
     now: datetime | None = None,
 ) -> dict[str, Any]:
     """Cockpit aggregates from one filtered record scroll + the event tail."""
-    now = now or datetime.now()
+    now = now or utc_now()
     cutoff_date = (now - timedelta(days=7)).strftime("%Y-%m-%d")
 
     tier_counts = dict.fromkeys(TIERS, 0)
@@ -153,7 +154,7 @@ def build_stream(
     after/before are inclusive YYYY-MM-DD day bounds applied post-merge on the
     row's date part — never a Qdrant Range on the string date (known pitfall).
     """
-    now = now or datetime.now()
+    now = now or utc_now()
     # A compaction summary IS a memory record — surface it once, as its own kind.
     rows = [
         _consolidated_row(r) if r.get("type") == "summary" else _saved_row(r, now) for r in records
@@ -191,7 +192,7 @@ def _fades_in_hours(record: dict[str, Any], now: datetime) -> int | None:
         record.get("type", "note"), "working"
     )
     try:
-        saved_at = datetime.fromisoformat(_record_at(record))
+        saved_at = parse_ts(_record_at(record))
     except ValueError:
         return None
     remaining = saved_at + timedelta(days=int(retention_days)) - now

@@ -6,7 +6,7 @@ events with empty memory_ids; episodics_created_7d comes from record dates +
 tier, never implied consolidation.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from memory.events import EventLog, MemoryEvent
 
@@ -140,6 +140,21 @@ def test_insights_project_scope_filters_scroll_and_events(monkeypatch, tmp_path)
     assert body["promotions_7d"] == 0
     # the event window is the shared tail, not the scoped slice
     assert body["event_window"]["events"] == 3
+
+
+def test_insights_tolerates_mixed_naive_and_aware_events(monkeypatch, tmp_path):
+    tc, manager = _rest_client(monkeypatch, tmp_path)
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    log = manager.event_log
+    log.append(_recalled("p", ["m1"], f"{today}T12:00:00", scores=[0.5]))
+    log.append(_recalled("p", ["m2"], f"{today}T12:00:00+00:00", scores=[0.5]))
+    manager.store.scroll_all.return_value = [_record("r1", "p", today, "working")]
+    manager.store.count.return_value = 1
+
+    r = tc.get("/api/memory/insights")
+
+    assert r.status_code == 200
+    assert r.json()["recalls_7d"] == 2
 
 
 def test_insights_empty_log_and_empty_store(monkeypatch, tmp_path):

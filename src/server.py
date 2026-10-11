@@ -31,6 +31,7 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from core import Telemetry
+from core.utils import utc_now
 from memory.insights import EVENT_WINDOW
 from memory.types import VALID_MEMORY_TYPES
 from tools import ToolConfig, ToolLoader, ToolRegistry
@@ -770,7 +771,6 @@ def _run_reinforce_pass(manager) -> None:
     Best-effort: a failure here must never fail the ingestion response
     (PLAN.md Mechanism: consume session_summary server-side, non-blocking).
     """
-    from datetime import datetime
 
     from memory.reinforce import process_events
 
@@ -781,7 +781,7 @@ def _run_reinforce_pass(manager) -> None:
             graph=manager.knowledge_graph,
             state_path=manager.memory_dir / "_reinforce_state.json",
             lock_path=manager.memory_dir / "_reinforce.lock",
-            now=datetime.now(),
+            now=utc_now(),
             record_event=manager.record_event,
         )
     except Exception:

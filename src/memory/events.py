@@ -6,11 +6,10 @@ import json
 import logging
 import uuid
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from core.utils import assert_test_isolation
+from core.utils import assert_test_isolation, utc_now_iso
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +48,7 @@ class MemoryEvent:
     source: str
     payload: dict[str, Any]
     event_id: str = field(default_factory=lambda: uuid.uuid4().hex)
-    observed_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    observed_at: str = field(default_factory=utc_now_iso)
 
 
 class EventLog:
