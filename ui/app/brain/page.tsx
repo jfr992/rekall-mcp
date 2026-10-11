@@ -104,7 +104,7 @@ export default function BrainPage() {
 
         <div className="flex flex-col gap-3.5">
           <div className="relative min-h-[280px] overflow-hidden rounded-[11px] border border-[var(--border-strong)] bg-[var(--bg-deep)]">
-            <MonoLabel className="absolute left-4 top-3.5 z-10 text-[9px] tracking-[0.16em]">
+            <MonoLabel className="absolute left-4 top-3.5 z-10 text-[11px] tracking-[0.16em]">
               Neural graph
             </MonoLabel>
             {nodes.length === 0 && !graphQ.isLoading ? (

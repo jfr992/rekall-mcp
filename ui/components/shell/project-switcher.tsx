@@ -27,8 +27,8 @@ export function ProjectSwitcher() {
   };
 
   return (
-    <label className="flex shrink-0 items-center gap-2 rounded-lg border border-[rgba(45,212,160,0.3)] bg-[rgba(45,212,160,0.08)] px-3 py-1.5 transition-colors hover:border-[rgba(45,212,160,0.55)]">
-      <span className="flex items-center gap-1.5 font-mono text-[9px] uppercase tracking-[0.12em] text-[var(--fg-dim)]">
+    <label className="flex shrink-0 items-center gap-2 rounded-lg border border-[rgba(45,212,160,0.3)] bg-[rgba(45,212,160,0.08)] px-3 py-1.5 transition-colors hover:border-[rgba(45,212,160,0.55)] focus-within:ring-2 focus-within:ring-[var(--accent-primary)] focus-within:ring-offset-2 focus-within:ring-offset-[var(--bg-deep)]">
+      <span className="hidden items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.12em] text-[var(--fg-dim)] sm:flex">
         <User size={11} />
         scope
       </span>
@@ -37,7 +37,7 @@ export function ProjectSwitcher() {
           value={project}
           onChange={handleChange}
           aria-label="Memory scope"
-          className="max-w-[8rem] cursor-pointer appearance-none bg-transparent pr-5 font-mono text-[11px] font-medium text-[var(--accent-bright)] focus:outline-none disabled:cursor-wait disabled:opacity-50 md:max-w-[12rem]"
+          className="max-w-[6rem] cursor-pointer appearance-none bg-transparent pr-5 font-mono text-[11px] font-medium text-[var(--accent-bright)] focus:outline-none disabled:cursor-wait disabled:opacity-50 sm:max-w-[8rem] md:max-w-[12rem]"
           disabled={isLoading}
         >
           {isLoading ? (

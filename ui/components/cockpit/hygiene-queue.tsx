@@ -34,7 +34,7 @@ export function HygieneQueue({ pressure }: Props) {
 
   return (
     <section className="rounded-[11px] border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-4">
-      <MonoLabel className="mb-2.5 block text-[9px] tracking-[0.16em]">Hygiene queue</MonoLabel>
+      <MonoLabel className="mb-2.5 block text-[11px] tracking-[0.16em]">Hygiene queue</MonoLabel>
 
       {flagged ? (
         <ul className="flex flex-col gap-2 text-xs text-[var(--fg-soft)]">

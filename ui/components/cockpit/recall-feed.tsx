@@ -28,7 +28,7 @@ export function RecallFeed({ rows, misses7d, onSelect, scoped = false }: Props) 
 
   return (
     <section className="flex flex-col rounded-[11px] border border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-4">
-      <MonoLabel className="mb-3.5 block text-[9px] tracking-[0.16em]">Live recall feed</MonoLabel>
+      <MonoLabel className="mb-3.5 block text-[11px] tracking-[0.16em]">Live recall feed</MonoLabel>
 
       <div className="flex flex-1 flex-col gap-0.5 text-xs">
         {recalled.length === 0 && scoped ? (

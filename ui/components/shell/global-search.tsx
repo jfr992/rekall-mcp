@@ -108,7 +108,7 @@ export function GlobalSearch() {
       >
         <Search size={12} />
         <span className="hidden md:inline">recall anything</span>
-        <kbd className="hidden rounded border border-[var(--border)] px-1 font-mono text-[9px] font-medium text-[var(--fg-dim)] md:inline">
+        <kbd className="hidden rounded border border-[var(--border)] px-1 font-mono text-[11px] font-medium text-[var(--fg-dim)] md:inline">
           ⌘K
         </kbd>
       </button>
@@ -137,7 +137,7 @@ export function GlobalSearch() {
                 type="button"
                 aria-pressed={mode === m}
                 onClick={() => setMode(m)}
-                className={`cursor-pointer rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-medium transition-colors ${
+                className={`cursor-pointer rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-medium transition-colors ${
                   mode === m
                     ? "border-[rgba(45,212,160,0.4)] bg-[rgba(45,212,160,0.16)] text-[var(--accent-bright)]"
                     : "border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg-soft)]"
@@ -184,7 +184,7 @@ export function GlobalSearch() {
           </p>
         ) : null}
 
-        <p className="mt-3 border-t border-[var(--border)] pt-2.5 font-mono text-[10px] text-[var(--fg-dim)]">
+        <p className="mt-3 border-t border-[var(--border)] pt-2.5 font-mono text-[11px] text-[var(--fg-dim)]">
           ↑↓ navigate · ↵ open · esc close
         </p>
       </Dialog>

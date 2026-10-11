@@ -35,6 +35,11 @@ import WikiRoute from "@/app/wiki/page";
 beforeEach(() => vi.mocked(useMemoryDetail).mockClear());
 
 describe("/wiki route", () => {
+  test("wiki route does not render a second <main>", () => {
+    const { container } = render(<WikiRoute />);
+    expect(container.querySelector("main")).toBeNull();
+  });
+
   test("clicking a source opens the memory inspector for that id", () => {
     render(<WikiRoute />);
     fireEvent.click(screen.getByText(/rotate gateway key/i));

@@ -15,7 +15,7 @@ export function TierComposition({ insights }: Props) {
 
   return (
     <section className="rounded-[11px] border border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-4">
-      <MonoLabel className="mb-4 block text-[9px] tracking-[0.16em]">Tier composition</MonoLabel>
+      <MonoLabel className="mb-4 block text-[11px] tracking-[0.16em]">Tier composition</MonoLabel>
 
       <div data-testid="tier-bar" className="mb-4 flex h-3 overflow-hidden rounded-md">
         {TIERS.map((tier) => (

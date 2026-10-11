@@ -110,7 +110,7 @@ export default function WikiPage() {
           )}
         </aside>
 
-        <main className="min-h-0 overflow-y-auto">
+        <section aria-label="Wiki content" className="min-h-0 overflow-y-auto">
           {draftId ? (
             draft.isLoading ? (
               <Skeleton className="h-64 w-full" />
@@ -144,7 +144,7 @@ export default function WikiPage() {
               onToggleFull={() => setFull((f) => !f)}
             />
           )}
-        </main>
+        </section>
 
         <aside className="flex min-h-0 flex-col gap-3 overflow-y-auto">
           <div className="flex gap-1.5">

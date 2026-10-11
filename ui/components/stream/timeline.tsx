@@ -56,12 +56,12 @@ function SavedRow({ row }: { row: Extract<StreamRow, { kind: "saved" }> }) {
         <Badge kind="type" value={payload.type} />
         {payload.tier ? <Badge kind="tier" value={payload.tier} /> : null}
         {payload.durability != null ? (
-          <span className="ml-auto font-mono text-[10px] text-[var(--fg-dim)]">
+          <span className="ml-auto font-mono text-[11px] text-[var(--fg-dim)]">
             strength {strengthBar(payload.durability)} {payload.durability.toFixed(1)}
           </span>
         ) : null}
         {decaying ? (
-          <span className="font-mono text-[10px] text-[var(--accent-danger)]">
+          <span className="font-mono text-[11px] text-[var(--accent-danger)]">
             fades in {payload.fades_in_hours}h
           </span>
         ) : null}
@@ -77,7 +77,7 @@ function RecalledRow({ row }: { row: Extract<StreamRow, { kind: "recalled" }> })
   const surfaced = `${n} ${n === 1 ? "memory" : "memories"} surfaced`;
   return (
     <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-dashed border-[color:rgba(163,230,53,0.3)] p-3">
-      <span className="font-mono text-[10px] font-medium tracking-[0.1em] text-[var(--accent-success)]">
+      <span className="font-mono text-[11px] font-medium tracking-[0.1em] text-[var(--accent-success)]">
         RECALLED
       </span>
       <span className="text-[13px] text-[var(--fg-muted)]">
@@ -95,7 +95,7 @@ function PromotedRow({ row }: { row: Extract<StreamRow, { kind: "promoted" }> })
   const { payload } = row;
   return (
     <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-[color:rgba(167,139,250,0.35)] bg-gradient-to-r from-[color:rgba(167,139,250,0.1)] to-transparent p-3">
-      <span className="font-mono text-[10px] font-medium tracking-[0.1em] text-[var(--accent-secondary)]">
+      <span className="font-mono text-[11px] font-medium tracking-[0.1em] text-[var(--accent-secondary)]">
         PROMOTED
       </span>
       <span className="text-[13px] text-[var(--fg-soft)]">
@@ -109,7 +109,7 @@ function ConsolidatedRow({ row }: { row: Extract<StreamRow, { kind: "consolidate
   const { payload } = row;
   return (
     <div className="flex flex-wrap items-center gap-2.5 rounded-lg border border-[color:rgba(167,139,250,0.35)] bg-gradient-to-r from-[color:rgba(167,139,250,0.1)] to-transparent p-3">
-      <span className="font-mono text-[10px] font-medium tracking-[0.1em] text-[var(--accent-secondary)]">
+      <span className="font-mono text-[11px] font-medium tracking-[0.1em] text-[var(--accent-secondary)]">
         CONSOLIDATED
       </span>
       <span className="text-[13px] text-[var(--fg-soft)]">{payload.preview}</span>
@@ -133,7 +133,7 @@ function Row({ row }: { row: StreamRow }) {
 function RowLine({ row }: { row: StreamRow }) {
   return (
     <div className="grid grid-cols-[48px_1fr] items-start gap-3">
-      <span className="pt-3 text-right font-mono text-[10px] text-[var(--fg-dim)]">
+      <span className="pt-3 text-right font-mono text-[11px] text-[var(--fg-dim)]">
         {timeLabel(row.at)}
       </span>
       <Row row={row} />
@@ -173,7 +173,7 @@ export function Timeline({ rows }: Props) {
       {groups.map((group, gi) => (
         <Fragment key={`${group.label}-${gi}`}>
           <div
-            className={`font-mono text-[10px] font-medium tracking-[0.14em] ${
+            className={`font-mono text-[11px] font-medium tracking-[0.14em] ${
               group.label.startsWith("TODAY")
                 ? "text-[var(--accent-bright)]"
                 : "text-[var(--fg-dim)]"

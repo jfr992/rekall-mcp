@@ -55,3 +55,16 @@ test.describe("Responsive shell — mobile viewport", () => {
     }
   });
 });
+
+test.describe("Responsive shell — 375px phone", () => {
+  test.skip(skip, "Set PLAYWRIGHT=1 to run browser-based responsive checks");
+
+  for (const path of ["/", "/hygiene"]) {
+    test(`no horizontal overflow at 375px on ${path}`, async ({ page }) => {
+      await page.setViewportSize({ width: 375, height: 812 });
+      await page.goto(path);
+      const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+      expect(scrollWidth).toBeLessThanOrEqual(375);
+    });
+  }
+});

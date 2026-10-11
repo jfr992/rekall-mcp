@@ -17,22 +17,24 @@ export function HealthBadge() {
           ? "var(--accent-danger)"
           : "var(--fg-dim)";
 
+  const detail = embedderError
+    ? `Embedder is broken — ${embedderError}. Nothing can be embedded or recalled.`
+    : status === "degraded"
+      ? `${zeroVectors} sampled memories have zero embedding vectors — semantic search is broken for them`
+      : undefined;
+
   return (
     <div
       className="flex shrink-0 items-center gap-2 rounded-md px-1 py-1"
-      title={
-        embedderError
-          ? `Embedder is broken — ${embedderError}. Nothing can be embedded or recalled.`
-          : status === "degraded"
-            ? `${zeroVectors} sampled memories have zero embedding vectors — semantic search is broken for them`
-            : undefined
-      }
+      title={detail ?? `Status: ${status}`}
+      role="status"
+      aria-label={`Status: ${status}`}
     >
       <span
         className="h-1.5 w-1.5 animate-pulse rounded-full"
         style={{ background: color, boxShadow: `0 0 8px ${color}` }}
       />
-      <span className="font-mono text-[10px] font-medium uppercase tracking-[0.08em] text-[var(--fg-muted)]">
+      <span className="hidden font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-[var(--fg-muted)] sm:inline">
         {status}
         {embedderError
           ? " · embedder down"

@@ -54,7 +54,7 @@ export function StatCards({ insights, pressure }: Props) {
   return (
     <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 xl:grid-cols-[1.4fr_1fr_1fr_1fr]">
       <div className="rounded-[11px] border border-[rgba(45,212,160,0.25)] bg-[radial-gradient(ellipse_90%_140%_at_20%_0%,rgba(45,212,160,0.14),rgba(13,17,32,0.6))] px-5 py-4">
-        <MonoLabel className="text-[9px] tracking-[0.16em]">
+        <MonoLabel className="text-[11px] tracking-[0.16em]">
           Total memories
         </MonoLabel>
         <div className="mt-1.5 flex items-baseline gap-2.5">
@@ -69,7 +69,7 @@ export function StatCards({ insights, pressure }: Props) {
       </div>
 
       <div className="rounded-[11px] border border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-4">
-        <MonoLabel className="text-[9px] tracking-[0.16em]">
+        <MonoLabel className="text-[11px] tracking-[0.16em]">
           Recalls · 7d
         </MonoLabel>
         <div className="mt-1.5 font-serif text-4xl leading-[1.1] text-[var(--fg)]">
@@ -89,7 +89,7 @@ export function StatCards({ insights, pressure }: Props) {
       </div>
 
       <div className="rounded-[11px] border border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-4">
-        <MonoLabel className="text-[9px] tracking-[0.16em]">
+        <MonoLabel className="text-[11px] tracking-[0.16em]">
           Recalls with hits
         </MonoLabel>
         <div className="mt-1.5 font-serif text-4xl leading-[1.1] text-[var(--accent-success)]">
@@ -104,7 +104,7 @@ export function StatCards({ insights, pressure }: Props) {
       </div>
 
       <div className="rounded-[11px] border border-[rgba(248,113,113,0.25)] bg-[var(--bg-elevated)] px-5 py-4">
-        <MonoLabel className="text-[9px] tracking-[0.16em] text-[var(--accent-danger)]">
+        <MonoLabel className="text-[11px] tracking-[0.16em] text-[var(--accent-danger)]">
           Needs attention
         </MonoLabel>
         <div className="mt-1.5 font-serif text-4xl leading-[1.1] text-[var(--accent-danger)]">
