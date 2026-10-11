@@ -13,6 +13,13 @@ export function DisputeToggle({ memoryId, disputed }: Props) {
   const m = useDisputeMemory();
   const label = disputed ? "Un-dispute" : "Dispute";
 
+  const callbacks = (l: string, onDone: () => void) => ({
+    onSuccess: onDone,
+    onError: (err: Error) => toast.error(`${l} failed — ${err.message}`),
+  });
+  const clear = () => toast.success("Dispute cleared");
+  const undo = () => m.mutate({ memoryId, disputed: false }, callbacks("Undo", clear));
+
   return (
     <Button
       variant="ghost"
@@ -22,15 +29,13 @@ export function DisputeToggle({ memoryId, disputed }: Props) {
       onClick={() =>
         m.mutate(
           { memoryId, disputed: !disputed },
-          {
-            onSuccess: () =>
-              disputed
-                ? toast.success("Dispute cleared")
-                : toast.success("Marked disputed — suppressed from recall", {
-                    action: { label: "Undo", onClick: () => m.mutate({ memoryId, disputed: false }) },
-                  }),
-            onError: (err) => toast.error(`${label} failed — ${err.message}`),
-          },
+          callbacks(label, () =>
+            disputed
+              ? clear()
+              : toast.success("Marked disputed — suppressed from recall", {
+                  action: { label: "Undo", onClick: undo },
+                }),
+          ),
         )
       }
     >

@@ -62,4 +62,15 @@ describe("/wiki route", () => {
     expect(approveMutate).not.toHaveBeenCalled();
     confirm.mockRestore();
   });
+
+  test("approving with confirm accepted calls approve", () => {
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(true);
+    const approveMutate = (wikiQueries as unknown as { __approveMutate: ReturnType<typeof vi.fn> }).__approveMutate;
+    approveMutate.mockClear();
+    render(<WikiRoute />);
+    fireEvent.click(screen.getByRole("button", { name: /^drafts/i }));
+    fireEvent.click(screen.getAllByRole("button", { name: /approve/i })[0]);
+    expect(approveMutate).toHaveBeenCalledWith("demo/policy/commits", expect.anything());
+    confirm.mockRestore();
+  });
 });
