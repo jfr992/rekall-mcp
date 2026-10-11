@@ -16,6 +16,11 @@ type FlaggedMemory = {
 
 type Props = {
   flagged: {
+    stale_working_count?: number;
+    low_value_count?: number;
+    contradiction_count?: number;
+    disputed_count?: number;
+    stale_candidates_count?: number;
     stale_working: FlaggedMemory[];
     low_value: FlaggedMemory[];
     conflict: FlaggedMemory[];
@@ -25,7 +30,19 @@ type Props = {
   onSelect: (memoryId: string) => void;
 };
 
-const GROUPS: Array<[keyof Props["flagged"], string, string]> = [
+type GroupKey = "stale_working" | "low_value" | "conflict" | "disputed" | "stale_candidates";
+
+const COUNT_KEY = {
+  conflict: "contradiction_count",
+  disputed: "disputed_count",
+  stale_candidates: "stale_candidates_count",
+  stale_working: "stale_working_count",
+  low_value: "low_value_count",
+} as const;
+
+const countOf = (f: Props["flagged"], k: GroupKey) => f[COUNT_KEY[k]] ?? f[k].length;
+
+const GROUPS: Array<[GroupKey, string, string]> = [
   ["conflict", "Conflicts", "carry a contradicts edge — see the resolution playbook in TUNING"],
   ["disputed", "Disputed", "marked wrong by feedback — suppressed from recall until reviewed"],
   ["stale_candidates", "Stale candidates", "marked stale — review for supersedes"],
@@ -45,14 +62,18 @@ export function FlaggedPanel({ flagged, onSelect }: Props) {
             className="max-h-[50vh] overflow-y-auto rounded-[11px] border border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-4"
           >
             <MonoLabel className="sticky top-0 -mx-5 -mt-4 block bg-[var(--bg-elevated)] px-5 pb-2 pt-4 tracking-[0.16em]">
-              {title} · {flagged[key].length} — {hint}
+              {title} · {countOf(flagged, key)} — {hint}
             </MonoLabel>
             <ul className="mt-3 space-y-1.5">
               <ShowMoreList
                 items={flagged[key]}
                 initialCount={VISIBLE_PER_GROUP}
                 keyFor={(m) => `${key}-${m.memory_id}`}
-                moreLabel={(_n) => `Show all ${flagged[key].length}`}
+                moreLabel={() => {
+                  const n = countOf(flagged, key);
+                  const shown = flagged[key].length;
+                  return n > shown ? `Show ${shown} of ${n}` : `Show all ${n}`;
+                }}
                 footerWrapper={(node) => <li>{node}</li>}
                 renderItem={(m: FlaggedMemory) => (
                   <li>

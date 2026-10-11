@@ -68,7 +68,7 @@ describe("hygiene flagged panel", () => {
     const onSelect = vi.fn();
     render(
       <FlaggedPanel
-        flagged={{ ...FLAGGED, conflict: manyConflicts(12) }}
+        flagged={{ ...FLAGGED, contradiction_count: 12, conflict: manyConflicts(12) }}
         onSelect={onSelect}
       />
     );
@@ -76,6 +76,12 @@ describe("hygiene flagged panel", () => {
     expect(screen.queryByText(/conflicted fact 5/)).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Show all 12" }));
     expect(screen.getByText(/conflicted fact 11/)).toBeInTheDocument();
+  });
+
+  it("header and expander use the server count when the list is truncated", () => {
+    render(<FlaggedPanel flagged={{ ...FLAGGED, contradiction_count: 67, conflict: manyConflicts(50) }} onSelect={vi.fn()} />);
+    expect(screen.getByText(/Conflicts · 67/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Show 50 of 67" })).toBeInTheDocument();
   });
 
   it("each group panel is the scroll container, not the page — bounded max-height with internal overflow", () => {

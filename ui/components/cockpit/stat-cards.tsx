@@ -1,8 +1,6 @@
-import { pruneCount } from "@/lib/pressure";
+import { attentionCount, type Attention } from "@/lib/pressure";
 import { MonoLabel } from "@/components/ui/mono-label";
 import type { InsightsResponse, PressureResponse } from "@/lib/schemas";
-
-type Flagged = PressureResponse["flagged"];
 
 type Props = {
   insights: InsightsResponse;
@@ -61,7 +59,7 @@ export function StatCards({ insights, pressure }: Props) {
         </MonoLabel>
         <div className="mt-1.5 flex items-baseline gap-2.5">
           <span className="font-serif text-[44px] leading-none text-[var(--fg)]">
-            {insights.total}
+            {insights.in_scope}
           </span>
           <span className="font-mono text-[11px] font-medium text-[var(--accent-success)]">
             {deltaLabel}
@@ -110,11 +108,11 @@ export function StatCards({ insights, pressure }: Props) {
           Needs attention
         </MonoLabel>
         <div className="mt-1.5 font-serif text-4xl leading-[1.1] text-[var(--accent-danger)]">
-          {pressure ? attentionTotal(pressure.flagged) : "—"}
+          {pressure ? attentionCount(pressure.flagged).total : "—"}
         </div>
         <div className="mt-2 font-mono text-[10.5px] text-[var(--fg-muted)]">
           {pressure
-            ? attentionBreakdown(pressure.flagged)
+            ? attentionBreakdown(attentionCount(pressure.flagged))
             : "pressure unavailable"}
         </div>
       </div>
@@ -123,20 +121,12 @@ export function StatCards({ insights, pressure }: Props) {
 }
 
 
-function attentionTotal(f: Flagged): number {
-  return (
-    pruneCount(f) +
-    f.contradiction_count +
-    f.disputed_count +
-    f.stale_candidates_count
-  );
-}
-
-function attentionBreakdown(f: Flagged): string {
+function attentionBreakdown(a: Attention): string {
   return [
-    `prune ${pruneCount(f)}`,
-    f.contradiction_count > 0 ? `conflict ${f.contradiction_count}` : null,
-    f.disputed_count > 0 ? `disputed ${f.disputed_count}` : null,
+    `prune ${a.prune}`,
+    a.conflict > 0 ? `conflict ${a.conflict}` : null,
+    a.disputed > 0 ? `disputed ${a.disputed}` : null,
+    a.staleCandidates > 0 ? `stale ${a.staleCandidates}` : null,
   ]
     .filter(Boolean)
     .join(" \u00b7 ");
