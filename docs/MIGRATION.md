@@ -1,3 +1,24 @@
+# Migration Guide — v1.18.1 → v1.18.2 (QA retest fixes)
+
+v1.18.1 QA retest fixes: stricter API input validation, consistent UTC timestamps, scope-safe project names, honest counts and error states in the cockpit.
+
+## What changed
+
+- **POST bodies must be JSON objects** (400 otherwise). `/api/memory/cleanup` rejects non-boolean `dry_run` / `prune_superseded`.
+- **Memory content is capped at 20,000 characters.** REST returns 400; MCP `save_memory` returns `Error: ...`.
+- **Timestamps carry `+00:00`.** Stored offset-less timestamps are read as UTC; rows written by a non-Docker server in local time may show offset by the UTC difference.
+- **Project names are normalized on write** (`La Gran Polla` → `La-Gran-Polla`). Reads stay strict.
+- **`GET /api/memory/sessions` no longer emits `view_opened`** and returns `total`.
+- **Cockpit/KB searches send `source: "ui"`** and are no longer logged as recalls.
+- **Fixes:** prune plan no longer 500s on real graphs; "Wrong" feedback now disputes the memory; pressure `capacity` is 0 for an empty scope; wiki drafts list accepts `?project=`.
+- **Continuity "Unresolved" lists model-verified conflicts.**
+- **`REKALL_UI_ORIGINS` is documented**; the migration script prints its targets and no-ops cleanly.
+- **Cockpit UX:** one needs-attention number, list headers use server totals, request errors replace empty states, 4xx is not retried, Dispute has Undo, success toasts, backfill shows changes and confirms Apply, Cmd-K Enter opens the top result, phone-width header, focus ring, 11px text floor.
+
+No data migration.
+
+---
+
 # Migration Guide — v1.18.0 → v1.18.1 (honest conflict counts)
 
 ## What's new
