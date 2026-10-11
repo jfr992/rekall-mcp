@@ -467,7 +467,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/save` | POST | Save a memory |
 | `/api/memory/afk/save` | POST | Idempotently save an AFK operation; retries require the same normalized operation envelope |
 | `/api/memory/afk/operations/{operation_id}` | GET | Fetch the exact AFK operation record (`?project=&operation_date=YYYY-MM-DD`) |
-| `/api/memory/recall` | POST | Graph-enhanced search (optional `task_hint`: context-matched results first; optional `cwd`: attributes the recall event to the caller's project; optional `session_id`: carried into the memory_recalled event) |
+| `/api/memory/recall` | POST | Graph-enhanced search (optional `task_hint`: context-matched results first; optional `cwd`: attributes the recall event to the caller's project; optional `session_id`: carried into the memory_recalled event; `source: "ui"` marks a cockpit lookup and emits no recall event) |
 | `/api/memory/recall/cross-project` | POST | Cross-project transfer recall |
 | `/api/memory/reflex` | POST | Cue-triggered recall packet for risky commands or edits (optional `cwd`: attributes the recall event to the caller's project; optional `session_id`: carried into the memory_recalled event) |
 | `/api/memory/observe` | POST | Auto-classify and save (accepts `cwd` for scope) |
@@ -487,7 +487,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/wiki/index` | GET | Wiki index entries with read-time validity (`project=` filter) |
 | `/api/wiki/search` | GET | BM25 lookup over live sections, ≤3 hits, ≤600 tokens (`q=`, `project=`, `limit=`) |
 | `/api/wiki/page/{page_id}` | GET | One section (default) or `full=1`; process pages never truncated |
-| `/api/wiki/drafts` | GET | Pending drafts with `needs`, unsourced steps, redaction flags |
+| `/api/wiki/drafts` | GET | Pending drafts (optional `?project=` scope) with `needs`, unsourced steps, redaction flags |
 | `/api/wiki/drafts/{page_id}` | GET, PUT | GET: one draft, full untrimmed body (`status: draft`) plus the same flags, 404 if none. PUT: edit |
 | `/api/wiki/drafts/{page_id}/approve` | POST | Approve: writes history, live page, index, and log |
 | `/api/wiki/drafts/{page_id}/reject` | POST | Reject with a reason |

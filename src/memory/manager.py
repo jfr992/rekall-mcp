@@ -1886,36 +1886,39 @@ class MemoryManager:
             except Exception:
                 logger.debug("freshness annotation skipped", exc_info=True)
 
-            try:
-                # Attribution only — the caller's cwd resolves through the same
-                # ScopeDetector path observe uses (v1.5.0 scope pitfall).
-                attributed = project
-                if not attributed and cwd:
-                    from memory.scope import ScopeDetector
+            if source != "ui":
+                try:
+                    # Attribution only — the caller's cwd resolves through the same
+                    # ScopeDetector path observe uses (v1.5.0 scope pitfall).
+                    attributed = project
+                    if not attributed and cwd:
+                        from memory.scope import ScopeDetector
 
-                    attributed = ScopeDetector.detect(cwd=cwd).project
-                self.record_event(
-                    event_type="memory_recalled",
-                    project=attributed or "general",
-                    agent=agent or "unknown",
-                    memory_ids=[m["memory_id"] for m in results if m.get("memory_id")],
-                    source=source,
-                    session_id=session_id,
-                    payload={
-                        "query": query,
-                        "task_hint": task_hint,
-                        "memories": [
-                            {"memory_id": m.get("memory_id"), "score": m.get("score")}
-                            for m in results
-                        ],
-                        # chars/4 — honest heuristic, not a tokenizer
-                        "token_estimate": sum(len(m.get("content") or "") // 4 for m in results),
-                        "session_id": session_id,
-                        "capture_origin": source if source != "recall" else None,
-                    },
-                )
-            except Exception:
-                logger.debug("event emission skipped", exc_info=True)
+                        attributed = ScopeDetector.detect(cwd=cwd).project
+                    self.record_event(
+                        event_type="memory_recalled",
+                        project=attributed or "general",
+                        agent=agent or "unknown",
+                        memory_ids=[m["memory_id"] for m in results if m.get("memory_id")],
+                        source=source,
+                        session_id=session_id,
+                        payload={
+                            "query": query,
+                            "task_hint": task_hint,
+                            "memories": [
+                                {"memory_id": m.get("memory_id"), "score": m.get("score")}
+                                for m in results
+                            ],
+                            # chars/4 — honest heuristic, not a tokenizer
+                            "token_estimate": sum(
+                                len(m.get("content") or "") // 4 for m in results
+                            ),
+                            "session_id": session_id,
+                            "capture_origin": source if source != "recall" else None,
+                        },
+                    )
+                except Exception:
+                    logger.debug("event emission skipped", exc_info=True)
 
             return results
 

@@ -61,3 +61,10 @@ def test_rest_recall_emits_exactly_once(client, fake_manager):
     r = client.post("/api/memory/recall", json={"query": "q"})
     assert r.status_code == 200
     assert fake_manager.record_event.call_count == 1
+
+
+def test_recall_forwards_only_allowlisted_ui_source(client, fake_manager):
+    client.post("/api/memory/recall", json={"query": "q", "source": "ui"})
+    assert fake_manager.recall.call_args.kwargs["source"] == "ui"
+    client.post("/api/memory/recall", json={"query": "q", "source": "evil"})
+    assert fake_manager.recall.call_args.kwargs["source"] == "recall"

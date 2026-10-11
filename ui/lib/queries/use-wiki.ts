@@ -38,8 +38,8 @@ export function useWikiPage(pageId: string | null, section?: string, full?: bool
   });
 }
 
-export function useWikiDrafts() {
-  return useQuery({ queryKey: ["wiki", "drafts"], queryFn: getWikiDrafts });
+export function useWikiDrafts(project = "") {
+  return useQuery({ queryKey: ["wiki", "drafts", project], queryFn: () => getWikiDrafts(project) });
 }
 
 export function useWikiDraft(pageId: string | null) {

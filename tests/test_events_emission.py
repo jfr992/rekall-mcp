@@ -46,3 +46,15 @@ def test_record_event_swallows_event_log_exception(tmp_path, monkeypatch):
         memory_ids=["id-x"],
         source="recall",
     )
+
+
+def test_ui_source_recall_emits_no_memory_recalled_event():
+    from memory.manager import MemoryManager
+    from test_event_contract import HITS, _mgr
+
+    mgr = _mgr(HITS)
+    MemoryManager.recall(mgr, "q", source="ui")
+    mgr.record_event.assert_not_called()
+
+    MemoryManager.recall(mgr, "q")
+    assert mgr.record_event.call_args.kwargs["event_type"] == "memory_recalled"

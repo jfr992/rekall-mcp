@@ -677,6 +677,7 @@ async def api_recall_memories(request):
         # Caller's cwd, not the backend's — attribution only (v1.5.0 scope pitfall)
         caller_cwd = body.get("cwd") or body.get("workspace_root") or None
         session_id = _safe_session_id(body.get("session_id"))
+        source = "ui" if body.get("source") == "ui" else "recall"
 
         if not query:
             return JSONResponse({"error": "query is required"}, status_code=400)
@@ -690,6 +691,7 @@ async def api_recall_memories(request):
             task_hint=task_hint,
             cwd=caller_cwd,
             session_id=session_id,
+            source=source,
         )
 
         # memory_recalled emission lives in manager.recall (event contract v2)
@@ -1797,6 +1799,8 @@ async def api_wiki_page(request):
 @mcp.custom_route("/api/wiki/drafts", methods=["GET"])
 async def api_wiki_drafts(request):
     try:
+        project = _safe_project(request.query_params.get("project"))
+        scoped = project not in (None, "all")
         manager = _get_memory_manager()
         drafts = [
             {
@@ -1807,8 +1811,11 @@ async def api_wiki_drafts(request):
                 **_wiki_draft_flags(p),
             }
             for p in manager.wiki.list_pages("draft")
+            if not scoped or p.project == project
         ]
         return _ok({"drafts": drafts})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         return _server_error(str(e))
 

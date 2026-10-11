@@ -13,6 +13,7 @@ export function postRecall(
       body: JSON.stringify({
         query,
         limit,
+        source: "ui",
         ...(project ? { project } : {}),
       }),
     },

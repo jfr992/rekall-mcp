@@ -31,7 +31,7 @@ type Tab = "search" | "drafts" | "candidates";
 export default function WikiPage() {
   const project = useProjectStore((s) => s.project);
   const index = useWikiIndex(project);
-  const drafts = useWikiDrafts();
+  const drafts = useWikiDrafts(project);
   const approve = useApproveDraft();
   const reject = useRejectDraft();
   const edit = useEditDraft();
