@@ -47,7 +47,7 @@ export function BrainNodeList({ nodes, selectedId, onSelect }: Props) {
           </ul>
         )}
         {nodes.length > MAX_VISIBLE ? (
-          <p className="px-3 py-1 text-[10px] text-[var(--fg-dim)]">
+          <p className="px-3 py-1 text-[11px] text-[var(--fg-dim)]">
             +{nodes.length - MAX_VISIBLE} more — use canvas
           </p>
         ) : null}

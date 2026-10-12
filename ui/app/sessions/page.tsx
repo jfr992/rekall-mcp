@@ -90,7 +90,7 @@ export default function SessionsPage() {
       </div>
 
       {truncated ? (
-        <p className="font-mono text-[10px] text-[var(--fg-dim)]">
+        <p className="font-mono text-[11px] text-[var(--fg-dim)]">
           sessions before {oldestDay} not shown (event log window)
         </p>
       ) : null}

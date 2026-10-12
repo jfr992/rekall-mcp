@@ -109,7 +109,7 @@ export function RelationshipList({ relationships, onSelectMemory }: Props) {
                       </span>
                     )}
                     {mem?.memory_id ? (
-                      <span className="break-all font-mono text-[10px] text-[var(--fg-muted)]">
+                      <span className="break-all font-mono text-[11px] text-[var(--fg-muted)]">
                         {mem.memory_id}
                       </span>
                     ) : null}
@@ -132,7 +132,7 @@ export function RelationshipList({ relationships, onSelectMemory }: Props) {
                         [targetId]: !prev[targetId],
                       }));
                     }}
-                    className="absolute bottom-1.5 right-8 font-mono text-[10px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
+                    className="absolute bottom-1.5 right-8 font-mono text-[11px] text-[var(--fg-muted)] hover:text-[var(--fg)]"
                   >
                     {isExpanded ? "collapse" : "expand"}
                   </button>

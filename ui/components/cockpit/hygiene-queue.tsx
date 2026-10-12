@@ -41,7 +41,7 @@ export function HygieneQueue({ pressure }: Props) {
           {items.map((item) => (
             <li key={item.label} className="flex items-center gap-2">
               <span
-                className="rounded px-1.5 py-px font-mono text-[10px] font-medium"
+                className="rounded px-1.5 py-px font-mono text-[11px] font-medium"
                 style={{ color: item.color, border: `1px solid ${item.border}` }}
               >
                 {item.count}

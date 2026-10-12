@@ -59,12 +59,16 @@ test.describe("Responsive shell — mobile viewport", () => {
 test.describe("Responsive shell — 375px phone", () => {
   test.skip(skip, "Set PLAYWRIGHT=1 to run browser-based responsive checks");
 
-  for (const path of ["/", "/hygiene"]) {
+  for (const path of ["/brain", "/kb", "/wiki", "/stream", "/sessions", "/hygiene", "/continuity"]) {
     test(`no horizontal overflow at 375px on ${path}`, async ({ page }) => {
       await page.setViewportSize({ width: 375, height: 812 });
       await page.goto(path);
-      const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
-      expect(scrollWidth).toBeLessThanOrEqual(375);
+      await page.waitForLoadState("networkidle");
+      // <main> scrolls on its own, so the document width alone misses overflow inside it
+      const overflow = await page.evaluate(() =>
+        [document.documentElement, document.querySelector("main")].map((el) => el.scrollWidth - el.clientWidth),
+      );
+      expect(overflow).toEqual([0, 0]);
     });
   }
 });

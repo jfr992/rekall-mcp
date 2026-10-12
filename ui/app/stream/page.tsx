@@ -99,7 +99,7 @@ export default function StreamPage() {
           />
         </div>
         {truncated ? (
-          <p className="font-mono text-[10px] text-[var(--fg-dim)]">
+          <p className="font-mono text-[11px] text-[var(--fg-dim)]">
             recalls/promotions before {oldestDay} not shown (event log window)
           </p>
         ) : null}

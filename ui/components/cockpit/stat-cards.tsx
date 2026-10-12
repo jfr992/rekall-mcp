@@ -110,7 +110,7 @@ export function StatCards({ insights, pressure }: Props) {
         <div className="mt-1.5 font-serif text-4xl leading-[1.1] text-[var(--accent-danger)]">
           {pressure ? attentionCount(pressure.flagged).total : "—"}
         </div>
-        <div className="mt-2 font-mono text-[10.5px] text-[var(--fg-muted)]">
+        <div className="mt-2 font-mono text-[11px] text-[var(--fg-muted)]">
           {pressure
             ? attentionBreakdown(attentionCount(pressure.flagged))
             : "pressure unavailable"}

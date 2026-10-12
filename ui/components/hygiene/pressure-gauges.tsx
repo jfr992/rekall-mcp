@@ -59,7 +59,7 @@ export function PressureGauges({ data }: Props) {
         <div className="mt-1.5 font-serif text-4xl leading-[1.1] text-[var(--accent-danger)]">
           {attention.total}
         </div>
-        <div className="mt-2.5 flex gap-3 font-mono text-[10.5px] text-[var(--fg-muted)]">
+        <div className="mt-2.5 flex gap-3 font-mono text-[11px] text-[var(--fg-muted)]">
           <span>prune {attention.prune}</span>
           {attention.conflict > 0 && (
             <span className="text-[var(--accent-danger)]">conflict {attention.conflict}</span>

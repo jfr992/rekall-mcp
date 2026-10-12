@@ -218,7 +218,7 @@ export function OkfExport({ project }: OkfExportProps) {
                     <span className="flex min-w-0 flex-col">
                       <span className="truncate">{label}</span>
                       {dir ? (
-                        <span className="truncate font-mono text-[10px] text-[var(--fg-muted)]">
+                        <span className="truncate font-mono text-[11px] text-[var(--fg-muted)]">
                           {dir}
                         </span>
                       ) : null}

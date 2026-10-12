@@ -92,7 +92,7 @@ export default function BrainPage() {
     <div className="flex min-h-full flex-col gap-4 px-7 py-6">
       <StatCards insights={insights} pressure={pressureQ.data} />
 
-      <div className="grid flex-1 items-start gap-3.5 lg:grid-cols-[1fr_1.5fr_1fr]">
+      <div className="grid flex-1 grid-cols-1 items-start gap-3.5 lg:grid-cols-[1fr_1.5fr_1fr]">
         <TierComposition insights={insights} />
 
         <RecallFeed
@@ -122,7 +122,7 @@ export default function BrainPage() {
                 />
               </div>
             )}
-            <span className="pointer-events-none absolute bottom-2.5 left-4 font-mono text-[10px] text-[var(--fg-dim)] [text-shadow:0_1px_4px_var(--bg-deep)]">
+            <span className="pointer-events-none absolute bottom-2.5 left-4 font-mono text-[11px] text-[var(--fg-dim)] [text-shadow:0_1px_4px_var(--bg-deep)]">
               {nodes.length} nodes · {links.length} edges
             </span>
           </div>
