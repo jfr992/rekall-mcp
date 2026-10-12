@@ -189,13 +189,13 @@ def test_manager_save_rejects_oversized_content():
 
 
 def test_save_normalizes_spaced_project(client, fake_manager):
-    r = client.post("/api/memory/save", json={"content": "x", "project": "La Gran Polla"})
+    r = client.post("/api/memory/save", json={"content": "x", "project": "My Project"})
     assert r.status_code == 200
-    assert fake_manager.save.call_args.kwargs["project"] == "La-Gran-Polla"
+    assert fake_manager.save.call_args.kwargs["project"] == "My-Project"
 
 
 def test_scoped_read_still_rejects_spaced_project(client, fake_manager):
-    assert client.get("/api/memory/pressure?project=La Gran Polla").status_code == 400
+    assert client.get("/api/memory/pressure?project=My Project").status_code == 400
 
 
 def test_observe_rejects_joined_content_over_limit(client, fake_manager):

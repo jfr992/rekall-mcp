@@ -10,7 +10,7 @@ _SAFE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 @pytest.mark.parametrize(
     "raw, expected",
     [
-        ("La Gran Polla", "La-Gran-Polla"),
+        ("My Project", "My-Project"),
         ("  spaced  name ", "spaced-name"),
         ("rekall-mcp", "rekall-mcp"),
         ("a.b_c-d", "a.b_c-d"),
@@ -38,13 +38,13 @@ def test_normalize_matches_safe_pattern(raw):
 
 
 def test_normalize_is_idempotent():
-    assert normalize_project(normalize_project("La Gran Polla")) == "La-Gran-Polla"
+    assert normalize_project(normalize_project("My Project")) == "My-Project"
 
 
 def test_detect_normalizes_spaced_directory(tmp_path):
-    d = tmp_path / "La Gran Polla"
+    d = tmp_path / "My Project"
     d.mkdir()
-    assert ScopeDetector.detect(cwd=d).project == "La-Gran-Polla"
+    assert ScopeDetector.detect(cwd=d).project == "My-Project"
 
 
 def test_detect_normalizes_explicit_project(tmp_path):
