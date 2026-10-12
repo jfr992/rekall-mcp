@@ -76,10 +76,7 @@ export function WikiCandidates({
         <p className="text-sm text-red-400">{apiErrorMessage(error ?? startError)}</p>
       ) : null}
       {data?.status === "error" ? <p className="text-sm text-red-400">{data.error}</p> : null}
-      {data?.status === "unconfigured" ? (
-        <p className="text-sm text-[var(--fg-dim)]">Wiki model is not configured on the backend.</p>
-      ) : null}
-      {create.data && create.data.status === "unconfigured" ? (
+      {data?.status === "unconfigured" || create.data?.status === "unconfigured" ? (
         <p className="text-sm text-[var(--fg-dim)]">Wiki model is not configured on the backend.</p>
       ) : null}
       {create.error ? <p className="text-sm text-red-400">{apiErrorMessage(create.error)}</p> : null}

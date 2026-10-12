@@ -5,11 +5,26 @@ from __future__ import annotations
 import hashlib
 import os
 import tempfile
+from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
 # Hostnames the docker compose test profile uses for the disposable Qdrant.
 _TEST_QDRANT_HOSTNAMES = {"qdrant-test", "rekall-qdrant-test"}
+
+
+def utc_now() -> datetime:
+    return datetime.now(UTC)
+
+
+def utc_now_iso() -> str:
+    return utc_now().isoformat()
+
+
+def parse_ts(value: str) -> datetime:
+    """Parse an ISO timestamp; offset-less (legacy) values are read as UTC."""
+    parsed = datetime.fromisoformat(value)
+    return parsed if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def is_prod_qdrant_url(url: str) -> bool:

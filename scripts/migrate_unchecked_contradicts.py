@@ -35,7 +35,7 @@ def migrate(graph: KnowledgeGraph, *, apply: bool = False) -> dict[str, Any]:
         if data.get("relation") == "contradicts"
     ]
     unchecked = [(s, t) for s, t, data in contradicts if not data.get("llm_refined")]
-    if apply:
+    if apply and unchecked:
         for source, target in unchecked:
             graph.set_edge_relation(source, target, "related_to", migrated_from="contradicts")
         graph.save()
@@ -47,10 +47,13 @@ def migrate(graph: KnowledgeGraph, *, apply: bool = False) -> dict[str, Any]:
     }
 
 
+def _api_base() -> str:
+    return os.environ.get("REKALL_API_URL", "http://localhost:8000")
+
+
 def _server_reachable() -> bool:
-    base = os.environ.get("REKALL_API_URL", "http://localhost:8000").rstrip("/")
     try:
-        with urllib.request.urlopen(f"{base}/health", timeout=1):
+        with urllib.request.urlopen(f"{_api_base().rstrip('/')}/health", timeout=1):
             return True
     except Exception:
         return False
@@ -64,24 +67,29 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--force", action="store_true", help="skip the server-running check")
     args = parser.parse_args(argv)
 
+    memory_dir = Path(os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory")).expanduser()
+    graph_path = memory_dir / "_graph.json"
+    print(f"graph: {graph_path}; server check: {_api_base()}")
+    if not graph_path.exists():
+        print(f"graph not found: {graph_path}")
+        return 1
+    graph = KnowledgeGraph(graph_path)
+
+    preview = migrate(graph)
+    if not preview["relabeled"]:
+        print(f"nothing to migrate: contradicts={preview['total']} unchecked=0")
+        return 0
+
     if args.apply and not args.force and _server_reachable():
         print(
             "Rekall server is reachable; stop the mcp container first (it would overwrite the graph)."
         )
         return 1
 
-    memory_dir = Path(os.environ.get("MEMORY_STORAGE_PATH", "~/.claude/memory")).expanduser()
-    graph_path = memory_dir / "_graph.json"
-    graph = KnowledgeGraph(graph_path)
-
-    if args.apply and graph_path.exists():
+    if args.apply:
         backup = graph_path.with_name(f"_graph.json.bak-{datetime.now():%Y%m%d-%H%M%S}")
-        if any(
-            d.get("relation") == "contradicts" and not d.get("llm_refined")
-            for _, _, d in graph._graph.edges(data=True)
-        ):
-            shutil.copy2(graph_path, backup)
-            print(f"backup: {backup}")
+        shutil.copy2(graph_path, backup)
+        print(f"backup: {backup}")
 
     result = migrate(graph, apply=args.apply)
     mode = "APPLIED" if result["applied"] else "DRY-RUN"

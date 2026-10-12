@@ -33,7 +33,10 @@ export function DeleteMemoryDialog({ memoryId, content, onCancel, onDone }: Prop
             deletion.mutate(
               { memoryId },
               {
-                onSuccess: onDone,
+                onSuccess: () => {
+                  toast.success("Memory deleted");
+                  onDone();
+                },
                 onError: (err) => toast.error(`Delete failed — ${err.message}`),
               },
             )

@@ -39,7 +39,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 
 from core import Embedder, Telemetry, VectorStore
-from core.utils import assert_test_isolation
+from core.utils import assert_test_isolation, parse_ts, utc_now, utc_now_iso
 from memory.events import EventLog, MemoryEvent
 from memory.lifecycle import summarize_lifecycle
 from memory.linker import auto_link
@@ -51,10 +51,10 @@ from memory.representation import (
     hard_identifiers,
 )
 from memory.resume import build_resume_packet
-from memory.scope import MemoryScope, ScopeDetector, strip_remote_creds
+from memory.scope import MemoryScope, ScopeDetector, normalize_project, strip_remote_creds
 from memory.skills import extract_skills, render_skill_context
 from memory.startup import build_agent_startup
-from memory.types import VALID_MEMORY_TYPES
+from memory.types import MAX_MEMORY_CONTENT_CHARS, VALID_MEMORY_TYPES
 
 if TYPE_CHECKING:
     from memory.knowledge_graph import KnowledgeGraph
@@ -486,6 +486,8 @@ class MemoryManager:
             memory.save("User prefers diagrams", type="preference")
             memory.save("Chose hybrid architecture", type="decision", project="my-app")
         """
+        if len(content) > MAX_MEMORY_CONTENT_CHARS:
+            raise ValueError(f"content exceeds {MAX_MEMORY_CONTENT_CHARS} characters")
         with self._telemetry.track("memory.save"):
             self._assert_reindex_complete()
             content = Sanitizer.sanitize(content)
@@ -494,6 +496,7 @@ class MemoryManager:
 
             if "/" in project_name or "\\" in project_name or ".." in project_name:
                 raise ValueError(f"Invalid project name: {project_name!r}")
+            project_name = normalize_project(project_name)
 
             payload = {
                 "content": content,
@@ -549,7 +552,7 @@ class MemoryManager:
                     project=project_name,
                     vector=vector,
                 )
-                timestamp = datetime.now().isoformat()
+                timestamp = utc_now_iso()
                 unique_string = f"{content}|{timestamp}"
                 content_hash = hashlib.sha256(unique_string.encode()).hexdigest()[:8]
                 memory_id = f"{date}_{type}_{content_hash}"
@@ -711,7 +714,7 @@ class MemoryManager:
             "sanitized": sanitized,
         }
         scope = ScopeDetector.detect(project=project)
-        timestamp = datetime.now().isoformat()
+        timestamp = utc_now_iso()
         payload: dict[str, Any] = {
             "memory_id": memory_id,
             "content": canonical_content,
@@ -1097,7 +1100,7 @@ class MemoryManager:
         if threshold <= 0:  # 0 disables the guard
             return None
         window_hours = _env_float("REKALL_LOOP_GUARD_WINDOW", 12.0)
-        cutoff = datetime.now() - timedelta(hours=window_hours)
+        cutoff = utc_now() - timedelta(hours=window_hours)
 
         try:
             events = self.event_log.tail(500)
@@ -1113,7 +1116,7 @@ class MemoryManager:
             if event.project != project:
                 continue
             try:
-                if datetime.fromisoformat(event.observed_at) < cutoff:
+                if parse_ts(event.observed_at) < cutoff:
                     continue
             except ValueError:
                 continue
@@ -1754,7 +1757,8 @@ class MemoryManager:
                 for memory_id in seed_ids:
                     if not isinstance(memory_id, str):
                         continue
-                    graph.record_access(memory_id)
+                    if source != "ui":
+                        graph.record_access(memory_id)
                     neighbors = graph.get_neighbors(memory_id, hops=1)
                     expanded_ids.update(neighbors)
 
@@ -1883,36 +1887,39 @@ class MemoryManager:
             except Exception:
                 logger.debug("freshness annotation skipped", exc_info=True)
 
-            try:
-                # Attribution only — the caller's cwd resolves through the same
-                # ScopeDetector path observe uses (v1.5.0 scope pitfall).
-                attributed = project
-                if not attributed and cwd:
-                    from memory.scope import ScopeDetector
+            if source != "ui":
+                try:
+                    # Attribution only — the caller's cwd resolves through the same
+                    # ScopeDetector path observe uses (v1.5.0 scope pitfall).
+                    attributed = project
+                    if not attributed and cwd:
+                        from memory.scope import ScopeDetector
 
-                    attributed = ScopeDetector.detect(cwd=cwd).project
-                self.record_event(
-                    event_type="memory_recalled",
-                    project=attributed or "general",
-                    agent=agent or "unknown",
-                    memory_ids=[m["memory_id"] for m in results if m.get("memory_id")],
-                    source=source,
-                    session_id=session_id,
-                    payload={
-                        "query": query,
-                        "task_hint": task_hint,
-                        "memories": [
-                            {"memory_id": m.get("memory_id"), "score": m.get("score")}
-                            for m in results
-                        ],
-                        # chars/4 — honest heuristic, not a tokenizer
-                        "token_estimate": sum(len(m.get("content") or "") // 4 for m in results),
-                        "session_id": session_id,
-                        "capture_origin": source if source != "recall" else None,
-                    },
-                )
-            except Exception:
-                logger.debug("event emission skipped", exc_info=True)
+                        attributed = ScopeDetector.detect(cwd=cwd).project
+                    self.record_event(
+                        event_type="memory_recalled",
+                        project=attributed or "general",
+                        agent=agent or "unknown",
+                        memory_ids=[m["memory_id"] for m in results if m.get("memory_id")],
+                        source=source,
+                        session_id=session_id,
+                        payload={
+                            "query": query,
+                            "task_hint": task_hint,
+                            "memories": [
+                                {"memory_id": m.get("memory_id"), "score": m.get("score")}
+                                for m in results
+                            ],
+                            # chars/4 — honest heuristic, not a tokenizer
+                            "token_estimate": sum(
+                                len(m.get("content") or "") // 4 for m in results
+                            ),
+                            "session_id": session_id,
+                            "capture_origin": source if source != "recall" else None,
+                        },
+                    )
+                except Exception:
+                    logger.debug("event emission skipped", exc_info=True)
 
             return results
 

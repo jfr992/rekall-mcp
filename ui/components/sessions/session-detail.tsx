@@ -26,7 +26,7 @@ export function SessionDetail({ session, onExpandMemory }: Props) {
         <h2 className="break-all font-mono text-[15px] font-medium text-[var(--fg)]">
           {unattributed ? `Unattributed · ${session.project}` : session.session_id}
         </h2>
-        <span className="flex items-baseline gap-3.5 font-mono text-[10.5px] text-[var(--fg-dim)]">
+        <span className="flex items-baseline gap-3.5 font-mono text-[11px] text-[var(--fg-dim)]">
           <span className="text-[var(--accent-bright)]">{session.project}</span>
           <span>{relativeTime(session.last_at)}</span>
         </span>

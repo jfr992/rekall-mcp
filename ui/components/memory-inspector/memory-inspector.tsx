@@ -6,7 +6,7 @@ import { Drawer } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { DeleteMemoryDialog } from "./delete-memory-dialog";
 import { PinMemoryDialog } from "./pin-memory-dialog";
-import { UndisputeButton } from "./undispute-button";
+import { DisputeToggle } from "./dispute-toggle";
 import { Badge } from "@/components/ui/badge";
 import { MonoLabel } from "@/components/ui/mono-label";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -249,7 +249,7 @@ export function MemoryInspector({
               <Star size={14} />
               {isPinned ? "Remove identity pin" : "Promote to identity"}
             </Button>
-            {isDisputed && <UndisputeButton memoryId={memory.memory_id} />}
+            <DisputeToggle memoryId={memory.memory_id} disputed={isDisputed} />
           </div>
 
           {confirmDelete && (

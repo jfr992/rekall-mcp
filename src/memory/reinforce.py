@@ -21,6 +21,7 @@ from itertools import groupby
 from pathlib import Path
 from typing import Any
 
+from core.utils import parse_ts
 from memory.events import EventLog, MemoryEvent
 from memory.lifecycle import LifecycleSignals, classify, compute_retention_days
 
@@ -68,6 +69,17 @@ def credit_from_recall(event: MemoryEvent) -> RecallCandidate | None:
     )
 
 
+def _feedback_memory_id(event: MemoryEvent) -> str | None:
+    payload = event.payload
+    memory_id = payload.get("memory_id")
+    if isinstance(memory_id, str) and memory_id:
+        return memory_id
+    ids = payload.get("memory_ids")
+    if isinstance(ids, list) and len(ids) == 1 and isinstance(ids[0], str):
+        return ids[0]
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class FeedbackCredit:
     memory_id: str
@@ -85,7 +97,7 @@ def credit_from_feedback(event: MemoryEvent) -> FeedbackCredit | None:
     useful -> +1.0 outcome credit. wrong -> -1.0 and disputed=True
     (suppression handled downstream). stale/unknown -> no counter credit.
     """
-    memory_id = event.payload.get("memory_id")
+    memory_id = _feedback_memory_id(event)
     verdict = event.payload.get("verdict")
     if not memory_id or verdict not in ("useful", "wrong"):
         return None
@@ -125,7 +137,7 @@ def supersedes_candidate_from_feedback(event: MemoryEvent) -> SupersedesCandidat
     instead of touching reinforcement_count (Zep lesson: staleness invalidates,
     it doesn't decay a score).
     """
-    memory_id = event.payload.get("memory_id")
+    memory_id = _feedback_memory_id(event)
     if not memory_id or event.payload.get("verdict") != "stale":
         return None
 
@@ -242,9 +254,7 @@ def apply_reinforcement(
     """
     cutoff = now.timestamp() - DAMPING_WINDOW_DAYS * 86400
     recent_count = sum(
-        1
-        for h in history
-        if h.kind != "wrong" and datetime.fromisoformat(h.ts).timestamp() >= cutoff
+        1 for h in history if h.kind != "wrong" and parse_ts(h.ts).timestamp() >= cutoff
     )
 
     if weight > 0:
@@ -440,7 +450,7 @@ def _history_to_payload(history: list[HistoryEntry]) -> list[dict[str, Any]]:
 def _age_days(memory: dict[str, Any], now: datetime) -> int:
     date_str = memory.get("date") or now.strftime("%Y-%m-%d")
     try:
-        mem_date = datetime.strptime(date_str, "%Y-%m-%d")
+        mem_date = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=now.tzinfo)
         return max(0, (now - mem_date).days)
     except ValueError:
         return 0
@@ -470,9 +480,7 @@ def _apply_credit_to_memory(
         for credit in sorted(kind_credits, key=lambda c: c.observed_at or ""):
             kind = "wrong" if credit.disputed else ("outcome" if credit.outcome_grade else "bare")
             try:
-                credit_time = (
-                    datetime.fromisoformat(credit.observed_at) if credit.observed_at else now
-                )
+                credit_time = parse_ts(credit.observed_at) if credit.observed_at else now
             except ValueError:
                 credit_time = now
             result = apply_reinforcement(

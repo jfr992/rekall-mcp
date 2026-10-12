@@ -142,6 +142,7 @@ describe("identity pin", () => {
       screen.getByRole("button", { name: /confirm promote to identity/i })
     );
 
+    expect(await screen.findByText(/promoted to identity|identity pin removed/i)).toBeInTheDocument();
     await waitFor(() => {
       const keys = invalidate.mock.calls.map(
         (c) => (c[0] as { queryKey: unknown[] }).queryKey[0]

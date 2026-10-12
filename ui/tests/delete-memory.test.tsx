@@ -130,12 +130,13 @@ describe("guarded delete", () => {
     fireEvent.click(screen.getByRole("button", { name: /delete memory/i }));
     fireEvent.click(screen.getByRole("button", { name: /confirm delete/i }));
 
+    expect(await screen.findByText(/memory deleted/i)).toBeInTheDocument();
     await waitFor(() => {
       const keys = invalidate.mock.calls.map(
         (c) => (c[0] as { queryKey: unknown[] }).queryKey[0]
       );
       expect(keys).toEqual(
-        expect.arrayContaining(["brain-graph", "kb", "pressure", "resume", "search"])
+        expect.arrayContaining(["brain-graph", "kb", "pressure", "resume", "search", "insights", "projects", "stream", "sessions", "session-detail"])
       );
     });
   });

@@ -1,7 +1,12 @@
 import { describe, test, expect, vi } from "vitest";
-import { render, screen, fireEvent, waitFor, act } from "@testing-library/react";
+import {render as rtlRender, screen, fireEvent, waitFor, act} from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import type { ReactElement } from "react";
 import { MemoryInspector } from "@/components/memory-inspector/memory-inspector";
 import type { DetailResponseV2 } from "@/lib/schemas";
+
+const render = (ui: ReactElement) =>
+  rtlRender(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
 
 // Inline fixture — mirrors detail-v2.json for stable types
 const detail: DetailResponseV2 = {

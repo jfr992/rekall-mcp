@@ -544,3 +544,24 @@ def test_capsule_and_startup_handlers_do_not_emit(rest_client, fake_rest_manager
     r = rest_client.get("/api/memory/context/startup?project=p")
     assert r.status_code == 200
     fake_rest_manager.record_event.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_save_memory_tool_returns_error_string_for_oversized_content(tool_registry):
+    from tools.builtin.memory import OptimizedMemoryTools
+
+    capture_tool, registered_tools = tool_registry
+
+    class FakeMCP:
+        def tool(self, **kwargs):
+            return capture_tool()
+
+    manager = MagicMock()
+    manager.save.side_effect = lambda **kw: MemoryManager.save(MagicMock(), **kw)
+    provider = OptimizedMemoryTools()
+    provider._manager = manager
+    provider.register(FakeMCP())
+
+    result = await registered_tools["save_memory"](content="x" * 19_990, context="y" * 100)
+    assert result.startswith("Error:")
+    assert "exceeds" in result

@@ -24,7 +24,7 @@ function ScopeCounts() {
   const { data } = useInsights(project);
   if (!data) return null;
   return (
-    <span className="hidden shrink-0 font-mono text-[10px] text-[var(--fg-dim)] lg:inline">
+    <span className="hidden shrink-0 font-mono text-[11px] text-[var(--fg-dim)] lg:inline">
       {data.in_scope} in scope · {data.total} total
     </span>
   );
@@ -37,19 +37,19 @@ export function CockpitShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen min-w-0 flex-col bg-[var(--bg-deep)]">
       <header
-        className="sticky top-0 flex items-center gap-3 border-b border-[var(--border)] bg-[var(--bg-frost)] px-4 py-2.5 backdrop-blur-[8px] md:gap-4 md:px-6"
+        className="sticky top-0 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-[var(--border)] bg-[var(--bg-frost)] px-4 py-2.5 backdrop-blur-[8px] md:flex-nowrap md:gap-x-4 md:px-6"
         style={{ zIndex: "var(--z-shell)" }}
       >
         <div className="flex shrink-0 items-baseline gap-2">
           <span className="font-serif text-xl font-medium italic text-[var(--fg)]">Rekall</span>
-          <span className="hidden font-mono text-[9px] font-medium tracking-[0.18em] text-[var(--fg-faint)] sm:inline">
+          <span className="hidden font-mono text-[11px] font-medium tracking-[0.18em] text-[var(--fg-faint)] sm:inline">
             {viewTag}
           </span>
         </div>
 
         <nav
           aria-label="Primary"
-          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none]"
+          className="order-last flex min-w-0 basis-full items-center md:order-none md:basis-auto md:flex-1 gap-1 overflow-x-auto whitespace-nowrap [scrollbar-width:none]"
         >
           {tabs.map((tab) => {
             const active = pathname.startsWith(tab.href);

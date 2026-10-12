@@ -31,7 +31,7 @@ type Tab = "search" | "drafts" | "candidates";
 export default function WikiPage() {
   const project = useProjectStore((s) => s.project);
   const index = useWikiIndex(project);
-  const drafts = useWikiDrafts();
+  const drafts = useWikiDrafts(project);
   const approve = useApproveDraft();
   const reject = useRejectDraft();
   const edit = useEditDraft();
@@ -62,7 +62,8 @@ export default function WikiPage() {
     setSelected(null);
     setDraftId(pageId);
   };
-  const doApprove = (id: string) =>
+  const doApprove = (id: string, needs: string[] = []) => {
+    if (needs.length && !window.confirm(`This draft is missing: ${needs.join(", ")}. Approve anyway?`)) return;
     approve.mutate(id, {
       onSuccess: () => {
         toast.success("Approved");
@@ -71,6 +72,7 @@ export default function WikiPage() {
       },
       onError,
     });
+  };
   const doReject = (id: string) => {
     const reason = window.prompt("Reason for rejecting this draft?");
     if (reason === null) return;
@@ -108,7 +110,7 @@ export default function WikiPage() {
           )}
         </aside>
 
-        <main className="min-h-0 overflow-y-auto">
+        <section aria-label="Wiki content" className="min-h-0 overflow-y-auto">
           {draftId ? (
             draft.isLoading ? (
               <Skeleton className="h-64 w-full" />
@@ -117,7 +119,7 @@ export default function WikiPage() {
             ) : (
               <WikiDraftView
                 draft={draft.data}
-                onApprove={doApprove}
+                onApprove={(id) => doApprove(id, draft.data?.needs)}
                 onReject={doReject}
                 onOpenSource={setInspecting}
                 onSave={doSave}
@@ -142,7 +144,7 @@ export default function WikiPage() {
               onToggleFull={() => setFull((f) => !f)}
             />
           )}
-        </main>
+        </section>
 
         <aside className="flex min-h-0 flex-col gap-3 overflow-y-auto">
           <div className="flex gap-1.5">
@@ -173,7 +175,7 @@ export default function WikiPage() {
           ) : tab === "drafts" ? (
             <WikiDraftsList
               drafts={drafts.data?.drafts ?? []}
-              onApprove={doApprove}
+              onApprove={(id) => doApprove(id, drafts.data?.drafts.find((d) => d.page_id === id)?.needs)}
               onReject={doReject}
               onOpen={openDraft}
             />

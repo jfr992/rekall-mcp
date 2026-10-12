@@ -27,8 +27,10 @@ export function getWikiPage(pageId: string, opts: { section?: string; full?: boo
   if (opts.full) qs.set("full", "1");
   return fetchJson(`/api/wiki/page/${pageId}?${qs}`, undefined, (d) => WikiPageSchema.parse(d));
 }
-export function getWikiDrafts() {
-  return fetchJson(`/api/wiki/drafts`, undefined, (d) => WikiDraftsSchema.parse(d));
+export function getWikiDrafts(project = "") {
+  const qs = new URLSearchParams();
+  if (project) qs.set("project", project);
+  return fetchJson(`/api/wiki/drafts?${qs}`, undefined, (d) => WikiDraftsSchema.parse(d));
 }
 export function getWikiDraft(pageId: string) {
   return fetchJson(`/api/wiki/drafts/${pageId}`, undefined, (d) => WikiDraftDetailSchema.parse(d));

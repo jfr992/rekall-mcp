@@ -22,4 +22,9 @@ describe("SessionList", () => {
     expect(metaLines[0]).toHaveTextContent("rekall-mcp");
     expect(metaLines[0]).toHaveTextContent("2 recalls");
   });
+
+  test("header says how many sessions are shown out of the total", () => {
+    render(<SessionList sessions={SESSIONS} total={53} selectedId={null} onSelect={vi.fn()} />);
+    expect(screen.getByText("1 of 53")).toBeInTheDocument();
+  });
 });

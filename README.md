@@ -467,7 +467,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/save` | POST | Save a memory |
 | `/api/memory/afk/save` | POST | Idempotently save an AFK operation; retries require the same normalized operation envelope |
 | `/api/memory/afk/operations/{operation_id}` | GET | Fetch the exact AFK operation record (`?project=&operation_date=YYYY-MM-DD`) |
-| `/api/memory/recall` | POST | Graph-enhanced search (optional `task_hint`: context-matched results first; optional `cwd`: attributes the recall event to the caller's project; optional `session_id`: carried into the memory_recalled event) |
+| `/api/memory/recall` | POST | Graph-enhanced search (optional `task_hint`: context-matched results first; optional `cwd`: attributes the recall event to the caller's project; optional `session_id`: carried into the memory_recalled event; `source: "ui"` marks a cockpit lookup and emits no recall event) |
 | `/api/memory/recall/cross-project` | POST | Cross-project transfer recall |
 | `/api/memory/reflex` | POST | Cue-triggered recall packet for risky commands or edits (optional `cwd`: attributes the recall event to the caller's project; optional `session_id`: carried into the memory_recalled event) |
 | `/api/memory/observe` | POST | Auto-classify and save (accepts `cwd` for scope) |
@@ -487,7 +487,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/wiki/index` | GET | Wiki index entries with read-time validity (`project=` filter) |
 | `/api/wiki/search` | GET | BM25 lookup over live sections, ≤3 hits, ≤600 tokens (`q=`, `project=`, `limit=`) |
 | `/api/wiki/page/{page_id}` | GET | One section (default) or `full=1`; process pages never truncated |
-| `/api/wiki/drafts` | GET | Pending drafts with `needs`, unsourced steps, redaction flags |
+| `/api/wiki/drafts` | GET | Pending drafts (optional `?project=` scope) with `needs`, unsourced steps, redaction flags |
 | `/api/wiki/drafts/{page_id}` | GET, PUT | GET: one draft, full untrimmed body (`status: draft`) plus the same flags, 404 if none. PUT: edit |
 | `/api/wiki/drafts/{page_id}/approve` | POST | Approve: writes history, live page, index, and log |
 | `/api/wiki/drafts/{page_id}/reject` | POST | Reject with a reason |
@@ -514,9 +514,9 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/publish/status` | GET | Poll a synthesis job's progress |
 | `/api/memory/events` | GET, POST | GET: cursor-paginated event feed (`cursor=&limit=`, truncation-safe); POST: append a client-side session-summary event (optional: client, delivered{surface: ids}, referenced, coverage) |
 | `/api/memory/review` | POST | Record a review verdict (`keep\|fix\|kill`; kill deletes then records, fix is 501 until U3) |
-| `/api/memory/sessions` | GET | Session transparency list folded from events (`?limit=`; `?project=` scopes to one project incl. its unattributed bucket, absent or `all` = every project; `after`/`before` are inclusive `YYYY-MM-DD` day bounds on each session's last activity; `window` = event-tail cap; `event_window.oldest_at` marks where the fold truncates; emits a `view_opened` counter) |
+| `/api/memory/sessions` | GET | Session transparency list folded from events (`?limit=`; `?project=` scopes to one project incl. its unattributed bucket, absent or `all` = every project; `after`/`before` are inclusive `YYYY-MM-DD` day bounds on each session's last activity; `window` = event-tail cap; `event_window.oldest_at` marks where the fold truncates; `total` = sessions before the limit) |
 | `/api/memory/sessions/{id}` | GET | Full session detail: injected memories + recall cards with scores; unattributed recalls under `unattributed:<project>` |
-| `/api/memory/feedback` | POST | One-click recall feedback (`useful\|wrong\|stale`) → `memory_feedback` event; labeled evidence only, never read into ranking |
+| `/api/memory/feedback` | POST | One-click recall feedback (`useful\|wrong\|stale`) → `memory_feedback` event; `wrong` disputes the memory (suppressed from recall), `useful` adds reinforcement credit, `stale` nominates it for supersede review |
 | `/api/memory/insights` | GET | Cockpit aggregates (`?project=`): totals, per-week counts, 7d recall/miss/promotion stats with honest denominators, tier counts; `event_window` = bounded event-tail truncation info |
 | `/api/memory/stream` | GET | Newest-first activity feed (`?project=&limit=&after=&before=`): `saved\|recalled\|promoted\|consolidated` rows merged from memory records + the bounded event tail; `after`/`before` are inclusive `YYYY-MM-DD` day bounds; `event_window.oldest_at` marks where recall/promotion rows truncate; working-tier saves carry `fades_in_hours` |
 

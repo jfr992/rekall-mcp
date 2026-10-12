@@ -34,14 +34,14 @@ export function HygieneQueue({ pressure }: Props) {
 
   return (
     <section className="rounded-[11px] border border-[var(--border)] bg-[var(--bg-elevated)] px-4 py-4">
-      <MonoLabel className="mb-2.5 block text-[9px] tracking-[0.16em]">Hygiene queue</MonoLabel>
+      <MonoLabel className="mb-2.5 block text-[11px] tracking-[0.16em]">Hygiene queue</MonoLabel>
 
       {flagged ? (
         <ul className="flex flex-col gap-2 text-xs text-[var(--fg-soft)]">
           {items.map((item) => (
             <li key={item.label} className="flex items-center gap-2">
               <span
-                className="rounded px-1.5 py-px font-mono text-[10px] font-medium"
+                className="rounded px-1.5 py-px font-mono text-[11px] font-medium"
                 style={{ color: item.color, border: `1px solid ${item.border}` }}
               >
                 {item.count}

@@ -80,3 +80,137 @@ def test_observe_uses_manager_embedder_for_auto_classification(client, fake_mana
 
     assert r.status_code == 200
     assert captured["embedder"] is fake_manager.embedder
+
+
+def test_cleanup_rejects_string_dry_run(client, fake_manager):
+    r = client.post("/api/memory/cleanup", json={"dry_run": "false"})
+    assert r.status_code == 400
+    fake_manager.cleanup.assert_not_called()
+
+
+def test_cleanup_rejects_string_prune_superseded(client, fake_manager):
+    r = client.post("/api/memory/cleanup", json={"dry_run": True, "prune_superseded": "yes"})
+    assert r.status_code == 400
+    fake_manager.cleanup.assert_not_called()
+
+
+_JSON_BODY_ROUTES = [
+    ("POST", "/api/memory/save"),
+    ("POST", "/api/memory/recall"),
+    ("POST", "/api/memory/recall/cross-project"),
+    ("POST", "/api/memory/reflex"),
+    ("POST", "/api/memory/events"),
+    ("POST", "/api/memory/review"),
+    ("POST", "/api/memory/feedback"),
+    ("POST", "/api/memory/m1/pin"),
+    ("POST", "/api/memory/m1/dispute"),
+    ("POST", "/api/memory/cleanup"),
+    ("POST", "/api/wiki/drafts/p1/reject"),
+    ("PUT", "/api/wiki/drafts/p1"),
+    ("POST", "/api/wiki/candidates"),
+    ("POST", "/api/wiki/draft"),
+    ("POST", "/api/memory/compact"),
+    ("POST", "/api/memory/lifecycle/backfill"),
+    ("POST", "/api/memory/prune/apply"),
+    ("POST", "/api/memory/prune/plan"),
+    ("POST", "/api/memory/prune/superseded"),
+    ("POST", "/api/memory/observe"),
+]
+
+
+def test_json_body_routes_cover_every_json_object_route():
+    import ast
+    import re
+    from pathlib import Path
+
+    src = (Path(__file__).parent.parent / "src" / "server.py").read_text()
+    found = set()
+    for node in ast.walk(ast.parse(src)):
+        if not isinstance(node, ast.AsyncFunctionDef):
+            continue
+        if "_json_object(request)" not in (ast.get_source_segment(src, node) or ""):
+            continue
+        for dec in node.decorator_list:
+            text = ast.get_source_segment(src, dec) or ""
+            path = re.search(r'"(/api[^"]*)"', text).group(1)
+            method = re.search(r'methods=\["(\w+)"\]', text).group(1)
+            found.add(
+                (method, re.sub(r"\{memory_id\}", "m1", re.sub(r"\{page_id:path\}", "p1", path)))
+            )
+    assert found == set(_JSON_BODY_ROUTES)
+
+
+@pytest.mark.parametrize("raw", [b"[1]", b'"x"', b"null", b"{"])
+def test_post_routes_reject_non_object_bodies(client, fake_manager, monkeypatch, raw):
+    monkeypatch.setattr("server.make_wiki_llm", lambda: object())
+    for method, path in _JSON_BODY_ROUTES:
+        r = client.request(method, path, content=raw, headers={"content-type": "application/json"})
+        assert r.status_code == 400, (method, path, raw, r.status_code)
+
+
+def test_save_rejects_oversized_content(client, fake_manager):
+    r = client.post("/api/memory/save", json={"content": "x" * 20_001})
+    assert r.status_code == 400
+    fake_manager.save.assert_not_called()
+
+
+def test_save_rejects_non_string_content(client, fake_manager):
+    r = client.post("/api/memory/save", json={"content": ["a"]})
+    assert r.status_code == 400
+    fake_manager.save.assert_not_called()
+
+
+def test_observe_rejects_oversized_summary(client, fake_manager):
+    r = client.post("/api/memory/observe", json={"summary": "x" * 20_001})
+    assert r.status_code == 400
+
+
+def test_feedback_rejects_non_string_session_id(client, fake_manager):
+    r = client.post(
+        "/api/memory/feedback",
+        json={"memory_id": "m1", "verdict": "useful", "session_id": {"a": 1}},
+    )
+    assert r.status_code == 400
+
+
+def test_wiki_draft_rejects_bad_memory_ids(client, fake_manager, monkeypatch):
+    monkeypatch.setattr("server.make_wiki_llm", lambda: object())
+    for ids in ([1], ["a"] * 51, "abc"):
+        r = client.post("/api/wiki/draft", json={"memory_ids": ids})
+        assert r.status_code == 400, ids
+
+
+def test_manager_save_rejects_oversized_content():
+    from memory.manager import MemoryManager
+
+    mgr = MemoryManager.__new__(MemoryManager)
+    with pytest.raises(ValueError, match="exceeds"):
+        MemoryManager.save(mgr, content="x" * 20_001, type="note")
+
+
+def test_save_normalizes_spaced_project(client, fake_manager):
+    r = client.post("/api/memory/save", json={"content": "x", "project": "My Project"})
+    assert r.status_code == 200
+    assert fake_manager.save.call_args.kwargs["project"] == "My-Project"
+
+
+def test_scoped_read_still_rejects_spaced_project(client, fake_manager):
+    assert client.get("/api/memory/pressure?project=My Project").status_code == 400
+
+
+def test_observe_rejects_joined_content_over_limit(client, fake_manager):
+    r = client.post(
+        "/api/memory/observe",
+        json={"summary": "a" * 15_000, "context": "b" * 15_000, "type": "note"},
+    )
+    assert r.status_code == 400
+    fake_manager.save.assert_not_called()
+
+
+@pytest.mark.parametrize("bad", [None, 0, "", "no"])
+@pytest.mark.parametrize("path", ["/api/memory/compact", "/api/memory/lifecycle/backfill"])
+def test_destructive_dry_run_must_be_boolean(client, fake_manager, path, bad):
+    r = client.post(path, json={"dry_run": bad})
+    assert r.status_code == 400, (path, bad)
+    fake_manager.backfill_lifecycle.assert_not_called()
+    fake_manager.store.scroll.assert_not_called()

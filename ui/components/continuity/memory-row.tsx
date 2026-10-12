@@ -31,7 +31,7 @@ export function MemoryRow({ memoryId, content, type, tier, date, onSelect }: Pro
         {content}
       </span>
       {age ? <Badge kind="tier" value={age} /> : null}
-      <MonoLabel>{date ?? ""}</MonoLabel>
+      <MonoLabel className="hidden shrink-0 sm:inline">{date ?? ""}</MonoLabel>
       <ChevronRight size={14} className="shrink-0 text-[var(--fg-muted)]" />
     </button>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorMessage } from "@/lib/api/client";
 import { useEffect, useState } from "react";
 import { Search } from "lucide-react";
 import { Dialog } from "@/components/ui/dialog";
@@ -21,6 +22,7 @@ export function GlobalSearch() {
   const [input, setInput] = useState("");
   const [query, setQuery] = useState("");
   const [mode, setMode] = useState<SearchMode>("semantic");
+  const [pendingEnter, setPendingEnter] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const project = useProjectStore((s) => s.project);
@@ -50,6 +52,16 @@ export function GlobalSearch() {
       ? fetched.filter((m) => (m.content ?? "").toLowerCase().includes(needle))
       : fetched;
 
+  useEffect(() => {
+    if (!pendingEnter || input !== query) return;
+    if (results.isError) {
+      setPendingEnter(false);
+    } else if (results.isSuccess) {
+      setPendingEnter(false);
+      if (memories[0]) openMemory(memories[0].memory_id);
+    }
+  }, [pendingEnter, input, query, results.isSuccess, results.isError, memories]);
+
   // Highlight resets whenever the visible result set changes.
   useEffect(() => {
     setActiveIndex(0);
@@ -59,6 +71,7 @@ export function GlobalSearch() {
     setOpen(false);
     setInput("");
     setQuery("");
+    setPendingEnter(false);
     setActiveIndex(0);
   }
 
@@ -74,9 +87,14 @@ export function GlobalSearch() {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter") {
+    } else if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+      e.preventDefault();
       const m = memories[activeIndex];
-      if (m) openMemory(m.memory_id);
+      if (m && input === query) openMemory(m.memory_id);
+      else if (input.trim()) {
+        setQuery(input);
+        setPendingEnter(true);
+      }
     }
   }
 
@@ -90,7 +108,7 @@ export function GlobalSearch() {
       >
         <Search size={12} />
         <span className="hidden md:inline">recall anything</span>
-        <kbd className="hidden rounded border border-[var(--border)] px-1 font-mono text-[9px] font-medium text-[var(--fg-dim)] md:inline">
+        <kbd className="hidden rounded border border-[var(--border)] px-1 font-mono text-[11px] font-medium text-[var(--fg-dim)] md:inline">
           ⌘K
         </kbd>
       </button>
@@ -104,7 +122,10 @@ export function GlobalSearch() {
             autoFocus
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              setPendingEnter(false);
+            }}
             placeholder="Search memories…"
             onKeyDown={onInputKey}
             className="min-w-0 flex-1 border-none bg-transparent text-base text-[var(--fg)] outline-none placeholder:text-[var(--fg-dim)]"
@@ -116,7 +137,7 @@ export function GlobalSearch() {
                 type="button"
                 aria-pressed={mode === m}
                 onClick={() => setMode(m)}
-                className={`cursor-pointer rounded-full border px-2.5 py-0.5 font-mono text-[10px] font-medium transition-colors ${
+                className={`cursor-pointer rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-medium transition-colors ${
                   mode === m
                     ? "border-[rgba(45,212,160,0.4)] bg-[rgba(45,212,160,0.16)] text-[var(--accent-bright)]"
                     : "border-[var(--border)] text-[var(--fg-muted)] hover:text-[var(--fg-soft)]"
@@ -153,13 +174,17 @@ export function GlobalSearch() {
               </li>
             ))}
           </ul>
+        ) : results.isError ? (
+          <p role="alert" className="mt-3 py-4 text-center text-sm text-[var(--accent-danger)]">
+            Search failed — {apiErrorMessage(results.error)}
+          </p>
         ) : query.trim() && results.isFetched ? (
           <p className="mt-3 py-4 text-center text-sm text-[var(--fg-muted)]">
             {mode === "exact" ? "No exact matches in top 50." : "No matches."}
           </p>
         ) : null}
 
-        <p className="mt-3 border-t border-[var(--border)] pt-2.5 font-mono text-[10px] text-[var(--fg-dim)]">
+        <p className="mt-3 border-t border-[var(--border)] pt-2.5 font-mono text-[11px] text-[var(--fg-dim)]">
           ↑↓ navigate · ↵ open · esc close
         </p>
       </Dialog>

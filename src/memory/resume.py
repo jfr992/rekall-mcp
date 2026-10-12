@@ -17,6 +17,36 @@ from memory.scope import MemoryScope
 MAX_RESUME_SCROLL = 2000
 
 
+def _verified_conflicts(graph, points: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_id = {p["memory_id"]: p for p in points if p.get("memory_id")}
+
+    def live(mid: str) -> bool:
+        if by_id[mid].get("disputed") or by_id[mid].get("compacted"):
+            return False
+        # Supersession is only a graph edge (newer -> older); no payload marker exists.
+        return not any(
+            e.relation == "supersedes" and e.target == mid
+            for e in graph.get_edges(mid, direction="both")
+        )
+
+    seen: set[frozenset[str]] = set()
+    out: list[dict[str, Any]] = []
+    for mid, point in by_id.items():
+        if not live(mid):
+            continue
+        for edge in graph.get_edges(mid, direction="both"):
+            if edge.relation != "contradicts" or not edge.llm_refined:
+                continue
+            other = edge.target if edge.source == mid else edge.source
+            pair = frozenset((mid, other))
+            if pair in seen or other not in by_id or not live(other):
+                continue
+            seen.add(pair)
+            content = (point.get("content") or "").strip().replace("\n", " ")[:160]
+            out.append({"memory_id": mid, "conflicts_with": other, "content": content})
+    return out
+
+
 def build_resume_packet(
     manager,
     *,
@@ -71,8 +101,7 @@ def build_resume_packet(
     dedup_important = _dedupe_by_id(
         sorted(promoted_memories, key=lambda x: (-x["importance"], x["date"]))
     )[:limit]
-    # Contradicts edges lack a polarity check; retain the response field without injection.
-    unresolved: list[dict[str, Any]] = []
+    unresolved = _verified_conflicts(graph, points)
 
     next_steps = extract_next_steps(dedup_recent + dedup_important)
     handoff = format_handoff_summary(

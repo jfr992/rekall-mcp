@@ -46,7 +46,7 @@ describe("Cockpit dashboard page", () => {
   test("renders every panel from the fixtures — cards, tiers, feed, graph, hygiene, node list", async () => {
     renderPage();
     // stat cards
-    expect(await screen.findByText("132")).toBeInTheDocument();
+    expect(await screen.findByText("41")).toBeInTheDocument();
     expect(screen.getByText("+6 this week")).toBeInTheDocument();
     // tier composition
     expect(screen.getByTestId("tier-bar")).toBeInTheDocument();

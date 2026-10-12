@@ -152,3 +152,11 @@ def test_pressure_prune_candidates_count_dedupes_low_and_stale(monkeypatch):
     assert flagged["low_value_count"] == 1
     assert flagged["stale_working_count"] == 1
     assert flagged["prune_candidates_count"] == 1
+
+
+def test_pressure_capacity_is_zero_for_empty_scope(client, fake_manager):
+    fake_manager.store.scroll.return_value = []
+    fake_manager.event_log.tail.return_value = []
+    body = client.get("/api/memory/pressure?project=nothing").json()
+    assert body["capacity"] == 0
+    assert body["load_score"] == 0

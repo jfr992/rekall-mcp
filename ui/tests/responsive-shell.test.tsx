@@ -4,6 +4,7 @@
  */
 import { describe, test, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { CockpitShell } from "@/components/shell/cockpit-shell";
 
 // Stub children that make network calls
@@ -67,6 +68,28 @@ describe("CockpitShell (top-nav)", () => {
     expect(nav.className).toMatch(/whitespace-nowrap/);
     // min-w-0 lets the flex row shrink instead of forcing body overflow
     expect(nav.className).toMatch(/min-w-0/);
+  });
+
+  test("header wraps below md so fixed-width items cannot overflow a phone", () => {
+    const { container } = render(
+      <CockpitShell>
+        <div />
+      </CockpitShell>,
+    );
+    expect(container.querySelector("header")!.className).toMatch(/\bflex-wrap\b/);
+    expect(screen.getByRole("navigation", { name: "Primary" }).className).toMatch(/\bbasis-full\b/);
+  });
+
+  test("scope select shows a focus ring", async () => {
+    const { ProjectSwitcher } = await vi.importActual<typeof import("@/components/shell/project-switcher")>(
+      "@/components/shell/project-switcher",
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ProjectSwitcher />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByLabelText(/memory scope/i).closest("label")!.className).toMatch(/focus-within:ring-2/);
   });
 
   test("scope counts render from insights but collapse on mobile; content renders inside main", () => {

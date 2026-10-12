@@ -4,6 +4,7 @@ import { MonoLabel } from "@/components/ui/mono-label";
 import { ShowMoreList } from "@/components/ui/show-more-list";
 import { recallOriginLabel } from "@/lib/recall-origin";
 import type { StreamRow } from "@/lib/schemas";
+import { parseServerTime } from "@/lib/time";
 
 const FEED_CAP = 8;
 
@@ -17,7 +18,7 @@ type Props = {
 };
 
 function hhmm(at: string): string {
-  const d = new Date(at);
+  const d = parseServerTime(at);
   if (Number.isNaN(d.getTime())) return "--:--";
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
@@ -27,7 +28,7 @@ export function RecallFeed({ rows, misses7d, onSelect, scoped = false }: Props) 
 
   return (
     <section className="flex flex-col rounded-[11px] border border-[var(--border)] bg-[var(--bg-elevated)] px-5 py-4">
-      <MonoLabel className="mb-3.5 block text-[9px] tracking-[0.16em]">Live recall feed</MonoLabel>
+      <MonoLabel className="mb-3.5 block text-[11px] tracking-[0.16em]">Live recall feed</MonoLabel>
 
       <div className="flex flex-1 flex-col gap-0.5 text-xs">
         {recalled.length === 0 && scoped ? (
@@ -59,7 +60,7 @@ export function RecallFeed({ rows, misses7d, onSelect, scoped = false }: Props) 
                     : "cursor-pointer hover:bg-[var(--surface-0)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--accent-primary)]"
                 }`}
               >
-                <span className="font-mono text-[10px] text-[var(--fg-dim)]">{hhmm(row.at)}</span>
+                <span className="font-mono text-[11px] text-[var(--fg-dim)]">{hhmm(row.at)}</span>
                 <span
                   className={`truncate ${
                     row.payload.query === null
@@ -71,10 +72,10 @@ export function RecallFeed({ rows, misses7d, onSelect, scoped = false }: Props) 
                 >
                   {row.payload.query ?? recallOriginLabel(row.payload.capture_origin)}
                 </span>
-                <span className="font-mono text-[10px] text-[var(--fg-dim)]">
+                <span className="font-mono text-[11px] text-[var(--fg-dim)]">
                   {hits} {hits === 1 ? "hit" : "hits"}
                 </span>
-                <span className="font-mono text-[10px] font-medium text-[var(--accent-bright)]">
+                <span className="font-mono text-[11px] font-medium text-[var(--accent-bright)]">
                   {row.payload.top_score === null ? null : row.payload.top_score.toFixed(2)}
                 </span>
               </Row>

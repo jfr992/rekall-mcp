@@ -30,7 +30,7 @@ def _fake_manager(memories: list[dict], graph_contradicts: dict | None = None):
     mgr.knowledge_graph.count_contradicts.side_effect = lambda mid: (graph_contradicts or {}).get(
         mid, 0
     )
-    mgr.knowledge_graph.get_neighbors.side_effect = lambda mid, hops=1: set()
+    mgr.knowledge_graph.get_neighbors.side_effect = lambda mid, hops=1: []
     mgr.delete.return_value = True
     return mgr
 
@@ -250,14 +250,7 @@ def test_apply_with_expired_plan_rejects(monkeypatch):
 
     import memory.prune as prune_mod
 
-    real_dt = prune_mod.datetime
-
-    class FakeDT(real_dt):
-        @classmethod
-        def now(cls):
-            return plan.expires_at + timedelta(seconds=1)
-
-    monkeypatch.setattr(prune_mod, "datetime", FakeDT)
+    monkeypatch.setattr(prune_mod, "utc_now", lambda: plan.expires_at + timedelta(seconds=1))
 
     with pytest.raises(PlanExpired):
         apply_plan(mgr, plan_id=plan.plan_id, confirm_plan_id=plan.plan_id)
@@ -394,3 +387,47 @@ def test_apply_with_nothing_deleted_emits_no_event():
     apply_plan(mgr, plan_id=plan.plan_id, confirm_plan_id=plan.plan_id)
 
     mgr.record_event.assert_not_called()
+
+
+def test_build_plan_handles_list_neighbors_like_real_graph():
+    mgr = _fake_manager(
+        [
+            {
+                "memory_id": "id1",
+                "tier": "identity",
+                "salience": 0.1,
+                "type": "preference",
+                "date": _old_date(),
+                "reinforcement_count": 0,
+            },
+            {
+                "memory_id": "w_near",
+                "tier": "working",
+                "salience": 0.1,
+                "type": "note",
+                "date": _old_date(),
+                "reinforcement_count": 0,
+            },
+            {
+                "memory_id": "w_far",
+                "tier": "working",
+                "salience": 0.1,
+                "type": "note",
+                "date": _old_date(),
+                "reinforcement_count": 0,
+            },
+        ]
+    )
+    neighbors = {"w_near": ["id1"], "w_far": ["other"]}
+    mgr.knowledge_graph.get_neighbors.side_effect = lambda mid, hops=1: neighbors.get(mid, [])
+
+    plan = build_plan(mgr, project="p")
+
+    assert {c.memory_id for c in plan.candidates} == {"w_far"}
+
+
+def test_plan_timestamps_carry_utc_offset():
+    mgr = _fake_manager([])
+    d = build_plan(mgr, project="p").to_dict()
+    assert d["generated_at"].endswith("+00:00")
+    assert d["expires_at"].endswith("+00:00")

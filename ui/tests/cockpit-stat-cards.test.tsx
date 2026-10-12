@@ -11,11 +11,17 @@ const pressure = pressureFixture as PressureResponse;
 describe("StatCards", () => {
   test("total card shows total, weekly delta, and an inline-SVG sparkline from per_week", () => {
     render(<StatCards insights={insights} pressure={pressure} />);
-    expect(screen.getByText("132")).toBeInTheDocument();
+    expect(screen.getByText("41")).toBeInTheDocument();
     expect(screen.getByText("+6 this week")).toBeInTheDocument();
     const sparkline = screen.getByTestId("sparkline");
     expect(sparkline.tagName.toLowerCase()).toBe("svg");
     expect(sparkline.querySelector("path")).not.toBeNull();
+  });
+
+  test("total card shows the in-scope count so it matches the scoped delta and sparkline", () => {
+    const { container } = render(<StatCards insights={insights} pressure={pressure} />);
+    expect(screen.getByText("41")).toBeInTheDocument();
+    expect(container.textContent).not.toContain("132");
   });
 
   test("recalls card shows recalls_7d and avg top match with the denominator in a tooltip", () => {
@@ -45,7 +51,7 @@ describe("StatCards", () => {
     expect(screen.getByText("15")).toBeInTheDocument();
     expect(screen.getByText(/needs attention/i)).toBeInTheDocument();
     expect(
-      screen.getByText("prune 12 \u00b7 conflict 1 \u00b7 disputed 1"),
+      screen.getByText("prune 12 \u00b7 conflict 1 \u00b7 disputed 1 \u00b7 stale 1"),
     ).toBeInTheDocument();
   });
 

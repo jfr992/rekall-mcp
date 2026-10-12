@@ -22,12 +22,13 @@ function renderHygiene() {
       mutations: { retry: false },
     },
   });
-  return render(
+  render(
     <QueryClientProvider client={client}>
       <HygienePage />
       <Toaster />
     </QueryClientProvider>
   );
+  return client;
 }
 
 describe("Prune flow (keystone)", () => {
@@ -61,7 +62,8 @@ describe("Prune flow (keystone)", () => {
 
   test("build plan → type confirmation → dialog → apply → success toast", async () => {
     const user = userEvent.setup();
-    renderHygiene();
+    const client = renderHygiene();
+    const invalidate = vi.spyOn(client, "invalidateQueries");
 
     // Wait for pressure to load
     await waitFor(() => {
@@ -106,6 +108,10 @@ describe("Prune flow (keystone)", () => {
     // Apply was called with matching confirm
     await waitFor(() => {
       expect(pruneApi.postPruneApply).toHaveBeenCalledWith(prunePlanFixture.plan_id, prunePlanFixture.plan_id);
+    });
+    await waitFor(() => {
+      const keys = invalidate.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey[0]);
+      expect(keys).toEqual(expect.arrayContaining(["projects", "insights", "pressure"]));
     });
   });
 

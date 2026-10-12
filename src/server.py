@@ -31,8 +31,10 @@ from mcp.server.fastmcp import FastMCP
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from core import Telemetry
+from core.utils import utc_now
 from memory.insights import EVENT_WINDOW
-from memory.types import VALID_MEMORY_TYPES
+from memory.scope import normalize_project
+from memory.types import MAX_MEMORY_CONTENT_CHARS, VALID_MEMORY_TYPES
 from tools import ToolConfig, ToolLoader, ToolRegistry
 
 # Configure logging
@@ -390,6 +392,7 @@ class AfkSaveRequest(BaseModel):
 
 
 _PROJECT_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
+_TRAVERSAL_RE = re.compile(r"[/\\]|\.\.")
 
 
 def _safe_project(value) -> str | None:
@@ -400,6 +403,12 @@ def _safe_project(value) -> str | None:
             "project must be 1-64 characters of letters, digits, dot, dash, underscore"
         )
     return value
+
+
+def _safe_write_project(value) -> str | None:
+    if isinstance(value, str) and value.strip() and not _TRAVERSAL_RE.search(value):
+        value = normalize_project(value)
+    return _safe_project(value)
 
 
 def _safe_type(value: str, *, allow_auto: bool = False) -> str:
@@ -454,6 +463,43 @@ def _body_int(body: dict, key: str, default: int, lo: int = 0, hi: int = 10000) 
     except (TypeError, ValueError) as e:
         raise RequestValidationError(f"{key} must be an integer") from e
     return max(lo, min(value, hi))
+
+
+async def _json_object(request) -> dict:
+    try:
+        body = await request.json()
+    except ValueError as e:
+        raise RequestValidationError("body must be valid JSON") from e
+    if not isinstance(body, dict):
+        raise RequestValidationError("body must be a JSON object")
+    return body
+
+
+def _safe_text(value, field: str, *, required: bool = True) -> str | None:
+    if value is None or value == "":
+        if required:
+            raise RequestValidationError(f"{field} is required")
+        return None
+    if not isinstance(value, str):
+        raise RequestValidationError(f"{field} must be a string")
+    if len(value) > MAX_MEMORY_CONTENT_CHARS:
+        raise RequestValidationError(f"{field} exceeds {MAX_MEMORY_CONTENT_CHARS} characters")
+    return value
+
+
+def _body_bool(body: dict, key: str, default: bool = False) -> bool:
+    value = body.get(key, default)
+    if not isinstance(value, bool):
+        raise RequestValidationError(f"{key} must be a boolean")
+    return value
+
+
+def _safe_session_id(value) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or len(value) > 128:
+        raise RequestValidationError("session_id must be a string up to 128 characters")
+    return value
 
 
 def _parse_graph_filters(query_params) -> dict[str, str | dict[str, str]]:
@@ -534,13 +580,10 @@ async def api_save_memory(request):
     from starlette.responses import JSONResponse
 
     try:
-        body = await request.json()
-        content = body.get("content")
+        body = await _json_object(request)
+        content = _safe_text(body.get("content"), "content")
         mem_type = _safe_type(body.get("type", "note"))
-        project = _safe_project(body.get("project"))
-
-        if not content:
-            return JSONResponse({"error": "content is required"}, status_code=400)
+        project = _safe_write_project(body.get("project"))
 
         manager = _get_memory_manager()
         async with _maintenance_barrier():
@@ -568,7 +611,7 @@ async def api_save_afk_memory_operation(request):
     try:
         body = AfkSaveRequest.model_validate_json(await request.body())
         fields = body.model_dump(mode="json")
-        fields["project"] = _safe_project(fields["project"])
+        fields["project"] = _safe_write_project(fields["project"])
         manager = _get_memory_manager()
         async with _maintenance_barrier():
             result = manager.save_afk_operation(**fields)
@@ -616,7 +659,7 @@ async def api_recall_memories(request):
     from starlette.responses import JSONResponse
 
     try:
-        body = await request.json()
+        body = await _json_object(request)
         query = body.get("query")
         limit = _body_int(body, "limit", 5, lo=1, hi=100)
         project = _safe_project(body.get("project"))
@@ -630,7 +673,8 @@ async def api_recall_memories(request):
             task_hint = task_hint[:256]
         # Caller's cwd, not the backend's — attribution only (v1.5.0 scope pitfall)
         caller_cwd = body.get("cwd") or body.get("workspace_root") or None
-        session_id = body.get("session_id")
+        session_id = _safe_session_id(body.get("session_id"))
+        source = "ui" if body.get("source") == "ui" else "recall"
 
         if not query:
             return JSONResponse({"error": "query is required"}, status_code=400)
@@ -644,6 +688,7 @@ async def api_recall_memories(request):
             task_hint=task_hint,
             cwd=caller_cwd,
             session_id=session_id,
+            source=source,
         )
 
         # memory_recalled emission lives in manager.recall (event contract v2)
@@ -659,7 +704,7 @@ async def api_recall_memories(request):
 async def api_cross_project_recall(request):
     """REST API: Search current-project, related-project, and global memories."""
     try:
-        body = await request.json()
+        body = await _json_object(request)
         raw_query = body.get("query")
         if not isinstance(raw_query, str):
             return _bad_request("query is required")
@@ -694,10 +739,7 @@ async def api_cross_project_recall(request):
 async def api_memory_reflex(request):
     """REST API: Build an action-aware reflex recall packet."""
     try:
-        body = await request.json()
-        if not isinstance(body, dict):
-            return _bad_request("body must be an object")
-
+        body = await _json_object(request)
         raw_text = body.get("text")
         if not isinstance(raw_text, str):
             return _bad_request("text is required")
@@ -711,7 +753,7 @@ async def api_memory_reflex(request):
             from memory.scope import ScopeDetector
 
             project = ScopeDetector.detect(cwd=caller_cwd).project
-        session_id = body.get("session_id")
+        session_id = _safe_session_id(body.get("session_id"))
 
         if not text:
             return _bad_request("text is required")
@@ -731,12 +773,11 @@ async def api_memory_reflex(request):
 
 
 def _run_reinforce_pass(manager) -> None:
-    """Fire the T2 reinforce processor after a session_summary lands.
+    """Fire the T2 reinforce processor after a session_summary or feedback lands.
 
     Best-effort: a failure here must never fail the ingestion response
     (PLAN.md Mechanism: consume session_summary server-side, non-blocking).
     """
-    from datetime import datetime
 
     from memory.reinforce import process_events
 
@@ -747,7 +788,7 @@ def _run_reinforce_pass(manager) -> None:
             graph=manager.knowledge_graph,
             state_path=manager.memory_dir / "_reinforce_state.json",
             lock_path=manager.memory_dir / "_reinforce.lock",
-            now=datetime.now(),
+            now=utc_now(),
             record_event=manager.record_event,
         )
     except Exception:
@@ -760,10 +801,7 @@ async def api_record_events(request):
     _ALLOWED_EVENT_TYPES = frozenset({"session_summary"})
 
     try:
-        body = await request.json()
-        if not isinstance(body, dict):
-            return _bad_request("body must be an object")
-
+        body = await _json_object(request)
         event_type = body.get("event_type")
         if event_type not in _ALLOWED_EVENT_TYPES:
             return _bad_request(f"event_type must be one of {sorted(_ALLOWED_EVENT_TYPES)}")
@@ -888,7 +926,7 @@ async def api_memory_review(request):
     from memory.events import MemoryEvent
 
     try:
-        body = await request.json()
+        body = await _json_object(request)
         memory_id = body.get("memory_id")
         verdict = body.get("verdict")
         editor = body.get("editor")
@@ -996,23 +1034,16 @@ async def api_list_sessions(request):
             sessions = [s for s in sessions if (s["last_at"] or "")[:10] >= after]
         if before is not None:
             sessions = [s for s in sessions if (s["last_at"] or "")[:10] <= before]
+        total = len(sessions)
         sessions = sessions[:limit]
-        # U2 phase metric: server-side hit counter for the transparency view.
-        _get_memory_manager().record_event(
-            event_type="view_opened",
-            project="general",
-            source="sessions_view",
-            payload={"view": "sessions"},
-        )
         rows = [
             {key: s[key] for key in ("session_id", "project", "started_at", "last_at", "totals")}
             for s in sessions
         ]
-        # Same honest marker the stream carries, from the snapshot the fold
-        # used — taken before the view_opened append above.
         return _ok(
             {
                 "sessions": rows,
+                "total": total,
                 "window": _SESSIONS_EVENT_WINDOW,
                 "event_window": {"events": len(snapshot.events), "oldest_at": snapshot.oldest_at},
             }
@@ -1106,16 +1137,17 @@ async def api_memory_stream(request):
 async def api_memory_feedback(request):
     """REST API: one-click recall feedback (useful|wrong|stale).
 
-    Labeled evidence only — nothing reads memory_feedback into ranking
-    (weights frozen until the 500-pair gate; grep-pinned in tests).
+    "wrong" disputes the memory, "useful" credits it, "stale" queues a
+    supersede review. The reinforce pass runs immediately so a verdict does
+    not wait for a later session to end. Ranking weights never read it.
     """
     from starlette.responses import JSONResponse
 
     try:
-        body = await request.json()
+        body = await _json_object(request)
         memory_id = body.get("memory_id")
         verdict = body.get("verdict")
-        session_id = body.get("session_id")
+        session_id = _safe_session_id(body.get("session_id"))
 
         if not memory_id or not isinstance(memory_id, str):
             return _bad_request("memory_id is required")
@@ -1135,6 +1167,8 @@ async def api_memory_feedback(request):
             session_id=session_id,
             payload={"verdict": verdict, "editor": "ui"},
         )
+        if os.getenv("REKALL_REINFORCE", "1") != "0":
+            _run_reinforce_pass(manager)
         return _ok({"recorded": True})
     except RequestValidationError as e:
         return _bad_request(str(e))
@@ -1337,7 +1371,7 @@ async def api_pin_memory(request):
 
     try:
         memory_id = request.path_params["memory_id"]
-        body = await request.json()
+        body = await _json_object(request)
         pinned = body.get("pinned")
         if not isinstance(pinned, bool):
             return _bad_request("pinned must be a boolean")
@@ -1350,6 +1384,8 @@ async def api_pin_memory(request):
             return JSONResponse({"error": "not found", "memory_id": memory_id}, status_code=404)
 
         return _ok({"memory_id": memory_id, "pinned": pinned})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error pinning memory: {e}")
         return _server_error(str(e))
@@ -1363,7 +1399,7 @@ async def api_dispute_memory(request):
 
     try:
         memory_id = request.path_params["memory_id"]
-        body = await request.json()
+        body = await _json_object(request)
         disputed = body.get("disputed")
         if not isinstance(disputed, bool):
             return _bad_request("disputed must be a boolean")
@@ -1376,6 +1412,8 @@ async def api_dispute_memory(request):
             return JSONResponse({"error": "not found", "memory_id": memory_id}, status_code=404)
 
         return _ok({"memory_id": memory_id, "disputed": disputed})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error updating disputed flag: {e}")
         return _server_error(str(e))
@@ -1387,7 +1425,7 @@ async def api_cleanup_memories(request):
     from starlette.responses import JSONResponse
 
     try:
-        body = await request.json()
+        body = await _json_object(request)
         max_age = (
             None
             if body.get("max_age_days_facts") is None
@@ -1395,8 +1433,8 @@ async def api_cleanup_memories(request):
         )
         result = _get_memory_manager().cleanup(
             max_age_days_facts=max_age,
-            prune_superseded=body.get("prune_superseded", False),
-            dry_run=body.get("dry_run", False),
+            prune_superseded=_body_bool(body, "prune_superseded"),
+            dry_run=_body_bool(body, "dry_run"),
         )
 
         return JSONResponse(result)
@@ -1761,6 +1799,8 @@ async def api_wiki_page(request):
 @mcp.custom_route("/api/wiki/drafts", methods=["GET"])
 async def api_wiki_drafts(request):
     try:
+        project = _safe_project(request.query_params.get("project"))
+        scoped = project not in (None, "all")
         manager = _get_memory_manager()
         drafts = [
             {
@@ -1771,8 +1811,11 @@ async def api_wiki_drafts(request):
                 **_wiki_draft_flags(p),
             }
             for p in manager.wiki.list_pages("draft")
+            if not scoped or p.project == project
         ]
         return _ok({"drafts": drafts})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         return _server_error(str(e))
 
@@ -1825,8 +1868,8 @@ async def api_wiki_reject(request):
     if page_id is None:
         return _bad_request("invalid page_id")
     try:
-        body = await request.json()
-        reason = str((body or {}).get("reason") or "").strip() or "no reason given"
+        body = await _json_object(request)
+        reason = str(body.get("reason") or "").strip() or "no reason given"
         _get_memory_manager().wiki.reject(page_id, reason)
         return _ok({"status": "rejected"})
     except ValueError as e:
@@ -1841,13 +1884,13 @@ async def api_wiki_edit_draft(request):
     if page_id is None:
         return _bad_request("invalid page_id")
     try:
-        body = await request.json()
-        edits = (body or {}).get("frontmatter") or {}
+        body = await _json_object(request)
+        edits = body.get("frontmatter") or {}
         allowed = {k: edits[k] for k in _WIKI_EDITABLE_FM if k in edits}
 
         def mutate(draft: Page) -> Page:
             fm = dict(draft.frontmatter, **allowed, page_id=page_id, human_edited=True)
-            return Page(frontmatter=fm, body=str((body or {}).get("body", draft.body)))
+            return Page(frontmatter=fm, body=str(body.get("body", draft.body)))
 
         page = _get_memory_manager().wiki.update_draft(page_id, mutate)
         return _ok({"page": page.frontmatter})
@@ -1868,9 +1911,9 @@ async def api_wiki_candidates(request):
         llm = make_wiki_llm()
         if llm is None:
             return _ok({"status": "unconfigured"})
-        body = await request.json()
-        project = _safe_project((body or {}).get("project"))
-        limit = _read_int(body or {}, "limit", 200, lo=1, hi=2000)
+        body = await _json_object(request)
+        project = _safe_project(body.get("project"))
+        limit = _body_int(body, "limit", 200, lo=1, hi=2000)
         key = project or "__all__"
         job = _WIKI_CLASSIFY_JOBS.get(key)
         if job and job.get("status") == "running":
@@ -1908,6 +1951,8 @@ async def api_wiki_candidates(request):
 
         threading.Thread(target=_run, daemon=True).start()
         return _ok({"status": "started"})
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         return _server_error(str(e))
 
@@ -1954,10 +1999,15 @@ async def api_wiki_draft(request):
         llm = make_wiki_llm()
         if llm is None:
             return _ok({"status": "unconfigured"})
-        body = await request.json()
+        body = await _json_object(request)
         ids = body.get("memory_ids") or []
-        if not isinstance(ids, list) or not ids:
-            return _bad_request("memory_ids must be a non-empty list")
+        if (
+            not isinstance(ids, list)
+            or not ids
+            or len(ids) > 50
+            or not all(isinstance(i, str) for i in ids)
+        ):
+            return _bad_request("memory_ids must be 1-50 strings")
         manager = _get_memory_manager()
         memories = manager.store.get_many(ids)
         if not memories:
@@ -2148,9 +2198,9 @@ async def api_compact_memories(request):
     from starlette.responses import JSONResponse
 
     try:
-        body = await request.json()
+        body = await _json_object(request)
         older_than_days = _body_int(body, "older_than_days", 30, lo=1, hi=36500)
-        dry_run = bool(body.get("dry_run", True))
+        dry_run = _body_bool(body, "dry_run", True)
         project = _safe_project(body.get("project"))
         llm_provider = body.get("llm_provider", "anthropic")
         if llm_provider not in {"anthropic", "openai"}:
@@ -2203,8 +2253,8 @@ async def api_memory_resume(request):
 async def api_lifecycle_backfill(request):
     """REST API: Backfill tier/durability on existing memories."""
     try:
-        body = await request.json()
-        dry_run = bool(body.get("dry_run", True))
+        body = await _json_object(request)
+        dry_run = _body_bool(body, "dry_run", True)
         project = _safe_project(body.get("project"))
 
         manager = _get_memory_manager()
@@ -2226,7 +2276,7 @@ async def api_memory_prune_apply(request):
     from memory.prune import PlanExpired, PlanIdMismatch, PlanNotFound, apply_plan
 
     try:
-        body = await request.json()
+        body = await _json_object(request)
         plan_id = body.get("plan_id")
         confirm = body.get("confirm")
         if not plan_id or not confirm:
@@ -2243,6 +2293,8 @@ async def api_memory_prune_apply(request):
             return _bad_request("plan expired")
 
         return _ok(result)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error applying prune plan: {e}")
         return _server_error(str(e))
@@ -2254,7 +2306,7 @@ async def api_memory_prune_plan(request):
     from memory.prune import build_plan
 
     try:
-        body = await request.json()
+        body = await _json_object(request)
         project = _safe_project(body.get("project"))
         if not project:
             return _bad_request("project is required")
@@ -2291,7 +2343,7 @@ async def api_prune_superseded(request):
     from starlette.responses import JSONResponse
 
     try:
-        body = await request.json()
+        body = await _json_object(request)
 
         # Gate 1: intentionality token
         if body.get("confirm_date") != _today_str():
@@ -2323,7 +2375,7 @@ async def api_prune_superseded(request):
             return _ok({"deleted": [], "message": "no eligible candidates"})
 
         # Gate 3: dry_run preview
-        if body.get("dry_run", False):
+        if _body_bool(body, "dry_run"):
             return _ok(
                 {
                     "dry_run": True,
@@ -2390,6 +2442,8 @@ async def api_prune_superseded(request):
                 "daily_remaining": MAX_PER_DAY - _prune_daily_count[today_key],
             }
         )
+    except RequestValidationError as e:
+        return _bad_request(str(e))
     except Exception as e:
         logger.error(f"Error in superseded prune: {e}")
         return _server_error(str(e))
@@ -2439,8 +2493,8 @@ async def api_memory_pressure(request):
         memories = manager.store.scroll(filters=filters, limit=cap)
         pressure = identify_pressure(memories)
 
-        total = max(len(memories), 1)
-        load_score = _pressure_load_score(pressure, total=total)
+        count = len(memories)
+        load_score = _pressure_load_score(pressure, total=max(count, 1))
 
         graph_has_nodes = manager.knowledge_graph.stats()["nodes"] > 0
         conflict: list[dict] = []
@@ -2474,7 +2528,7 @@ async def api_memory_pressure(request):
             {
                 "project": project or "all",
                 "load_score": load_score,
-                "capacity": total,
+                "capacity": count,
                 "flagged": {
                     "stale_working_count": pressure.get("stale_working_count", 0),
                     "low_value_count": pressure.get("low_value_count", 0),
@@ -2610,15 +2664,12 @@ async def api_observe(request):
     from starlette.responses import JSONResponse
 
     try:
-        body = await request.json()
-        summary = body.get("summary")
+        body = await _json_object(request)
+        summary = _safe_text(body.get("summary"), "summary")
         mem_type = _safe_type(body.get("type", "auto"), allow_auto=True)
-        context = body.get("context")
+        context = _safe_text(body.get("context"), "context", required=False)
         caller_cwd = body.get("cwd") or body.get("workspace_root")
-        caller_project = _safe_project(body.get("project"))
-
-        if not summary:
-            return JSONResponse({"error": "summary is required"}, status_code=400)
+        caller_project = _safe_write_project(body.get("project"))
 
         manager = _get_memory_manager()
 
@@ -2633,6 +2684,8 @@ async def api_observe(request):
         content = summary
         if context:
             content = f"{summary}\n\nContext: {context}"
+        if len(content) > MAX_MEMORY_CONTENT_CHARS:
+            raise RequestValidationError(f"content exceeds {MAX_MEMORY_CONTENT_CHARS} characters")
 
         # Resolve scope from CALLER'S cwd, not the backend's. Without this,
         # every observation from every Claude session lands under the backend's
@@ -2654,7 +2707,7 @@ async def api_observe(request):
                 type=mem_type,
                 scope=scope,
                 capture_origin="hook",
-                session_id=body.get("session_id") or None,
+                session_id=_safe_session_id(body.get("session_id")),
                 evidence_class=evidence_class,
                 source_tool="observe",
                 cwd=caller_cwd,

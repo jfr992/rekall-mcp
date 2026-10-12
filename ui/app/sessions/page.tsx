@@ -90,7 +90,7 @@ export default function SessionsPage() {
       </div>
 
       {truncated ? (
-        <p className="font-mono text-[10px] text-[var(--fg-dim)]">
+        <p className="font-mono text-[11px] text-[var(--fg-dim)]">
           sessions before {oldestDay} not shown (event log window)
         </p>
       ) : null}
@@ -106,6 +106,7 @@ export default function SessionsPage() {
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-4 lg:grid-cols-[minmax(300px,2fr)_3fr]">
           <SessionList
             sessions={data.sessions}
+            total={data.total}
             selectedId={selectedId}
             onSelect={setSelectedId}
             emptyMessage={

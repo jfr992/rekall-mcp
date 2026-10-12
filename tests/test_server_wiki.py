@@ -469,3 +469,21 @@ def test_candidates_used_in_dedupes_a_page_with_draft_and_live_versions(client, 
     assert manager.wiki.read(pid, "draft") is not None
     cands = tc.get("/api/wiki/candidates?project=demo").json()["candidates"]
     assert cands[0]["used_in"] == [pid]
+
+
+def test_drafts_filtered_by_project(client, monkeypatch):
+    from types import SimpleNamespace as NS
+
+    import server
+
+    tc, manager = client
+    pages = [
+        NS(page_id=f"{p}/process/x", frontmatter={"title": "x"}, type="process", project=p)
+        for p in ("demo", "other")
+    ]
+    monkeypatch.setattr(manager.wiki, "list_pages", lambda status="live": pages)
+    monkeypatch.setattr(server, "_wiki_draft_flags", lambda p: {})
+    assert len(tc.get("/api/wiki/drafts").json()["drafts"]) == 2
+    scoped = tc.get("/api/wiki/drafts", params={"project": "demo"}).json()["drafts"]
+    assert [d["project"] for d in scoped] == ["demo"]
+    assert tc.get("/api/wiki/drafts", params={"project": "bad name"}).status_code == 400

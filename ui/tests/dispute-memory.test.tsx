@@ -79,4 +79,37 @@ describe("un-dispute", () => {
     expect(JSON.parse(init.body as string)).toEqual({ disputed: false });
     expect((init.headers as Record<string, string>)["X-Rekall-UI"]).toBe("1");
   });
+
+  test("a memory that is not disputed offers Dispute and posts disputed=true", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({ memory_id: "2026-07-10_fact_0ddba11", disputed: true })));
+    vi.stubGlobal("fetch", fetchMock);
+    renderInspector({ detail: { ...disputedDetail, memory: { ...disputedDetail.memory, disputed: false } } });
+    fireEvent.click(screen.getByRole("button", { name: /^dispute$/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    expect(JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string)).toEqual({ disputed: true });
+    expect(await screen.findByText(/marked disputed/i)).toBeInTheDocument();
+  });
+
+  test("Undo on the dispute toast posts disputed=false and confirms", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(JSON.stringify({ memory_id: "2026-07-10_fact_0ddba11", disputed: true })));
+    vi.stubGlobal("fetch", fetchMock);
+    renderInspector({ detail: { ...disputedDetail, memory: { ...disputedDetail.memory, disputed: false } } });
+    fireEvent.click(screen.getByRole("button", { name: /^dispute$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^undo$/i }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    expect(JSON.parse((fetchMock.mock.calls[1][1] as RequestInit).body as string)).toEqual({ disputed: false });
+    expect(await screen.findByText(/dispute cleared/i)).toBeInTheDocument();
+  });
+
+  test("a failed Undo shows an error toast", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ memory_id: "2026-07-10_fact_0ddba11", disputed: true })))
+      .mockResolvedValue(new Response(JSON.stringify({ error: "boom" }), { status: 500 }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderInspector({ detail: { ...disputedDetail, memory: { ...disputedDetail.memory, disputed: false } } });
+    fireEvent.click(screen.getByRole("button", { name: /^dispute$/i }));
+    fireEvent.click(await screen.findByRole("button", { name: /^undo$/i }));
+    expect(await screen.findByText(/undo failed/i)).toBeInTheDocument();
+  });
 });

@@ -1,4 +1,5 @@
 import { MonoLabel } from "@/components/ui/mono-label";
+import { attentionCount } from "@/lib/pressure";
 import type { PressureResponse } from "@/lib/schemas";
 
 type Props = { data: PressureResponse };
@@ -31,8 +32,7 @@ function loadColor(score: number): string {
 const statCard = "rounded-[11px] border bg-[var(--bg-elevated)] px-5 py-4";
 
 export function PressureGauges({ data }: Props) {
-  const totalFlagged =
-    data.flagged.stale_working_count + data.flagged.low_value_count + data.flagged.contradiction_count;
+  const attention = attentionCount(data.flagged);
   const load = loadColor(data.load_score);
   return (
     <div className="grid grid-cols-1 gap-3.5 md:grid-cols-3">
@@ -46,7 +46,7 @@ export function PressureGauges({ data }: Props) {
       <div className={`${statCard} border-[var(--border)]`}>
         <MonoLabel className="tracking-[0.16em]">capacity</MonoLabel>
         <div className="mt-1.5 font-serif text-4xl leading-[1.1] text-[var(--fg)]">
-          {data.capacity}
+          {data.capacity === 0 ? "empty" : data.capacity}
         </div>
         <GaugeBar
           value={Math.min(data.capacity, 2000)}
@@ -57,14 +57,15 @@ export function PressureGauges({ data }: Props) {
       <div className={`${statCard} border-[rgba(248,113,113,0.25)]`}>
         <MonoLabel className="tracking-[0.16em] text-[var(--accent-danger)]">flagged</MonoLabel>
         <div className="mt-1.5 font-serif text-4xl leading-[1.1] text-[var(--accent-danger)]">
-          {totalFlagged}
+          {attention.total}
         </div>
-        <div className="mt-2.5 flex gap-3 font-mono text-[10.5px] text-[var(--fg-muted)]">
-          <span>stale {data.flagged.stale_working_count}</span>
-          <span>low {data.flagged.low_value_count}</span>
-          <span className="text-[var(--accent-danger)]">
-            conflict {data.flagged.contradiction_count}
-          </span>
+        <div className="mt-2.5 flex gap-3 font-mono text-[11px] text-[var(--fg-muted)]">
+          <span>prune {attention.prune}</span>
+          {attention.conflict > 0 && (
+            <span className="text-[var(--accent-danger)]">conflict {attention.conflict}</span>
+          )}
+          {attention.disputed > 0 && <span>disputed {attention.disputed}</span>}
+          {attention.staleCandidates > 0 && <span>stale {attention.staleCandidates}</span>}
         </div>
       </div>
     </div>

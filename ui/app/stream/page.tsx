@@ -6,6 +6,7 @@ import { Timeline } from "@/components/stream/timeline";
 import { Chip } from "@/components/ui/chip";
 import { Empty } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
+import { apiErrorMessage } from "@/lib/api/client";
 import { useInsights } from "@/lib/queries/use-insights";
 import { usePressure } from "@/lib/queries/use-pressure";
 import { useStream } from "@/lib/queries/use-stream";
@@ -86,8 +87,10 @@ export default function StreamPage() {
             type="date"
             aria-label="Jump to day"
             value={jumpDay ?? ""}
+            min="2000-01-01"
+            max={day(0)}
             onChange={(e) => {
-              if (e.target.value) {
+              if (/^\d{4}-\d{2}-\d{2}$/.test(e.target.value)) {
                 setJumpDay(e.target.value);
                 setRangeKey(null);
               }
@@ -96,14 +99,14 @@ export default function StreamPage() {
           />
         </div>
         {truncated ? (
-          <p className="font-mono text-[10px] text-[var(--fg-dim)]">
+          <p className="font-mono text-[11px] text-[var(--fg-dim)]">
             recalls/promotions before {oldestDay} not shown (event log window)
           </p>
         ) : null}
         {stream.isLoading ? (
           <Skeleton className="h-[420px] w-full" />
         ) : stream.isError || !stream.data ? (
-          <Empty title="Could not load stream" hint="Check backend connection" />
+          <Empty title="Could not load stream" hint={stream.error ? apiErrorMessage(stream.error) : "Check backend connection"} />
         ) : (
           <div
             data-testid="stream-timeline-scroll"

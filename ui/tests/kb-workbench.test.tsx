@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, within } from "@testing-library/rea
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import KbPage from "@/app/kb/page";
 import { useProjectStore } from "@/lib/project-store";
+import { ApiError } from "@/lib/api/client";
 import * as searchApi from "@/lib/api/search";
 import * as detailApi from "@/lib/api/detail";
 import * as kbApi from "@/lib/api/kb";
@@ -388,5 +389,16 @@ describe("KB recall workbench", () => {
     const panel = screen.getByRole("list", { name: /recall results/i });
     expect(panel.className).toContain("max-h-[60vh]");
     expect(panel.className).toContain("overflow-y-auto");
+  });
+});
+
+describe("KbPage recall errors", () => {
+  test("a failed search says so instead of No matches", async () => {
+    vi.mocked(searchApi.postRecall).mockRejectedValue(new ApiError(500, "Request failed: 500", { error: "qdrant down" }));
+    renderPage();
+    fireEvent.change(screen.getByRole("textbox", { name: /recall query/i }), { target: { value: "x" } });
+    expect(await screen.findByText("Search failed")).toBeInTheDocument();
+    expect(screen.getByText("qdrant down")).toBeInTheDocument();
+    expect(screen.queryByText(/no matches/i)).not.toBeInTheDocument();
   });
 });

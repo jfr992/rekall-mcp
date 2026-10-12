@@ -854,16 +854,19 @@ class OptimizedMemoryTools(BaseToolProvider):
                 project, **_provided(cwd=cwd, agent=agent, session_id=session_id)
             )
             full_content = content if not context else f"{content}\n\nContext: {context}"
-            memory_id = self.manager.save(
-                content=full_content,
-                type=memory_type,
-                project=scope.project,
-                scope=scope,
-                cwd=cwd,
-                session_id=session_id,
-                capture_origin="save_memory_tool",
-                source_tool="mcp",
-            )
+            try:
+                memory_id = self.manager.save(
+                    content=full_content,
+                    type=memory_type,
+                    project=scope.project,
+                    scope=scope,
+                    cwd=cwd,
+                    session_id=session_id,
+                    capture_origin="save_memory_tool",
+                    source_tool="mcp",
+                )
+            except ValueError as e:
+                return f"Error: {e}"
             return f"Saved memory: {memory_id}"
 
         registered.append("save_memory")

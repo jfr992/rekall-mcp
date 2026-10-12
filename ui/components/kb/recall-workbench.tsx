@@ -1,5 +1,6 @@
 "use client";
 
+import { apiErrorMessage } from "@/lib/api/client";
 import { useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Chip } from "@/components/ui/chip";
@@ -99,7 +100,7 @@ export function RecallWorkbench({ project }: Props) {
           />
         </div>
         {results.data ? (
-          <p className="mt-2 text-right font-mono text-[10px] text-[var(--fg-dim)]">
+          <p className="mt-2 text-right font-mono text-[11px] text-[var(--fg-dim)]">
             {fetched.length} results ·{" "}
             <span
               className={
@@ -120,6 +121,8 @@ export function RecallWorkbench({ project }: Props) {
             title="Type to recall"
             hint={`Semantic search over ${project || "all"} memories — top ${RECALL_LIMIT} by score`}
           />
+        ) : results.isError ? (
+          <Empty title="Search failed" hint={apiErrorMessage(results.error)} />
         ) : results.isFetched ? (
           <Empty
             title="No matches"
@@ -148,7 +151,7 @@ export function RecallWorkbench({ project }: Props) {
                   style={{ background: "var(--accent-primary)" }}
                 />
                 all
-                <span className="ml-auto font-mono text-[10px] text-[var(--fg-dim)]">
+                <span className="ml-auto font-mono text-[11px] text-[var(--fg-dim)]">
                   {memories.length}
                 </span>
               </button>
@@ -176,7 +179,7 @@ export function RecallWorkbench({ project }: Props) {
                     }}
                   />
                   {t}
-                  <span className="ml-auto font-mono text-[10px] text-[var(--fg-dim)]">
+                  <span className="ml-auto font-mono text-[11px] text-[var(--fg-dim)]">
                     {typeCounts.get(t)}
                   </span>
                 </button>
@@ -252,7 +255,7 @@ export function RecallWorkbench({ project }: Props) {
                             {rel.memory?.content ?? rel.neighbor_id}
                           </span>
                           {typeof rel.weight === "number" ? (
-                            <span className="shrink-0 font-mono text-[9px] text-[var(--fg-dim)]">
+                            <span className="shrink-0 font-mono text-[11px] text-[var(--fg-dim)]">
                               {rel.weight.toFixed(2)}
                             </span>
                           ) : null}

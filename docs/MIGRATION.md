@@ -1,3 +1,24 @@
+# Migration Guide — v1.18.1 → v1.18.2 (QA retest fixes)
+
+v1.18.1 QA retest fixes: stricter API input validation, consistent UTC timestamps, scope-safe project names, honest counts and error states in the cockpit.
+
+## What changed
+
+- **POST bodies must be JSON objects** (400 otherwise). `/api/memory/cleanup`, `/compact`, `/lifecycle/backfill` and `/prune/superseded` reject non-boolean `dry_run` (a `null`/`0`/`""` no longer runs destructively).
+- **Memory content is capped at 20,000 characters.** REST returns 400; MCP `save_memory` returns `Error: ...`.
+- **Timestamps carry `+00:00`.** Stored offset-less timestamps are read as UTC; rows written by a non-Docker server in local time may show offset by the UTC difference.
+- **Project names are normalized on write** (`My Project` → `My-Project`); leading dots are preserved (`.playwright-mcp` stays as is). Reads stay strict.
+- **`GET /api/memory/sessions` no longer emits `view_opened`** and returns `total`.
+- **Cockpit/KB searches send `source: "ui"`** and are no longer logged as recalls and no longer bump graph access counts.
+- **Fixes:** prune plan no longer 500s on real graphs; "Wrong" feedback now disputes the memory immediately (the reinforce pass runs on the feedback request, not at session end); pressure `capacity` is 0 for an empty scope; wiki drafts list accepts `?project=`.
+- **Continuity "Unresolved" lists model-verified conflicts.**
+- **`REKALL_UI_ORIGINS` is documented**; the migration script prints its targets and no-ops cleanly.
+- **Cockpit UX:** one needs-attention number, list headers use server totals, request errors replace empty states, 4xx is not retried, Dispute has Undo, success toasts, backfill shows changes and confirms Apply, Cmd-K Enter opens the top result, phone-width header, focus ring, 11px text floor.
+
+No data migration.
+
+---
+
 # Migration Guide — v1.18.0 → v1.18.1 (honest conflict counts)
 
 ## What's new
@@ -12,7 +33,7 @@
 **Run the graph migration once, from a repo checkout** (the script is not in the PyPI package). Upgrade the server (`uvx rekall-mcp@1.18.1`, or `docker compose up -d --build mcp ui`), then:
 
 1. `docker compose stop mcp` (a running server holds the graph in memory and would overwrite the file).
-2. Dry run: `uv run python scripts/migrate_unchecked_contradicts.py`
+2. Dry run: `uv run python scripts/migrate_unchecked_contradicts.py`. The script prints the `_graph.json` it targets (`MEMORY_STORAGE_PATH`, default `~/.claude/memory`) and the server it checks (`REKALL_API_URL`). Make sure the path is the directory your mcp container mounts before `--apply`.
 3. Apply (writes `_graph.json.bak-<timestamp>` next to the graph first): `uv run python scripts/migrate_unchecked_contradicts.py --apply`
 4. `docker compose start mcp`
 5. Recompute tiers, since two or more `contradicts` links demote a memory one tier: Hygiene → Lifecycle backfill → Dry run, review, then Apply (or `POST /api/memory/lifecycle/backfill` with `{"dry_run": true}` first).
