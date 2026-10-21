@@ -651,7 +651,8 @@ def _run_restore_with_backend(tmp_path: Path, session: str, up: bool):
     fakebin.mkdir(exist_ok=True)
     (tmp_path / "health.json").write_text(json.dumps({"status": "ok"}), encoding="utf-8")
     (tmp_path / "stats.json").write_text(
-        json.dumps({"total_memories": 3, "knowledge_graph": {"nodes": 1, "edges": 0}}), encoding="utf-8"
+        json.dumps({"total_memories": 3, "knowledge_graph": {"nodes": 1, "edges": 0}}),
+        encoding="utf-8",
     )
     curl = fakebin / "curl"
     curl.write_text(
