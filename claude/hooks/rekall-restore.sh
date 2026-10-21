@@ -27,7 +27,16 @@ if [[ -f "$MARKER" ]]; then
 fi
 
 # Backend alive? Capture the body — /health carries the zero-vector tripwire.
-health=$(curl -sf --max-time 1 "$API/health" 2>/dev/null) || exit 0
+# Down: say so once per session (a silent dead backend left memory unused for a
+# whole session), then keep retrying quietly; recovery prints the ready line below.
+if ! health=$(curl -sf --max-time 1 "$API/health" 2>/dev/null); then
+  DOWN_MARKER="${MARKER%/*}/rekall-down-${SESSION_ID}"
+  if [[ ! -f "$DOWN_MARKER" ]]; then
+    touch "$DOWN_MARKER"
+    echo "Rekall DOWN ($API unreachable) — memory tools may be missing. Retrying each prompt; before answering about prior decisions or past work, check whether recall_memories() works."
+  fi
+  exit 0
+fi
 
 # Vector-corruption tripwire: two prod incidents sat undetected for days
 # because this line only showed counts. Absent vectors block → no indicator.
@@ -44,15 +53,16 @@ embedder=$(jq -r 'if (.embedder | type) == "object"
 # Zero-injection mode: check backend is alive, print a one-liner with
 # memory count, done. Model uses recall_memories() / mcp__rekall__recall
 # on demand instead of burning tokens on a dump every session.
-stats=$(curl -sf --max-time 2 "$API/api/memory/stats" 2>/dev/null \
+stats=$(curl -sf --max-time 4 "$API/api/memory/stats" 2>/dev/null \
   | jq -r '"\(.total_memories // 0) memories · \(.knowledge_graph.nodes // 0) nodes · \(.knowledge_graph.edges // 0) edges"' 2>/dev/null || true)
 
 touch "$MARKER"
 
-if [[ -n "$stats" || -n "$embedder" ]]; then
-  # Imperative wording measured: soft "on demand" left agents skipping memory on
-  # ~45% of memory-dependent questions (eval run 8); check-first closes the gap.
-  echo "Rekall ready — ${stats}${vectors}${embedder}. Before answering anything about prior decisions, current values, or past work: check memory first with recall_memories()."
-fi
+# Health passed, so always say ready: stats once took 1.8s against this budget and a
+# timeout here left the whole session without the line.
+[[ -n "$stats" ]] || stats="stats unavailable"
+# Imperative wording measured: soft "on demand" left agents skipping memory on
+# ~45% of memory-dependent questions (eval run 8); check-first closes the gap.
+echo "Rekall ready — ${stats}${vectors}${embedder}. Before answering anything about prior decisions, current values, or past work: check memory first with recall_memories()."
 
 exit 0

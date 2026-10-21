@@ -643,3 +643,105 @@ def test_session_end_wiki_read_arguments_are_not_a_reference(tmp_path):
     r, body = _run_session_end(tmp_path, entries)
     assert r.returncode == 0
     assert body["delivered"]["wiki"] == [PAGE] and body["referenced"] == []
+
+
+def _run_restore_with_backend(tmp_path: Path, session: str, up: bool):
+    """Run the restore hook against a fake backend that is up or refusing connections."""
+    fakebin = tmp_path / "fakebin-backend"
+    fakebin.mkdir(exist_ok=True)
+    (tmp_path / "health.json").write_text(json.dumps({"status": "ok"}), encoding="utf-8")
+    (tmp_path / "stats.json").write_text(
+        json.dumps({"total_memories": 3, "knowledge_graph": {"nodes": 1, "edges": 0}}),
+        encoding="utf-8",
+    )
+    curl = fakebin / "curl"
+    curl.write_text(
+        f"""#!/usr/bin/env bash
+{"" if up else "exit 7"}
+for arg in "$@"; do
+    case "$arg" in
+        */health) cat "{tmp_path}/health.json"; exit 0 ;;
+        */api/memory/stats) cat "{tmp_path}/stats.json"; exit 0 ;;
+    esac
+done
+exit 0
+""",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fakebin}:{env['PATH']}",
+            "REKALL_API_URL": "http://rekall.test",
+            "REKALL_AUTOSAVE": "1",
+            "REKALL_MARKER_DIR": str(tmp_path),
+        }
+    )
+    return subprocess.run(
+        ["bash", str(RESTORE_HOOK)],
+        input=json.dumps({"session_id": session, "cwd": str(tmp_path)}),
+        text=True,
+        capture_output=True,
+        env=env,
+        cwd=tmp_path,
+        timeout=10,
+        check=False,
+    )
+
+
+def test_restore_announces_a_down_backend_once_then_reports_recovery(tmp_path):
+    """A dead backend was silent, so memory went unused all session. Say so once, keep retrying."""
+    first = _run_restore_with_backend(tmp_path, "down-sess", up=False)
+    assert first.returncode == 0, first.stderr
+    assert "Rekall DOWN" in first.stdout
+    assert not (tmp_path / "rekall-restored-down-sess").exists()
+
+    second = _run_restore_with_backend(tmp_path, "down-sess", up=False)
+    assert second.stdout == ""
+
+    recovered = _run_restore_with_backend(tmp_path, "down-sess", up=True)
+    assert "Rekall ready" in recovered.stdout
+    assert (tmp_path / "rekall-restored-down-sess").exists()
+
+
+def test_restore_still_reports_ready_when_stats_time_out(tmp_path):
+    """Stats once took 1.8s against a 2s budget; a timeout set the marker and printed nothing."""
+    fakebin = tmp_path / "fakebin-slowstats"
+    fakebin.mkdir()
+    (tmp_path / "health.json").write_text(json.dumps({"status": "ok"}), encoding="utf-8")
+    curl = fakebin / "curl"
+    curl.write_text(
+        f"""#!/usr/bin/env bash
+for arg in "$@"; do
+    case "$arg" in
+        */health) cat "{tmp_path}/health.json"; exit 0 ;;
+        */api/memory/stats) exit 28 ;;
+    esac
+done
+exit 0
+""",
+        encoding="utf-8",
+    )
+    curl.chmod(0o755)
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fakebin}:{env['PATH']}",
+            "REKALL_API_URL": "http://rekall.test",
+            "REKALL_AUTOSAVE": "1",
+            "REKALL_MARKER_DIR": str(tmp_path),
+        }
+    )
+    result = subprocess.run(
+        ["bash", str(RESTORE_HOOK)],
+        input=json.dumps({"session_id": "slow-sess", "cwd": str(tmp_path)}),
+        text=True,
+        capture_output=True,
+        env=env,
+        cwd=tmp_path,
+        timeout=10,
+        check=False,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "Rekall ready" in result.stdout
