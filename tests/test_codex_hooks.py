@@ -322,7 +322,7 @@ def test_exact_memory_frame(hook_module):
     assert out.endswith("[/Rekall historical context]")
 
 
-def test_startup_degraded_is_visible_but_unavailable_is_silent(hook_module):
+def test_startup_degraded_and_unavailable_are_both_visible(hook_module):
     def degraded(method, url, body, timeout):
         if url.endswith("/health"):
             return {
@@ -334,7 +334,22 @@ def test_startup_degraded_is_visible_but_unavailable_is_silent(hook_module):
 
     out = hook_module.handle_session_start({"cwd": "/repo"}, degraded, {})
     assert "2 dead vectors" in out["hookSpecificOutput"]["additionalContext"]
-    assert hook_module.handle_session_start({}, lambda *args: None, {}) is None
+    down = hook_module.handle_session_start({}, lambda *args: None, {})
+    assert down is not None
+    assert "Rekall DOWN" in down["hookSpecificOutput"]["additionalContext"]
+
+
+def test_startup_gives_slow_stats_enough_time(hook_module):
+    timeouts = {}
+
+    def req(method, url, body, timeout):
+        timeouts[url.rsplit("/", 1)[-1]] = timeout
+        if url.endswith("/health"):
+            return {"status": "healthy", "vectors": {"sampled": 1, "zero_vectors": 0}}
+        return {"total_memories": 1}
+
+    hook_module.handle_session_start({}, req, {"REKALL_API_URL": "http://api"})
+    assert timeouts["stats"] >= 4.0
 
 
 def test_partial_reflex_debounce_reserves_only_new_cue(hook_module, tmp_path):

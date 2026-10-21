@@ -480,8 +480,14 @@ def handle_session_start(
     base = env.get("REKALL_API_URL", "http://localhost:8000")
     health = request("GET", base + "/health", None, 1.0)
     if not isinstance(health, Mapping) or health.get("status") not in {"healthy", "degraded"}:
-        return None
-    stats = request("GET", base + "/api/memory/stats", None, 1.0)
+        # A silent dead backend left memory unused for a whole session: say so.
+        down = (
+            f"Rekall DOWN ({base} unreachable) — memory tools may be missing. "
+            "Before answering about prior decisions or past work, check whether recall works."
+        )
+        return {"hookSpecificOutput": {"hookEventName": "SessionStart", "additionalContext": down}}
+    # Stats measured 1.8s on a 1,800-memory store; 1s dropped the count.
+    stats = request("GET", base + "/api/memory/stats", None, 4.0)
     if not isinstance(stats, Mapping):
         stats = {}
     context = build_startup_context(health, stats)
