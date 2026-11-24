@@ -162,7 +162,7 @@ def test_session_summary_recall_edits_tests(hook_module):
     assert hook_module.summarize_session({"session_id": "s", "cwd": "/repo"}, lines) == {
         "event_type": "session_summary",
         "session_id": "s",
-        "project": "repo",
+        "cwd": "/repo",
         "recalled_ids": ["m1", "m2"],
         "edits_after_recall": 1,
         "test_passes_after_recall": 1,
@@ -307,7 +307,12 @@ def test_startup_uses_backend_stats_and_capsule_get(hook_module):
         {"REKALL_API_URL": "http://api", "REKALL_STARTUP_CAPSULE": "1"},
     )
     assert out and calls[1][0] == "GET" and "/api/memory/stats" in calls[1][1]
-    assert calls[2][0] == "GET" and "project=r" in calls[2][1] and "limit=" in calls[2][1]
+    assert (
+        calls[2][0] == "GET"
+        and "cwd=%2Fr" in calls[2][1]
+        and "project=" not in calls[2][1]
+        and "limit=" in calls[2][1]
+    )
     context = out["hookSpecificOutput"]["additionalContext"]
     assert "total_memories=3" in context
     assert "vectors OK" in context
@@ -461,7 +466,7 @@ def test_session_summary_correlates_call_outputs(hook_module):
     assert hook_module.summarize_session({"session_id": "s", "cwd": "/repo"}, lines) == {
         "event_type": "session_summary",
         "session_id": "s",
-        "project": "repo",
+        "cwd": "/repo",
         "recalled_ids": ["2026-08-23_learning_abc12345"],
         "edits_after_recall": 1,
         "test_passes_after_recall": 1,
@@ -752,3 +757,44 @@ def test_summarize_session_wiki_read_arguments_are_not_a_reference(hook_module):
     ]
     summary = hook_module.summarize_session({"session_id": "s", "cwd": "/repo"}, lines)
     assert summary["delivered"]["wiki"] == [page] and summary["referenced"] == []
+
+
+def test_capsule_with_worktree_cwd_does_not_send_folder_as_project(hook_module):
+    urls = []
+
+    def request(method, url, body, timeout):
+        urls.append(url)
+        if url.endswith("/health"):
+            return {"status": "healthy", "vectors": {"zero_vectors": 0}, "embedder": "ok"}
+        if url.endswith("/api/memory/stats"):
+            return {"total_memories": 0}
+        return {}
+
+    hook_module.handle_session_start(
+        {"session_id": "s", "cwd": "/code/worktrees/demo-repo-feature"},
+        request,
+        {"REKALL_STARTUP_CAPSULE": "1"},
+    )
+    capsule = [u for u in urls if "/api/memory/capsule" in u][-1]
+    assert "cwd=" in capsule
+    assert "demo-repo-feature" in capsule
+    assert "project=demo-repo-feature" not in capsule
+    assert "project=" not in capsule
+
+
+def test_summarize_session_sends_cwd_not_folder_basename(hook_module):
+    lines = [
+        __import__("json").dumps(
+            {"type": "function_call", "call_id": "r", "name": "recall_memories", "arguments": "{}"}
+        ),
+        __import__("json").dumps(
+            {"type": "function_call_output", "call_id": "r", "output": '{"memory_id":"m1"}'}
+        ),
+    ]
+    summary = hook_module.summarize_session(
+        {"session_id": "s", "cwd": "/code/worktrees/demo-repo-feature"},
+        lines,
+    )
+    assert summary["cwd"] == "/code/worktrees/demo-repo-feature"
+    assert summary.get("project") != "demo-repo-feature"
+    assert "project" not in summary

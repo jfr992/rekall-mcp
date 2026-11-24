@@ -500,7 +500,7 @@ Team memory publishing emits distilled project capsules and playbook summaries. 
 | `/api/memory/prune/superseded` | POST | Gated auto-prune of superseded memories (confirm-date token, ≤10/fire, ≤20/day, backup-first; REST-only) |
 | `/api/memory/lifecycle/backfill` | POST | Backfill tier metadata (dry-run + execute) |
 | `/api/memory/resparse` | POST | Transactional BM25 vocab refit — refuses on schema/parity divergence, fail-closed sentinel on interrupt (REST-only) |
-| `/api/memory/{id}` | DELETE | Delete a single memory |
+| `/api/memory/{id}` | DELETE, PATCH | Delete a memory, or retag its project and/or type |
 | `/api/memory/{id}/pin` | POST | Grant/revoke the identity pin (`{pinned: bool}`; human-only affordance, no MCP tool) |
 | `/api/memory/{id}/dispute` | POST | Clear (or set) the disputed flag (`{disputed: bool}`; minimal resolution affordance) |
 | `/api/memory/cleanup` | POST | Batch cleanup (prune superseded, age-based) |

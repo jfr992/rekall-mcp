@@ -69,13 +69,65 @@ class MemoryScope:
         return {k: v for k, v in data.items() if v not in {"", None}}
 
 
+def _origin_repo_name(remote: str) -> str:
+    """Last path segment of origin, with credentials and a trailing .git removed."""
+    if not remote:
+        return ""
+    cleaned = _strip_creds(remote).rstrip("/")
+    if cleaned.endswith(".git"):
+        cleaned = cleaned[: -len(".git")]
+    if "/" in cleaned:
+        name = cleaned.rsplit("/", 1)[-1]
+    elif ":" in cleaned:
+        name = cleaned.rsplit(":", 1)[-1]
+    else:
+        name = cleaned
+    return normalize_project(name) if name else ""
+
+
+def _main_checkout_name(common_dir: str, repo_root: str, cwd: str) -> str:
+    """Directory name of the main checkout, from --git-common-dir."""
+    if not common_dir:
+        return Path(repo_root or cwd).name
+    path = Path(common_dir)
+    if not path.is_absolute():
+        base = Path(repo_root) if repo_root else Path(cwd)
+        path = (
+            (base / ".git").resolve()
+            if common_dir in {".git", "./.git"}
+            else (Path(cwd) / path).resolve()
+        )
+    else:
+        path = path.resolve()
+    if path.name == ".git":
+        return path.parent.name
+    if path.name.endswith(".git"):
+        return path.stem
+    return path.name
+
+
+def _preferred_repo_name(checkout_name: str, origin_name: str) -> str:
+    """Prefer origin when it matches the checkout name or is a prefix of it."""
+    checkout = normalize_project(checkout_name)
+    origin = normalize_project(origin_name) if origin_name else ""
+    if origin and (
+        checkout == origin or checkout.startswith(origin + "-") or checkout.startswith(origin + "_")
+    ):
+        return origin
+    return checkout
+
+
 @lru_cache(maxsize=32)
-def _git_info(cwd: str) -> tuple[str, str, str]:
-    """Cached (repo_root, branch, repo_remote) for a cwd."""
+def _git_info(cwd: str) -> tuple[str, str, str, str]:
+    """Cached (repo_root, branch, repo_remote, git_common_dir) for a cwd."""
+    common = _git(cwd, ["rev-parse", "--path-format=absolute", "--git-common-dir"])
+    if not common:
+        common = _git(cwd, ["rev-parse", "--git-common-dir"])
     return (
         _git(cwd, ["rev-parse", "--show-toplevel"]),
         _git(cwd, ["branch", "--show-current"]),
         _git(cwd, ["remote", "get-url", "origin"]),
+        common,
     )
 
 
@@ -122,14 +174,32 @@ class ScopeDetector:
         current = Path(cwd or os.getcwd()).resolve()
         workspace_root = str(current)
 
-        repo_root, branch, raw_remote = _git_info(str(current))
-        repo_name = Path(repo_root).name if repo_root else current.name
+        repo_root, branch, raw_remote, common_dir = _git_info(str(current))
         repo_remote = _strip_creds(raw_remote)
+        if repo_root:
+            repo_name = _preferred_repo_name(
+                _main_checkout_name(common_dir, repo_root, str(current)),
+                _origin_repo_name(repo_remote),
+            )
+        else:
+            repo_name = current.name
 
-        detected_project = normalize_project(project or repo_name or current.name or "general")
-        # Explicit `project` is trusted verbatim; only inferred names are screened.
-        if not project and _is_junk_project_name(detected_project):
-            detected_project = "general"
+        if project:
+            explicit = normalize_project(project)
+            cwd_basename = normalize_project(current.name)
+            worktree_basename = (
+                normalize_project(Path(repo_root).name) if repo_root else cwd_basename
+            )
+            # An explicit project that is just the cwd/worktree folder is treated
+            # as a mistaken hook value and resolved to the main repo name.
+            if repo_root and explicit in {cwd_basename, worktree_basename}:
+                detected_project = repo_name
+            else:
+                detected_project = explicit
+        else:
+            detected_project = normalize_project(repo_name or current.name or "general")
+            if _is_junk_project_name(detected_project):
+                detected_project = "general"
         detected_agent = agent or rekall_env("AGENT") or cls._detect_agent()
         detected_trust = (
             trust_boundary

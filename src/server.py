@@ -33,7 +33,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from core import Telemetry
 from core.utils import utc_now
 from memory.insights import EVENT_WINDOW
-from memory.scope import normalize_project
+from memory.scope import ScopeDetector, normalize_project
 from memory.types import MAX_MEMORY_CONTENT_CHARS, VALID_MEMORY_TYPES
 from tools import ToolConfig, ToolLoader, ToolRegistry
 
@@ -393,6 +393,37 @@ class AfkSaveRequest(BaseModel):
 
 _PROJECT_RE = re.compile(r"^[A-Za-z0-9._-]{1,64}$")
 _TRAVERSAL_RE = re.compile(r"[/\\]|\.\.")
+
+
+def _optional_cwd(value) -> str | None:
+    if value in (None, ""):
+        return None
+    if not isinstance(value, str) or "\x00" in value or len(value) > 4096:
+        raise RequestValidationError("cwd must be a filesystem path")
+    return value
+
+
+def _resolve_project(*, project=None, cwd=None, default: str | None = None) -> str | None:
+    """Resolve a project name from an explicit value and/or a working directory.
+
+    `cwd` is a filesystem path (hooks pass the session directory). It is never
+    accepted as the project string itself because project names cannot contain slashes.
+    """
+    cwd_path = _optional_cwd(cwd)
+    if cwd_path:
+        # Allow a bare project through ScopeDetector so hook-supplied folder
+        # names can be hardened to the main repo name.
+        explicit = None
+        if project not in (None, ""):
+            if not isinstance(project, str):
+                raise RequestValidationError(
+                    "project must be 1-64 characters of letters, digits, dot, dash, underscore"
+                )
+            explicit = project
+        return ScopeDetector.detect(project=explicit, cwd=cwd_path).project
+    if project not in (None, ""):
+        return _safe_project(project)
+    return default
 
 
 def _safe_project(value) -> str | None:
@@ -807,7 +838,9 @@ async def api_record_events(request):
             return _bad_request(f"event_type must be one of {sorted(_ALLOWED_EVENT_TYPES)}")
 
         session_id = body.get("session_id")
-        project = _safe_project(body.get("project"))
+        project = _resolve_project(
+            project=body.get("project"), cwd=body.get("cwd"), default="general"
+        )
         recalled_ids = body.get("recalled_ids", [])
         edits_after_recall = body.get("edits_after_recall", 0)
         test_passes_after_recall = body.get("test_passes_after_recall", 0)
@@ -1336,6 +1369,44 @@ async def api_memory_doctor(request):
     except Exception as e:
         logger.error(f"Error running memory doctor: {e}")
         return _server_error(str(e))
+
+
+@mcp.custom_route("/api/memory/{memory_id}", methods=["PATCH"])
+async def api_retag_memory(request):
+    """REST API: Retag a memory's project and/or type. Updates YAML, Qdrant, and the graph."""
+    from starlette.responses import JSONResponse
+
+    try:
+        memory_id = request.path_params["memory_id"]
+        if not memory_id:
+            return JSONResponse({"error": "memory_id is required"}, status_code=400)
+
+        body = await _json_object(request)
+        project_raw = body.get("project")
+        type_raw = body.get("memory_type")
+        if project_raw is None and type_raw is None:
+            return _bad_request("project or memory_type is required")
+
+        project = _safe_write_project(project_raw) if project_raw is not None else None
+        memory_type = _safe_type(type_raw) if type_raw is not None else None
+
+        manager = _get_memory_manager()
+        async with _maintenance_barrier():
+            result = manager.retag_memory(memory_id, project=project, memory_type=memory_type)
+
+        if result is None:
+            return JSONResponse(
+                {"memory_id": memory_id, "error": "not found"},
+                status_code=404,
+            )
+        return _ok(result)
+    except RequestValidationError as e:
+        return _bad_request(str(e))
+    except ValueError as e:
+        return _bad_request(str(e))
+    except Exception as e:
+        logger.error(f"Error retagging memory: {e}")
+        return JSONResponse({"error": str(e)}, status_code=500)
 
 
 @mcp.custom_route("/api/memory/{memory_id}", methods=["DELETE"])
@@ -2121,7 +2192,7 @@ async def api_agent_startup(request):
 
     try:
         query = request.query_params
-        project = _safe_project(query.get("project"))
+        project = _resolve_project(project=query.get("project"), cwd=query.get("cwd"))
         agent = query.get("agent")
         limit = _read_int(query, "limit", 12)
         session_id = query.get("session_id") or None
@@ -2144,9 +2215,12 @@ async def api_agent_startup(request):
 async def api_project_capsule(request):
     """REST API: Thin project familiarity capsule."""
     try:
-        project = _safe_project(request.query_params.get("project")) or "general"
-        limit = _read_int(request.query_params, "limit", 300, lo=1, hi=2000)
-        session_id = request.query_params.get("session_id") or None
+        query = request.query_params
+        project = _resolve_project(
+            project=query.get("project"), cwd=query.get("cwd"), default="general"
+        )
+        limit = _read_int(query, "limit", 300, lo=1, hi=2000)
+        session_id = query.get("session_id") or None
         manager = _get_memory_manager()
         result = manager.get_project_capsule(project=project, limit=limit, session_id=session_id)
 

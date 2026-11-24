@@ -1425,6 +1425,144 @@ class MemoryManager:
                 return
         logger.warning(f"YAML entry not found for {memory_id}; only the vector will be updated")
 
+    def retag_memory(
+        self,
+        memory_id: str,
+        project: str | None = None,
+        memory_type: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Move a memory to a new project and/or type in YAML, Qdrant, and the graph."""
+        self._assert_reindex_complete()
+        if project is None and memory_type is None:
+            raise ValueError("project or memory_type is required")
+        if memory_type is not None and memory_type not in VALID_MEMORY_TYPES:
+            raise ValueError(f"type must be one of {sorted(VALID_MEMORY_TYPES)}")
+
+        found = self.store.get_many([memory_id])
+        if not found:
+            return None
+        payload = dict(found[0])
+        if project is not None:
+            payload["project"] = project
+        if memory_type is not None:
+            payload["type"] = memory_type
+
+        self._retag_in_yaml(memory_id, payload)
+        self.store.update_payload(memory_id, payload)
+        self.knowledge_graph.add_node(
+            memory_id,
+            topic=str(payload.get("project") or "general"),
+            memory_type=str(payload.get("type") or "note"),
+        )
+        self.knowledge_graph.save()
+        return {
+            "memory_id": memory_id,
+            "project": payload.get("project") or "general",
+            "type": payload.get("type") or "note",
+        }
+
+    def _find_yaml_for_memory(self, memory_id: str, date: str) -> Path | None:
+        for candidate in self.memory_dir.rglob(f"{date}.yaml"):
+            try:
+                with open(candidate) as handle:
+                    check = yaml.safe_load(handle) or {}
+            except OSError:
+                continue
+            for type_key in check:
+                if isinstance(check[type_key], list) and any(
+                    isinstance(item, dict) and item.get("id") == memory_id
+                    for item in check[type_key]
+                ):
+                    return candidate
+        flat = self.memory_dir / f"{date}.yaml"
+        return flat if flat.exists() else None
+
+    @staticmethod
+    def _pop_yaml_entry(data: dict[str, Any], memory_id: str) -> dict[str, Any] | None:
+        found: dict[str, Any] | None = None
+        for type_key in list(data.keys()):
+            if not isinstance(data[type_key], list):
+                continue
+            kept = []
+            for item in data[type_key]:
+                if found is None and isinstance(item, dict) and item.get("id") == memory_id:
+                    found = item
+                    continue
+                kept.append(item)
+            if kept:
+                data[type_key] = kept
+            else:
+                del data[type_key]
+        return found
+
+    def _retag_in_yaml(self, memory_id: str, payload: dict[str, Any]) -> None:
+        """Relocate a YAML entry to its new project directory and/or type section."""
+        date = memory_id[:10] if len(memory_id) >= 10 else ""
+        if not date or len(date) != 10 or date[4] != "-" or date[7] != "-":
+            logger.warning("Cannot retag %s in YAML: memory id has no date prefix", memory_id)
+            return
+        new_project = payload.get("project") or "general"
+        new_type = payload.get("type") or "note"
+        dest = self.memory_dir / new_project / f"{date}.yaml"
+        src = self._find_yaml_for_memory(memory_id, date)
+        content = str(payload.get("content") or "")
+
+        if src is None:
+            logger.warning(
+                "YAML entry not found for %s; writing only the destination file", memory_id
+            )
+            self._save_to_file(memory_id, content, payload, new_type, date)
+            return
+
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        if src.resolve() == dest.resolve():
+            with _yaml_writer_lock(src):
+                data = _read_yaml_document(src, date)
+                entry = self._pop_yaml_entry(data, memory_id)
+                if entry is None:
+                    logger.warning(
+                        "YAML entry not found for %s; only the vector will be updated", memory_id
+                    )
+                    return
+                type_key = f"{new_type}s"
+                entries = data.setdefault(type_key, [])
+                if not isinstance(entries, list):
+                    raise ValueError(f"Invalid YAML type section: {type_key}")
+                entry = dict(entry)
+                entry["project"] = new_project
+                entries.append(entry)
+                _atomic_write_yaml(src, data)
+            return
+
+        first, second = sorted((src, dest), key=lambda path: str(path.resolve()))
+        with _yaml_writer_lock(first), _yaml_writer_lock(second):
+            data = _read_yaml_document(src, date)
+            entry = self._pop_yaml_entry(data, memory_id)
+            if entry is None:
+                logger.warning(
+                    "YAML entry not found for %s; only the vector will be updated", memory_id
+                )
+                return
+            has_memories = any(isinstance(value, list) and value for value in data.values())
+            if not has_memories:
+                if src.exists():
+                    src.unlink()
+                    directory_fd = os.open(src.parent, os.O_RDONLY)
+                    try:
+                        os.fsync(directory_fd)
+                    finally:
+                        os.close(directory_fd)
+            else:
+                _atomic_write_yaml(src, data)
+            self._save_to_file_locked(
+                memory_id,
+                content or str(entry.get("content") or ""),
+                payload,
+                new_type,
+                date,
+                dest,
+            )
+
     # -------------------------------------------------------------------------
     # DELETE: Remove memories
     # -------------------------------------------------------------------------

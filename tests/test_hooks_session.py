@@ -745,3 +745,46 @@ exit 0
     )
     assert result.returncode == 0, result.stderr
     assert "Rekall ready" in result.stdout
+
+
+def test_session_end_sends_cwd_not_folder_basename(tmp_path):
+    import json
+    import os
+    import subprocess
+
+    worktree = tmp_path / "demo-repo-feature"
+    worktree.mkdir()
+    fakebin, calls, bodies = _make_fake_curl(tmp_path)
+    transcript = tmp_path / "sess-9.jsonl"
+    transcript.write_text("\n".join(json.dumps(line) for line in _transcript_lines()) + "\n")
+    (tmp_path / "rekall-restored-sess-9").write_text("")
+    env = os.environ.copy()
+    env.update(
+        {
+            "PATH": f"{fakebin}:{env['PATH']}",
+            "REKALL_API_URL": "http://rekall.test",
+            "REKALL_AUTOSAVE": "1",
+            "REKALL_MARKER_DIR": str(tmp_path),
+        }
+    )
+    payload = {
+        "hook_event_name": "SessionEnd",
+        "session_id": "sess-9",
+        "cwd": str(worktree),
+        "transcript_path": str(transcript),
+    }
+    r = subprocess.run(
+        ["bash", str(SESSION_END_HOOK)],
+        input=json.dumps(payload),
+        text=True,
+        capture_output=True,
+        env=env,
+        cwd=tmp_path,
+        timeout=10,
+        check=False,
+    )
+    assert r.returncode == 0, r.stderr
+    body = json.loads(bodies.read_text().strip().splitlines()[-1])
+    assert body.get("cwd") == str(worktree)
+    assert body.get("project") != "demo-repo-feature"
+    assert "project" not in body or body["project"] != worktree.name

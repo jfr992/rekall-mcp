@@ -36,7 +36,7 @@ class CodexHookInput(TypedDict, total=False):
 class SessionSummary(TypedDict):
     event_type: Literal["session_summary"]
     session_id: str
-    project: str
+    cwd: str
     recalled_ids: list[str]
     edits_after_recall: int
     test_passes_after_recall: int
@@ -446,13 +446,12 @@ def summarize_session(
     cwd = payload.get("cwd")
     if not isinstance(session, str) or not isinstance(cwd, str):
         return None
-    project = sanitize_token(Path(cwd).name)
     delivered = recalled[:32]
     wiki = delivered_wiki[:32]
     return {
         "event_type": "session_summary",
         "session_id": session,
-        "project": project,
+        "cwd": cwd,
         "recalled_ids": delivered,
         "edits_after_recall": edits,
         "test_passes_after_recall": tests,
@@ -495,7 +494,7 @@ def handle_session_start(
         query_params = {"limit": "4", "session_id": payload.get("session_id", "")}
         cwd = payload.get("cwd")
         if isinstance(cwd, str) and cwd.strip():
-            query_params["project"] = sanitize_token(Path(cwd).name)
+            query_params["cwd"] = cwd.strip()
         query = urlencode(query_params)
         capsule = request("GET", base + "/api/memory/capsule?" + query, None, 1.0)
         if isinstance(capsule, Mapping):

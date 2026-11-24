@@ -297,7 +297,8 @@ def test_summary_with_recall_edits_and_test_pass(tmp_path):
     body = bodies[0]
 
     assert body["event_type"] == "session_summary"
-    assert body["project"] == "rekall-mcp"
+    assert body["cwd"] == "/workspaces/rekall-mcp"
+    assert "project" not in body
     assert body["session_id"] == SESSION_ID
 
     # Both memory IDs must be present (order-independent)
