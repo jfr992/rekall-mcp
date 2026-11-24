@@ -95,6 +95,7 @@ def test_cleanup_rejects_string_prune_superseded(client, fake_manager):
 
 
 _JSON_BODY_ROUTES = [
+    ("PATCH", "/api/memory/m1"),
     ("POST", "/api/memory/save"),
     ("POST", "/api/memory/recall"),
     ("POST", "/api/memory/recall/cross-project"),

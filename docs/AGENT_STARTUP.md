@@ -15,7 +15,7 @@ When broad project continuity can change the work, call **one** of these at sess
 Startup order:
 
 1. Decide whether broad continuity is useful for this task.
-2. If it is, resolve and pass the current project explicitly, then load one startup view.
+2. If it is, pass `cwd` or the main repo name as `project`, then load one startup view. Never use a worktree folder, branch, or subdirectory name as the project.
 3. Skip full doctor scans; call `memory_doctor(project)` on demand when recall trust is in question.
 4. Defer targeted recall until the user prompt or command supplies a cue.
 
@@ -32,7 +32,7 @@ Startup order:
 - When broad continuity is useful, call `agent_startup(project="<repo-name>", agent="codex")`
 - Read `startup_summary`
 - Use `resume_packet` when you need the structured JSON payload
-- Pass `project` explicitly in worktrees; keep repo/project boundaries strict when switching worktrees or repos
+- Pass `cwd` or the main repo name as `project`. Never use a worktree folder, branch, or subdirectory name as the project.
 
 ## Tool roles
 

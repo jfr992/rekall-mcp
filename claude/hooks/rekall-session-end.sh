@@ -30,15 +30,13 @@ marker="${REKALL_MARKER_DIR:-/tmp}/rekall-restored-${session_id}"
 tail_bytes="${REKALL_TRANSCRIPT_TAIL_BYTES:-1048576}"
 [[ "$tail_bytes" =~ ^[1-9][0-9]*$ ]] || tail_bytes=1048576
 (( tail_bytes > 16777216 )) && tail_bytes=16777216
-project="$(basename "$caller_cwd")"
-
-summary_json="$(python3 - "$transcript_path" "$project" "$session_id" "$tail_bytes" 2>/dev/null <<'PY' || true
+summary_json="$(python3 - "$transcript_path" "$caller_cwd" "$session_id" "$tail_bytes" 2>/dev/null <<'PY' || true
 import json
 import re
 import sys
 
 
-transcript_path, project, session_id, raw_limit = sys.argv[1:]
+transcript_path, caller_cwd, session_id, raw_limit = sys.argv[1:]
 limit = int(raw_limit)
 memory_id = re.compile(r"\d{4}-\d{2}-\d{2}_[a-z]+_[0-9a-f]+")
 page_id = re.compile(r"[a-z0-9][a-z0-9._-]*/(?:process|policy|reference|entity)/[a-z0-9][a-z0-9-]*")
@@ -233,7 +231,7 @@ print(
         {
             "event_type": "session_summary",
             "session_id": session_id,
-            "project": project,
+            "cwd": caller_cwd,
             "client": "claude-code",
             "recalled_ids": sorted(memory_delivered),
             "delivered": delivered,

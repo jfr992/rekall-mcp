@@ -154,7 +154,7 @@ def test_session_start_hook_prefers_capsule_endpoint(tmp_path):
     result, urls = _run_hook(tmp_path, {"cwd": "/workspaces/rekall-mcp"})
 
     assert result.returncode == 0, result.stderr
-    assert urls == ["http://rekall.test/api/memory/capsule?project=rekall-mcp"]
+    assert urls == ["http://rekall.test/api/memory/capsule?cwd=%2Fworkspaces%2Frekall-mcp"]
     packet = json.loads(result.stdout)
     output = packet["hookSpecificOutput"]
     assert output["hookEventName"] == "SessionStart"
@@ -171,8 +171,8 @@ def test_session_start_hook_falls_back_to_startup_context(tmp_path):
 
     assert result.returncode == 0, result.stderr
     assert urls == [
-        "http://rekall.test/api/memory/capsule?project=rekall-mcp",
-        "http://rekall.test/api/memory/context/startup?project=rekall-mcp&agent=claude-code&limit=8",
+        "http://rekall.test/api/memory/capsule?cwd=%2Fworkspaces%2Frekall-mcp",
+        "http://rekall.test/api/memory/context/startup?cwd=%2Fworkspaces%2Frekall-mcp&agent=claude-code&limit=8",
     ]
     packet = json.loads(result.stdout)
     assert "Fallback startup context loaded." in packet["hookSpecificOutput"]["additionalContext"]
@@ -189,8 +189,8 @@ def test_session_start_hook_silent_when_backend_down(tmp_path):
     assert result.returncode == 0, result.stderr
     assert result.stdout == ""
     assert urls == [
-        "http://rekall.test/api/memory/capsule?project=rekall-mcp",
-        "http://rekall.test/api/memory/context/startup?project=rekall-mcp&agent=claude-code&limit=8",
+        "http://rekall.test/api/memory/capsule?cwd=%2Fworkspaces%2Frekall-mcp",
+        "http://rekall.test/api/memory/context/startup?cwd=%2Fworkspaces%2Frekall-mcp&agent=claude-code&limit=8",
     ]
 
 
@@ -244,7 +244,7 @@ def test_session_start_hook_infers_project_from_project_dir(tmp_path):
     result, urls = _run_hook(tmp_path, {"project_dir": "/Users/test/Agent Project"})
 
     assert result.returncode == 0, result.stderr
-    assert urls == ["http://rekall.test/api/memory/capsule?project=Agent%20Project"]
+    assert urls == ["http://rekall.test/api/memory/capsule?cwd=%2FUsers%2Ftest%2FAgent%20Project"]
     packet = json.loads(result.stdout)
     assert "REKALL STARTUP (Agent Project)" in packet["hookSpecificOutput"]["additionalContext"]
 
@@ -695,3 +695,12 @@ def test_verify_ignores_foreign_rekall_named_paths_and_flags_non_object_entries(
     assert "Notification" not in line
     assert "UserPromptSubmit" in line
     assert "non-object hook entr" in result.stdout
+
+
+def test_session_start_hook_worktree_cwd_is_not_sent_as_project(tmp_path):
+    result, urls = _run_hook(tmp_path, {"cwd": "/workspaces/demo-repo-feature"})
+
+    assert result.returncode == 0, result.stderr
+    assert urls == ["http://rekall.test/api/memory/capsule?cwd=%2Fworkspaces%2Fdemo-repo-feature"]
+    assert all("project=demo-repo-feature" not in u for u in urls)
+    assert all("project=" not in u for u in urls)
